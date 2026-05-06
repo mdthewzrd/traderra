@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>File Upload Debug</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #e0e0e0; }
+        h1 { color: #4ade80; }
+        button { background: #4ade80; color: #000; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin: 5px; }
+        #output { background: #0a0a0a; padding: 15px; border-radius: 8px; white-space: pre-wrap; max-height: 600px; overflow-y: auto; }
+        .success { color: #4ade80; }
+        .error { color: #ef4444; }
+        .warning { color: #f59e0b; }
+    </style>
+</head>
+<body>
+    <h1>🔍 File Upload Debug Test</h1>
+    <button onclick="testDebug()">Test File Upload Processing</button>
+    <button onclick="clearOutput()">Clear</button>
+
+    <h2>Output:</h2>
+    <pre id="output"></pre>
+
+    <script>
+        function log(msg, type = 'info') {
+            const output = document.getElementById('output');
+            const prefix = { 'success': '✅ ', 'error': '❌ ', 'warning': '⚠️ ' }[type] || '';
+            output.textContent += `\n${prefix}${msg}`;
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function clearOutput() {
+            document.getElementById('output').textContent = '';
+        }
+
+        async function testDebug() {
+            clearOutput();
+            log('Testing file upload processing...', 'info');
+
+            const testCSV = `Open Datetime,Close Datetime,Symbol,Side,Volume,Entry Price,Exit Price,Net P&L
+2024-01-15 09:30:00,2024-01-15 10:15:00,AAPL,Long,100,150.25,152.30,205.0
+2024-01-16 14:00:00,2024-01-16 14:30:00,TSLA,Short,50,210.50,208.25,112.5
+2024-01-17 10:00:00,2024-01-17 11:00:00,MSFT,Long,75,380.00,385.50,412.5`;
+
+            const base64Content = btoa(testCSV);
+
+            log(`CSV encoded to base64 (${base64Content.length} chars)`, 'info');
+
+            try {
+                const response = await fetch('/api/debug-upload', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: 'Upload my trades',
+                        attachedFile: {
+                            name: 'test-trades.csv',
+                            content: base64Content
+                        }
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    log('=== DEBUG INFO ===', 'info');
+                    log(JSON.stringify(data.debug, null, 2), 'info');
+
+                    log('\n=== ANALYSIS ===', 'info');
+
+                    if (data.debug.processing.fileDetected) {
+                        log('✓ File was detected', 'success');
+                    } else {
+                        log('✗ File was NOT detected', 'error');
+                    }
+
+                    if (data.debug.processing.csvParse) {
+                        log(`✓ CSV parsed: ${data.debug.processing.csvParse.tradeCount} trades found`, 'success');
+                    }
+
+                    if (data.debug.processing.error) {
+                        log(`✗ Processing error: ${data.debug.processing.error.message}`, 'error');
+                    }
+
+                    if (data.debug.processing.containsFileMarker) {
+                        log('✓ File marker would be in message', 'success');
+                    } else {
+                        log('✗ File marker would NOT be in message', 'error');
+                    }
+
+                    if (data.debug.processing.containsStatusReceived) {
+                        log('✓ "received successfully" status would be in message', 'success');
+                    } else {
+                        log('✗ "received successfully" status would NOT be in message', 'error');
+                    }
+
+                } else {
+                    log('Debug endpoint failed: ' + JSON.stringify(data), 'error');
+                }
+
+            } catch (error) {
+                log(`Error: ${error.message}`, 'error');
+            }
+        }
+
+        log('Ready. Click "Test File Upload Processing" to begin.', 'info');
+    </script>
+</body>
+</html>

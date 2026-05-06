@@ -1,0 +1,121 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id       String @id
+  trades   Trade[]
+  learningFeedback LearningFeedback[]
+  learningRules    LearningRule[]
+  learningMetrics  LearningMetrics?
+  chartSettings String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Trade {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Core trade data
+  date         String
+  symbol       String
+  side         String   // 'Long' | 'Short'
+  quantity     Float
+  entryPrice   Float
+  exitPrice    Float
+  pnl          Float
+  grossPnl     Float?
+  pnlPercent   Float
+  commission   Float
+  duration     String
+  strategy     String
+  notes        String
+  entryTime    String
+  exitTime     String
+
+  // Optional risk management fields
+  riskAmount   Float?
+  riskPercent  Float?
+  stopLoss     Float?
+  rMultiple    Float?
+  mfe          Float?
+  mae          Float?
+
+  // Metadata
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId])
+  @@index([symbol])
+  @@index([date])
+}
+
+// Learning System Models
+model LearningFeedback {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  messageId        String   // Frontend message ID for reference
+  feedbackType     String   // 'positive', 'correction', 'clarification'
+  originalMessage  String   // Original user message
+  correctedMessage String?  // User's correction (if applicable)
+  userContext      String?  // Additional context provided
+  confidence       Float    @default(1.0)
+
+  createdAt        DateTime @default(now())
+
+  @@index([userId])
+  @@index([feedbackType])
+}
+
+model LearningRule {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  originalMessage  String   // Original message that triggered learning
+  correctedMessage String   // User's preferred response/action
+  ruleDescription  String   // Human-readable rule description
+  ruleType         String   // 'correction', 'preference', 'context'
+  context          String?  // Specific context for rule application
+  priority         Int      @default(1) // Rule priority (higher = more important)
+  isGlobalRule     Boolean  @default(false) // Apply to all users vs user-specific
+  patterns         String   // JSON string of extracted patterns
+  isActive         Boolean  @default(true)
+  confidence       Float    @default(1.0)
+  timesApplied     Int      @default(0)
+
+  createdAt        DateTime @default(now())
+  lastUsed         DateTime?
+
+  @@index([userId])
+  @@index([ruleType])
+  @@index([isActive])
+}
+
+model LearningMetrics {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  totalFeedback         Int      @default(0)
+  understandingAccuracy Float    @default(0.8)
+  totalCorrections      Int      @default(0)
+  isActive              Boolean  @default(true)
+
+  createdAt             DateTime? @default(now())
+  lastUpdated           DateTime @updatedAt
+
+  @@index([userId])
+}

@@ -1,0 +1,1063 @@
+/* Import Google Fonts - Must come before all other CSS rules */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
+
+/* Import Rich Text Editor Styles */
+@import './editor.css';
+
+/* Import VS Code Tree Styles */
+@import './vscode-tree.css';
+
+/* Import Button Fix CSS for clickable buttons */
+@import './button-fix.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light theme (for reference, but Traderra uses dark) */
+    --background: 0 0% 100%;
+    --foreground: 224 71.4% 4.1%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 71.4% 4.1%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 71.4% 4.1%;
+    --primary: 220.9 39.3% 11%;
+    --primary-foreground: 210 20% 98%;
+    --secondary: 220 14.3% 95.9%;
+    --secondary-foreground: 220.9 39.3% 11%;
+    --muted: 220 14.3% 95.9%;
+    --muted-foreground: 220 8.9% 46.1%;
+    --accent: 220 14.3% 95.9%;
+    --accent-foreground: 220.9 39.3% 11%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 224 71.4% 4.1%;
+    --radius: 0.375rem;
+  }
+
+  .dark {
+    /* Traderra Dark Studio Theme */
+    --background: 0 0% 4%;
+    --foreground: 0 0% 90%;
+    --card: 0 0% 6.7%;
+    --card-foreground: 0 0% 90%;
+    --popover: 0 0% 6.7%;
+    --popover-foreground: 0 0% 90%;
+    --primary: 45 93% 35%; /* Darker gold/amber color */
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 10%;
+    --secondary-foreground: 0 0% 90%;
+    --muted: 0 0% 10%;
+    --muted-foreground: 0 0% 40%;
+    --accent: 0 0% 10%;
+    --accent-foreground: 0 0% 90%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 10%;
+    --input: 0 0% 10%;
+    --ring: 214 100% 59%;
+
+    /* Traderra Studio specific colors */
+    --studio-gold: #D4AF37;
+    --studio-bg: #0a0a0a;
+    --studio-bg-secondary: #111111;
+    --studio-text: #e5e5e5;
+    --studio-text-muted: #666666;
+    --studio-text-secondary: #999999;
+    --studio-border: #1a1a1a;
+    --studio-card-bg: #111111;
+    --studio-info: #3b82f6;
+  }
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  html {
+    @apply dark; /* Force dark mode for Traderra */
+    background-color: #0a0a0a !important;
+    zoom: 0.9; /* Default to 90% zoom for better UI proportions */
+  }
+
+  html *, body * {
+    color: inherit;
+  }
+
+  /* Professional scroll bars */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/30 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/50;
+  }
+
+  /* Focus styles */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  /* Selection styles */
+  ::selection {
+    @apply bg-primary/20 text-primary-foreground;
+  }
+
+  /* Fix date picker popup z-index and transparency issues */
+  input[type="date"] {
+    position: relative;
+    z-index: 2147483647 !important;
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    z-index: 2147483647 !important;
+  }
+
+  /* Force calendar popup to render on top with solid background */
+  input[type="date"]::-webkit-datetime-edit {
+    z-index: 2147483647 !important;
+  }
+
+  /* Fix webkit date picker popup styling */
+  input[type="date"]::-webkit-datetime-edit-fields-wrapper {
+    z-index: 2147483647 !important;
+  }
+
+  /* Ensure date inputs don't inherit problematic styles */
+  .traderra-date-selector input[type="date"] {
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+  }
+}
+
+@layer components {
+  /* Force dark theme on all elements */
+  * {
+    box-sizing: border-box;
+  }
+
+  /* CRITICAL: Fix for button clicks - HIGHEST PRIORITY */
+  button:not([disabled]),
+  [role="button"]:not([disabled]),
+  .traderra-date-btn {
+    cursor: pointer !important;
+    pointer-events: auto !important;
+  }
+
+  /* Studio theme components */
+  .studio-bg {
+    @apply bg-[#0a0a0a];
+    background-color: #0a0a0a !important;
+  }
+
+  .studio-surface {
+    @apply bg-[#111111] border border-[#1a1a1a];
+    background-color: #111111 !important;
+    border-color: #1a1a1a !important;
+    box-shadow:
+      0 2px 4px rgba(0, 0, 0, 0.3),
+      0 4px 8px rgba(0, 0, 0, 0.2),
+      0 1px 0px rgba(255, 255, 255, 0.06) inset;
+  }
+
+  .studio-border {
+    @apply border-[#1a1a1a];
+    border-color: #1a1a1a !important;
+  }
+
+  .studio-text {
+    @apply text-[#e5e5e5];
+    color: #e5e5e5 !important;
+  }
+
+  .studio-muted {
+    @apply text-[#666666];
+    color: #666666 !important;
+  }
+
+  /* Trading-specific styles */
+  .profit-text {
+    @apply text-trading-profit;
+  }
+
+  .loss-text {
+    @apply text-trading-loss;
+  }
+
+  .neutral-text {
+    @apply text-trading-neutral;
+  }
+
+  /* Professional animations */
+  .animate-glow {
+    animation: glow 2s ease-in-out infinite alternate;
+  }
+
+  @keyframes glow {
+    from {
+      text-shadow: 0 0 10px #3b82f6;
+    }
+    to {
+      text-shadow: 0 0 20px #3b82f6, 0 0 30px #3b82f6;
+    }
+  }
+
+  .animate-pulse-soft {
+    animation: pulse-soft 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-soft {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.6;
+    }
+  }
+
+  /* Metric tiles with professional depth */
+  .metric-tile {
+    @apply studio-surface rounded-lg p-4;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow:
+      0 2px 4px rgba(0, 0, 0, 0.25),
+      0 4px 8px rgba(0, 0, 0, 0.15),
+      0 1px 0px rgba(255, 255, 255, 0.06) inset,
+      0 -1px 0px rgba(0, 0, 0, 0.1) inset;
+  }
+
+  .metric-tile:hover {
+    transform: translateY(-2px);
+    background-color: #161616 !important;
+    box-shadow:
+      0 4px 8px rgba(0, 0, 0, 0.3),
+      0 8px 16px rgba(0, 0, 0, 0.2),
+      0 16px 32px rgba(0, 0, 0, 0.1),
+      0 1px 0px rgba(255, 255, 255, 0.08) inset,
+      0 -1px 0px rgba(0, 0, 0, 0.15) inset;
+  }
+
+  .metric-tile-value {
+    @apply text-2xl font-semibold;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
+
+  .metric-tile-label {
+    @apply text-sm studio-muted uppercase tracking-wide;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+  }
+
+  /* Professional buttons with depth */
+  .btn-primary {
+    @apply bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg font-medium;
+    transition: all 0.2s ease-out;
+    box-shadow:
+      0 2px 4px rgba(0, 0, 0, 0.2),
+      0 4px 8px rgba(0, 0, 0, 0.15),
+      0 1px 0px rgba(255, 255, 255, 0.1) inset,
+      0 -1px 0px rgba(0, 0, 0, 0.2) inset;
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 4px 8px rgba(0, 0, 0, 0.25),
+      0 8px 16px rgba(0, 0, 0, 0.2),
+      0 1px 0px rgba(255, 255, 255, 0.15) inset,
+      0 -1px 0px rgba(0, 0, 0, 0.3) inset;
+  }
+
+  .btn-primary:active {
+    transform: translateY(0px);
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.3),
+      0 1px 0px rgba(255, 255, 255, 0.05) inset,
+      0 -1px 0px rgba(0, 0, 0, 0.4) inset;
+  }
+
+  .btn-secondary {
+    @apply studio-surface hover:bg-[#161616] studio-text px-4 py-2 rounded-lg font-medium;
+    transition: all 0.2s ease-out;
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.2),
+      0 1px 0px rgba(255, 255, 255, 0.05) inset,
+      0 -1px 0px rgba(0, 0, 0, 0.1) inset;
+  }
+
+  .btn-secondary:hover {
+    transform: translateY(-0.5px);
+    box-shadow:
+      0 2px 4px rgba(0, 0, 0, 0.25),
+      0 4px 8px rgba(0, 0, 0, 0.15),
+      0 1px 0px rgba(255, 255, 255, 0.08) inset,
+      0 -1px 0px rgba(0, 0, 0, 0.15) inset;
+  }
+
+  .btn-ghost {
+    @apply hover:bg-accent hover:text-accent-foreground px-4 py-2 rounded-lg font-medium;
+    transition: all 0.2s ease-out;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  }
+
+  .btn-ghost:hover {
+    transform: translateY(-0.5px);
+    box-shadow:
+      0 2px 4px rgba(0, 0, 0, 0.15),
+      0 1px 0px rgba(255, 255, 255, 0.05) inset;
+  }
+
+  /* Chart container with elevated depth */
+  .chart-container {
+    @apply studio-surface rounded-lg p-6;
+    min-height: 300px;
+    height: 400px;
+    display: flex;
+    flex-direction: column;
+    box-shadow:
+      0 4px 8px rgba(0, 0, 0, 0.25),
+      0 8px 16px rgba(0, 0, 0, 0.2),
+      0 16px 32px rgba(0, 0, 0, 0.1),
+      0 1px 0px rgba(255, 255, 255, 0.08) inset,
+      0 -1px 0px rgba(0, 0, 0, 0.15) inset;
+  }
+
+  /* Renata AI chat styles */
+  .ai-message {
+    @apply studio-surface rounded-lg p-4 mb-4 border-l-2 border-primary/50;
+  }
+
+  .ai-message.analyst {
+    @apply border-l-red-500/50;
+  }
+
+  .ai-message.coach {
+    @apply border-l-blue-500/50;
+  }
+
+  .ai-message.mentor {
+    @apply border-l-green-500/50;
+  }
+
+  /* Loading states */
+  .skeleton {
+    @apply animate-pulse bg-muted rounded;
+  }
+
+  /* Professional form styles with depth */
+  .form-input {
+    @apply studio-surface studio-border rounded-lg px-3 py-2 text-sm placeholder:studio-muted;
+    transition: all 0.2s ease-out;
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.2) inset,
+      0 1px 0px rgba(255, 255, 255, 0.05);
+  }
+
+  .form-input:focus {
+    outline: none;
+    border-color: hsl(var(--primary)) !important;
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.3) inset,
+      0 0 0 2px rgba(var(--primary), 0.2),
+      0 2px 4px rgba(0, 0, 0, 0.15);
+  }
+
+  /* Status indicators */
+  .status-online {
+    @apply h-2 w-2 bg-green-500 rounded-full animate-pulse-soft;
+  }
+
+  .status-offline {
+    @apply h-2 w-2 bg-red-500 rounded-full;
+  }
+
+  .status-loading {
+    @apply h-2 w-2 bg-yellow-500 rounded-full animate-pulse;
+  }
+
+  /* Enhanced prose styling for studio theme */
+  .prose-studio {
+    @apply prose prose-studio max-w-none;
+  }
+
+  .prose-studio-sm {
+    @apply prose prose-sm prose-studio max-w-none;
+  }
+
+  .prose-studio-lg {
+    @apply prose prose-lg prose-studio max-w-none;
+  }
+
+  /* Override default prose colors for dark theme consistency */
+  .prose-dark {
+    @apply prose max-w-none;
+  }
+
+  .prose-dark h1,
+  .prose-dark h2,
+  .prose-dark h3,
+  .prose-dark h4,
+  .prose-dark h5,
+  .prose-dark h6 {
+    @apply studio-text;
+  }
+
+  .prose-dark p,
+  .prose-dark li {
+    @apply studio-text;
+  }
+
+  .prose-dark strong {
+    @apply studio-text font-semibold;
+  }
+
+  .prose-dark a {
+    @apply text-primary hover:text-primary/80 transition-colors;
+  }
+
+  .prose-dark blockquote {
+    @apply studio-surface border-l-primary/50 studio-text;
+    background-color: #111111 !important;
+    border-left-color: hsl(45, 93%, 35%) !important;
+    border-left-width: 4px !important;
+    padding: 1rem 1.5rem !important;
+    border-radius: 0.5rem !important;
+    margin: 1.5rem 0 !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3), 0 4px 8px rgba(0, 0, 0, 0.2) !important;
+  }
+
+  .prose-dark code {
+    @apply studio-text bg-[#111111] border border-[#1a1a1a] rounded px-2 py-1;
+    font-size: 0.875em !important;
+  }
+
+  .prose-dark pre {
+    @apply bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) inset, 0 1px 0px rgba(255, 255, 255, 0.05) !important;
+  }
+
+  .prose-dark pre code {
+    @apply bg-transparent border-0 p-0;
+  }
+
+  .prose-dark ul > li::marker,
+  .prose-dark ol > li::marker {
+    @apply studio-muted;
+  }
+
+  .prose-dark hr {
+    @apply studio-border;
+  }
+
+  .prose-dark table {
+    @apply studio-surface border border-[#1a1a1a] rounded-lg overflow-hidden;
+  }
+
+  .prose-dark thead th {
+    @apply studio-text bg-[#0f0f0f] border-b border-[#1a1a1a];
+  }
+
+  .prose-dark tbody td {
+    @apply studio-text border-b border-[#1a1a1a]/50;
+  }
+
+  /* TipTap editor integration */
+  .ProseMirror {
+    @apply prose-dark focus:outline-none;
+    color: #e5e5e5 !important;
+  }
+
+  .ProseMirror h1,
+  .ProseMirror h2,
+  .ProseMirror h3,
+  .ProseMirror h4,
+  .ProseMirror h5,
+  .ProseMirror h6 {
+    color: #e5e5e5 !important;
+    font-weight: 700 !important;
+    line-height: 1.4 !important;
+  }
+
+  .ProseMirror p {
+    color: #e5e5e5 !important;
+    line-height: 1.7 !important;
+    margin: 1.25em 0 !important;
+  }
+
+  .ProseMirror ul,
+  .ProseMirror ol {
+    color: #e5e5e5 !important;
+    padding-left: 1.625em !important;
+  }
+
+  .ProseMirror li {
+    color: #e5e5e5 !important;
+    margin: 0.5em 0 !important;
+  }
+
+  .ProseMirror ul > li::marker {
+    color: #666666 !important;
+  }
+
+  .ProseMirror ol > li::marker {
+    color: #666666 !important;
+  }
+
+  .ProseMirror strong {
+    color: #e5e5e5 !important;
+    font-weight: 600 !important;
+  }
+
+  .ProseMirror em {
+    color: #e5e5e5 !important;
+    font-style: italic !important;
+  }
+
+  .ProseMirror blockquote {
+    border-left: 4px solid hsl(45, 93%, 35%) !important;
+    background-color: #111111 !important;
+    color: #e5e5e5 !important;
+    padding: 1rem 1.5rem !important;
+    margin: 1.5rem 0 !important;
+    border-radius: 0.5rem !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3), 0 4px 8px rgba(0, 0, 0, 0.2) !important;
+  }
+
+  .ProseMirror code {
+    background-color: #111111 !important;
+    color: #e5e5e5 !important;
+    border: 1px solid #1a1a1a !important;
+    border-radius: 0.25rem !important;
+    padding: 0.125rem 0.375rem !important;
+    font-size: 0.875em !important;
+  }
+
+  .ProseMirror pre {
+    background-color: #0a0a0a !important;
+    border: 1px solid #1a1a1a !important;
+    border-radius: 0.375rem !important;
+    padding: 0.8571429em 1.1428571em !important;
+    margin: 1.7142857em 0 !important;
+    overflow-x: auto !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) inset, 0 1px 0px rgba(255, 255, 255, 0.05) !important;
+  }
+
+  .ProseMirror pre code {
+    background-color: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    color: #a3a3a3 !important;
+  }
+}
+
+@layer utilities {
+  /* Text utilities */
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .text-pretty {
+    text-wrap: pretty;
+  }
+
+  /* Professional spacing */
+  .section-spacing {
+    @apply py-12 md:py-16 lg:py-20;
+  }
+
+  .container-spacing {
+    @apply px-4 sm:px-6 lg:px-8;
+  }
+
+  /* Glass effect */
+  .glass {
+    @apply backdrop-blur-sm border;
+    background-color: hsl(var(--background) / 0.8);
+    border-color: hsl(var(--border) / 0.5);
+  }
+
+  /* Trading-specific utilities */
+  .pnl-positive {
+    @apply text-trading-profit;
+  }
+
+  .pnl-negative {
+    @apply text-trading-loss;
+  }
+
+  .pnl-neutral {
+    @apply text-trading-neutral;
+  }
+
+  /* Metric formatting */
+  .metric-value {
+    @apply font-semibold;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  /* Standardized number font for all financial data */
+  .number-font {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  .metric-change-positive {
+    @apply text-trading-profit;
+  }
+
+  .metric-change-negative {
+    @apply text-trading-loss;
+  }
+
+  /* Professional shadows - Multi-layer depth system */
+  .shadow-studio-subtle {
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.15),
+      0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .shadow-studio {
+    box-shadow:
+      0 2px 4px rgba(0, 0, 0, 0.2),
+      0 4px 8px rgba(0, 0, 0, 0.15),
+      0 1px 0px rgba(255, 255, 255, 0.05) inset;
+  }
+
+  .shadow-studio-lg {
+    box-shadow:
+      0 4px 8px rgba(0, 0, 0, 0.25),
+      0 8px 16px rgba(0, 0, 0, 0.2),
+      0 16px 32px rgba(0, 0, 0, 0.1),
+      0 1px 0px rgba(255, 255, 255, 0.08) inset;
+  }
+
+  .shadow-studio-prominent {
+    box-shadow:
+      0 8px 16px rgba(0, 0, 0, 0.3),
+      0 16px 32px rgba(0, 0, 0, 0.25),
+      0 32px 64px rgba(0, 0, 0, 0.15),
+      0 1px 0px rgba(255, 255, 255, 0.1) inset;
+  }
+
+  /* Elevated surface shadows */
+  .shadow-elevated {
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.2),
+      0 4px 6px rgba(0, 0, 0, 0.15),
+      0 1px 0px rgba(255, 255, 255, 0.06) inset,
+      0 -1px 0px rgba(0, 0, 0, 0.1) inset;
+  }
+
+  /* Spacious Layout Adjustments - Creates better spacing feel */
+  .dashboard-container {
+    /* Remove aggressive scaling, use subtle spacing improvements */
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  /* Increase overall container max widths for more breathing room */
+  .max-w-7xl {
+    max-width: 82rem; /* Slightly increased from 80rem */
+  }
+
+  .max-w-6xl {
+    max-width: 74rem; /* Slightly increased from 72rem */
+  }
+
+  /* Increase grid gaps for better spacing */
+  .grid {
+    gap: 1.25rem; /* Slightly increased base grid gap */
+  }
+
+  /* Enhanced padding for main containers */
+  .main-content {
+    padding: 2rem; /* Increased from default */
+  }
+
+  /* Metric cards - slightly larger and more spaced */
+  .metric-card {
+    padding: 1.25rem; /* Moderately increased padding */
+    margin-bottom: 1.25rem;
+  }
+
+  /* Chart containers - more breathing room */
+  .chart-container {
+    padding: 1.25rem;
+    margin: 1rem 0;
+  }
+
+  /* Performance overview spacing */
+  .performance-overview {
+    gap: 1.5rem; /* Moderately increased gap between performance metrics */
+  }
+
+  /* Slightly larger text for better readability */
+  .dashboard-text {
+    font-size: 1.05em; /* 5% larger base text */
+  }
+
+  /* Interactive shadow states */
+  .shadow-interactive {
+    transition: box-shadow 0.2s ease-out;
+    box-shadow:
+      0 2px 4px rgba(0, 0, 0, 0.15),
+      0 1px 0px rgba(255, 255, 255, 0.05) inset;
+  }
+
+  .shadow-interactive:hover {
+    box-shadow:
+      0 4px 8px rgba(0, 0, 0, 0.2),
+      0 8px 16px rgba(0, 0, 0, 0.15),
+      0 1px 0px rgba(255, 255, 255, 0.08) inset;
+    transform: translateY(-1px);
+  }
+
+  /* Dark theme date input styling */
+  input[type="date"] {
+    @apply bg-[#1a1a1a] border border-[#2a2a2a] text-[#e5e5e5];
+    color-scheme: dark;
+    background-color: #1a1a1a !important;
+    border-color: #2a2a2a !important;
+    color: #e5e5e5 !important;
+  }
+
+  input[type="date"]:focus {
+    @apply ring-2 ring-primary border-primary;
+    border-color: hsl(var(--primary)) !important;
+    box-shadow: 0 0 0 2px rgba(var(--primary), 0.2) !important;
+  }
+
+  /* Force dark theme on date picker calendar popup */
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1) brightness(0.8);
+    background-color: transparent;
+    cursor: pointer;
+  }
+
+  /* Dark theme styling for the calendar popup itself */
+  input[type="date"]::-webkit-datetime-edit {
+    color: #e5e5e5 !important;
+    background-color: #1a1a1a !important;
+  }
+
+  input[type="date"]::-webkit-datetime-edit-fields-wrapper {
+    background-color: #1a1a1a !important;
+  }
+
+  input[type="date"]::-webkit-datetime-edit-text {
+    color: #e5e5e5 !important;
+  }
+
+  input[type="date"]::-webkit-datetime-edit-month-field,
+  input[type="date"]::-webkit-datetime-edit-day-field,
+  input[type="date"]::-webkit-datetime-edit-year-field {
+    color: #e5e5e5 !important;
+    background-color: #1a1a1a !important;
+  }
+
+  /* Additional dark theme support for various browsers */
+  input[type="date"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    display: none;
+  }
+
+  input[type="date"]::-webkit-clear-button {
+    -webkit-appearance: none;
+    display: none;
+  }
+
+  /* AI-Enhanced Trading Interface Styles */
+  .studio-card {
+    @apply studio-surface rounded-lg p-6;
+    box-shadow:
+      0 2px 4px rgba(0, 0, 0, 0.25),
+      0 4px 8px rgba(0, 0, 0, 0.15),
+      0 1px 0px rgba(255, 255, 255, 0.06) inset,
+      0 -1px 0px rgba(0, 0, 0, 0.1) inset;
+  }
+
+  .studio-card-elevated {
+    @apply studio-card;
+    box-shadow:
+      0 4px 8px rgba(0, 0, 0, 0.3),
+      0 8px 16px rgba(0, 0, 0, 0.2),
+      0 16px 32px rgba(0, 0, 0, 0.1),
+      0 1px 0px rgba(255, 255, 255, 0.08) inset,
+      0 -1px 0px rgba(0, 0, 0, 0.15) inset;
+  }
+
+  .studio-card-large {
+    @apply studio-card;
+    min-height: 400px;
+  }
+
+  .studio-metric-card {
+    @apply studio-surface rounded-lg p-4 border studio-border;
+    transition: all 0.2s ease-out;
+  }
+
+  .studio-metric-card:hover {
+    transform: translateY(-1px);
+    background-color: #161616 !important;
+  }
+
+  .studio-metric-value {
+    @apply text-xl font-semibold studio-text;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
+
+  .studio-metric-label {
+    @apply text-xs uppercase tracking-wide studio-muted;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+  }
+
+  .studio-input {
+    @apply studio-surface studio-border rounded-lg px-3 py-2 text-sm studio-text;
+    background-color: var(--studio-card-bg) !important;
+    border-color: var(--studio-border) !important;
+    color: var(--studio-text) !important;
+    transition: all 0.2s ease-out;
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.2) inset,
+      0 1px 0px rgba(255, 255, 255, 0.05);
+  }
+
+  .studio-input:focus {
+    outline: none;
+    border-color: var(--studio-gold) !important;
+    box-shadow:
+      0 1px 3px rgba(0, 0, 0, 0.3) inset,
+      0 0 0 2px rgba(212, 175, 55, 0.2),
+      0 2px 4px rgba(0, 0, 0, 0.15);
+  }
+
+  .studio-input::placeholder {
+    color: var(--studio-text-muted) !important;
+  }
+
+  .studio-table {
+    @apply w-full text-sm;
+  }
+
+  .studio-table thead th {
+    @apply text-xs uppercase tracking-wide studio-muted p-3 text-left border-b studio-border;
+    background-color: var(--studio-bg-secondary) !important;
+  }
+
+  .studio-table tbody td {
+    @apply p-3 border-b studio-border;
+  }
+
+  .studio-table tbody tr {
+    @apply hover:bg-gray-800/50 cursor-pointer transition-colors;
+  }
+
+  .studio-table tbody tr.selected {
+    background-color: rgba(212, 175, 55, 0.1) !important;
+    border-color: rgba(212, 175, 55, 0.3) !important;
+  }
+
+  .studio-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+  }
+
+  .studio-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .studio-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .studio-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+  }
+
+  .studio-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.5);
+  }
+
+  .studio-header {
+    @apply border-b studio-border;
+    background-color: var(--studio-bg-secondary) !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+
+  .section-header {
+    @apply flex items-center gap-3 mb-6;
+  }
+
+  .section-icon {
+    @apply h-6 w-6;
+  }
+
+  .section-title {
+    @apply text-xl font-semibold;
+  }
+
+  .section-spacing {
+    @apply mb-8;
+  }
+
+  .content-bumper-all {
+    @apply p-6;
+  }
+
+  .sidebar-professional {
+    @apply p-6;
+  }
+
+  .sidebar-project-item {
+    @apply transition-all duration-200;
+  }
+
+  .sidebar-project-item.active {
+    border-color: var(--studio-gold) !important;
+  }
+
+  .btn-secondary {
+    @apply bg-secondary hover:bg-secondary/90 text-secondary-foreground px-4 py-2 rounded-lg font-medium;
+    transition: all 0.2s ease-out;
+    box-shadow:
+      0 2px 4px rgba(0, 0, 0, 0.2),
+      0 4px 8px rgba(0, 0, 0, 0.15),
+      0 1px 0px rgba(255, 255, 255, 0.1) inset,
+      0 -1px 0px rgba(0, 0, 0, 0.2) inset;
+  }
+
+  .btn-secondary:hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 4px 8px rgba(0, 0, 0, 0.25),
+      0 8px 16px rgba(0, 0, 0, 0.2),
+      0 1px 0px rgba(255, 255, 255, 0.15) inset,
+      0 -1px 0px rgba(0, 0, 0, 0.3) inset;
+  }
+
+  .professional-container {
+    @apply p-8;
+  }
+
+  .metrics-grid {
+    @apply grid grid-cols-2 gap-4;
+  }
+
+  .status-positive {
+    @apply text-green-400 font-semibold;
+  }
+
+  .status-negative {
+    @apply text-red-400 font-semibold;
+  }
+
+  .chart-container {
+    @apply min-h-[400px];
+  }
+
+  /* AI-specific animations */
+  .studio-spinner {
+    @apply animate-spin h-4 w-4 border-2 border-primary/30 border-t-primary rounded-full;
+  }
+
+  @keyframes ai-pulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.8;
+      transform: scale(1.05);
+    }
+  }
+
+  .ai-pulse {
+    animation: ai-pulse 2s ease-in-out infinite;
+  }
+
+  /* CRITICAL FIX: Traderra Date Selector Button Classes */
+  /* These classes are referenced in traderview-date-selector.tsx but were missing */
+  .traderra-date-btn {
+    @apply px-3 py-1.5 text-sm font-medium rounded transition-all duration-200;
+    position: relative;
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    z-index: 10 !important;
+    transition: all 0.2s ease-out !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), 0 1px 0px rgba(255, 255, 255, 0.05);
+  }
+
+  .traderra-date-active {
+    @apply bg-[#B8860B] text-black shadow-lg;
+    background-color: #B8860B !important;
+    color: #000000 !important;
+    font-weight: 600 !important;
+    box-shadow:
+      0 2px 4px rgba(184, 134, 11, 0.3),
+      0 4px 8px rgba(184, 134, 11, 0.2),
+      0 1px 0px rgba(255, 255, 255, 0.3) inset,
+      0 -1px 0px rgba(0, 0, 0, 0.2) inset !important;
+    border: 1px solid rgba(184, 134, 11, 0.8) !important;
+  }
+
+  .traderra-date-active:hover {
+    background-color: #C8960C !important;
+    transform: translateY(-1px);
+    box-shadow:
+      0 4px 8px rgba(184, 134, 11, 0.4),
+      0 6px 12px rgba(184, 134, 11, 0.3),
+      0 1px 0px rgba(255, 255, 255, 0.4) inset !important;
+  }
+
+  .traderra-date-inactive {
+    @apply text-gray-400 hover:text-gray-200 hover:bg-gray-700/50;
+    background-color: transparent !important;
+    color: #9CA3AF !important;
+    border: 1px solid transparent !important;
+  }
+
+  .traderra-date-inactive:hover {
+    background-color: rgba(55, 65, 81, 0.5) !important;
+    color: #E5E7EB !important;
+    transform: translateY(-0.5px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  }
+
+  /* Ensure proper state attributes for AI detection */
+  .traderra-date-btn[data-active="true"] {
+    /* This ensures data-active attribute styling matches visual styling */
+    @apply bg-[#B8860B] text-black shadow-lg;
+    background-color: #B8860B !important;
+    color: #000000 !important;
+  }
+
+  .traderra-date-btn[data-active="false"] {
+    /* This ensures data-active attribute styling matches visual styling */
+    @apply text-gray-400;
+    color: #9CA3AF !important;
+  }
+}

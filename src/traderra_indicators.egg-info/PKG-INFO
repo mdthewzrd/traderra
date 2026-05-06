@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: traderra-indicators
+Version: 0.1.0
+Summary: Declarative indicator framework for Traderra Charts
+Requires-Python: >=3.11
+Requires-Dist: pandas>=2.0
+Requires-Dist: numpy>=1.24
+Provides-Extra: server
+Requires-Dist: fastapi>=0.104; extra == "server"
+Requires-Dist: uvicorn>=0.24; extra == "server"
+Requires-Dist: pydantic>=2.0; extra == "server"

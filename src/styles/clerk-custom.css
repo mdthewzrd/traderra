@@ -1,0 +1,288 @@
+/* Custom Clerk Overrides for Traderra Theme */
+
+/* Force dark theme on all Clerk components */
+[class*="cl-"],
+.cl-internal-b3uf6c,
+.cl-internal-1m0jbdx,
+[class*="cl-signIn"],
+[class*="cl-signIn-"] {
+  background: #0a0a0a !important;
+  background-color: #0a0a0a !important;
+  color: #fafafa !important;
+  border: 1px solid #1a1a1a !important;
+  border-radius: 0.5rem !important;
+}
+
+/* Remove any white backgrounds */
+[class*="cl-"]:not([class*="button"]):not([class*="link"]):not([class*="logo"]) {
+  background: #0a0a0a !important;
+  background-color: #0a0a0a !important;
+}
+
+/* Header override */
+.cl-internal-1u2x3i8,
+.cl-signIn-start__title {
+  color: #fafafa !important;
+  font-size: 2rem !important;
+  font-weight: 700 !important;
+  margin-bottom: 1rem !important;
+}
+
+/* Subtitle override */
+.cl-internal-11rfnkp,
+.cl-signIn-start__subtitle {
+  color: #a1a1aa !important;
+  font-size: 1rem !important;
+  margin-bottom: 2rem !important;
+}
+
+.cl-internal-1m0jbdx {
+  background: #0a0a0a !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 2rem !important;
+}
+
+/* Header */
+.cl-internal-1u2x3i8 {
+  color: #fafafa !important;
+  font-size: 2rem !important;
+  font-weight: 700 !important;
+  margin-bottom: 1rem !important;
+}
+
+.cl-internal-11rfnkp {
+  color: #a1a1aa !important;
+  font-size: 1rem !important;
+  margin-bottom: 2rem !important;
+}
+
+/* Form fields */
+.cl-internal-1k0pwg3 {
+  background: #1a1a1a !important;
+  border: 1px solid #333333 !important;
+  border-radius: 0.5rem !important;
+  color: #fafafa !important;
+  font-size: 0.875rem !important;
+  padding: 0.75rem !important;
+  transition: all 0.2s !important;
+}
+
+.cl-internal-1k0pwg3:focus {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 1px #3b82f6 !important;
+}
+
+.cl-internal-1tq0yrs {
+  color: #fafafa !important;
+  font-weight: 500 !important;
+  font-size: 0.875rem !important;
+  margin-bottom: 0.5rem !important;
+}
+
+/* Buttons */
+.cl-internal-14ag8o4 {
+  background: #3b82f6 !important;
+  color: #ffffff !important;
+  border-radius: 0.5rem !important;
+  font-weight: 500 !important;
+  transition: all 0.2s !important;
+}
+
+.cl-internal-14ag8o4:hover {
+  background: #2563eb !important;
+}
+
+.cl-internal-14ag8o4:focus {
+  background: #1d4ed8 !important;
+}
+
+/* Social buttons */
+.cl-internal-1e2d8gr {
+  background: #1a1a1a !important;
+  border: 1px solid #333333 !important;
+  border-radius: 0.5rem !important;
+  color: #fafafa !important;
+  transition: all 0.2s !important;
+}
+
+.cl-internal-1e2d8gr:hover {
+  background: #262626 !important;
+}
+
+.cl-internal-q615sa {
+  color: #fafafa !important;
+  font-weight: 500 !important;
+}
+
+/* Links */
+.cl-internal-1i3a2c8 {
+  color: #3b82f6 !important;
+  text-decoration: none !important;
+}
+
+.cl-internal-1i3a2c8:hover {
+  color: #2563eb !important;
+  text-decoration: underline !important;
+}
+
+/* Footer */
+.cl-internal-14kqt9 {
+  border-top: 1px solid #333333 !important;
+  margin-top: 1.5rem !important;
+  padding-top: 1.5rem !important;
+}
+
+/* Divider */
+.cl-internal-13f05k8 {
+  border-top: 1px solid #333333 !important;
+}
+
+.cl-internal-1qlz6 {
+  color: #a1a1aa !important;
+  font-size: 0.875rem !important;
+}
+
+/* Alerts */
+.cl-internal-1klizp3 {
+  border: 1px solid rgba(239, 68, 68, 0.2) !important;
+  background: rgba(239, 68, 68, 0.1) !important;
+  border-radius: 0.5rem !important;
+}
+
+.cl-internal-jgl6g7 {
+  color: #f87171 !important;
+}
+
+/* Form spacing */
+.cl-internal-1wzug8 {
+  margin-bottom: 1.5rem !important;
+}
+
+.cl-internal-1wx1z7 {
+  margin-bottom: 1rem !important;
+}
+
+/* Container overrides */
+[class*="cl-signIn"] {
+  background: transparent !important;
+  border: none !important;
+}
+
+[class*="cl-signIn-"] {
+  background: #0a0a0a !important;
+  border: 1px solid #1a1a1a !important;
+  border-radius: 0.5rem !important;
+  padding: 2rem !important;
+}
+
+/* Additional Clerk component overrides */
+.cl-internal-1itq4ms,
+.cl-internal-1r3k5f4 {
+  background: #0a0a0a !important;
+  border: 1px solid #333333 !important;
+}
+
+/* Force dark theme on all elements inside Clerk components */
+[class*="cl-"] * {
+  background-color: transparent !important;
+}
+
+/* Specific override for the main container */
+div[class*="cl-internal-b3uf6c"] {
+  background: #0a0a0a !important;
+  background-color: #0a0a0a !important;
+}
+
+/* Override any element with white background */
+[class*="cl-"] [style*="background: white"],
+[class*="cl-"] [style*="background-color: white"],
+[class*="cl-"] [style*="background: #fff"],
+[class*="cl-"] [style*="background-color: #fff"] {
+  background: #0a0a0a !important;
+  background-color: #0a0a0a !important;
+}
+
+/* Ensure proper z-index and positioning */
+.cl-internal-b3uf6c {
+  position: relative !important;
+  z-index: 10 !important;
+}
+
+/* Global override for any remaining white elements */
+[class*="cl-"] div,
+[class*="cl-"] section,
+[class*="cl-"] main,
+[class*="cl-"] article,
+[class*="cl-"] aside {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+/* Fix any white backgrounds */
+[class*="cl-"] {
+  background-color: transparent !important;
+}
+
+.cl-internal-b3uf6c *,
+.cl-internal-1m0jbdx * {
+  background-color: inherit !important;
+}
+
+/* Force dark theme for all text elements */
+[class*="cl-"] span,
+[class*="cl-"] p,
+[class*="cl-"] div {
+  color: inherit !important;
+}
+
+/* Ensure inputs are readable */
+input[type="email"],
+input[type="password"],
+input[type="text"] {
+  background: #1a1a1a !important;
+  color: #fafafa !important;
+  border: 1px solid #333333 !important;
+  border-radius: 0.5rem !important;
+  padding: 0.75rem !important;
+}
+
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="text"]:focus {
+  border-color: #3b82f6 !important;
+  outline: none !important;
+  box-shadow: 0 0 0 1px #3b82f6 !important;
+}
+
+/* Button overrides */
+button {
+  background: #3b82f6 !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 0.5rem !important;
+  padding: 0.75rem 1.5rem !important;
+  font-weight: 500 !important;
+  transition: all 0.2s !important;
+}
+
+button:hover {
+  background: #2563eb !important;
+}
+
+button:active {
+  background: #1d4ed8 !important;
+}
+
+/* Social provider buttons */
+button[data-provider="google"],
+button[data-provider="apple"] {
+  background: #1a1a1a !important;
+  border: 1px solid #333333 !important;
+  color: #fafafa !important;
+}
+
+button[data-provider="google"]:hover,
+button[data-provider="apple"]:hover {
+  background: #262626 !important;
+}

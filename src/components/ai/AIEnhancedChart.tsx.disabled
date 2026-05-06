@@ -1,0 +1,636 @@
+'use client'
+
+/**
+ * AI-Enhanced Chart Analysis Component
+ * Provides intelligent pattern recognition and automated chart analysis
+ */
+
+import React, { useState, useEffect, useMemo } from 'react'
+import { useCopilotAction, useCopilotReadable } from '@copilotkit/react-core'
+import {
+  TrendingUp,
+  TrendingDown,
+  Target,
+  AlertTriangle,
+  Brain,
+  Eye,
+  Zap,
+  BarChart3,
+  Activity
+} from 'lucide-react'
+import EdgeChart, { ChartData, Timeframe } from '@/components/EdgeChart'
+
+interface ChartPattern {
+  type: 'bullish_breakout' | 'bearish_breakdown' | 'consolidation' | 'parabolic' | 'reversal'
+  confidence: number
+  description: string
+  entry?: number
+  target?: number
+  stop?: number
+}
+
+interface TechnicalIndicators {
+  trend: 'bullish' | 'bearish' | 'neutral'
+  momentum: 'strong' | 'moderate' | 'weak'
+  volume: 'high' | 'normal' | 'low'
+  volatility: 'high' | 'normal' | 'low'
+  support?: number
+  resistance?: number
+}
+
+interface AIEnhancedChartProps {
+  symbol: string
+  timeframe: Timeframe
+  data: ChartData
+  onTimeframeChange: (timeframe: Timeframe) => void
+  className?: string
+}
+
+export function AIEnhancedChart({
+  symbol,
+  timeframe,
+  data,
+  onTimeframeChange,
+  className
+}: AIEnhancedChartProps) {
+  const [detectedPatterns, setDetectedPatterns] = useState<ChartPattern[]>([])
+  const [technicalIndicators, setTechnicalIndicators] = useState<TechnicalIndicators | null>(null)
+  const [aiInsights, setAiInsights] = useState<string>('')
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [showAIOverlay, setShowAIOverlay] = useState(true)
+
+  // Calculate basic technical indicators
+  const indicators = useMemo(() => {
+    if (!data || !data.close || data.close.length === 0) return null
+
+    const closes = data.close
+    const volumes = data.volume || []
+    const highs = data.high || []
+    const lows = data.low || []
+
+    // Calculate current price and recent performance
+    const currentPrice = closes[closes.length - 1]
+    const previousPrice = closes[closes.length - 2] || currentPrice
+    const change = ((currentPrice - previousPrice) / previousPrice) * 100
+
+    // Calculate average volume
+    const avgVolume = volumes.length > 20 ?
+      volumes.slice(-20).reduce((sum, vol) => sum + vol, 0) / 20 : 0
+
+    // Calculate volatility (using 20-period ATR approximation)
+    let atr = 0
+    if (highs.length >= 20 && lows.length >= 20) {
+      const atrValues = []
+      for (let i = 1; i < Math.min(20, highs.length); i++) {
+        const tr = Math.max(
+          highs[i] - lows[i],
+          Math.abs(highs[i] - closes[i - 1]),
+          Math.abs(lows[i] - closes[i - 1])
+        )
+        atrValues.push(tr)
+      }
+      atr = atrValues.reduce((sum, val) => sum + val, 0) / atrValues.length
+    }
+
+    // Simple support/resistance calculation
+    const recentHighs = highs.slice(-20)
+    const recentLows = lows.slice(-20)
+    const resistance = Math.max(...recentHighs)
+    const support = Math.min(...recentLows)
+
+    return {
+      currentPrice,
+      change,
+      avgVolume,
+      atr,
+      resistance,
+      support,
+      trend: change > 2 ? 'bullish' : change < -2 ? 'bearish' : 'neutral',
+      momentum: Math.abs(change) > 5 ? 'strong' : Math.abs(change) > 2 ? 'moderate' : 'weak',
+      volume: volumes[volumes.length - 1] > avgVolume * 1.5 ? 'high' :
+               volumes[volumes.length - 1] < avgVolume * 0.5 ? 'low' : 'normal',
+      volatility: atr > currentPrice * 0.05 ? 'high' : atr < currentPrice * 0.02 ? 'low' : 'normal'
+    }
+  }, [data])
+
+  // Make chart data readable by AI
+  useCopilotReadable({
+    description: `Chart data for ${symbol} on ${timeframe} timeframe with price and volume information`,
+    value: {
+      symbol,
+      timeframe,
+      currentPrice: indicators?.currentPrice,
+      priceChange: indicators?.change,
+      trend: indicators?.trend,
+      momentum: indicators?.momentum,
+      volumeProfile: indicators?.volume,
+      volatility: indicators?.volatility,
+      dataPoints: data?.close?.length || 0
+    }
+  })
+
+  // Make technical analysis readable
+  useCopilotReadable({
+    description: `Technical analysis results for ${symbol} including patterns and indicators`,
+    value: {
+      detectedPatterns: detectedPatterns.map(p => ({
+        type: p.type,
+        confidence: p.confidence,
+        description: p.description
+      })),
+      technicalIndicators,
+      lastUpdated: new Date().toISOString()
+    }
+  })
+
+  // AI Action: Analyze chart patterns
+  useCopilotAction({
+    name: "analyzeChartPatterns",
+    description: "Analyze the current chart for trading patterns and opportunities",
+    parameters: [
+      {
+        name: "analysisType",
+        type: "string",
+        description: "Type of analysis: 'patterns', 'support_resistance', 'trend', or 'comprehensive'"
+      }
+    ],
+    handler: async ({ analysisType }) => {
+      setIsAnalyzing(true)
+      const patterns = await analyzePatterns(data, analysisType)
+      setDetectedPatterns(patterns)
+
+      const insights = generatePatternInsights(patterns, indicators)
+      setAiInsights(insights)
+      setIsAnalyzing(false)
+
+      return insights
+    }
+  })
+
+  // AI Action: Generate trading signals
+  useCopilotAction({
+    name: "generateTradingSignals",
+    description: "Generate specific trading signals with entry, target, and stop levels",
+    parameters: [
+      {
+        name: "riskTolerance",
+        type: "string",
+        description: "Risk tolerance for signal generation: 'conservative', 'moderate', or 'aggressive'"
+      }
+    ],
+    handler: async ({ riskTolerance }) => {
+      const signals = generateTradingSignals(indicators, detectedPatterns, riskTolerance)
+      return signals
+    }
+  })
+
+  // AI Action: Predict price movement
+  useCopilotAction({
+    name: "predictPriceMovement",
+    description: "Analyze price data to predict potential future movement direction and magnitude",
+    parameters: [
+      {
+        name: "timeHorizon",
+        type: "string",
+        description: "Prediction time horizon: 'short' (1-3 days), 'medium' (1-2 weeks), or 'long' (1+ months)"
+      }
+    ],
+    handler: async ({ timeHorizon }) => {
+      const prediction = generatePricePrediction(data, indicators, timeHorizon)
+      return prediction
+    }
+  })
+
+  // Analyze chart patterns
+  async function analyzePatterns(chartData: ChartData, analysisType: string): Promise<ChartPattern[]> {
+    if (!chartData.close || chartData.close.length < 10) return []
+
+    const patterns: ChartPattern[] = []
+    const closes = chartData.close
+    const highs = chartData.high || []
+    const lows = chartData.low || []
+    const volumes = chartData.volume || []
+
+    // Pattern detection logic
+    if (analysisType === 'patterns' || analysisType === 'comprehensive') {
+      // Breakout pattern
+      const recentHigh = Math.max(...highs.slice(-10))
+      const currentPrice = closes[closes.length - 1]
+      if (currentPrice > recentHigh * 1.02) {
+        patterns.push({
+          type: 'bullish_breakout',
+          confidence: 0.8,
+          description: 'Price breaking above recent resistance level',
+          entry: currentPrice,
+          target: currentPrice * 1.15,
+          stop: currentPrice * 0.95
+        })
+      }
+
+      // Parabolic move detection
+      const priceChanges = closes.slice(-5).map((price, i, arr) =>
+        i > 0 ? ((price - arr[i-1]) / arr[i-1]) * 100 : 0
+      ).slice(1)
+
+      if (priceChanges.every(change => change > 5)) {
+        patterns.push({
+          type: 'parabolic',
+          confidence: 0.9,
+          description: 'Parabolic price movement detected - caution advised',
+          entry: currentPrice,
+          target: currentPrice * 1.10,
+          stop: currentPrice * 0.85
+        })
+      }
+
+      // Consolidation pattern
+      const priceRange = Math.max(...closes.slice(-10)) - Math.min(...closes.slice(-10))
+      const avgPrice = closes.slice(-10).reduce((sum, price) => sum + price, 0) / 10
+      if (priceRange / avgPrice < 0.05) {
+        patterns.push({
+          type: 'consolidation',
+          confidence: 0.7,
+          description: 'Price consolidating in tight range - potential breakout setup',
+          entry: avgPrice,
+          target: avgPrice * 1.08,
+          stop: avgPrice * 0.92
+        })
+      }
+    }
+
+    return patterns
+  }
+
+  // Generate pattern insights
+  function generatePatternInsights(patterns: ChartPattern[], indicators: any): string {
+    if (!indicators) return "Insufficient data for analysis"
+
+    let insights = `🎯 AI Chart Analysis for ${symbol}\n\n`
+
+    // Current market condition
+    insights += `📊 Current Status:\n`
+    insights += `• Price: $${indicators.currentPrice.toFixed(2)} (${indicators.change >= 0 ? '+' : ''}${indicators.change.toFixed(2)}%)\n`
+    insights += `• Trend: ${indicators.trend.toUpperCase()}\n`
+    insights += `• Momentum: ${indicators.momentum}\n`
+    insights += `• Volume: ${indicators.volume}\n`
+    insights += `• Volatility: ${indicators.volatility}\n\n`
+
+    // Pattern analysis
+    if (patterns.length > 0) {
+      insights += `🔍 Detected Patterns:\n`
+      patterns.forEach((pattern, i) => {
+        insights += `${i + 1}. ${pattern.description} (${(pattern.confidence * 100).toFixed(0)}% confidence)\n`
+        if (pattern.entry) insights += `   Entry: $${pattern.entry.toFixed(2)}\n`
+        if (pattern.target) insights += `   Target: $${pattern.target.toFixed(2)}\n`
+        if (pattern.stop) insights += `   Stop: $${pattern.stop.toFixed(2)}\n`
+      })
+      insights += '\n'
+    } else {
+      insights += `🔍 No significant patterns detected at current timeframe\n\n`
+    }
+
+    // Support/Resistance
+    insights += `📈 Key Levels:\n`
+    insights += `• Resistance: $${indicators.resistance.toFixed(2)}\n`
+    insights += `• Support: $${indicators.support.toFixed(2)}\n\n`
+
+    // Risk assessment
+    insights += `⚠️ Risk Assessment:\n`
+    if (indicators.volatility === 'high') {
+      insights += `• High volatility - use wider stops\n`
+    }
+    if (indicators.volume === 'low') {
+      insights += `• Low volume - reduced liquidity risk\n`
+    }
+    if (patterns.some(p => p.type === 'parabolic')) {
+      insights += `• Parabolic move detected - reversal risk elevated\n`
+    }
+
+    return insights
+  }
+
+  // Generate trading signals
+  function generateTradingSignals(indicators: any, patterns: ChartPattern[], riskTolerance: string): string {
+    if (!indicators) return "Insufficient data for signal generation"
+
+    let signals = `🎯 Trading Signals for ${symbol}\n\n`
+
+    const riskMultiplier = riskTolerance === 'conservative' ? 0.5 :
+                          riskTolerance === 'aggressive' ? 2.0 : 1.0
+
+    if (patterns.length === 0) {
+      signals += `📊 Current Market Assessment:\n`
+      signals += `• Trend: ${indicators.trend}\n`
+      signals += `• Suggested position size: ${riskTolerance === 'conservative' ? 'Small' : riskTolerance === 'aggressive' ? 'Large' : 'Normal'}\n`
+
+      if (indicators.trend === 'bullish') {
+        signals += `• Entry consideration: Above $${indicators.currentPrice.toFixed(2)}\n`
+        signals += `• Target: $${(indicators.currentPrice * (1 + 0.05 * riskMultiplier)).toFixed(2)}\n`
+        signals += `• Stop: $${(indicators.currentPrice * (1 - 0.03 * riskMultiplier)).toFixed(2)}\n`
+      }
+    } else {
+      signals += `🎯 Pattern-Based Signals:\n`
+      patterns.forEach((pattern, i) => {
+        signals += `\n${i + 1}. ${pattern.type.replace('_', ' ').toUpperCase()}\n`
+        signals += `   Confidence: ${(pattern.confidence * 100).toFixed(0)}%\n`
+        if (pattern.entry) signals += `   Entry: $${pattern.entry.toFixed(2)}\n`
+        if (pattern.target) signals += `   Target: $${(pattern.target! * riskMultiplier).toFixed(2)}\n`
+        if (pattern.stop) signals += `   Stop: $${(pattern.stop! / riskMultiplier).toFixed(2)}\n`
+      })
+    }
+
+    return signals
+  }
+
+  // Generate price prediction
+  function generatePricePrediction(chartData: ChartData, indicators: any, timeHorizon: string): string {
+    if (!indicators) return "Insufficient data for prediction"
+
+    const momentum = indicators.momentum
+    const trend = indicators.trend
+    const volatility = indicators.volatility
+
+    let prediction = `🔮 Price Prediction for ${symbol} (${timeHorizon}-term)\n\n`
+
+    let direction = 'sideways'
+    let confidence = 50
+    let magnitude = 0
+
+    if (trend === 'bullish' && momentum === 'strong') {
+      direction = 'upward'
+      confidence = 75
+      magnitude = timeHorizon === 'short' ? 5 : timeHorizon === 'medium' ? 12 : 25
+    } else if (trend === 'bearish' && momentum === 'strong') {
+      direction = 'downward'
+      confidence = 75
+      magnitude = timeHorizon === 'short' ? -5 : timeHorizon === 'medium' ? -12 : -25
+    } else if (momentum === 'moderate') {
+      direction = trend === 'bullish' ? 'upward' : trend === 'bearish' ? 'downward' : 'sideways'
+      confidence = 60
+      magnitude = direction === 'upward' ? 3 : direction === 'downward' ? -3 : 0
+    }
+
+    prediction += `📊 Analysis:\n`
+    prediction += `• Direction: ${direction.toUpperCase()}\n`
+    prediction += `• Confidence: ${confidence}%\n`
+    prediction += `• Expected magnitude: ${magnitude >= 0 ? '+' : ''}${magnitude}%\n\n`
+
+    prediction += `🎯 Price Targets:\n`
+    if (magnitude !== 0) {
+      const targetPrice = indicators.currentPrice * (1 + magnitude / 100)
+      prediction += `• Target: $${targetPrice.toFixed(2)}\n`
+      prediction += `• Current: $${indicators.currentPrice.toFixed(2)}\n`
+    } else {
+      prediction += `• Range: $${(indicators.currentPrice * 0.95).toFixed(2)} - $${(indicators.currentPrice * 1.05).toFixed(2)}\n`
+    }
+
+    prediction += `\n⚠️ Risk Factors:\n`
+    if (volatility === 'high') prediction += `• High volatility increases prediction uncertainty\n`
+    if (momentum === 'weak') prediction += `• Weak momentum suggests sideways movement\n`
+
+    return prediction
+  }
+
+  // Auto-analyze on data change
+  useEffect(() => {
+    if (data && data.close && data.close.length > 0) {
+      // Auto-analyze patterns when new data loads
+      analyzePatterns(data, 'comprehensive').then(patterns => {
+        setDetectedPatterns(patterns)
+        if (indicators) {
+          const insights = generatePatternInsights(patterns, indicators)
+          setAiInsights(insights)
+        }
+      })
+    }
+  }, [data, symbol])
+
+  // Update technical indicators
+  useEffect(() => {
+    if (indicators) {
+      setTechnicalIndicators({
+        trend: indicators.trend as any,
+        momentum: indicators.momentum as any,
+        volume: indicators.volume as any,
+        volatility: indicators.volatility as any,
+        support: indicators.support,
+        resistance: indicators.resistance
+      })
+    }
+  }, [indicators])
+
+  return (
+    <div className={`space-y-4 ${className}`}>
+      {/* AI Analysis Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Brain className="h-5 w-5 text-primary" />
+            <span className="text-lg font-semibold studio-text">AI Chart Analysis</span>
+          </div>
+          {isAnalyzing && (
+            <div className="flex items-center gap-2 text-sm text-primary">
+              <div className="w-3 h-3 rounded-full bg-primary animate-pulse"></div>
+              Analyzing...
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAIOverlay(!showAIOverlay)}
+            className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${
+              showAIOverlay ? 'bg-primary text-white' : 'bg-gray-700 text-gray-300'
+            }`}
+          >
+            <Eye className="h-4 w-4 inline mr-1" />
+            AI Overlay
+          </button>
+        </div>
+      </div>
+
+      {/* Main Chart */}
+      <div className="relative">
+        <EdgeChart
+          symbol={symbol}
+          timeframe={timeframe}
+          data={data}
+          onTimeframeChange={onTimeframeChange}
+          className="chart-container"
+        />
+
+        {/* AI Pattern Overlay */}
+        {showAIOverlay && detectedPatterns.length > 0 && (
+          <div className="absolute top-4 right-4 space-y-2">
+            {detectedPatterns.map((pattern, index) => (
+              <div
+                key={index}
+                className="px-3 py-2 rounded-lg text-sm font-medium"
+                style={{
+                  background: pattern.type.includes('bullish') ?
+                    'rgba(34, 197, 94, 0.9)' :
+                    pattern.type.includes('bearish') ?
+                    'rgba(239, 68, 68, 0.9)' :
+                    'rgba(59, 130, 246, 0.9)',
+                  color: 'white',
+                  backdropFilter: 'blur(8px)'
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  {pattern.type.includes('bullish') ?
+                    <TrendingUp className="h-4 w-4" /> :
+                    pattern.type.includes('bearish') ?
+                    <TrendingDown className="h-4 w-4" /> :
+                    <Target className="h-4 w-4" />
+                  }
+                  <span>{pattern.type.replace('_', ' ').toUpperCase()}</span>
+                </div>
+                <div className="text-xs opacity-90">
+                  {(pattern.confidence * 100).toFixed(0)}% confidence
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Technical Indicators Summary */}
+      {technicalIndicators && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="studio-metric-card">
+            <div className="flex items-center gap-2 mb-1">
+              <TrendingUp className="h-4 w-4 text-primary" />
+              <span className="studio-metric-label">Trend</span>
+            </div>
+            <div className={`studio-metric-value ${
+              technicalIndicators.trend === 'bullish' ? 'text-green-400' :
+              technicalIndicators.trend === 'bearish' ? 'text-red-400' : 'text-gray-400'
+            }`}>
+              {technicalIndicators.trend}
+            </div>
+          </div>
+
+          <div className="studio-metric-card">
+            <div className="flex items-center gap-2 mb-1">
+              <Zap className="h-4 w-4 text-primary" />
+              <span className="studio-metric-label">Momentum</span>
+            </div>
+            <div className={`studio-metric-value ${
+              technicalIndicators.momentum === 'strong' ? 'text-green-400' :
+              technicalIndicators.momentum === 'moderate' ? 'text-yellow-400' : 'text-gray-400'
+            }`}>
+              {technicalIndicators.momentum}
+            </div>
+          </div>
+
+          <div className="studio-metric-card">
+            <div className="flex items-center gap-2 mb-1">
+              <BarChart3 className="h-4 w-4 text-primary" />
+              <span className="studio-metric-label">Volume</span>
+            </div>
+            <div className={`studio-metric-value ${
+              technicalIndicators.volume === 'high' ? 'text-green-400' :
+              technicalIndicators.volume === 'normal' ? 'text-blue-400' : 'text-gray-400'
+            }`}>
+              {technicalIndicators.volume}
+            </div>
+          </div>
+
+          <div className="studio-metric-card">
+            <div className="flex items-center gap-2 mb-1">
+              <Activity className="h-4 w-4 text-primary" />
+              <span className="studio-metric-label">Volatility</span>
+            </div>
+            <div className={`studio-metric-value ${
+              technicalIndicators.volatility === 'high' ? 'text-red-400' :
+              technicalIndicators.volatility === 'normal' ? 'text-blue-400' : 'text-green-400'
+            }`}>
+              {technicalIndicators.volatility}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Insights Panel */}
+      {aiInsights && (
+        <div className="studio-card">
+          <div className="flex items-center gap-2 mb-3">
+            <Brain className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold studio-text">AI Insights</h3>
+          </div>
+          <div className="p-4 rounded-lg" style={{
+            background: 'rgba(59, 130, 246, 0.1)',
+            border: '1px solid rgba(59, 130, 246, 0.3)'
+          }}>
+            <pre className="whitespace-pre-wrap text-sm studio-text">{aiInsights}</pre>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Analysis Actions */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <button
+          onClick={() => analyzePatterns(data, 'patterns').then(patterns => {
+            setDetectedPatterns(patterns)
+            if (indicators) setAiInsights(generatePatternInsights(patterns, indicators))
+          })}
+          className="p-3 rounded-lg border-2 border-transparent hover:border-primary transition-all duration-200 text-left group"
+          style={{ background: 'var(--studio-bg-secondary)' }}
+          disabled={isAnalyzing}
+        >
+          <Target className="h-5 w-5 text-blue-400 mb-2 group-hover:scale-110 transition-transform" />
+          <div className="text-sm font-medium studio-text">Find Patterns</div>
+          <div className="text-xs studio-muted">Chart pattern detection</div>
+        </button>
+
+        <button
+          onClick={() => generateTradingSignals(indicators, detectedPatterns, 'moderate')}
+          className="p-3 rounded-lg border-2 border-transparent hover:border-primary transition-all duration-200 text-left group"
+          style={{ background: 'var(--studio-bg-secondary)' }}
+          disabled={isAnalyzing}
+        >
+          <Zap className="h-5 w-5 text-yellow-400 mb-2 group-hover:scale-110 transition-transform" />
+          <div className="text-sm font-medium studio-text">Get Signals</div>
+          <div className="text-xs studio-muted">Trading signal generation</div>
+        </button>
+
+        <button
+          onClick={() => generatePricePrediction(data, indicators, 'short')}
+          className="p-3 rounded-lg border-2 border-transparent hover:border-primary transition-all duration-200 text-left group"
+          style={{ background: 'var(--studio-bg-secondary)' }}
+          disabled={isAnalyzing}
+        >
+          <TrendingUp className="h-5 w-5 text-green-400 mb-2 group-hover:scale-110 transition-transform" />
+          <div className="text-sm font-medium studio-text">Predict Price</div>
+          <div className="text-xs studio-muted">AI price prediction</div>
+        </button>
+
+        <button
+          onClick={() => {
+            if (indicators) {
+              const riskInsights = `⚠️ Risk Analysis for ${symbol}\n\n` +
+                `Current Risk Level: ${indicators.volatility === 'high' ? 'HIGH' : indicators.volatility === 'low' ? 'LOW' : 'MODERATE'}\n\n` +
+                `Key Risk Factors:\n` +
+                `• Volatility: ${indicators.volatility}\n` +
+                `• Volume: ${indicators.volume}\n` +
+                `• Trend strength: ${indicators.momentum}\n\n` +
+                `Recommendations:\n` +
+                `${indicators.volatility === 'high' ? '• Use wider stops due to high volatility\n' : ''}` +
+                `${indicators.volume === 'low' ? '• Reduce position size due to low liquidity\n' : ''}` +
+                `${detectedPatterns.some(p => p.type === 'parabolic') ? '• Parabolic move - consider taking profits\n' : ''}`
+              setAiInsights(riskInsights)
+            }
+          }}
+          className="p-3 rounded-lg border-2 border-transparent hover:border-primary transition-all duration-200 text-left group"
+          style={{ background: 'var(--studio-bg-secondary)' }}
+          disabled={isAnalyzing}
+        >
+          <AlertTriangle className="h-5 w-5 text-red-400 mb-2 group-hover:scale-110 transition-transform" />
+          <div className="text-sm font-medium studio-text">Risk Analysis</div>
+          <div className="text-xs studio-muted">Risk assessment</div>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export default AIEnhancedChart

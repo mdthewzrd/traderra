@@ -1,0 +1,13 @@
+agents
+app
+communication
+components
+config
+contexts
+data
+hooks
+lib
+services
+styles
+types
+utils

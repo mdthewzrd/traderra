@@ -1,0 +1,542 @@
+/* Rich Text Editor Styles for Traderra */
+
+/* TipTap Editor Base Styles */
+.ProseMirror {
+  outline: none !important;
+  color: #e5e5e5 !important;
+  background-color: transparent !important;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  line-height: 1.6 !important;
+  word-wrap: break-word !important;
+}
+
+/* Prose Styling Overrides for Dark Theme */
+.prose-invert {
+  color: #e5e5e5 !important;
+  max-width: none !important;
+}
+
+.prose-invert h1,
+.prose-invert h2,
+.prose-invert h3,
+.prose-invert h4,
+.prose-invert h5,
+.prose-invert h6 {
+  color: #e5e5e5 !important;
+  font-weight: 600 !important;
+  line-height: 1.3 !important;
+  margin-top: 2rem !important;
+  margin-bottom: 1rem !important;
+  scroll-margin-top: 5rem !important;
+}
+
+.prose-invert h1 {
+  font-size: 2.25rem !important;
+  border-bottom: 2px solid #2a2a2a !important;
+  padding-bottom: 0.5rem !important;
+}
+
+.prose-invert h2 {
+  font-size: 1.875rem !important;
+  border-bottom: 1px solid #2a2a2a !important;
+  padding-bottom: 0.375rem !important;
+}
+
+.prose-invert h3 {
+  font-size: 1.5rem !important;
+}
+
+.prose-invert h4 {
+  font-size: 1.25rem !important;
+}
+
+.prose-invert p {
+  color: #e5e5e5 !important;
+  margin: 1rem 0 !important;
+  line-height: 1.7 !important;
+}
+
+.prose-invert strong {
+  color: #e5e5e5 !important;
+  font-weight: 600 !important;
+}
+
+.prose-invert em {
+  color: #e5e5e5 !important;
+  font-style: italic !important;
+}
+
+.prose-invert code {
+  color: #e5e5e5 !important;
+  background-color: #2a2a2a !important;
+  padding: 0.125rem 0.375rem !important;
+  border-radius: 0.375rem !important;
+  font-size: 0.875em !important;
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace !important;
+  border: 1px solid #3a3a3a !important;
+}
+
+.prose-invert pre {
+  background-color: #1a1a1a !important;
+  border: 1px solid #2a2a2a !important;
+  border-radius: 0.5rem !important;
+  padding: 1rem !important;
+  overflow-x: auto !important;
+  margin: 1.5rem 0 !important;
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.3),
+    0 4px 8px rgba(0, 0, 0, 0.2),
+    0 1px 0px rgba(255, 255, 255, 0.06) inset !important;
+}
+
+.prose-invert pre code {
+  background-color: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  color: #e5e5e5 !important;
+  font-size: 0.875rem !important;
+}
+
+.prose-invert blockquote {
+  border-left: 4px solid #FFD700 !important;
+  background-color: #1a1a1a !important;
+  margin: 1.5rem 0 !important;
+  padding: 1rem 1.5rem !important;
+  border-radius: 0 0.5rem 0.5rem 0 !important;
+  color: #cccccc !important;
+  position: relative !important;
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.2),
+    0 1px 0px rgba(255, 255, 255, 0.05) inset !important;
+}
+
+.prose-invert blockquote::before {
+  content: '"' !important;
+  font-size: 3rem !important;
+  color: #FFD700 !important;
+  position: absolute !important;
+  top: 0.5rem !important;
+  left: 0.5rem !important;
+  opacity: 0.3 !important;
+  line-height: 1 !important;
+}
+
+.prose-invert blockquote p {
+  margin: 0 !important;
+  padding-left: 2rem !important;
+}
+
+/* Lists */
+.prose-invert ul,
+.prose-invert ol {
+  color: #e5e5e5 !important;
+  margin: 1rem 0 !important;
+  padding-left: 1.5rem !important;
+}
+
+.prose-invert li {
+  color: #e5e5e5 !important;
+  margin: 0.5rem 0 !important;
+}
+
+.prose-invert ul > li {
+  position: relative !important;
+}
+
+.prose-invert ul > li::marker {
+  color: #FFD700 !important;
+}
+
+.prose-invert ol > li::marker {
+  color: #FFD700 !important;
+  font-weight: 600 !important;
+}
+
+/* Task Lists */
+.prose-invert .task-list {
+  list-style: none !important;
+  padding-left: 0 !important;
+}
+
+.prose-invert .task-item {
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 0.5rem !important;
+  margin: 0.5rem 0 !important;
+}
+
+.prose-invert .task-item input[type="checkbox"] {
+  margin-top: 0.25rem !important;
+  accent-color: #FFD700 !important;
+  flex-shrink: 0 !important;
+}
+
+/* Links */
+.prose-invert a {
+  color: #FFD700 !important;
+  text-decoration: underline !important;
+  text-decoration-color: #FFD700 !important;
+  text-underline-offset: 0.125rem !important;
+  transition: all 0.2s ease !important;
+}
+
+.prose-invert a:hover {
+  color: #FFE55C !important;
+  text-decoration-color: #FFE55C !important;
+  text-shadow: 0 0 8px rgba(255, 215, 0, 0.3) !important;
+}
+
+/* Tables */
+.prose-invert table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  margin: 1.5rem 0 !important;
+  background-color: #111111 !important;
+  border: 1px solid #2a2a2a !important;
+  border-radius: 0.5rem !important;
+  overflow: hidden !important;
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.25),
+    0 4px 8px rgba(0, 0, 0, 0.15),
+    0 1px 0px rgba(255, 255, 255, 0.06) inset !important;
+}
+
+.prose-invert th {
+  background-color: #1a1a1a !important;
+  color: #e5e5e5 !important;
+  font-weight: 600 !important;
+  text-align: left !important;
+  padding: 0.75rem !important;
+  border-bottom: 1px solid #2a2a2a !important;
+  border-right: 1px solid #2a2a2a !important;
+}
+
+.prose-invert th:last-child {
+  border-right: none !important;
+}
+
+.prose-invert td {
+  color: #e5e5e5 !important;
+  padding: 0.75rem !important;
+  border-bottom: 1px solid #2a2a2a !important;
+  border-right: 1px solid #2a2a2a !important;
+}
+
+.prose-invert td:last-child {
+  border-right: none !important;
+}
+
+.prose-invert tbody tr:last-child td {
+  border-bottom: none !important;
+}
+
+.prose-invert tbody tr:hover {
+  background-color: #1a1a1a !important;
+}
+
+/* Horizontal Rule */
+.prose-invert hr {
+  border: none !important;
+  height: 2px !important;
+  background: linear-gradient(90deg, transparent, #2a2a2a, transparent) !important;
+  margin: 2rem 0 !important;
+}
+
+/* Images */
+.prose-invert img {
+  border-radius: 0.5rem !important;
+  box-shadow:
+    0 4px 8px rgba(0, 0, 0, 0.25),
+    0 8px 16px rgba(0, 0, 0, 0.2),
+    0 1px 0px rgba(255, 255, 255, 0.06) inset !important;
+  margin: 1.5rem 0 !important;
+}
+
+/* Selection */
+.prose-invert ::selection {
+  background-color: rgba(255, 215, 0, 0.2) !important;
+  color: #e5e5e5 !important;
+}
+
+/* Placeholder */
+.ProseMirror .is-editor-empty:first-child::before {
+  content: attr(data-placeholder) !important;
+  float: left !important;
+  color: #666666 !important;
+  pointer-events: none !important;
+  height: 0 !important;
+  font-style: italic !important;
+}
+
+/* Focus States */
+.ProseMirror:focus {
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(255, 215, 0, 0.2) !important;
+  border-radius: 0.5rem !important;
+}
+
+/* Custom Blocks Styling */
+.trade-entry-block {
+  background-color: #111111 !important;
+  border: 1px solid #2a2a2a !important;
+  border-radius: 0.5rem !important;
+  margin: 1.5rem 0 !important;
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.25),
+    0 4px 8px rgba(0, 0, 0, 0.15),
+    0 1px 0px rgba(255, 255, 255, 0.06) inset !important;
+}
+
+.chart-block {
+  background-color: #111111 !important;
+  border: 1px solid #2a2a2a !important;
+  border-radius: 0.5rem !important;
+  margin: 1.5rem 0 !important;
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.25),
+    0 4px 8px rgba(0, 0, 0, 0.15),
+    0 1px 0px rgba(255, 255, 255, 0.06) inset !important;
+}
+
+.calculation-block {
+  background-color: #111111 !important;
+  border: 1px solid #2a2a2a !important;
+  border-radius: 0.5rem !important;
+  margin: 1.5rem 0 !important;
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.25),
+    0 4px 8px rgba(0, 0, 0, 0.15),
+    0 1px 0px rgba(255, 255, 255, 0.06) inset !important;
+}
+
+/* Callout Blocks */
+.callout-info {
+  background-color: rgba(59, 130, 246, 0.1) !important;
+  border-left: 4px solid #3b82f6 !important;
+  border-radius: 0 0.5rem 0.5rem 0 !important;
+  padding: 1rem 1.5rem !important;
+  margin: 1.5rem 0 !important;
+  color: #e5e5e5 !important;
+}
+
+.callout-warning {
+  background-color: rgba(245, 158, 11, 0.1) !important;
+  border-left: 4px solid #f59e0b !important;
+  border-radius: 0 0.5rem 0.5rem 0 !important;
+  padding: 1rem 1.5rem !important;
+  margin: 1.5rem 0 !important;
+  color: #e5e5e5 !important;
+}
+
+.callout-success {
+  background-color: rgba(34, 197, 94, 0.1) !important;
+  border-left: 4px solid #22c55e !important;
+  border-radius: 0 0.5rem 0.5rem 0 !important;
+  padding: 1rem 1.5rem !important;
+  margin: 1.5rem 0 !important;
+  color: #e5e5e5 !important;
+}
+
+/* Editor Toolbar Styling */
+.editor-toolbar {
+  background-color: #111111 !important;
+  border-bottom: 1px solid #2a2a2a !important;
+  padding: 0.75rem !important;
+  backdrop-filter: blur(8px) !important;
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 10 !important;
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.15),
+    0 1px 0px rgba(255, 255, 255, 0.05) inset !important;
+}
+
+.editor-toolbar button {
+  color: #e5e5e5 !important;
+  background-color: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: 0.375rem !important;
+  padding: 0.5rem !important;
+  transition: all 0.2s ease !important;
+}
+
+.editor-toolbar button:hover {
+  background-color: #2a2a2a !important;
+  border-color: #3a3a3a !important;
+}
+
+.editor-toolbar button.active {
+  background-color: #FFD700 !important;
+  color: #0a0a0a !important;
+  border-color: #FFD700 !important;
+  box-shadow: 0 2px 4px rgba(255, 215, 0, 0.2) !important;
+}
+
+.editor-toolbar button:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+/* Block Selector Menu */
+.block-selector {
+  background-color: #111111 !important;
+  border: 1px solid #2a2a2a !important;
+  border-radius: 0.5rem !important;
+  box-shadow:
+    0 8px 16px rgba(0, 0, 0, 0.3),
+    0 16px 32px rgba(0, 0, 0, 0.25),
+    0 1px 0px rgba(255, 255, 255, 0.08) inset !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+.block-selector button {
+  color: #e5e5e5 !important;
+  background-color: transparent !important;
+  border: none !important;
+  width: 100% !important;
+  text-align: left !important;
+  padding: 0.75rem !important;
+  border-radius: 0.375rem !important;
+  transition: all 0.2s ease !important;
+}
+
+.block-selector button:hover,
+.block-selector button.selected {
+  background-color: #2a2a2a !important;
+  color: #FFD700 !important;
+}
+
+/* Editor Sidebar */
+.editor-sidebar {
+  background-color: #111111 !important;
+  border-left: 1px solid #2a2a2a !important;
+  color: #e5e5e5 !important;
+}
+
+.editor-sidebar button {
+  color: #e5e5e5 !important;
+  background-color: transparent !important;
+  border: 1px solid transparent !important;
+  transition: all 0.2s ease !important;
+}
+
+.editor-sidebar button:hover {
+  background-color: #2a2a2a !important;
+  border-color: #3a3a3a !important;
+}
+
+.editor-sidebar button.active {
+  background-color: #FFD700 !important;
+  color: #0a0a0a !important;
+  border-color: #FFD700 !important;
+}
+
+/* Document Templates Modal */
+.document-templates-modal {
+  background-color: #111111 !important;
+  border: 1px solid #2a2a2a !important;
+  border-radius: 0.5rem !important;
+  box-shadow:
+    0 8px 16px rgba(0, 0, 0, 0.3),
+    0 16px 32px rgba(0, 0, 0, 0.25),
+    0 1px 0px rgba(255, 255, 255, 0.08) inset !important;
+}
+
+.template-card {
+  background-color: #111111 !important;
+  border: 1px solid #2a2a2a !important;
+  border-radius: 0.5rem !important;
+  transition: all 0.2s ease !important;
+}
+
+.template-card:hover {
+  border-color: #FFD700 !important;
+  box-shadow:
+    0 4px 8px rgba(0, 0, 0, 0.25),
+    0 8px 16px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(255, 215, 0, 0.2) !important;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .prose-invert h1 {
+    font-size: 1.875rem !important;
+  }
+
+  .prose-invert h2 {
+    font-size: 1.5rem !important;
+  }
+
+  .prose-invert h3 {
+    font-size: 1.25rem !important;
+  }
+
+  .editor-toolbar {
+    flex-wrap: wrap !important;
+    gap: 0.25rem !important;
+  }
+
+  .editor-sidebar {
+    width: 100% !important;
+    max-width: 320px !important;
+  }
+}
+
+/* High DPI / Retina Display Optimizations */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .prose-invert code {
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+  }
+
+  .editor-toolbar button,
+  .block-selector button {
+    -webkit-font-smoothing: antialiased !important;
+    -moz-osx-font-smoothing: grayscale !important;
+  }
+}
+
+/* Accessibility Improvements */
+@media (prefers-reduced-motion: reduce) {
+  .prose-invert *,
+  .editor-toolbar *,
+  .block-selector *,
+  .editor-sidebar * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* Focus visible for keyboard navigation */
+.prose-invert a:focus-visible,
+.editor-toolbar button:focus-visible,
+.block-selector button:focus-visible,
+.editor-sidebar button:focus-visible {
+  outline: 2px solid #FFD700 !important;
+  outline-offset: 2px !important;
+}
+
+/* Print Styles */
+@media print {
+  .editor-toolbar,
+  .block-selector,
+  .editor-sidebar {
+    display: none !important;
+  }
+
+  .prose-invert {
+    color: black !important;
+    background: white !important;
+  }
+
+  .prose-invert h1,
+  .prose-invert h2,
+  .prose-invert h3,
+  .prose-invert h4,
+  .prose-invert h5,
+  .prose-invert h6,
+  .prose-invert p,
+  .prose-invert li {
+    color: black !important;
+  }
+}

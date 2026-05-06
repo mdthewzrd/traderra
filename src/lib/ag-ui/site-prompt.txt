@@ -1,0 +1,571 @@
+# Traderra Site Knowledge for AG-UI
+
+**Generated:** 2026-01-02T14:36:39.723Z
+
+
+## 🧭 TOP NAVIGATION BAR
+
+The main navigation bar (always visible at top) has these items in order:
+
+1. **Dashboard** → `/dashboard` - Main trading overview with metrics
+2. **Trades** → `/trades` - Trade history and management
+3. **Stats** → `/statistics` - Performance statistics and analytics
+4. **Summary** → `/daily-summary` - Daily trading summary
+5. **Calendar** → `/calendar` - Trading calendar view
+6. **Journal** → `/journal` - Trade journal entries
+7. **Settings** → `/settings` - User settings and preferences
+8. **Renata** button - Toggles AI sidebar open/closed
+
+**User Profile** (right side): Shows "Demo Account" with dropdown menu
+
+Users may refer to these by their exact nav labels: "Dashboard", "Trades", "Stats", "Summary", "Calendar", "Journal", "Settings"
+
+
+## 📄 AVAILABLE PAGES
+
+
+### MAIN PAGES
+
+- **/** - Page.tsx
+  - Components: landing/landing-page
+- **/dashboard** - Page.tsx
+  - Components: dashboard/main-dashboard
+
+### TRADING PAGES
+
+- **/journal** - Page.tsx
+  - Components: layout/app-layout, journal/JournalLayout, journal/journal-components, folders/FolderTree
+- **/journal-enhanced** - Page.tsx
+  - Components: layout/app-layout, journal/JournalLayout, journal/journal-components, folders/FolderTree
+- **/journal-enhanced-v2** - Page.tsx
+  - Components: folders/EnhancedFolderTree, ui/Toast, ui/LoadingStates
+- **/trades** - Page.tsx
+  - Components: layout/app-layout, trades/trades-table, trades/new-trade-modal, trades/import-guide-modal, ui/traderview-date-selector...
+
+### ANALYTICS PAGES
+
+- **/analytics** - Page.tsx
+  - Components: layout/app-layout
+- **/statistics** - Page.tsx
+  - Components: layout/app-layout, layout/top-nav, ui/traderview-date-selector, ui/display-mode-toggle, chat/standalone-renata-chat...
+
+### MANAGEMENT PAGES
+
+- **/calendar** - Page.tsx
+  - Components: layout/top-nav
+- **/settings** - Page.tsx
+  - Components: layout/app-layout, auth/user-profile
+
+### AUTH PAGES
+
+- **/sign-in/[[...sign-in]]** - Page.tsx
+  - Components: auth/sign-in
+- **/sign-up/[[...sign-up]]** - Page.tsx
+  - Components: auth/sign-up
+
+
+## 🧩 AVAILABLE COMPONENTS
+
+
+### GENERAL
+
+- **action-buttons**: action-buttons component
+- **advanced-analytics-charts**: advanced-analytics-charts component
+- **AGUITradingDashboard**: AGUI Trading Dashboard - AI-Generated User Interface for Trading   Integrates CopilotKit for natural language interactions with trading data
+- **AICommentaryPanel**: AI Commentary Panel - Real-time AI insights during scanning   Provides live commentary and analysis with intelligent prioritization
+- **AIEnhancedScanFilters**: AI-Enhanced Scan Filters - Natural Language Trading Filters   Provides intelligent filter suggestions and natural language configuration
+- **BlockEditor**: BlockEditor component
+- **BlockHoverMenu**: BlockHoverMenu component
+- **BlockSelector**: BlockSelector component
+- **ButtonDebugTest**: ButtonDebugTest component
+- **CalculationBlock**: CalculationBlock component
+- **calendar-components**: AGUI CALENDAR COMPONENTS   Dynamic calendar interface components for Renata AI interaction   Enables natural language calendar operations through visual components
+- **ChartBlock**: ChartBlock component
+- **CompatibilityLayer**: Smart Editor Component that automatically selects the appropriate editor   based on content structure and user preferences
+- **comprehensive-stats**: comprehensive-stats component
+- **CreateFolderModal**: CreateFolderModal component
+- **DisplayModeTest**: DisplayModeTest component
+- **DocumentManager**: DocumentManager component
+- **DocumentTemplates**: DocumentTemplates component
+- **DragDropHandler**: DragDropHandler component
+- **DragDropProvider**: DragDropProvider component
+  - ... and 33 more
+
+### DASHBOARD
+
+- **additional-metrics**: additional-metrics component
+- **advanced-charts**: advanced-charts component
+- **calendar-row**: calendar-row component
+- **calendar-view**: calendar-view component
+- **daily-summary-card**: daily-summary-card component
+- **enhanced-metrics**: enhanced-metrics component
+- **main-dashboard**: main-dashboard component
+- **main-dashboard-debug**: main-dashboard-debug component
+- **metric-toggles**: metric-toggles component
+- **metrics-tiles**: metrics-tiles component
+- **performance-chart**: performance-chart component
+- **tabbed-widget**: tabbed-widget component
+
+### LAYOUT
+
+- **app-layout**: app-layout component
+- **footer**: footer component
+- **top-nav**: top-nav component
+
+### JOURNAL
+
+- **BlockNoteEditor**: BlockNoteEditor component
+- **journal-components**: journal-components component
+- **JournalLayout**: JournalLayout component
+- **TemplateSelectionModal**: TemplateSelectionModal component
+
+### UI
+
+- **custom-calendar**: custom-calendar component
+- **date-range-selector**: date-range-selector component
+- **display-mode-toggle**: display-mode-toggle component
+- **loading-spinner**: loading-spinner component
+- **LoadingStates**: LoadingStates component
+- **pnl-mode-toggle**: pnl-mode-toggle component
+- **Toast**: Toast component
+- **traderview-date-selector**: traderview-date-selector component
+- **unified-filter**: unified-filter component
+
+### TRADES
+
+- **import-guide-modal**: import-guide-modal component
+- **new-trade-modal**: new-trade-modal component
+- **trade-detail-modal**: trade-detail-modal component
+- **trades-table**: trades-table component
+
+### AI
+
+- **standalone-renata-chat**: Generate unique message ID to prevent collisions   Uses timestamp + random component for uniqueness
+
+## 🎯 NAVIGATION PATTERNS
+
+- Use `navigateToPage` tool with route paths (e.g., "dashboard", "trades", "statistics")
+- All navigation should go through the tool system, not direct URL manipulation
+- Check page existence before attempting navigation
+
+
+## 🗣️ NATURAL LANGUAGE VARIATIONS & CONTEXT AWARENESS
+
+### CRITICAL: Context-First Understanding
+**ALWAYS analyze the USER'S INTENT, not just keywords.**
+
+❌ **WRONG**: User says "look at stats in the dashboard" → Go to /statistics
+✅ **RIGHT**: User says "look at stats in the dashboard" → Go to /dashboard, user wants to SEE stats there
+
+**Context Examples:**
+- "take me to the dashboard" → Navigate to dashboard
+- "show me the stats on the dashboard" → Navigate to dashboard (stats are what they want to see)
+- "go to trades page" → Navigate to trades
+- "check my trades in the app" → Navigate to trades
+- "settings for my profile" → Navigate to settings
+- "change my profile settings" → Navigate to settings
+
+**Key Principle**: If a page name appears in a prepositional phrase ("in the dashboard", "on the stats page", "from trades"), it's describing LOCATION or CONTENT, not a navigation destination. Look for the PRIMARY action verb (go, take me, navigate, show me) and the PRIMARY destination.
+
+
+### Page Name Variations by Intent
+
+**Dashboard** (route: `""` or `"dashboard"`)
+- Standard: dashboard, home, main page, landing, overview, main
+- Casual: the dash, the hub, command center, home base, main screen
+- Misspellings: dashbaord, dasboard, dashborad, home paeg
+- Phrases: "go to dashboard", "take me home", "show main page", "open the dash"
+- Context: "metrics on dashboard", "stats in dashboard" → Still means dashboard
+
+**Trades** (route: `"trades"`)
+- Standard: trades, trading, trade history, positions, all trades
+- Casual: my trades, trade log, trading log, positions list, the trades
+- Misspellings: tades, trads, tradeing, trads log, postions
+- Phrases: "show trades", "view trade history", "open trades", "all my positions"
+- Context: "trades from yesterday", "trade in TSLA" → Navigate to trades
+
+**Journal** (route: `"journal"`)
+- Standard: journal, trade journal, trading journal
+- Casual: diary, log, notes, trade notes, trade diary, my journal, the journal
+- Slang: journo (rare), joural, journl
+- Misspellings: journl, jornal, journel, trade journl, dairies
+- Phrases: "open journal", "go to my diary", "view trade notes", "write in journal"
+- Context: "journal entry for today", "notes from trades" → Navigate to journal
+
+**Statistics** (route: `"statistics"`)
+- Standard: statistics, stats, analytics, performance, metrics
+- Casual: the numbers, analytics page, performance page, my stats, my performance
+- Slang: stats page, the stats, numbers, analytics
+- Misspellings: stattistics, stattics, stas, anayltics, performace, metrcs
+- Phrases: "show statistics", "view stats", "open analytics", "check performance"
+- Context: "statistics for this week", "my trading stats" → Navigate to statistics
+
+**Daily Summary** (route: `"daily-summary"`)
+- Standard: daily summary, summary, daily recap
+- Casual: today's summary, daily recap, the summary, recap, daily overview
+- Misspellings: sumary, daly summary, sumarry, recpa, dacap
+- Phrases: "show daily summary", "view summary", "today's recap", "daily overview"
+- Context: "summary for today", "recap of trades" → Navigate to daily-summary
+
+**Calendar** (route: `"calendar"`)
+- Standard: calendar, trading calendar, market calendar
+- Casual: the calendar, cal, trade calendar, market days, trading days
+- Misspellings: calnedar, calender, calndar, cal, callendar
+- Phrases: "open calendar", "view calendar", "show market calendar", "trading days"
+- Context: "calendar for this week", "market days this month" → Navigate to calendar
+
+**Settings** (route: `"settings"`)
+- Standard: settings, preferences, configuration, options, config
+- Casual: setup, config options, my settings, the settings, prefs (informal)
+- Misspellings: setings, setttings, prefrences, configuratin, optons, prefrences
+- Phrases: "open settings", "go to preferences", "change settings", "configure app"
+- Context: "settings for notifications", "change my config" → Navigate to settings
+
+
+### Component & Feature Name Variations
+
+**Display Mode Toggle**
+- Standard: display mode, show as, view mode, display as
+- Variations: switch to dollar view, show in R, change display, toggle display
+- Values: "dollar" ($), "R" or "R-multiple" (R), "percentage" (%)
+
+**Date Range Selector**
+- Standard: date range, time period, date filter, time range
+- Variations: change dates, filter by date, show period, select time range
+- Quick options: 7 days, 30 days, 90 days, YTD (year to date), all time, all
+
+**New Trade Modal**
+- Standard: new trade, add trade, create trade, add entry
+- Variations: add new trade, create entry, log trade, add position, enter trade
+
+**Trade Detail Modal**
+- Standard: trade details, view trade, trade info, trade information
+- Variations: show trade, open trade, view details, trade details
+
+**Filters**
+- Standard: filters, filter, filtering, search
+- Variations: filter trades, search trades, filter by, show only
+
+**Folders** (Journal)
+- Standard: folder, folders, directory, directories
+- Variations: journal folder, trade folder, organize, category
+
+
+### Action Verbs That Indicate Navigation
+
+**Primary Navigation Triggers:**
+- Go to / take me to / navigate to → STRONG navigation signal
+- Show me / view / open / display → Navigation to content
+- Switch to / change to / move to → Navigation or mode change
+
+**Weak Context Signals (NOT navigation):**
+- "in the [page]" → Describing location, not navigating
+- "on the [page]" → Describing location, not navigating
+- "from [page]" → Describing source, not navigating
+- "about [topic]" → Describing subject, not navigating
+
+
+### Misspelling Patterns to Handle
+
+**Common Typing Errors:**
+- Double letters: setttings, tradess, journall
+- Swapped letters: calnedar, sumarry
+- Missing letters: journl, stattics, calndar
+- Extra letters: tradeing, setttings
+- Phonetic: stas, stats, anayltics
+
+**Casual/Slang Patterns:**
+- Shortened: cal (calendar), stats (statistics), prefs (preferences)
+- Combined: tradejournal, dashboardview
+- Verbs as nouns: trading, settingsing (incorrect but happens)
+
+
+### Ambiguity Resolution Examples
+
+**Example 1**: "stats in the dashboard"
+- "stats" appears = User wants to see statistics
+- "in the dashboard" = Location context
+- ✅ Navigate to dashboard, NOT statistics
+
+**Example 2**: "go to stats page"
+- "go to" = Primary navigation trigger
+- "stats page" = Destination
+- ✅ Navigate to statistics
+
+**Example 3**: "show trades from last week"
+- "show" = Display action
+- "trades" = Content type
+- "from last week" = Filter/time range
+- ✅ Navigate to trades with date filter
+
+**Example 4**: "settings for notifications"
+- "settings" = What they want to configure
+- "for notifications" = Specific area within settings
+- ✅ Navigate to settings (potentially with section selection in future)
+
+
+## 📊 PAGE-BY-PAGE COMPONENT BREAKDOWN
+
+### Dashboard (/dashboard)
+
+**Main Components:**
+- **main-dashboard**: Primary dashboard interface with trading metrics
+- **metrics-tiles**: Individual metric cards showing key trading data
+  - Total P&L, Win Rate, Average Trade, Profit Factor, Max Drawdown
+- **performance-chart**: Main performance visualization chart
+- **calendar-view**: Trading calendar integrated into dashboard
+- **calendar-row**: Individual calendar rows showing daily performance
+- **daily-summary-card**: Cards showing daily trading summaries
+
+**Interactive Controls:**
+- **display-mode-toggle**: Switch between dollar ($) and R-multiple (R) display modes
+  - Variants: icon-only, compact, flat, default
+  - Two modes: dollar ($), r_multiple (R)
+- **metric-toggles**: Show/hide specific metrics on dashboard
+- **date-range-selector**: Quick range buttons (7d, 30d, 90d, YTD, All) + custom calendar picker
+
+**Advanced Features:**
+- **additional-metrics**: Extended metrics beyond basics
+- **enhanced-metrics**: Enhanced metric displays with more detail
+- **advanced-charts**: Advanced charting capabilities
+- **tabbed-widget**: Tabbed interface for organizing content
+
+
+### Trades (/trades)
+
+**Main Components:**
+- **trades-table**: Complete trade data table with all entries
+  - Sortable columns: Date, Symbol, Side, Qty, Price, P&L, R-Multiple, Strategy
+  - Row click opens trade detail modal
+  - Display mode support (dollar/R/percentage)
+  - Search functionality
+  - Filter controls
+
+**Modals & Overlays:**
+- **new-trade-modal**: Modal for adding new trades
+  - Fields: Symbol, Side (Long/Short), Quantity, Entry Price, Exit Price, Date, Strategy, Notes
+  - Validation and error handling
+- **import-guide-modal**: Modal showing import/export instructions
+  - Step-by-step import guide
+  - Supported file formats
+- **trade-detail-modal**: Detailed view of individual trade
+  - Full trade information display
+  - Edit and delete options
+  - Related trades linking
+
+**Interactive Controls:**
+- **traderview-date-selector**: Date range picker for filtering trades
+  - Quick range buttons: 7d, 30d, 90d, YTD, All
+  - Custom calendar popup with date selection
+  - Direct date input fields (start date, end date)
+- **display-mode-toggle**: Toggle P&L display modes
+
+
+### Journal (/journal)
+
+**Layout Structure:**
+- **JournalLayout**: Complex two-column layout with sidebar and main content
+
+**Sidebar Components (Left Panel):**
+- **Collapsible Sidebar**: PanelLeft icon when collapsed, expandable
+- **FolderTree**: Hierarchical folder navigation
+  - Folder icons and labels
+  - Nested folder structure
+  - Item counts per folder
+  - Drag-drop reorganization support
+- **Folder Context Menu**: Right-click menu for folder operations
+  - Rename folder
+  - Delete folder
+  - Create subfolder
+  - Move folder
+  - Copy folder
+  - Change icon/color
+  - Folder settings
+  - Folder info
+
+**Main Content Area:**
+- **Breadcrumb**: Shows current folder path with item count
+- **View Mode Toggle**: Grid view (2x2 icon) vs List view (lines icon)
+- **Filter Toggle Button**: Enable/disable journal filters
+- **New Entry Button**: Create new journal entry
+- **More Options Menu**: Additional journal operations (three dots)
+
+**Editor Components:**
+- **BlockNoteEditor**: Rich text editor for journal entries
+  - Block-based editing
+  - Text formatting options
+  - Code blocks
+  - Lists and headings
+- **TemplateSelectionModal**: Choose from predefined journal templates
+  - Trade review template
+  - Daily recap template
+  - Analysis template
+  - Custom templates
+
+**Filter System:**
+- **JournalFilters**: Filter panel when filter toggle enabled
+  - Date range filters
+  - Strategy filters
+  - Symbol filters
+  - Tag filters
+
+**Drag-Drop System:**
+- **DragDropProvider**: Wrapper for drag-drop functionality
+- **DragDropHandler**: Handles drag-drop events for folders and entries
+
+
+### Statistics (/statistics)
+
+**Main Components:**
+- **standalone-renata-chat**: AI assistant integration for statistics queries
+- **advanced-analytics-charts**: Advanced charting for analytics
+
+**Interactive Controls:**
+- **traderview-date-selector**: Date range selector for analytics period
+- **display-mode-toggle**: Switch between dollar, R-multiple, percentage views
+- **comprehensive-stats**: Comprehensive statistics display panel
+
+**Analytics Features:**
+- Performance metrics calculations
+- P&L analysis by period
+- Win rate tracking
+- Risk-reward ratios
+- Drawdown analysis
+- Trade distribution charts
+
+
+### Calendar (/calendar)
+
+**Main Components:**
+- **custom-calendar**: Custom calendar component
+- **daily-summary-card**: Cards showing summaries for each trading day
+
+**Features:**
+- Date-based navigation
+- Daily P&L display
+- Trade count per day
+- Click day to view detailed summary
+- Filter by date range
+
+
+### Settings (/settings)
+
+**Layout Structure:**
+- **Left Sidebar Navigation**: 7 main sections with icons
+  - Profile (user icon)
+  - Trading (chart icon)
+  - Integrations (connection icon)
+  - Notifications (bell icon)
+  - Appearance (palette icon)
+  - Data (database icon)
+  - Security (shield icon)
+
+**Section Details:**
+
+**1. Profile Section:**
+- Username field
+- Display name field
+- Email address field
+- Timezone selector dropdown
+- Save changes button
+
+**2. Trading Section:**
+- Default position size input
+- Risk per trade slider/input
+- Trading strategy dropdown
+- Max open trades input
+- Stop-loss defaults
+
+**3. Integrations Section:**
+- **OpenRouter AI**: API key input, model selection dropdown
+- **DAS Trader**: API configuration, connection settings
+- **Discord**: Webhook URL, notification channels
+- **Telegram**: Bot token, chat ID
+- **TradingView**: Webhook URL, alert configuration
+- **Twitter/X**: API keys, authentication
+
+**4. Notifications Section:**
+- Email notifications toggle
+- Push notifications toggle
+- Trade alerts toggle
+- Journal reminders toggle
+- Alert frequency selector
+- Quiet hours configuration
+
+**5. Appearance Section:**
+- Theme selector (Dark/Light)
+- Chart theme dropdown
+- Compact mode toggle
+- Animations toggle
+- Font size selector
+
+**6. Data Section:**
+- Data retention period dropdown
+- Backup frequency selector
+- Manual backup button
+- Export data button
+- Import data button
+- Delete all trades button (danger zone)
+
+**7. Security Section:**
+- Two-factor authentication toggle/setup
+- API access management
+- Active sessions list
+- Revoke session buttons
+- Session timeout dropdown
+
+
+### Daily Summary (/daily-summary)
+
+**Main Components:**
+- **daily-summary-card**: Summary cards for each trading day
+- P&L summary
+- Trade count
+- Win/Loss breakdown
+- Key metrics display
+
+
+### Analytics (/analytics)
+
+**Main Components:**
+- **advanced-analytics-charts**: Advanced analytics visualizations
+- **AGUITradingDashboard**: AI-enhanced trading dashboard with CopilotKit integration
+- Natural language query interface for trading data
+
+
+### Journal Enhanced Variants (/journal-enhanced, /journal-enhanced-v2)
+
+**Enhanced Components:**
+- **EnhancedFolderTree**: Improved folder tree with better UX
+- **Toast**: Notification system for feedback
+- **LoadingStates**: Enhanced loading indicators
+- All standard journal components plus enhancements
+
+
+## 🎮 COMMON UI COMPONENTS ACROSS PAGES
+
+### Date Selection Components
+- **traderview-date-selector**: Full-featured date picker (682 lines)
+  - Quick range buttons: 7d, 30d, 90d, YTD, All
+  - Custom calendar popup (TraderViewCalendar)
+  - Direct date input fields (start/end date)
+  - Month navigation arrows
+  - P&L Mode Toggle integration
+
+### Display Mode Components
+- **display-mode-toggle**: Toggle between display modes (301 lines)
+  - Variants: icon-only, compact, flat, default
+  - Modes: dollar ($), r_multiple (R)
+  - Context-aware rendering
+
+### Loading & Feedback
+- **loading-spinner**: Circular progress indicator
+- **LoadingStates**: Comprehensive loading state components
+- **Toast**: Notification toast messages
+
+### Modal System
+- Modals use consistent overlay/backdrop pattern
+- Close on backdrop click
+- Escape key to close
+- Focus management for accessibility
+

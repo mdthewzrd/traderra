@@ -1,0 +1,6 @@
+pyproject.toml
+src/traderra_indicators.egg-info/PKG-INFO
+src/traderra_indicators.egg-info/SOURCES.txt
+src/traderra_indicators.egg-info/dependency_links.txt
+src/traderra_indicators.egg-info/requires.txt
+src/traderra_indicators.egg-info/top_level.txt

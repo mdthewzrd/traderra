@@ -1,0 +1,846 @@
+{
+  "appName": "Traderra",
+  "baseUrl": "http://localhost:6565",
+  "generatedAt": "2026-01-02T14:36:39.722Z",
+  "pages": [
+    {
+      "path": "src/app/page.tsx",
+      "route": "/",
+      "title": "Page.tsx",
+      "description": "page.tsx page",
+      "components": [
+        "landing/landing-page"
+      ],
+      "layouts": [
+        "src/app/layout.tsx"
+      ]
+    },
+    {
+      "path": "src/app/ag-ui-test/page.tsx",
+      "route": "/ag-ui-test",
+      "title": "Page.tsx",
+      "description": "AG-UI Tools Test Page",
+      "components": [
+        "layout/app-layout",
+        "ui/date-range-selector"
+      ],
+      "layouts": []
+    },
+    {
+      "path": "src/app/agui-test/page.tsx",
+      "route": "/agui-test",
+      "title": "Page.tsx",
+      "description": "page.tsx page",
+      "components": [],
+      "layouts": []
+    },
+    {
+      "path": "src/app/analytics/page.tsx",
+      "route": "/analytics",
+      "title": "Page.tsx",
+      "description": "page.tsx page",
+      "components": [
+        "layout/app-layout"
+      ],
+      "layouts": []
+    },
+    {
+      "path": "src/app/button-test/page.tsx",
+      "route": "/button-test",
+      "title": "Page.tsx",
+      "description": "page.tsx page",
+      "components": [
+        "ui/display-mode-toggle"
+      ],
+      "layouts": []
+    },
+    {
+      "path": "src/app/calendar/page.tsx",
+      "route": "/calendar",
+      "title": "Page.tsx",
+      "description": "page.tsx page",
+      "components": [
+        "layout/top-nav"
+      ],
+      "layouts": []
+    },
+    {
+      "path": "src/app/daily-summary/page.tsx",
+      "route": "/daily-summary",
+      "title": "Page.tsx",
+      "description": "page.tsx page",
+      "components": [
+        "layout/app-layout",
+        "dashboard/daily-summary-card"
+      ],
+      "layouts": []
+    },
+    {
+      "path": "src/app/dashboard/page.tsx",
+      "route": "/dashboard",
+      "title": "Page.tsx",
+      "description": "page.tsx page",
+      "components": [
+        "dashboard/main-dashboard"
+      ],
+      "layouts": []
+    },
+    {
+      "path": "src/app/dashboard-test/page.tsx",
+      "route": "/dashboard-test",
+      "title": "Page.tsx",
+      "description": "page.tsx page",
+      "components": [
+        "dashboard/main-dashboard-debug"
+      ],
+      "layouts": []
+    },
+    {
+      "path": "src/app/debug-dashboard/page.tsx",
+      "route": "/debug-dashboard",
+      "title": "Page.tsx",
+      "description": "page.tsx page",
+      "components": [
+        "dashboard/main-dashboard",
+        "debug/ButtonDebugTest"
+      ],
+      "layouts": []
+    },
+    {
+      "path": "src/app/editor-demo/page.tsx",
+      "route": "/editor-demo",
+      "title": "AAPL Long Position Analysis - Q4 2024",
+      "description": "AAPL Long Position Analysis - Q4 2024 page",
+      "components": [
+        "editor/RichTextEditor",
+        "editor/templates/DocumentTemplates",
+        "editor/DocumentManager",
+        "editor/EditorSidebar",
+        "editor/blocks/TradeEntryBlock",
+        "editor/blocks/ChartBlock",
+        "editor/blocks/CalculationBlock"
+      ],
+      "layouts": []
+    },
+    {
+      "path": "src/app/journal/page.tsx",
+      "route": "/journal",
+      "title": "Page.tsx",
+      "description": "page.tsx page",
+      "components": [
+        "layout/app-layout",
+        "journal/JournalLayout",
+        "journal/journal-components",
+        "folders/FolderTree"
+      ],
+      "layouts": []
+    },
+    {
+      "path": "src/app/journal-enhanced/page.tsx",
+      "route": "/journal-enhanced",
+      "title": "Page.tsx",
+      "description": "page.tsx page",
+      "components": [
+        "layout/app-layout",
+        "journal/JournalLayout",
+        "journal/journal-components",
+        "folders/FolderTree"
+      ],
+      "layouts": []
+    },
+    {
+      "path": "src/app/journal-enhanced-v2/page.tsx",
+      "route": "/journal-enhanced-v2",
+      "title": "Page.tsx",
+      "description": "page.tsx page",
+      "components": [
+        "folders/EnhancedFolderTree",
+        "ui/Toast",
+        "ui/LoadingStates"
+      ],
+      "layouts": []
+    },
+    {
+      "path": "src/app/risk-management/page.tsx",
+      "route": "/risk-management",
+      "title": "Page.tsx",
+      "description": "page.tsx page",
+      "components": [],
+      "layouts": []
+    },
+    {
+      "path": "src/app/settings/page.tsx",
+      "route": "/settings",
+      "title": "Page.tsx",
+      "description": "page.tsx page",
+      "components": [
+        "layout/app-layout",
+        "auth/user-profile"
+      ],
+      "layouts": []
+    },
+    {
+      "path": "src/app/sign-in/[[...sign-in]]/page.tsx",
+      "route": "/sign-in/[[...sign-in]]",
+      "title": "Page.tsx",
+      "description": "page.tsx page",
+      "components": [
+        "auth/sign-in"
+      ],
+      "layouts": []
+    },
+    {
+      "path": "src/app/sign-up/[[...sign-up]]/page.tsx",
+      "route": "/sign-up/[[...sign-up]]",
+      "title": "Page.tsx",
+      "description": "page.tsx page",
+      "components": [
+        "auth/sign-up"
+      ],
+      "layouts": []
+    },
+    {
+      "path": "src/app/statistics/page.tsx",
+      "route": "/statistics",
+      "title": "Page.tsx",
+      "description": "page.tsx page",
+      "components": [
+        "layout/app-layout",
+        "layout/top-nav",
+        "ui/traderview-date-selector",
+        "ui/display-mode-toggle",
+        "chat/standalone-renata-chat",
+        "dashboard/additional-metrics",
+        "dashboard/tabbed-widget"
+      ],
+      "layouts": []
+    },
+    {
+      "path": "src/app/trades/page.tsx",
+      "route": "/trades",
+      "title": "Page.tsx",
+      "description": "page.tsx page",
+      "components": [
+        "layout/app-layout",
+        "trades/trades-table",
+        "trades/new-trade-modal",
+        "trades/import-guide-modal",
+        "ui/traderview-date-selector",
+        "ui/display-mode-toggle"
+      ],
+      "layouts": []
+    },
+    {
+      "path": "src/app/trading-agents/page.tsx",
+      "route": "/trading-agents",
+      "title": "Page.tsx",
+      "description": "page.tsx page",
+      "components": [],
+      "layouts": []
+    }
+  ],
+  "components": [
+    {
+      "name": "action-buttons",
+      "path": "src/components/agui/components/action-buttons.tsx",
+      "category": "general",
+      "description": "action-buttons component"
+    },
+    {
+      "name": "additional-metrics",
+      "path": "src/components/dashboard/additional-metrics.tsx",
+      "category": "dashboard",
+      "description": "additional-metrics component"
+    },
+    {
+      "name": "advanced-analytics-charts",
+      "path": "src/components/analytics/advanced-analytics-charts.tsx",
+      "category": "general",
+      "description": "advanced-analytics-charts component"
+    },
+    {
+      "name": "advanced-charts",
+      "path": "src/components/dashboard/advanced-charts.tsx",
+      "category": "dashboard",
+      "description": "advanced-charts component"
+    },
+    {
+      "name": "AGUITradingDashboard",
+      "path": "src/components/ai/AGUITradingDashboard.tsx",
+      "category": "general",
+      "description": "AGUI Trading Dashboard - AI-Generated User Interface for Trading   Integrates CopilotKit for natural language interactions with trading data"
+    },
+    {
+      "name": "AICommentaryPanel",
+      "path": "src/components/ai/AICommentaryPanel.tsx",
+      "category": "general",
+      "description": "AI Commentary Panel - Real-time AI insights during scanning   Provides live commentary and analysis with intelligent prioritization"
+    },
+    {
+      "name": "AIEnhancedScanFilters",
+      "path": "src/components/ai/AIEnhancedScanFilters.tsx",
+      "category": "general",
+      "description": "AI-Enhanced Scan Filters - Natural Language Trading Filters   Provides intelligent filter suggestions and natural language configuration"
+    },
+    {
+      "name": "app-layout",
+      "path": "src/components/layout/app-layout.tsx",
+      "category": "layout",
+      "description": "app-layout component"
+    },
+    {
+      "name": "BlockEditor",
+      "path": "src/components/editor/BlockEditor.tsx",
+      "category": "general",
+      "description": "BlockEditor component"
+    },
+    {
+      "name": "BlockHoverMenu",
+      "path": "src/components/editor/BlockHoverMenu.tsx",
+      "category": "general",
+      "description": "BlockHoverMenu component"
+    },
+    {
+      "name": "BlockNoteEditor",
+      "path": "src/components/journal/BlockNoteEditor.tsx",
+      "category": "journal",
+      "description": "BlockNoteEditor component"
+    },
+    {
+      "name": "BlockSelector",
+      "path": "src/components/editor/BlockSelector.tsx",
+      "category": "general",
+      "description": "BlockSelector component"
+    },
+    {
+      "name": "ButtonDebugTest",
+      "path": "src/components/debug/ButtonDebugTest.tsx",
+      "category": "general",
+      "description": "ButtonDebugTest component"
+    },
+    {
+      "name": "CalculationBlock",
+      "path": "src/components/editor/blocks/CalculationBlock.tsx",
+      "category": "general",
+      "description": "CalculationBlock component"
+    },
+    {
+      "name": "calendar-components",
+      "path": "src/components/agui/calendar-components.tsx",
+      "category": "general",
+      "description": "AGUI CALENDAR COMPONENTS   Dynamic calendar interface components for Renata AI interaction   Enables natural language calendar operations through visual components"
+    },
+    {
+      "name": "calendar-row",
+      "path": "src/components/dashboard/calendar-row.tsx",
+      "category": "dashboard",
+      "description": "calendar-row component"
+    },
+    {
+      "name": "calendar-view",
+      "path": "src/components/dashboard/calendar-view.tsx",
+      "category": "dashboard",
+      "description": "calendar-view component"
+    },
+    {
+      "name": "ChartBlock",
+      "path": "src/components/editor/blocks/ChartBlock.tsx",
+      "category": "general",
+      "description": "ChartBlock component"
+    },
+    {
+      "name": "CompatibilityLayer",
+      "path": "src/components/editor/CompatibilityLayer.tsx",
+      "category": "general",
+      "description": "Smart Editor Component that automatically selects the appropriate editor   based on content structure and user preferences"
+    },
+    {
+      "name": "comprehensive-stats",
+      "path": "src/components/statistics/comprehensive-stats.tsx",
+      "category": "general",
+      "description": "comprehensive-stats component"
+    },
+    {
+      "name": "CreateFolderModal",
+      "path": "src/components/folders/CreateFolderModal.tsx",
+      "category": "general",
+      "description": "CreateFolderModal component"
+    },
+    {
+      "name": "custom-calendar",
+      "path": "src/components/ui/custom-calendar.tsx",
+      "category": "ui",
+      "description": "custom-calendar component"
+    },
+    {
+      "name": "daily-summary-card",
+      "path": "src/components/dashboard/daily-summary-card.tsx",
+      "category": "dashboard",
+      "description": "daily-summary-card component"
+    },
+    {
+      "name": "date-range-selector",
+      "path": "src/components/ui/date-range-selector.tsx",
+      "category": "ui",
+      "description": "date-range-selector component"
+    },
+    {
+      "name": "display-mode-toggle",
+      "path": "src/components/ui/display-mode-toggle.tsx",
+      "category": "ui",
+      "description": "display-mode-toggle component"
+    },
+    {
+      "name": "DisplayModeTest",
+      "path": "src/components/debug/DisplayModeTest.tsx",
+      "category": "general",
+      "description": "DisplayModeTest component"
+    },
+    {
+      "name": "DocumentManager",
+      "path": "src/components/editor/DocumentManager.tsx",
+      "category": "general",
+      "description": "DocumentManager component"
+    },
+    {
+      "name": "DocumentTemplates",
+      "path": "src/components/editor/templates/DocumentTemplates.tsx",
+      "category": "general",
+      "description": "DocumentTemplates component"
+    },
+    {
+      "name": "DragDropHandler",
+      "path": "src/components/editor/DragDropHandler.tsx",
+      "category": "general",
+      "description": "DragDropHandler component"
+    },
+    {
+      "name": "DragDropProvider",
+      "path": "src/components/folders/DragDropProvider.tsx",
+      "category": "general",
+      "description": "DragDropProvider component"
+    },
+    {
+      "name": "EditorSidebar",
+      "path": "src/components/editor/EditorSidebar.tsx",
+      "category": "general",
+      "description": "EditorSidebar component"
+    },
+    {
+      "name": "EditorToolbar",
+      "path": "src/components/editor/EditorToolbar.tsx",
+      "category": "general",
+      "description": "EditorToolbar component"
+    },
+    {
+      "name": "enhanced-metrics",
+      "path": "src/components/dashboard/enhanced-metrics.tsx",
+      "category": "dashboard",
+      "description": "enhanced-metrics component"
+    },
+    {
+      "name": "enhanced-renata-multi-processor",
+      "path": "src/components/enhanced/enhanced-renata-multi-processor.tsx",
+      "category": "general",
+      "description": "Enhanced Renata Multi-Command Processor     Handles complex multi-command messages with sophisticated trading language understanding."
+    },
+    {
+      "name": "enhanced-trading-chart",
+      "path": "src/components/charts/enhanced-trading-chart.tsx",
+      "category": "general",
+      "description": "Enhanced Trading Chart Component     Extended version of the trading chart that supports multiple execution arrows"
+    },
+    {
+      "name": "EnhancedBlockSelector",
+      "path": "src/components/editor/EnhancedBlockSelector.tsx",
+      "category": "general",
+      "description": "EnhancedBlockSelector component"
+    },
+    {
+      "name": "EnhancedFolderTree",
+      "path": "src/components/folders/EnhancedFolderTree.tsx",
+      "category": "general",
+      "description": "EnhancedFolderTree component"
+    },
+    {
+      "name": "FolderContextMenu",
+      "path": "src/components/folders/FolderContextMenu.tsx",
+      "category": "general",
+      "description": "FolderContextMenu component"
+    },
+    {
+      "name": "FolderOperations",
+      "path": "src/components/folders/FolderOperations.tsx",
+      "category": "general",
+      "description": "FolderOperations component"
+    },
+    {
+      "name": "FolderTree",
+      "path": "src/components/folders/FolderTree.tsx",
+      "category": "general",
+      "description": "FolderTree component"
+    },
+    {
+      "name": "footer",
+      "path": "src/components/layout/footer.tsx",
+      "category": "layout",
+      "description": "footer component"
+    },
+    {
+      "name": "GlobalTraderraProvider",
+      "path": "src/components/global/GlobalTraderraProvider.tsx",
+      "category": "general",
+      "description": "GlobalTraderraProvider component"
+    },
+    {
+      "name": "import-guide-modal",
+      "path": "src/components/trades/import-guide-modal.tsx",
+      "category": "trades",
+      "description": "import-guide-modal component"
+    },
+    {
+      "name": "insight-panel",
+      "path": "src/components/agui/components/insight-panel.tsx",
+      "category": "general",
+      "description": "insight-panel component"
+    },
+    {
+      "name": "journal-components",
+      "path": "src/components/journal/journal-components.tsx",
+      "category": "journal",
+      "description": "journal-components component"
+    },
+    {
+      "name": "JournalLayout",
+      "path": "src/components/journal/JournalLayout.tsx",
+      "category": "journal",
+      "description": "JournalLayout component"
+    },
+    {
+      "name": "landing-page",
+      "path": "src/components/landing/landing-page.tsx",
+      "category": "general",
+      "description": "landing-page component"
+    },
+    {
+      "name": "loading-spinner",
+      "path": "src/components/ui/loading-spinner.tsx",
+      "category": "ui",
+      "description": "loading-spinner component"
+    },
+    {
+      "name": "LoadingStates",
+      "path": "src/components/ui/LoadingStates.tsx",
+      "category": "ui",
+      "description": "LoadingStates component"
+    },
+    {
+      "name": "main-dashboard",
+      "path": "src/components/dashboard/main-dashboard.tsx",
+      "category": "dashboard",
+      "description": "main-dashboard component"
+    },
+    {
+      "name": "main-dashboard-debug",
+      "path": "src/components/dashboard/main-dashboard-debug.tsx",
+      "category": "dashboard",
+      "description": "main-dashboard-debug component"
+    },
+    {
+      "name": "metric-card",
+      "path": "src/components/agui/components/metric-card.tsx",
+      "category": "general",
+      "description": "Grid layout for multiple metric cards"
+    },
+    {
+      "name": "metric-toggles",
+      "path": "src/components/dashboard/metric-toggles.tsx",
+      "category": "dashboard",
+      "description": "metric-toggles component"
+    },
+    {
+      "name": "metrics-tiles",
+      "path": "src/components/dashboard/metrics-tiles.tsx",
+      "category": "dashboard",
+      "description": "metrics-tiles component"
+    },
+    {
+      "name": "NavigationTest",
+      "path": "src/components/folders/NavigationTest.tsx",
+      "category": "general",
+      "description": "NavigationTest component"
+    },
+    {
+      "name": "new-trade-modal",
+      "path": "src/components/trades/new-trade-modal.tsx",
+      "category": "trades",
+      "description": "new-trade-modal component"
+    },
+    {
+      "name": "overview-chart",
+      "path": "src/components/charts/overview-chart.tsx",
+      "category": "general",
+      "description": "overview-chart component"
+    },
+    {
+      "name": "performance-chart",
+      "path": "src/components/dashboard/performance-chart.tsx",
+      "category": "dashboard",
+      "description": "performance-chart component"
+    },
+    {
+      "name": "PerformanceSummaryBlockComponent",
+      "path": "src/components/editor/blocks/PerformanceSummaryBlockComponent.tsx",
+      "category": "general",
+      "description": "PerformanceSummaryBlockComponent component"
+    },
+    {
+      "name": "placeholders",
+      "path": "src/components/agui/components/placeholders.tsx",
+      "category": "general",
+      "description": "placeholders component"
+    },
+    {
+      "name": "pnl-mode-toggle",
+      "path": "src/components/ui/pnl-mode-toggle.tsx",
+      "category": "ui",
+      "description": "pnl-mode-toggle component"
+    },
+    {
+      "name": "query-provider",
+      "path": "src/components/providers/query-provider.tsx",
+      "category": "general",
+      "description": "query-provider component"
+    },
+    {
+      "name": "RCTreeFolderTree",
+      "path": "src/components/folders/RCTreeFolderTree.tsx",
+      "category": "general",
+      "description": "RCTreeFolderTree component"
+    },
+    {
+      "name": "RichTextEditor",
+      "path": "src/components/editor/RichTextEditor.tsx",
+      "category": "general",
+      "description": "RichTextEditor component"
+    },
+    {
+      "name": "sign-in",
+      "path": "src/components/auth/sign-in.tsx",
+      "category": "general",
+      "description": "sign-in component"
+    },
+    {
+      "name": "sign-up",
+      "path": "src/components/auth/sign-up.tsx",
+      "category": "general",
+      "description": "sign-up component"
+    },
+    {
+      "name": "SimpleFolderTree",
+      "path": "src/components/folders/SimpleFolderTree.tsx",
+      "category": "general",
+      "description": "SimpleFolderTree component"
+    },
+    {
+      "name": "SlashCommandMenu",
+      "path": "src/components/editor/SlashCommandMenu.tsx",
+      "category": "general",
+      "description": "SlashCommandMenu component"
+    },
+    {
+      "name": "standalone-renata-chat",
+      "path": "src/components/chat/standalone-renata-chat.tsx",
+      "category": "ai",
+      "description": "Generate unique message ID to prevent collisions   Uses timestamp + random component for uniqueness"
+    },
+    {
+      "name": "StrategyTemplateBlockComponent",
+      "path": "src/components/editor/blocks/StrategyTemplateBlockComponent.tsx",
+      "category": "general",
+      "description": "StrategyTemplateBlockComponent component"
+    },
+    {
+      "name": "studio-theme",
+      "path": "src/components/providers/studio-theme.tsx",
+      "category": "general",
+      "description": "studio-theme component"
+    },
+    {
+      "name": "tabbed-widget",
+      "path": "src/components/dashboard/tabbed-widget.tsx",
+      "category": "dashboard",
+      "description": "tabbed-widget component"
+    },
+    {
+      "name": "TemplateSelectionModal",
+      "path": "src/components/journal/TemplateSelectionModal.tsx",
+      "category": "journal",
+      "description": "TemplateSelectionModal component"
+    },
+    {
+      "name": "Toast",
+      "path": "src/components/ui/Toast.tsx",
+      "category": "ui",
+      "description": "Toast component"
+    },
+    {
+      "name": "toast-provider",
+      "path": "src/components/providers/toast-provider.tsx",
+      "category": "general",
+      "description": "toast-provider component"
+    },
+    {
+      "name": "top-nav",
+      "path": "src/components/layout/top-nav.tsx",
+      "category": "layout",
+      "description": "top-nav component"
+    },
+    {
+      "name": "trade-detail-modal",
+      "path": "src/components/trades/trade-detail-modal.tsx",
+      "category": "trades",
+      "description": "trade-detail-modal component"
+    },
+    {
+      "name": "TradeEntryBlock",
+      "path": "src/components/editor/blocks/TradeEntryBlock.tsx",
+      "category": "general",
+      "description": "TradeEntryBlock component"
+    },
+    {
+      "name": "TradeEntryBlockComponent",
+      "path": "src/components/editor/blocks/TradeEntryBlockComponent.tsx",
+      "category": "general",
+      "description": "TradeEntryBlockComponent component"
+    },
+    {
+      "name": "traderview-date-selector",
+      "path": "src/components/ui/traderview-date-selector.tsx",
+      "category": "ui",
+      "description": "traderview-date-selector component"
+    },
+    {
+      "name": "trades-table",
+      "path": "src/components/trades/trades-table.tsx",
+      "category": "trades",
+      "description": "trades-table component"
+    },
+    {
+      "name": "trading-chart",
+      "path": "src/components/charts/trading-chart.tsx",
+      "category": "general",
+      "description": "trading-chart component"
+    },
+    {
+      "name": "unified-filter",
+      "path": "src/components/ui/unified-filter.tsx",
+      "category": "ui",
+      "description": "unified-filter component"
+    },
+    {
+      "name": "user-profile",
+      "path": "src/components/auth/user-profile.tsx",
+      "category": "general",
+      "description": "user-profile component"
+    },
+    {
+      "name": "VSCodeFolderTree",
+      "path": "src/components/folders/VSCodeFolderTree.tsx",
+      "category": "general",
+      "description": "VSCodeFolderTree component"
+    },
+    {
+      "name": "VSCodeTreeItem",
+      "path": "src/components/folders/VSCodeTreeItem.tsx",
+      "category": "general",
+      "description": "VSCodeTreeItem component"
+    }
+  ],
+  "routes": [
+    {
+      "path": "/",
+      "page": "src/app/page.tsx"
+    },
+    {
+      "path": "/ag-ui-test",
+      "page": "src/app/ag-ui-test/page.tsx"
+    },
+    {
+      "path": "/agui-test",
+      "page": "src/app/agui-test/page.tsx"
+    },
+    {
+      "path": "/analytics",
+      "page": "src/app/analytics/page.tsx"
+    },
+    {
+      "path": "/button-test",
+      "page": "src/app/button-test/page.tsx"
+    },
+    {
+      "path": "/calendar",
+      "page": "src/app/calendar/page.tsx"
+    },
+    {
+      "path": "/daily-summary",
+      "page": "src/app/daily-summary/page.tsx"
+    },
+    {
+      "path": "/dashboard",
+      "page": "src/app/dashboard/page.tsx"
+    },
+    {
+      "path": "/dashboard-test",
+      "page": "src/app/dashboard-test/page.tsx"
+    },
+    {
+      "path": "/debug-dashboard",
+      "page": "src/app/debug-dashboard/page.tsx"
+    },
+    {
+      "path": "/editor-demo",
+      "page": "src/app/editor-demo/page.tsx"
+    },
+    {
+      "path": "/journal",
+      "page": "src/app/journal/page.tsx"
+    },
+    {
+      "path": "/journal-enhanced",
+      "page": "src/app/journal-enhanced/page.tsx"
+    },
+    {
+      "path": "/journal-enhanced-v2",
+      "page": "src/app/journal-enhanced-v2/page.tsx"
+    },
+    {
+      "path": "/risk-management",
+      "page": "src/app/risk-management/page.tsx"
+    },
+    {
+      "path": "/settings",
+      "page": "src/app/settings/page.tsx"
+    },
+    {
+      "path": "/sign-in/[[...sign-in]]",
+      "page": "src/app/sign-in/[[...sign-in]]/page.tsx"
+    },
+    {
+      "path": "/sign-up/[[...sign-up]]",
+      "page": "src/app/sign-up/[[...sign-up]]/page.tsx"
+    },
+    {
+      "path": "/statistics",
+      "page": "src/app/statistics/page.tsx"
+    },
+    {
+      "path": "/trades",
+      "page": "src/app/trades/page.tsx"
+    },
+    {
+      "path": "/trading-agents",
+      "page": "src/app/trading-agents/page.tsx"
+    }
+  ]
+}

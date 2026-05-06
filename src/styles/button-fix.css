@@ -1,0 +1,76 @@
+/* Comprehensive CSS fix for button click issues */
+
+/* CRITICAL: Force ALL buttons to be clickable - HIGHEST PRIORITY */
+button:not([disabled]),
+[role="button"]:not([disabled]) {
+  cursor: pointer !important;
+  pointer-events: auto !important;
+  user-select: none !important;
+  position: relative !important;
+  z-index: 100 !important;
+}
+
+/* Traderra date selector buttons - specific fix */
+.traderra-date-btn,
+.traderra-date-selector button,
+[data-testid="date-selector"] button,
+[data-component="traderview-date-selector"] button {
+  cursor: pointer !important;
+  pointer-events: auto !important;
+  position: relative !important;
+  z-index: 200 !important;
+}
+
+/* Ensure no parent containers block clicks */
+.traderra-date-selector,
+[data-testid="date-selector"],
+[data-component="traderview-date-selector"] {
+  pointer-events: auto !important;
+  position: relative !important;
+}
+
+/* Fix for display mode toggles - only block pseudo-elements */
+[data-testid="display-mode-toggles"] {
+  pointer-events: auto !important;
+  position: relative !important;
+}
+
+[data-testid="display-mode-toggles"] button {
+  cursor: pointer !important;
+  pointer-events: auto !important;
+  position: relative !important;
+  z-index: 100 !important;
+}
+
+[data-testid="display-mode-toggles"] *::before,
+[data-testid="display-mode-toggles"] *::after {
+  pointer-events: none !important;
+}
+
+/* Fix for Clerk sign-in */
+.cl-signIn {
+  pointer-events: auto !important;
+  position: relative !important;
+}
+
+.cl-signIn button,
+.cl-signIn .cl-button,
+.cl-signIn [type="submit"] {
+  cursor: pointer !important;
+  pointer-events: auto !important;
+  position: relative !important;
+  z-index: 1000 !important;
+}
+
+/* Fix for any overlays that might block clicks - use sparingly */
+.cl-signIn::before,
+.cl-signIn::after {
+  pointer-events: none !important;
+}
+
+/* Ensure clickable elements stay on top */
+button:hover,
+[role="button"]:hover,
+.traderra-date-btn:hover {
+  z-index: 1000 !important;
+}

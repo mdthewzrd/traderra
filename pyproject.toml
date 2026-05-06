@@ -1,0 +1,9 @@
+[project]
+name = "traderra-indicators"
+version = "0.1.0"
+description = "Declarative indicator framework for Traderra Charts"
+requires-python = ">=3.11"
+dependencies = ["pandas>=2.0", "numpy>=1.24"]
+
+[project.optional-dependencies]
+server = ["fastapi>=0.104", "uvicorn>=0.24", "pydantic>=2.0"]

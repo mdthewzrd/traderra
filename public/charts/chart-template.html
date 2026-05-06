@@ -1,0 +1,351 @@
+<div id="topbar">
+  <span id="logo">TRADERRA</span>
+  <div class="sep"></div>
+  <input id="symbol-input" type="text" value="AAPL" placeholder="TICKER"/>
+  <button class="tbtn" id="load-btn">▶ LOAD</button>
+  <button class="tbtn" id="live-btn">⬤ LIVE</button>
+  <div id="live-indicator"><div id="live-dot"></div><span id="live-label">LIVE</span></div>
+  <div class="sep"></div>
+  <!-- Grouped dropdown menus -->
+  <div class="dropdown-group">
+    <button class="tbtn dropdown-trigger" id="draw-menu-btn">✏ DRAW ▾</button>
+    <div class="dropdown-content" id="draw-menu">
+      <button class="tool-btn" data-tool="trendline">✏ Line</button>
+      <button class="tool-btn" data-tool="fib_ret" style="border-color:#a78bfa;color:#a78bfa;">〰 Fib Retracement</button>
+      <button class="tool-btn" data-tool="box_orange">▣ Orange Box</button>
+      <button class="tool-btn" data-tool="box_yellow">▣ Yellow Box</button>
+      <button class="tool-btn" data-tool="text_orange">T Orange Text</button>
+      <button class="tool-btn" data-tool="text_yellow">T Yellow Text</button>
+      <hr style="border:none;border-top:1px solid #2a3050;margin:2px 0;">
+      <span style="font-size:8px;color:#3a4560;padding:2px 6px;">HIGHLIGHT:</span>
+      <button class="tool-btn" data-tool="hl_cyan" style="border-color:#22d3ee;color:#22d3ee;">■ Cyan</button>
+      <button class="tool-btn" data-tool="hl_magenta" style="border-color:#e879f9;color:#e879f9;">■ Magenta</button>
+      <button class="tool-btn" data-tool="hl_green" style="border-color:#4ade80;color:#4ade80;">■ Green</button>
+      <button class="tool-btn" data-tool="hl_white" style="border-color:#cbd5e1;color:#cbd5e1;">■ White</button>
+      <div style="display:flex;align-items:center;gap:4px;padding:2px 6px;">
+        <span style="font-size:8px;color:#3a4560;">OP:</span>
+        <input id="hl-opacity" type="range" min="5" max="50" value="15" style="width:60px;height:14px;accent-color:#22d3ee;cursor:pointer;"/>
+        <span id="hl-opacity-val" style="font-size:9px;color:#4a6080;">15%</span>
+      </div>
+      <hr style="border:none;border-top:1px solid #2a3050;margin:2px 0;">
+      <button class="tool-btn" data-tool="edit" style="border-color:#fbbf24;color:#fbbf24;">✎ Edit</button>
+      <button class="tool-btn" data-tool="del" style="border-color:#ff3d57;color:#ff3d57;">🗑 Delete</button>
+      <button class="tbtn" id="clr-btn" style="margin:2px 4px;">✕ Clear All</button>
+    </div>
+  </div>
+  <div class="dropdown-group">
+    <button class="tbtn dropdown-trigger" id="trade-menu-btn" style="border-color:#ff9800;color:#ff9800;">⇅ TRADE ▾</button>
+    <div class="dropdown-content" id="trade-menu">
+      <button class="tool-btn" data-tool="entry_arrow" style="border-color:#ff9800;color:#ff9800;">▲ Long Entry</button>
+      <button class="tool-btn" data-tool="exit_arrow" style="border-color:#40c4ff;color:#40c4ff;">▼ Long Exit</button>
+      <hr style="border:none;border-top:1px solid #2a3050;margin:2px 0;">
+      <button class="tool-btn" data-tool="short_arrow" style="border-color:#ff5252;color:#ff5252;">▼ Short Entry</button>
+      <button class="tool-btn" data-tool="cover_arrow" style="border-color:#00e676;color:#00e676;">▲ Cover</button>
+      <hr style="border:none;border-top:1px solid #2a3050;margin:2px 0;">
+      <button class="tool-btn" data-tool="stop_line" style="border-color:#facc15;color:#facc15;">— Stop</button>
+      <button class="tool-btn" data-tool="trail_stop" style="border-color:#38bdf8;color:#38bdf8;">— Trail Stop</button>
+    </div>
+  </div>
+  <div class="sep"></div>
+  <button class="tbtn" id="toggle-bars-btn">≡ BARS</button>
+  <button class="tbtn" id="price-line-btn" style="border-color:#26a69a;color:#26a69a;">— LINE</button>
+  <button class="tbtn" id="adj-btn" style="border-color:#f59e0b;color:#f59e0b;">ADJ</button>
+  <button class="tbtn" id="clean-btn" style="border-color:#4a5580;color:#4a5580;text-decoration:line-through;">CLN</button>
+  <div class="sep"></div>
+  <button class="tbtn" id="bt-btn">⏱ BACKTEST</button>
+  <button class="tbtn" id="scan-btn" style="border-color:#4ade80!important;color:#4ade80!important;">📡 SCAN</button>
+  <button class="tbtn" id="settings-btn" style="border-color:#D4AF37!important;color:#D4AF37!important;">⚙ LOOK</button>
+  <div id="ticker-info">
+    <span id="ti-sym" style="color:#dde3f0;font-weight:700;font-size:14px;"></span>
+    <span id="ti-price" style="font-size:13px;"></span>
+    <span id="ti-chg" style="font-size:12px;"></span>
+  </div>
+</div>
+
+<div id="main-area" style="flex:1;display:flex;min-height:0;overflow:hidden;transition:margin-right 0.15s ease;">
+<div id="grid"></div>
+<div id="bt-sidebar">
+  <div id="bt-header">
+    <span id="bt-title">⏱ BACKTEST MODE</span>
+    <button id="bt-close">✕</button>
+  </div>
+  <!-- TOP PANE: upload + stats + filter + range + sim — scrollable, resizable -->
+  <div id="bt-top-pane" style="overflow-y:auto;overflow-x:hidden;flex-shrink:0;">
+  <div id="bt-upload-area">
+    <div id="bt-drop">
+      <input type="file" id="bt-file-input" accept=".csv"/>
+      <div id="bt-drop-label">Drop <span>CSV</span> or click to upload<br>entry/exit execution file</div>
+    </div>
+  </div>
+  <div id="bt-stats">
+    <div class="bt-stat-row"><span class="bt-stat-l">TRADES</span><span class="bt-stat-v" id="bts-trades">—</span></div>
+    <div class="bt-stat-row"><span class="bt-stat-l">TOTAL PNL</span><span class="bt-stat-v" id="bts-pnl">—</span></div>
+    <div class="bt-stat-row"><span class="bt-stat-l">WIN RATE</span><span class="bt-stat-v" id="bts-wr">—</span></div>
+    <div class="bt-stat-row"><span class="bt-stat-l">AVG WIN</span><span class="bt-stat-v pos" id="bts-aw">—</span></div>
+    <div class="bt-stat-row"><span class="bt-stat-l">AVG LOSS</span><span class="bt-stat-v neg" id="bts-al">—</span></div>
+    <div class="bt-stat-row"><span class="bt-stat-l">BEST</span><span class="bt-stat-v pos" id="bts-best">—</span></div>
+    <div class="bt-stat-row"><span class="bt-stat-l">WORST</span><span class="bt-stat-v neg" id="bts-worst">—</span></div>
+  </div>
+  <div id="bt-strategy" style="display:none;padding:5px 10px;border-bottom:1px solid #1e2840;flex-shrink:0;">
+    <div style="font-size:9px;color:#4a6080;letter-spacing:.5px;margin-bottom:4px;font-family:'Courier New',monospace;">STRATEGY TYPE</div>
+    <div style="display:flex;gap:5px;">
+      <button id="bt-strat-long" style="flex:1;padding:3px 0;border-radius:3px;font-family:'Courier New',monospace;font-size:10px;font-weight:700;cursor:pointer;border:1px solid #2a3050;background:none;color:#4a5580;letter-spacing:.5px;">▲ LONG</button>
+      <button id="bt-strat-short" style="flex:1;padding:3px 0;border-radius:3px;font-family:'Courier New',monospace;font-size:10px;font-weight:700;cursor:pointer;border:1px solid #ff5252;background:#ff525218;color:#ff5252;letter-spacing:.5px;">▼ SHORT</button>
+    </div>
+  </div>
+  <div id="bt-filter">
+    <input id="bt-search" type="text" placeholder="FILTER TICKER…" maxlength="10"/>
+    <select id="bt-sort">
+      <option value="date_asc">DATE ↑</option>
+      <option value="date_desc">DATE ↓</option>
+      <option value="pnl_desc">PNL ↓</option>
+      <option value="pnl_asc">PNL ↑</option>
+      <option value="ticker">TICKER</option>
+    </select>
+    <button id="bt-hldt-btn" title="Highlight trade dates on chart" style="padding:2px 7px;border-radius:3px;font-family:'Courier New',monospace;font-size:9px;font-weight:700;cursor:pointer;border:1px solid #f59e0b;background:#f59e0b18;color:#f59e0b;letter-spacing:.5px;flex-shrink:0;">HLDT</button>
+  </div>
+  <div id="bt-range-cfg" style="display:none;padding:6px 10px;border-bottom:1px solid #1e2840;background:#0d0f18;">
+    <div style="font-size:9px;color:#3a5070;letter-spacing:1px;margin-bottom:5px;text-transform:uppercase;">Chart Lookback / Forward</div>
+    <div id="bt-panel-ranges"></div>
+  </div>
+  <div id="bt-sim" style="display:none;padding:8px 10px;background:#080b12;">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+      <span style="font-size:9px;font-weight:700;color:#38bdf8;letter-spacing:1px;">MANUAL SIM</span>
+      <span style="margin-left:auto;display:flex;align-items:center;gap:4px;">
+        <span style="color:#ef5350;font-size:9px;font-weight:700;letter-spacing:0.5px;">R%</span>
+        <input id="bt-sim-riskpct" type="number" min="0.01" step="0.1" value="1" style="width:52px;background:#1a1e2e;border:1px solid #ef5350;color:#ef5350;font-family:'Courier New',monospace;font-size:11px;font-weight:800;padding:2px 5px;border-radius:3px;outline:none;text-align:right;" title="Risk per R as % of equity"/>
+        <span id="btsim-rdollar" style="color:#ef535099;font-size:9px;font-weight:700;font-family:'Courier New',monospace;min-width:50px;">—</span>
+        <button id="bt-sim-clear" style="background:none;border:1px solid #2a3050;color:#4a5580;font-family:'Courier New',monospace;font-size:8px;padding:1px 5px;border-radius:2px;cursor:pointer;">CLR</button>
+      </span>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;flex-wrap:wrap;">
+      <span style="color:#a78bfa;font-size:9px;font-weight:700;letter-spacing:0.5px;">EQ$</span>
+      <input id="bt-sim-equity" type="number" min="0" step="1000" value="" placeholder="—" style="width:72px;background:#1a1e2e;border:1px solid #a78bfa;color:#a78bfa;font-family:'Courier New',monospace;font-size:11px;font-weight:800;padding:2px 5px;border-radius:3px;outline:none;text-align:right;" title="Account equity"/>
+      <span style="color:#f59e0b;font-size:9px;font-weight:700;letter-spacing:0.5px;">BP×</span>
+      <input id="bt-sim-bpmult" type="number" min="1" max="10" step="1" value="4" style="width:36px;background:#1a1e2e;border:1px solid #f59e0b;color:#f59e0b;font-family:'Courier New',monospace;font-size:11px;font-weight:800;padding:2px 5px;border-radius:3px;outline:none;text-align:right;" title="Buying power multiplier (e.g. 4× for margin)"/>
+      <span id="btsim-eq-summary" style="font-size:9px;color:#4a6080;margin-left:auto;"></span>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+      <span style="color:#34d399;font-size:9px;font-weight:700;letter-spacing:0.5px;">R$</span>
+      <input id="bt-sim-rdirect" type="number" min="1" step="50" value="" placeholder="— override" style="width:90px;background:#1a1e2e;border:1px solid #34d399;color:#34d399;font-family:'Courier New',monospace;font-size:11px;font-weight:800;padding:2px 5px;border-radius:3px;outline:none;text-align:right;" title="Direct R dollar amount — overrides EQ$×R% when set"/>
+      <span style="font-size:9px;color:#2a5040;font-weight:600;letter-spacing:0.3px;">overrides EQ%</span>
+    </div>
+    <div id="bt-sim-legs" style="margin-bottom:6px;font-size:11px;color:#8aa0c0;min-height:14px;line-height:1.6;font-weight:600;"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;font-size:11px;">
+      <span style="color:#6a80a0;font-size:10px;">AVG ENTRY</span><span id="btsim-entry" style="font-weight:800;color:#dde3f0;font-size:12px;">—</span>
+      <span style="color:#6a80a0;font-size:10px;">SHARES</span><span id="btsim-shares" style="font-weight:800;color:#dde3f0;font-size:12px;">—</span>
+      <span style="color:#6a80a0;font-size:10px;">STOP</span><span id="btsim-stop" style="font-weight:800;color:#facc15;font-size:12px;">—</span>
+      <span style="color:#6a80a0;font-size:10px;">RISK</span><span id="btsim-risk" style="font-weight:800;color:#ef5350;font-size:12px;">—</span>
+      <span style="color:#6a80a0;font-size:10px;">AVG EXIT</span><span id="btsim-avgexit" style="font-weight:800;color:#dde3f0;font-size:12px;">—</span>
+      <span style="color:#6a80a0;font-size:10px;">LAST EXIT</span><span id="btsim-exit" style="font-weight:800;color:#dde3f0;font-size:12px;">—</span>
+      <span style="color:#6a80a0;font-size:10px;">SIM PNL</span><span id="btsim-pnl" style="font-weight:800;font-size:13px;">—</span>
+      <span style="color:#6a80a0;font-size:10px;">SIM R</span><span id="btsim-r" style="font-weight:800;font-size:12px;">—</span>
+      <span style="color:#6a80a0;font-size:10px;">R MATH</span><span id="btsim-rmath" style="font-weight:600;color:#4a6080;font-size:10px;">—</span>
+      <span style="color:#6a80a0;font-size:10px;">STATUS</span><span id="btsim-status" style="font-weight:800;font-size:11px;">—</span>
+      <span style="color:#6a80a0;font-size:10px;">POS VALUE</span><span id="btsim-posval" style="font-weight:800;color:#dde3f0;font-size:12px;">—</span>
+      <span style="color:#6a80a0;font-size:10px;">BP USED</span><span id="btsim-bpused" style="font-weight:800;color:#dde3f0;font-size:12px;">—</span>
+    </div>
+    <div id="btsim-bp-warn" style="display:none;margin-top:4px;padding:3px 6px;background:rgba(239,83,80,0.15);border:1px solid #ef5350;border-radius:3px;font-size:10px;font-weight:700;color:#ef5350;"></div>
+    <div style="display:flex;gap:5px;margin-top:6px;border-top:1px solid #1e2840;padding-top:6px;">
+      <button id="review-save-btn" style="flex:1;background:#0d1a2e;border:1px solid #38bdf8;color:#38bdf8;font-family:'Courier New',monospace;font-size:9px;font-weight:700;padding:4px 0;border-radius:3px;cursor:pointer;letter-spacing:0.5px;">💾 SAVE REVIEW</button>
+      <button id="review-load-btn" style="flex:1;background:#0d1a2e;border:1px solid #a855f7;color:#a855f7;font-family:'Courier New',monospace;font-size:9px;font-weight:700;padding:4px 0;border-radius:3px;cursor:pointer;letter-spacing:0.5px;">📂 LOAD REVIEW</button>
+      <input type="file" id="review-file-input" accept=".json" style="display:none;"/>
+    </div>
+    <div id="review-status" style="display:none;margin-top:4px;font-size:9px;font-weight:700;padding:2px 5px;border-radius:2px;text-align:center;"></div>
+  </div>
+  </div>
+  <!-- DRAG HANDLE -->
+  <div id="bt-divider" style="height:6px;background:#1e2840;cursor:ns-resize;flex-shrink:0;display:flex;align-items:center;justify-content:center;user-select:none;">
+    <div class="bt-div-pip"></div>
+  </div>
+  <!-- BOTTOM PANE: trade list — takes remaining space -->
+  <div id="bt-list" style="flex:1;overflow-y:auto;overflow-x:hidden;min-height:40px;"></div>
+</div>
+</div>
+<div id="fs-backdrop"></div>
+<div id="draw-hint"></div>
+<div id="toast"></div>
+
+<!-- ══════════ SETTINGS PANEL ══════════ -->
+<div id="settings-panel">
+  <div id="settings-panel-header">
+    <span style="font-size:11px;font-weight:700;color:#D4AF37;letter-spacing:1px;">⚙ LOOK & FEEL</span>
+    <button id="settings-close" style="background:none;border:none;color:#4a5580;cursor:pointer;font-size:14px;line-height:1;padding:2px 4px;margin-left:auto;">✕</button>
+  </div>
+  <div id="settings-panel-body">
+    <div class="settings-section">
+      <div class="settings-section-title">CANDLES</div>
+      <div class="settings-row">
+        <label>Up Color</label><input type="color" id="set-c-up" value="#26a69a">
+      </div>
+      <div class="settings-row">
+        <label>Down Color</label><input type="color" id="set-c-dn" value="#ef5350">
+      </div>
+      <div class="settings-row">
+        <label>Up Volume</label><input type="color" id="set-c-volup" value="#26a69a">
+      </div>
+      <div class="settings-row">
+        <label>Down Volume</label><input type="color" id="set-c-voldn" value="#ef5350">
+      </div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-section-title">BACKGROUND</div>
+      <div class="settings-row">
+        <label>Chart BG</label><input type="color" id="set-c-bg" value="#0c0e14">
+      </div>
+      <div class="settings-row">
+        <label>Axis BG</label><input type="color" id="set-c-axisbg" value="#0d0f18">
+      </div>
+      <div class="settings-row">
+        <label>Grid</label><input type="color" id="set-c-grid" value="#141926">
+      </div>
+      <div class="settings-row">
+        <label>Panel Border</label><input type="color" id="set-c-border" value="#1e2535">
+      </div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-section-title">SESSIONS</div>
+      <div class="settings-row">
+        <label>Pre-Market</label><input type="color" id="set-c-pre" value="#a05014">
+      </div>
+      <div class="settings-row">
+        <label>Pre-Market Opacity</label><input type="range" id="set-c-pre-opacity" min="1" max="40" value="7" style="flex:1;"><span id="set-c-pre-opacity-val" class="settings-range-val">7%</span>
+      </div>
+      <div class="settings-row">
+        <label>After-Hours</label><input type="color" id="set-c-after" value="#1e50c8">
+      </div>
+      <div class="settings-row">
+        <label>After-Hours Opacity</label><input type="range" id="set-c-after-opacity" min="1" max="40" value="9" style="flex:1;"><span id="set-c-after-opacity-val" class="settings-range-val">9%</span>
+      </div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-section-title">CROSSHAIR</div>
+      <div class="settings-row">
+        <label>Crosshair</label><input type="color" id="set-c-cross" value="#8ca0c8">
+      </div>
+      <div class="settings-row">
+        <label>Opacity</label><input type="range" id="set-c-cross-opacity" min="10" max="100" value="50" style="flex:1;"><span id="set-c-cross-opacity-val" class="settings-range-val">50%</span>
+      </div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-section-title">FONTS</div>
+      <div class="settings-row">
+        <label>Price Size</label><input type="range" id="set-font-price" min="7" max="14" value="10" style="flex:1;"><span id="set-font-price-val" class="settings-range-val">10px</span>
+      </div>
+      <div class="settings-row">
+        <label>Time Size</label><input type="range" id="set-font-time" min="7" max="14" value="9" style="flex:1;"><span id="set-font-time-val" class="settings-range-val">9px</span>
+      </div>
+      <div class="settings-row">
+        <label>OHLCV Size</label><input type="range" id="set-font-ohlc" min="9" max="16" value="12" style="flex:1;"><span id="set-font-ohlc-val" class="settings-range-val">12px</span>
+      </div>
+      <div class="settings-row">
+        <label>Volume Size</label><input type="range" id="set-font-vol" min="7" max="14" value="10" style="flex:1;"><span id="set-font-vol-val" class="settings-range-val">10px</span>
+      </div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-section-title">PRESETS</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;">
+        <button class="settings-preset" data-preset="default">Default</button>
+        <button class="settings-preset" data-preset="gold">Gold Dark</button>
+        <button class="settings-preset" data-preset="light">Light</button>
+        <button class="settings-preset" data-preset="nord">Nord</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:4px;margin-top:8px;">
+      <button id="settings-save" class="settings-action">💾 Save</button>
+      <button id="settings-reset" class="settings-action" style="border-color:#ef5350;color:#ef5350;">↺ Reset</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ SCAN PANEL (standalone) ══════════ -->
+<div id="scan-panel">
+  <div id="scan-panel-header">
+    <span style="font-size:11px;font-weight:700;color:#4ade80;letter-spacing:1px;">📡 SCANS</span>
+    <div style="display:flex;gap:4px;margin-left:8px;">
+      <button class="scan-tab active" data-scantab="live">LIVE SCAN</button>
+      <button class="scan-tab" data-scantab="historical">HISTORICAL</button>
+    </div>
+    <span id="scan-count" style="margin-left:auto;font-size:11px;color:#8aa0c0;font-family:'Segoe UI',Arial,sans-serif;font-weight:700;"></span>
+    <button id="scan-close" style="background:none;border:none;color:#4a5580;cursor:pointer;font-size:14px;line-height:1;padding:2px 4px;margin-left:4px;">✕</button>
+  </div>
+  <div id="scan-panel-body">
+    <!-- Controls (shared) -->
+    <div style="display:flex;gap:5px;margin-bottom:6px;">
+      <select id="scan-strategy" style="flex:1;background:#1a1e2e;border:1px solid #4ade80;color:#4ade80;font-family:'Segoe UI',Arial,sans-serif;font-size:12px;font-weight:700;padding:4px 6px;border-radius:3px;outline:none;cursor:pointer;">
+        <option value="inside_day_long">Inside Day Long</option>
+      </select>
+      <button id="scan-run-btn" style="background:#4ade80;color:#000;border:none;font-family:'Segoe UI',Arial,sans-serif;font-size:12px;font-weight:700;padding:4px 12px;border-radius:3px;cursor:pointer;letter-spacing:0.5px;white-space:nowrap;">▶ SCAN</button>
+    </div>
+    <!-- Date range (historical only) -->
+    <div id="scan-date-range" style="display:none;margin-bottom:6px;">
+      <div style="display:flex;gap:5px;align-items:center;">
+        <span style="font-size:10px;color:#6a80a0;font-weight:700;letter-spacing:0.5px;">FROM</span>
+        <input id="scan-from" type="date" style="flex:1;background:#1a1e2e;border:1px solid #a855f7;color:#a855f7;font-family:'Segoe UI',Arial,sans-serif;font-size:12px;font-weight:600;padding:3px 5px;border-radius:3px;outline:none;"/>
+        <span style="font-size:10px;color:#6a80a0;font-weight:700;letter-spacing:0.5px;">TO</span>
+        <input id="scan-to" type="date" style="flex:1;background:#1a1e2e;border:1px solid #a855f7;color:#a855f7;font-family:'Segoe UI',Arial,sans-serif;font-size:12px;font-weight:600;padding:3px 5px;border-radius:3px;outline:none;"/>
+      </div>
+      <div style="display:flex;gap:4px;margin-top:4px;">
+        <button class="scan-preset" data-days="30" style="flex:1;background:none;border:1px solid #2a3050;color:#4a6080;font-family:'Segoe UI',Arial,sans-serif;font-size:10px;font-weight:700;padding:4px;border-radius:3px;cursor:pointer;">1M</button>
+        <button class="scan-preset" data-days="90" style="flex:1;background:none;border:1px solid #2a3050;color:#4a6080;font-family:'Segoe UI',Arial,sans-serif;font-size:10px;font-weight:700;padding:4px;border-radius:3px;cursor:pointer;">3M</button>
+        <button class="scan-preset" data-days="180" style="flex:1;background:none;border:1px solid #2a3050;color:#4a6080;font-family:'Segoe UI',Arial,sans-serif;font-size:10px;font-weight:700;padding:4px;border-radius:3px;cursor:pointer;">6M</button>
+        <button class="scan-preset" data-days="365" style="flex:1;background:none;border:1px solid #2a3050;color:#4a6080;font-family:'Segoe UI',Arial,sans-serif;font-size:10px;font-weight:700;padding:4px;border-radius:3px;cursor:pointer;">1Y</button>
+        <button class="scan-preset" data-days="730" style="flex:1;background:none;border:1px solid #2a3050;color:#4a6080;font-family:'Segoe UI',Arial,sans-serif;font-size:10px;font-weight:700;padding:4px;border-radius:3px;cursor:pointer;">2Y</button>
+      </div>
+    </div>
+    <div id="scan-filters" style="margin-bottom:6px;">
+      <span style="font-size:10px;color:#6a80a0;font-weight:700;letter-spacing:0.5px;">FILTER:</span>
+      <div style="display:flex;gap:4px;margin-top:3px;">
+        <label style="display:flex;align-items:center;gap:3px;font-size:11px;color:#4ade80;cursor:pointer;border:1px solid #1e2840;padding:3px 8px;border-radius:3px;">
+          <input type="radio" name="scan-filter" value="1" style="accent-color:#4ade80;"/> F1: $400M gap≥0%
+        </label>
+        <label style="display:flex;align-items:center;gap:3px;font-size:11px;color:#38bdf8;cursor:pointer;border:1px solid #1e2840;padding:3px 8px;border-radius:3px;">
+          <input type="radio" name="scan-filter" value="2" style="accent-color:#38bdf8;"/> F2: $1B gap≥-20%
+        </label>
+        <label style="display:flex;align-items:center;gap:3px;font-size:11px;color:#f59e0b;cursor:pointer;border:1px solid #1e2840;padding:3px 8px;border-radius:3px;">
+          <input type="radio" name="scan-filter" value="3" checked style="accent-color:#f59e0b;"/> F3: Both
+        </label>
+      </div>
+    </div>
+    <div id="scan-status" style="font-size:11px;color:#8aa0c0;margin-bottom:6px;min-height:14px;line-height:1.5;"></div>
+    <!-- Live results -->
+    <div id="scan-watchlist"></div>
+    <!-- Historical results -->
+    <div id="scan-historical" style="display:none;"></div>
+  </div>
+</div>
+
+<div id="pct-popup">
+  <div id="pct-popup-title" style="font-size:10px;letter-spacing:1px;font-weight:700;color:#ff9800;cursor:move;user-select:none;">LONG</div>
+  <div style="display:grid;grid-template-columns:auto 1fr;align-items:center;gap:5px 8px;">
+    <label id="pct-price-label" style="font-size:9px;color:#4a6080;font-family:'Courier New',monospace;display:none;">PRICE</label>
+    <input id="pct-price-input" type="number" step="0.01" placeholder="price" style="background:#1e2436;border:1px solid #fbbf24;color:#fbbf24;font-family:'Courier New',monospace;font-size:13px;padding:4px 7px;border-radius:3px;outline:none;width:100%;display:none;"/>
+    <label style="font-size:9px;color:#4a6080;font-family:'Courier New',monospace;">%&nbsp;RISK</label>
+    <div style="display:flex;gap:4px;">
+      <input id="pct-input" type="number" min="0" max="9999" step="1" placeholder="100" style="background:#1e2436;border:1px solid #2a3050;color:#dde3f0;font-family:'Courier New',monospace;font-size:13px;padding:4px 7px;border-radius:3px;outline:none;flex:1;min-width:0;"/>
+      <button id="pct-rebuy" title="Re-add last sold qty" style="background:none;border:1px solid #ff9800;color:#ff9800;font-family:'Courier New',monospace;font-size:8px;padding:2px 5px;border-radius:3px;cursor:pointer;white-space:nowrap;">↺ REBUY</button>
+    </div>
+    <label id="pct-stop-label" style="font-size:9px;color:#4a6080;font-family:'Courier New',monospace;">STOP</label>
+    <input id="pct-stop-input" type="number" step="0.0001" placeholder="price" style="background:#1e2436;border:1px solid #2a3050;color:#facc15;font-family:'Courier New',monospace;font-size:13px;padding:4px 7px;border-radius:3px;outline:none;width:100%;"/>
+    <label id="pct-pnlrisk-label" style="font-size:9px;color:#4a6080;font-family:'Courier New',monospace;display:none;">+BASE%</label>
+    <input id="pct-pnlrisk-input" type="number" min="0" max="9999" step="1" placeholder="0" title="Use locked PnL + this% of Risk$ as risk budget" style="background:#1e2436;border:1px solid #2a3050;color:#a78bfa;font-family:'Courier New',monospace;font-size:13px;padding:4px 7px;border-radius:3px;outline:none;width:100%;display:none;"/>
+  </div>
+  <div style="display:flex;gap:4px;margin-top:4px;">
+    <button id="pct-mode-normal" style="flex:1;padding:2px;border-radius:3px;font-family:'Courier New',monospace;font-size:8px;cursor:pointer;border:1px solid #ff9800;background:#ff980018;color:#ff9800;" id="pct-mode-normal-label">% RISK</button>
+    <button id="pct-mode-pnl" style="flex:1;padding:2px;border-radius:3px;font-family:'Courier New',monospace;font-size:8px;cursor:pointer;border:1px solid #2a3050;background:none;color:#4a6080;">PNL + %</button>
+  </div>
+  <div id="pct-popup-hint" style="font-size:9px;color:#2a4060;margin-top:3px;line-height:1.4;min-height:12px;"></div>
+  <div class="popup-btns">
+    <button id="pct-ok">PLACE</button>
+    <button class="cancel" id="pct-cancel">CANCEL</button>
+  </div>
+</div>
+
+<div id="text-popup">
+  <div style="font-size:10px;color:#a855f7;letter-spacing:1px;font-weight:700;">ANNOTATION TEXT</div>
+  <input id="text-input" type="text" placeholder="Enter label…" maxlength="80"/>
+  <div class="popup-btns">
+    <button id="text-ok">PLACE</button>
+    <button class="cancel" id="text-cancel">CANCEL</button>
+  </div>
+</div>

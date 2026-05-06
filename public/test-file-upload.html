@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>File Upload Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+            background: #1a1a1a;
+            color: #e0e0e0;
+        }
+        h1 { color: #4ade80; }
+        .test-section {
+            background: #2a2a2a;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border: 1px solid #3a3a3a;
+        }
+        button {
+            background: #4ade80;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 5px;
+        }
+        button:hover { background: #22c55e; }
+        input[type="file"] {
+            background: #3a3a3a;
+            padding: 10px;
+            border-radius: 4px;
+            width: 100%;
+            margin: 10px 0;
+        }
+        #output {
+            background: #0a0a0a;
+            padding: 15px;
+            border-radius: 8px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: 600px;
+            overflow-y: auto;
+            border: 1px solid #3a3a3a;
+        }
+        .success { color: #4ade80; }
+        .error { color: #ef4444; }
+        .info { color: #60a5fa; }
+        .warning { color: #f59e0b; }
+    </style>
+</head>
+<body>
+    <h1>File Upload API Test</h1>
+
+    <div class="test-section">
+        <h2>Test 1: Upload Real CSV File</h2>
+        <input type="file" id="fileInput" accept=".csv" />
+        <button onclick="testUpload()">Upload & Test</button>
+        <button onclick="downloadTestCSV()">Download Test CSV</button>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 2: Pre-made Test Data</h2>
+        <button onclick="testWithPremadeData()">Test with Pre-made CSV Data</button>
+        <button onclick="clearOutput()">Clear Output</button>
+    </div>
+
+    <h2>Output:</h2>
+    <pre id="output">Ready to test...</pre>
+
+    <script>
+        function log(message, type = 'info') {
+            const output = document.getElementById('output');
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = {
+                'success': '✅ ',
+                'error': '❌ ',
+                'warning': '⚠️ ',
+                'info': 'ℹ️ '
+            }[type] || '';
+            output.textContent += `\n[${timestamp}] ${prefix}${message}`;
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function clearOutput() {
+            document.getElementById('output').textContent = 'Output cleared.\n';
+        }
+
+        function downloadTestCSV() {
+            const csvContent = `Open Datetime,Close Datetime,Symbol,Side,Volume,Entry Price,Exit Price,Net P&L
+2024-01-15 09:30:00,2024-01-15 10:15:00,AAPL,Long,100,150.25,152.30,205.0
+2024-01-16 14:00:00,2024-01-16 14:30:00,TSLA,Short,50,210.50,208.25,112.5
+2024-01-17 10:00:00,2024-01-17 11:00:00,MSFT,Long,75,380.00,385.50,412.5`;
+
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'test-trades.csv';
+            a.click();
+            window.URL.revokeObjectURL(url);
+
+            log('Test CSV file downloaded. You can now upload it using Test 1.', 'success');
+        }
+
+        function testUpload() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                log('Please select a file first', 'error');
+                return;
+            }
+
+            log(`Starting upload test for: ${file.name} (${file.size} bytes)`, 'info');
+
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const base64Content = e.target.result.split(',')[1];
+
+                log(`File encoded to base64 (${base64Content.length} characters)`, 'info');
+
+                const requestBody = {
+                    message: 'Test message with file upload',
+                    attachedFile: {
+                        name: file.name,
+                        content: base64Content
+                    },
+                    userId: 'test-user',
+                    concise: true
+                };
+
+                log('Sending request to /api/agui...', 'info');
+                log(`Request body: message="${requestBody.message}", fileName="${requestBody.attachedFile.name}"`, 'info');
+
+                try {
+                    const startTime = Date.now();
+                    const response = await fetch('/api/agui', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(requestBody)
+                    });
+                    const endTime = Date.now();
+
+                    log(`Response received in ${endTime - startTime}ms`, 'info');
+
+                    const data = await response.json();
+
+                    log('--- Response Data ---', 'info');
+                    log(JSON.stringify(data, null, 2), 'info');
+                    log('--- End Response Data ---', 'info');
+
+                    // Analyze response
+                    log('\n=== Analysis ===', 'info');
+
+                    if (data.success) {
+                        log('✓ API returned success=true', 'success');
+                    } else {
+                        log('✗ API returned success=false', 'error');
+                    }
+
+                    if (data.response) {
+                        if (data.response.includes('FILE UPLOADED')) {
+                            log('✓ File was acknowledged in response (found "FILE UPLOADED")', 'success');
+                        } else {
+                            log('✗ File NOT acknowledged in response (no "FILE UPLOADED" found)', 'warning');
+                        }
+
+                        if (data.response.includes('received') || data.response.includes('acknowledge')) {
+                            log('✓ File was acknowledged (found "received" or "acknowledge")', 'success');
+                        }
+
+                        if (data.response.toLowerCase().includes('error') || data.response.toLowerCase().includes('encoding')) {
+                            log('⚠ Response contains error/encoding language - AI may be misinterpreting the file upload', 'warning');
+                        }
+
+                        log(`\nFull AI Response:\n${data.response}`, 'info');
+                    }
+
+                } catch (error) {
+                    log(`Error: ${error.message}`, 'error');
+                    log(error.stack, 'error');
+                }
+            };
+
+            reader.onerror = () => {
+                log('Error reading file', 'error');
+            };
+
+            reader.readAsDataURL(file);
+        }
+
+        async function testWithPremadeData() {
+            clearOutput();
+            log('Testing with pre-made CSV data...', 'info');
+
+            const testCSV = `Open Datetime,Close Datetime,Symbol,Side,Volume,Entry Price,Exit Price,Net P&L
+2024-01-15 09:30:00,2024-01-15 10:15:00,AAPL,Long,100,150.25,152.30,205.0
+2024-01-16 14:00:00,2024-01-16 14:30:00,TSLA,Short,50,210.50,208.25,112.5
+2024-01-17 10:00:00,2024-01-17 11:00:00,MSFT,Long,75,380.00,385.50,412.5`;
+
+            const base64Content = btoa(testCSV);
+
+            log(`Pre-made CSV encoded to base64 (${base64Content.length} characters)`, 'info');
+
+            const requestBody = {
+                message: 'Upload my trades',
+                attachedFile: {
+                    name: 'test-trades.csv',
+                    content: base64Content
+                },
+                userId: 'test-user',
+                concise: true
+            };
+
+            log('Sending request to /api/agui...', 'info');
+
+            try {
+                const startTime = Date.now();
+                const response = await fetch('/api/agui', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                const endTime = Date.now();
+
+                log(`Response received in ${endTime - startTime}ms`, 'info');
+
+                const data = await response.json();
+
+                log('--- Response Data ---', 'info');
+                log(JSON.stringify(data, null, 2), 'info');
+
+                // Analyze response
+                log('\n=== Analysis ===', 'info');
+
+                if (data.success) {
+                    log('✓ API returned success=true', 'success');
+                }
+
+                if (data.response && data.response.includes('FILE UPLOADED')) {
+                    log('✓ File was acknowledged in response', 'success');
+                } else {
+                    log('✗ File NOT acknowledged in response', 'error');
+                }
+
+            } catch (error) {
+                log(`Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Log page load
+        log('Test page loaded. Ready for testing.', 'success');
+        log('Options:', 'info');
+        log('  1. Click "Download Test CSV" to get a test file', 'info');
+        log('  2. Select the file and click "Upload & Test"', 'info');
+        log('  3. Or click "Test with Pre-made CSV Data" for quick testing', 'info');
+    </script>
+</body>
+</html>

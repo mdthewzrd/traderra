@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Test</title>
+</head>
+<body>
+    <h1>OpenRouter API Test</h1>
+    <div id="results"></div>
+    <script>
+        async function testAPI() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<h2>Testing...</h2>';
+
+            try {
+                // Test 1: GET request
+                console.log('Testing GET request...');
+                const getResponse = await fetch('/api/openrouter-key', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                if (!getResponse.ok) {
+                    throw new Error(`GET failed: ${getResponse.status} ${getResponse.statusText}`);
+                }
+
+                const getData = await getResponse.json();
+                console.log('GET Response:', getData);
+                resultsDiv.innerHTML += `<p>✅ GET: ${JSON.stringify(getData)}</p>`;
+
+                // Test 2: POST request
+                console.log('Testing POST request...');
+                const postResponse = await fetch('/api/openrouter-key', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        apiKey: 'sk-or-v1-browser-test-67890'
+                    })
+                });
+
+                if (!postResponse.ok) {
+                    throw new Error(`POST failed: ${postResponse.status} ${postResponse.statusText}`);
+                }
+
+                const postData = await postResponse.json();
+                console.log('POST Response:', postData);
+                resultsDiv.innerHTML += `<p>✅ POST: ${JSON.stringify(postData)}</p>`;
+
+                // Test 3: Verification GET
+                console.log('Testing verification GET...');
+                const verifyResponse = await fetch('/api/openrouter-key', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                if (!verifyResponse.ok) {
+                    throw new Error(`Verification GET failed: ${verifyResponse.status} ${verifyResponse.statusText}`);
+                }
+
+                const verifyData = await verifyResponse.json();
+                console.log('Verification Response:', verifyData);
+                resultsDiv.innerHTML += `<p>✅ Verification: ${JSON.stringify(verifyData)}</p>`;
+
+                resultsDiv.innerHTML += '<h2>✅ All tests passed!</h2>';
+
+            } catch (error) {
+                console.error('Test failed:', error);
+                resultsDiv.innerHTML += `<h2>❌ Test failed: ${error.message}</h2>`;
+                resultsDiv.innerHTML += `<p>Stack: ${error.stack}</p>`;
+            }
+        }
+
+        // Run test when page loads
+        testAPI();
+    </script>
+</body>
+</html>

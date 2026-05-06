@@ -1,0 +1,388 @@
+'use client'
+
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+
+export type DateRangeType =
+  | 'today'
+  | 'week'
+  | 'month'
+  | 'quarter'
+  | 'year'
+  | '90day'
+  | 'all'
+  | 'lastMonth'
+  | 'lastYear'
+  | '12months'
+  | 'custom'
+
+export interface CustomDateRange {
+  startDate: string
+  endDate: string
+}
+
+export interface EnhancedDateRangeState {
+  selectedRange: DateRangeType
+  customDates: CustomDateRange | null
+  relativeDates: {
+    [key in DateRangeType]: {
+      startDate: string
+      endDate: string
+      label: string
+      description: string
+    }
+  }
+}
+
+interface EnhancedDateRangeContextType {
+  // Current state
+  currentDateRange: EnhancedDateRangeState
+
+  // Actions
+  setDateRange: (range: DateRangeType | string, customDates?: CustomDateRange) => void
+  setCustomDateRange: (dates: CustomDateRange) => void
+  resetToDefault: () => void
+
+  // Computed values
+  isActive: (range: DateRangeType) => boolean
+  getCurrentLabel: () => string
+  getCurrentDescription: () => string
+  getDateRangeForQuery: () => { startDate: string; endDate: string }
+
+  // Utilities
+  getAvailableRanges: () => Array<{ value: DateRangeType; label: string; description: string }>
+  getRangeDates: (range: DateRangeType) => { startDate: string; endDate: string }
+
+  // Advanced features
+  getRelativeChange: (fromRange: DateRangeType, toRange: DateRangeType) => { change: number; percentage: number } | null
+  getBusinessDaysCount: (range: DateRangeType) => number
+  isWeekendIncluded: (range: DateRangeType) => boolean
+}
+
+const EnhancedDateRangeContext = createContext<EnhancedDateRangeContextType | undefined>(undefined)
+
+export function useEnhancedDateRange() {
+  const context = useContext(EnhancedDateRangeContext)
+  if (!context) {
+    throw new Error('useEnhancedDateRange must be used within an EnhancedDateRangeProvider')
+  }
+  return context
+}
+
+interface EnhancedDateRangeProviderProps {
+  children: ReactNode
+  defaultRange?: DateRangeType
+}
+
+export function EnhancedDateRangeProvider({ children, defaultRange = '90day' }: EnhancedDateRangeProviderProps) {
+  const [currentDateRange, setCurrentDateRange] = useState<EnhancedDateRangeState>(() => {
+    const now = new Date()
+
+    // Calculate all relative dates
+    const relativeDates = {
+      today: {
+        startDate: new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().split('T')[0],
+        endDate: new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().split('T')[0],
+        label: 'Today',
+        description: 'Current trading day only'
+      },
+
+      week: {
+        startDate: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        endDate: now.toISOString().split('T')[0],
+        label: 'Last 7 Days',
+        description: 'Trading data from the past week'
+      },
+
+      month: {
+        startDate: new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()).toISOString().split('T')[0],
+        endDate: now.toISOString().split('T')[0],
+        label: 'Last 30 Days',
+        description: 'Trading data from the past month'
+      },
+
+      quarter: {
+        startDate: new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()).toISOString().split('T')[0],
+        endDate: now.toISOString().split('T')[0],
+        label: 'Last Quarter',
+        description: 'Trading data from the past 3 months'
+      },
+
+      year: {
+        startDate: new Date(now.getFullYear(), 0, 1).toISOString().split('T')[0],
+        endDate: now.toISOString().split('T')[0],
+        label: 'Year to Date',
+        description: 'Trading data from January 1st to today'
+      },
+
+      '90day': {
+        startDate: new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        endDate: now.toISOString().split('T')[0],
+        label: 'Last 90 Days',
+        description: 'Trading data from the past 90 days'
+      },
+
+      all: {
+        startDate: '2020-01-01', // Far past date for "all time"
+        endDate: now.toISOString().split('T')[0],
+        label: 'All Time',
+        description: 'All available trading data'
+      },
+
+      lastMonth: {
+        startDate: new Date(now.getFullYear(), now.getMonth() - 2, now.getDate()).toISOString().split('T')[0],
+        endDate: new Date(now.getFullYear(), now.getMonth() - 1, now.getDate()).toISOString().split('T')[0],
+        label: 'Previous Month',
+        description: 'Trading data from the previous calendar month'
+      },
+
+      lastYear: {
+        startDate: new Date(now.getFullYear() - 1, 0, 1).toISOString().split('T')[0],
+        endDate: new Date(now.getFullYear() - 1, 11, 31).toISOString().split('T')[0],
+        label: 'Previous Year',
+        description: 'Trading data from the previous calendar year'
+      },
+
+      '12months': {
+        startDate: new Date(now.getFullYear(), now.getMonth() - 12, now.getDate()).toISOString().split('T')[0],
+        endDate: now.toISOString().split('T')[0],
+        label: 'Last 12 Months',
+        description: 'Trading data from the past 12 months'
+      },
+
+      custom: {
+        startDate: now.toISOString().split('T')[0],
+        endDate: now.toISOString().split('T')[0],
+        label: 'Custom Range',
+        description: 'User-defined date range'
+      }
+    }
+
+    return {
+      selectedRange: defaultRange,
+      customDates: null,
+      relativeDates
+    }
+  })
+
+  // Load saved state from localStorage
+  useEffect(() => {
+    const savedRange = localStorage.getItem('traderra-enhanced-date-range')
+    const savedCustomDates = localStorage.getItem('traderra-enhanced-custom-dates')
+
+    if (savedRange) {
+      try {
+        setCurrentDateRange(prev => ({
+          ...prev,
+          selectedRange: savedRange as DateRangeType,
+          customDates: savedCustomDates ? JSON.parse(savedCustomDates) : null
+        }))
+      } catch (error) {
+        console.error('Failed to load enhanced date range state:', error)
+      }
+    }
+  }, [])
+
+  // Save state to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('traderra-enhanced-date-range', currentDateRange.selectedRange)
+    if (currentDateRange.customDates) {
+      localStorage.setItem('traderra-enhanced-custom-dates', JSON.stringify(currentDateRange.customDates))
+    } else {
+      localStorage.removeItem('traderra-enhanced-custom-dates')
+    }
+  }, [currentDateRange])
+
+  // Enhanced setDateRange function with better type handling
+  const setDateRange = (range: DateRangeType | string, customDates?: CustomDateRange) => {
+    const normalizedRange = normalizeDateRange(range)
+
+    setCurrentDateRange(prev => ({
+      ...prev,
+      selectedRange: normalizedRange,
+      customDates: customDates || (normalizedRange === 'custom' ? prev.customDates : null)
+    }))
+
+    console.log(`📅 Enhanced DateRange: Set to ${normalizedRange}`, { customDates })
+  }
+
+  const setCustomDateRange = (dates: CustomDateRange) => {
+    setCurrentDateRange(prev => ({
+      ...prev,
+      selectedRange: 'custom',
+      customDates: dates
+    }))
+  }
+
+  const resetToDefault = () => {
+    setDateRange(defaultRange)
+  }
+
+  const isActive = (range: DateRangeType): boolean => {
+    return currentDateRange.selectedRange === range
+  }
+
+  const getCurrentLabel = (): string => {
+    if (currentDateRange.selectedRange === 'custom' && currentDateRange.customDates) {
+      return `Custom: ${currentDateRange.customDates.startDate} to ${currentDateRange.customDates.endDate}`
+    }
+    return currentDateRange.relativeDates[currentDateRange.selectedRange]?.label || 'Unknown Range'
+  }
+
+  const getCurrentDescription = (): string => {
+    if (currentDateRange.selectedRange === 'custom' && currentDateRange.customDates) {
+      return `Custom date range from ${currentDateRange.customDates.startDate} to ${currentDateRange.customDates.endDate}`
+    }
+    return currentDateRange.relativeDates[currentDateRange.selectedRange]?.description || 'No description available'
+  }
+
+  const getDateRangeForQuery = (): { startDate: string; endDate: string } => {
+    if (currentDateRange.selectedRange === 'custom' && currentDateRange.customDates) {
+      return {
+        startDate: currentDateRange.customDates.startDate,
+        endDate: currentDateRange.customDates.endDate
+      }
+    }
+
+    const range = currentDateRange.relativeDates[currentDateRange.selectedRange]
+    return range || { startDate: '', endDate: '' }
+  }
+
+  const getAvailableRanges = () => {
+    const ranges: Array<{ value: DateRangeType; label: string; description: string }> = []
+
+    for (const [key, value] of Object.entries(currentDateRange.relativeDates)) {
+      if (key !== 'custom') {
+        ranges.push({
+          value: key as DateRangeType,
+          label: value.label,
+          description: value.description
+        })
+      }
+    }
+
+    return ranges.sort((a, b) => {
+      // Sort by duration (shorter to longer)
+      const order = ['today', 'week', 'month', 'quarter', '90day', 'year', '12months', 'all']
+      const aIndex = order.indexOf(a.value)
+      const bIndex = order.indexOf(b.value)
+
+      if (aIndex === -1 && bIndex === -1) return 0
+      if (aIndex === -1) return 1
+      if (bIndex === -1) return -1
+      return aIndex - bIndex
+    })
+  }
+
+  const getRangeDates = (range: DateRangeType): { startDate: string; endDate: string } => {
+    return currentDateRange.relativeDates[range] || { startDate: '', endDate: '' }
+  }
+
+  // Advanced analytics features
+  const getRelativeChange = (fromRange: DateRangeType, toRange: DateRangeType) => {
+    const from = currentDateRange.relativeDates[fromRange]
+    const to = currentDateRange.relativeDates[toRange]
+
+    if (!from || !to) return null
+
+    const fromDays = Math.ceil((new Date(from.endDate).getTime() - new Date(from.startDate).getTime()) / (1000 * 60 * 60 * 24))
+    const toDays = Math.ceil((new Date(to.endDate).getTime() - new Date(to.startDate).getTime()) / (1000 * 60 * 60 * 24))
+
+    const change = toDays - fromDays
+    const percentage = fromDays > 0 ? (change / fromDays) * 100 : 0
+
+    return { change, percentage }
+  }
+
+  const getBusinessDaysCount = (range: DateRangeType): number => {
+    const dates = currentDateRange.relativeDates[range]
+    if (!dates) return 0
+
+    const start = new Date(dates.startDate)
+    const end = new Date(dates.endDate)
+    let businessDays = 0
+
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const dayOfWeek = d.getDay()
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Not Saturday or Sunday
+        businessDays++
+      }
+    }
+
+    return businessDays
+  }
+
+  const isWeekendIncluded = (range: DateRangeType): boolean => {
+    const dates = currentDateRange.relativeDates[range]
+    if (!dates) return false
+
+    const start = new Date(dates.startDate)
+    const end = new Date(dates.endDate)
+
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const dayOfWeek = d.getDay()
+      if (dayOfWeek === 0 || dayOfWeek === 6) { // Saturday or Sunday
+        return true
+      }
+    }
+
+    return false
+  }
+
+  const value: EnhancedDateRangeContextType = {
+    currentDateRange,
+    setDateRange,
+    setCustomDateRange,
+    resetToDefault,
+    isActive,
+    getCurrentLabel,
+    getCurrentDescription,
+    getDateRangeForQuery,
+    getAvailableRanges,
+    getRangeDates,
+    getRelativeChange,
+    getBusinessDaysCount,
+    isWeekendIncluded
+  }
+
+  return (
+    <EnhancedDateRangeContext.Provider value={value}>
+      {children}
+    </EnhancedDateRangeContext.Provider>
+  )
+}
+
+// Helper function to normalize various date range inputs
+function normalizeDateRange(range: string | DateRangeType): DateRangeType {
+  const normalized = range.toLowerCase()
+
+  // Map common variations to standard types
+  const mappings: Record<string, DateRangeType> = {
+    'today': 'today',
+    'week': 'week',
+    'month': 'month',
+    'quarter': 'quarter',
+    'year': 'year',
+    'ytd': 'year',
+    'yeartodate': 'year',
+    '90d': '90day',
+    '90days': '90day',
+    '90-day': '90day',
+    '90-days': '90day',
+    'all': 'all',
+    'alltime': 'all',
+    'all-time': 'all',
+    'everything': 'all',
+    'lastmonth': 'lastMonth',
+    'last-month': 'lastMonth',
+    'previousmonth': 'lastMonth',
+    'lastyear': 'lastYear',
+    'last-year': 'lastYear',
+    'previousyear': 'lastYear',
+    '12m': '12months',
+    '12months': '12months',
+    '12-months': '12months',
+    'custom': 'custom'
+  }
+
+  return mappings[normalized] as DateRangeType || (normalized as DateRangeType)
+}

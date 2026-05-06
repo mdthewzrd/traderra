@@ -1,0 +1,298 @@
+/* VS Code-Style Folder Tree Styling */
+/* Add this to your global CSS or import it in your component */
+
+.vscode-folder-tree {
+  --vscode-tree-indent: 16px;
+  --vscode-tree-item-height: 28px;
+  --vscode-selection-background: rgba(255, 215, 0, 0.1);
+  --vscode-selection-border: #FFD700;
+  --vscode-hover-background: #1a1a1a;
+  --vscode-focus-background: #161616;
+  --vscode-text-primary: #e5e5e5;
+  --vscode-text-muted: #888888;
+  --vscode-text-selected: #FFD700;
+  --vscode-background: #0a0a0a;
+  --vscode-surface: #111111;
+  --vscode-border: #2a2a2a;
+}
+
+/* Tree container */
+.vscode-folder-tree {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--vscode-text-primary);
+  background: var(--vscode-background);
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* Tree item container */
+.vscode-tree-item {
+  position: relative;
+  width: 100%;
+}
+
+/* Tree item row */
+.vscode-tree-item > div:first-child {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: var(--vscode-tree-item-height);
+  padding-right: 8px;
+  transition: all 0.15s ease-in-out;
+  border-radius: 4px;
+  margin: 1px 0;
+}
+
+/* Hover effects */
+.vscode-tree-item > div:first-child:hover {
+  background-color: var(--vscode-hover-background);
+}
+
+/* Selection styling */
+.vscode-tree-item > div:first-child[data-selected="true"] {
+  background-color: var(--vscode-selection-background);
+  border-left: 2px solid var(--vscode-selection-border);
+  padding-left: calc(var(--indent) + 6px);
+}
+
+/* Focus styling */
+.vscode-tree-item > div:first-child:focus-within {
+  background-color: var(--vscode-focus-background);
+  outline: 1px solid var(--vscode-selection-border);
+  outline-offset: -1px;
+}
+
+/* Chevron button */
+.vscode-tree-item button[aria-label*="folder"] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.vscode-tree-item button[aria-label*="folder"]:hover {
+  background-color: var(--vscode-border);
+}
+
+/* Chevron icon rotation animation */
+.vscode-tree-item button[aria-label*="folder"] > div {
+  transition: transform 0.2s ease-in-out;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Folder icon */
+.vscode-tree-item .folder-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  transition: color 0.15s ease-in-out;
+}
+
+/* Folder name button */
+.vscode-tree-item button[role="treeitem"] {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 2px 4px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: all 0.15s ease-in-out;
+  min-width: 0;
+}
+
+.vscode-tree-item button[role="treeitem"]:focus {
+  outline: 1px solid var(--vscode-selection-border);
+  outline-offset: -1px;
+}
+
+/* Selected folder name styling */
+.vscode-tree-item button[role="treeitem"][aria-selected="true"] {
+  color: var(--vscode-text-selected);
+  font-weight: 500;
+}
+
+/* Content count badge */
+.vscode-tree-item .content-count {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background-color: var(--vscode-border);
+  color: var(--vscode-text-muted);
+  margin-left: 4px;
+  transition: all 0.15s ease-in-out;
+}
+
+.vscode-tree-item > div:first-child[data-selected="true"] .content-count {
+  background-color: rgba(255, 215, 0, 0.2);
+  color: var(--vscode-text-selected);
+}
+
+/* Action buttons container */
+.vscode-tree-item .action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 8px;
+  opacity: 0;
+  transition: opacity 0.15s ease-in-out;
+}
+
+.vscode-tree-item:hover .action-buttons {
+  opacity: 1;
+}
+
+/* Individual action buttons */
+.vscode-tree-item .action-buttons button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background-color 0.15s ease-in-out;
+}
+
+.vscode-tree-item .action-buttons button:hover {
+  background-color: var(--vscode-border);
+}
+
+.vscode-tree-item .action-buttons button svg {
+  width: 12px;
+  height: 12px;
+  color: var(--vscode-text-muted);
+  transition: color 0.15s ease-in-out;
+}
+
+.vscode-tree-item .action-buttons button:hover svg {
+  color: var(--vscode-text-primary);
+}
+
+/* Tree children container */
+.vscode-tree-children {
+  position: relative;
+}
+
+/* Smooth expand/collapse animation */
+.vscode-tree-children {
+  overflow: hidden;
+  transition: max-height 0.2s ease-in-out;
+}
+
+/* Tree controls */
+.vscode-tree-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--vscode-text-muted);
+}
+
+.vscode-tree-controls button {
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  color: var(--vscode-text-muted);
+  cursor: pointer;
+  border-radius: 2px;
+  transition: all 0.15s ease-in-out;
+  font-size: 11px;
+}
+
+.vscode-tree-controls button:hover {
+  background-color: var(--vscode-hover-background);
+  color: var(--vscode-text-primary);
+}
+
+/* Empty state */
+.vscode-tree-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--vscode-text-muted);
+}
+
+.vscode-tree-empty svg {
+  width: 32px;
+  height: 32px;
+  margin-bottom: 8px;
+  opacity: 0.5;
+}
+
+.vscode-tree-empty button {
+  margin-top: 8px;
+  padding: 4px 12px;
+  border: none;
+  background: transparent;
+  color: var(--vscode-text-selected);
+  cursor: pointer;
+  border-radius: 2px;
+  transition: all 0.15s ease-in-out;
+  font-size: 11px;
+}
+
+.vscode-tree-empty button:hover {
+  background-color: var(--vscode-hover-background);
+  color: var(--vscode-text-primary);
+}
+
+/* Keyboard navigation focus indicators */
+.vscode-tree-item button:focus-visible {
+  outline: 2px solid var(--vscode-selection-border);
+  outline-offset: -2px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .vscode-folder-tree {
+    --vscode-selection-background: rgba(255, 255, 255, 0.1);
+    --vscode-selection-border: #ffffff;
+    --vscode-hover-background: #ffffff20;
+    --vscode-text-selected: #ffffff;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .vscode-tree-item > div:first-child,
+  .vscode-tree-item button,
+  .vscode-tree-item .folder-icon,
+  .vscode-tree-item .content-count,
+  .vscode-tree-item .action-buttons,
+  .vscode-tree-children {
+    transition: none;
+  }
+
+  .vscode-tree-item button[aria-label*="folder"] > div {
+    transition: none;
+  }
+}

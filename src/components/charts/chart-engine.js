@@ -1,0 +1,4569 @@
+<script>
+'use strict';
+// ══════════════════════════════════════════════════════════
+//  CONSTANTS
+// ══════════════════════════════════════════════════════════
+const API_KEY = (typeof window !== 'undefined' && window.__POLY_KEY) || 'd95jSGsXx6ZoqYG1_GXaqnmP6y64ZO_r';
+const POLY = 'https://api.polygon.io';
+const PRE_START=240, MKTOPEN=570, MKTCLOSE=960, POST_END=1200;
+const VOL_FRAC = 0.22;   // volume pane = 22% of chart height
+
+const TF_LIST = [
+  {tf:'1',l:'1m'},{tf:'2',l:'2m'},{tf:'3',l:'3m'},{tf:'5',l:'5m'},
+  {tf:'10',l:'10m'},{tf:'15',l:'15m'},{tf:'30',l:'30m'},{tf:'60',l:'1h'},
+  {tf:'240',l:'4h'},{tf:'D',l:'D'},{tf:'W',l:'W'},{tf:'M',l:'Mo'},
+];
+const PANEL_DEFAULTS=[{tf:'5'},{tf:'15'},{tf:'60'},{tf:'D'}];
+
+const C={
+  bg:'#0c0e14', axisbg:'#0d0f18', grid:'#141926',
+  up:'#26a69a', dn:'#ef5350',
+  ema9:'#e8d000', ema20:'#3a70e0', ema50:'#00c8e8', ema150:'#e0e0e0', ema200:'#e0e0e0', vwap:'#00e676',
+  ema40_60_fill:'rgba(0,200,232,0.10)', ema40_60_line:'rgba(0,200,232,0.55)',
+  db_upper_fill:'rgba(200,120,20,.20)', db_upper_line:'rgba(220,140,30,.90)',
+  db_low1_fill:'rgba(200,184,0,.20)',   db_low1_line:'rgba(220,200,10,.90)',
+  db_low2_fill:'rgba(20,120,200,.20)',  db_low2_line:'rgba(30,150,220,.90)',
+  pre:'rgba(160,80,20,.07)', after:'rgba(30,80,200,.09)',
+  cross:'rgba(140,160,200,.5)',
+  trendline:'#a855f7',
+  box_orange:'#f97316', box_yellow:'#eab308',
+  hl_cyan:'#22d3ee', hl_magenta:'#e879f9', hl_green:'#4ade80', hl_white:'#cbd5e1',
+  vol_up:'rgba(38,166,154,.5)', vol_dn:'rgba(239,83,80,.5)',
+};
+
+// ══════════════════════════════════════════════════════════
+//  GLOBAL STATE
+// ══════════════════════════════════════════════════════════
+let symbol='AAPL', activeTool=null, toolStep=null, toolAnchor=null;
+let fullscreenPanel=null, pendingText=null, pendingExec=null;
+let annotations=[], nextId=1;
+let liveMode=false;
+let showPriceLine=true;
+let barsVisible=true;  // toggle toolbar rows
+
+// ── BACKTEST STATE ──
+let btTrades=[];
+let btActive=false;
+let btSelected=null;
+let btMarkers=[];
+let btStrategyMode='short'; // 'long' or 'short' — default short
+let btHighlightDates=true;  // highlight trade dates on chart background
+
+let useAdjusted=true; // ADJ/UNADJ toggle
+let globalCrossTime=-1; // shared crosshair timestamp across panels
+let globalCrossPrice=-1; // shared crosshair price across panels
+let cleanPrints=false; // filter suspicious bars (off by default)
+
+const panels = PANEL_DEFAULTS.map((d,i)=>({
+  idx:i, tf:d.tf,
+  startDate:null, endDate:null,
+  data:[],
+  viewStart:0, viewBars:80,
+  W:0, H:0, PRICE_W:72, TIME_H:20,
+  canvas:null, ctx:null,
+  dragging:false, dragStartX:0, dragViewStart:0,
+  sbDragging:false, sbDragStartX:0, sbDragViewStart:0,
+  cx:-1, cy:-1,
+  mouseDown:false, mouseDownX:0, mouseDownY:0, mouseDownTime:0,
+  inds: d.tf==='D'
+    ? {ema9:true,ema20:true,ema50:false,ema200:false,
+       db_upper:false,db_low1:false,db_low2:false,vol:true,vwap:false,ema40_60:false,ema150:false}
+    : {ema9:true,ema20:true,ema50:true,ema200:true,
+       db_upper:false,db_low1:false,db_low2:false,vol:true,vwap:true,ema40_60:false,ema150:false},
+  showTL:true, showAnn:true, showExec:true, showBtExec:true,
+  btBack:null, btFwd:null,   // custom BT lookback/forward (null=use defaults)
+  showOtherAnn:true,         // show annotations drawn on OTHER panels
+  showPDC:true,               // prior-day close line
+  adjusted:true,              // per-panel adj toggle (defaults to global)
+}));
+
+// ══════════════════════════════════════════════════════════
+//  TIME / FORMAT HELPERS
+// ══════════════════════════════════════════════════════════
+function fmtDate(d){
+  // Always use UTC to match Polygon timestamps (prevents timezone shift)
+  return`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+}
+function defaultRange(tf){
+  const to=new Date(),from=new Date(); // fmtDate uses UTC, so these are fine
+  const days={
+    '1':10,'2':10,
+    '5':31,'15':31,'30':31,'60':31,
+    '240':62,
+    'D':730,'W':1825,'M':3650
+  }[tf]||31;
+  from.setUTCDate(from.getUTCDate()-days);
+  return{from:fmtDate(from),to:fmtDate(to)};
+}
+function liveRange(tf){
+  const to=new Date(),from=new Date();
+  // Per-TF lookbacks as requested
+  const daysBack={
+    '1':10,'2':10,                          // 1m/2m → 10 days
+    '5':31,'15':31,'30':31,'60':31,         // 5m/15m/30m/1h → 1 month
+    '240':62,                               // 4h → 2 months
+    'D':366,'W':366*2,'M':366*5,            // daily+ → 1yr+
+  }[tf]||31;
+  from.setUTCDate(from.getUTCDate()-daysBack);
+  return{from:fmtDate(from),to:fmtDate(to)};
+}
+function tfToPolygon(tf){
+  if(tf==='D') return{mul:1,ts:'day'};
+  if(tf==='W') return{mul:1,ts:'week'};
+  if(tf==='M') return{mul:1,ts:'month'};
+  return{mul:parseInt(tf),ts:'minute'};
+}
+function isIntraday(tf){return tf!=='D'&&tf!=='W'&&tf!=='M';}
+// Convert any bar timestamp (unix number OR "YYYY-MM-DD" string) to Unix seconds
+function toUnix(t){
+  if(typeof t==='number') return t;
+  if(typeof t==='string'&&t.match(/^\d{4}-\d{2}-\d{2}$/))
+    return Date.UTC(+t.slice(0,4),+t.slice(5,7)-1,+t.slice(8,10))/1000;
+  const n=Number(t); return isNaN(n)?0:n;
+}
+function fmtPrice(v){
+  if(v==null) return'';
+  return v>=10000?v.toFixed(0):v.toFixed(2);
+}
+function fmtVol(v){
+  if(v==null||v===0) return'—';
+  if(v>=1e9) return(v/1e9).toFixed(2)+'B';
+  if(v>=1e6) return(v/1e6).toFixed(2)+'M';
+  if(v>=1e3) return(v/1e3).toFixed(1)+'K';
+  return v.toFixed(0);
+}
+
+const _nyFmt=new Intl.DateTimeFormat('en-US',{
+  timeZone:'America/New_York',year:'numeric',month:'2-digit',
+  day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false
+});
+function getNY(ts){
+  if(typeof ts!=='number') return{year:0,month:0,day:0,hour:0,minute:0};
+  const p={};
+  for(const{type,value} of _nyFmt.formatToParts(new Date(ts*1000))) p[type]=parseInt(value,10);
+  if(p.hour===24) p.hour=0;
+  return p;
+}
+function nyMins(ts){const{hour,minute}=getNY(ts);return hour*60+minute;}
+function getSession(ts){
+  const m=nyMins(ts);
+  if(m>=PRE_START&&m<MKTOPEN) return'pre';
+  if(m>=MKTOPEN&&m<MKTCLOSE) return'regular';
+  if(m>=MKTCLOSE&&m<POST_END) return'after';
+  return null;
+}
+function fmtTimeAxis(ts,tf){
+  if(!isIntraday(tf)){const[y,m,d]=String(ts).split('-');return`${d}/${m}/${y.slice(2)}`;}
+  const{hour,minute}=getNY(ts);
+  return`${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')}`;
+}
+function fmtTimeCross(ts,tf){
+  if(!isIntraday(tf)){const[y,m,d]=String(ts).split('-');return`${d}/${m}/${y}`;}
+  const{year,month,day,hour,minute}=getNY(ts);
+  return`${String(day).padStart(2,'0')}/${String(month).padStart(2,'0')}/${year} ${String(hour).padStart(2,'0')}:${String(minute).padStart(2,'0')} ET`;
+}
+
+// ══════════════════════════════════════════════════════════
+//  INDICATORS
+// ══════════════════════════════════════════════════════════
+function calcEMA(data,period){
+  const k=2/(period+1); let ema=null; const out=[];
+  for(const b of data){ema=ema===null?b.close:b.close*k+ema*(1-k);out.push(ema);}
+  return out;
+}
+
+function calcVWAP(data, intraday){
+  // For intraday: reset each calendar day. For daily+: cumulative from data start.
+  const out=[];
+  let cumPV=0, cumV=0, lastDay=null;
+  for(let i=0;i<data.length;i++){
+    const b=data[i];
+    const day=intraday?new Date(b.time*1000).toISOString().slice(0,10):null;
+    if(intraday && day!==lastDay){cumPV=0;cumV=0;lastDay=day;}
+    const tp=(b.high+b.low+b.close)/3;
+    cumPV+=tp*(b.volume||0);
+    cumV+=(b.volume||0);
+    out.push(cumV>0?cumPV/cumV:tp);
+  }
+  return out;
+}
+function calcATR(data,period=14){
+  let atr=null; const out=[];
+  for(let i=0;i<data.length;i++){
+    const hi=data[i].high,lo=data[i].low,pc=i>0?data[i-1].close:data[i].open;
+    const tr=Math.max(hi-lo,Math.abs(hi-pc),Math.abs(lo-pc));
+    atr=atr===null?tr:(atr*(period-1)+tr)/period;
+    out.push(atr);
+  }
+  return out;
+}
+// SMA of True Range — matches Pine Script ta.sma(ta.tr(true), length)
+function calcATRSMA(data,period=14){
+  const trs=[];
+  for(let i=0;i<data.length;i++){
+    const hi=data[i].high,lo=data[i].low,pc=i>0?data[i-1].close:data[i].open;
+    trs.push(Math.max(hi-lo,Math.abs(hi-pc),Math.abs(lo-pc)));
+  }
+  const out=[];
+  for(let i=0;i<trs.length;i++){
+    if(i<period-1){out.push(null);continue;}
+    let sum=0; for(let j=i-period+1;j<=i;j++) sum+=trs[j];
+    out.push(sum/period);
+  }
+  return out;
+}
+
+// ══════════════════════════════════════════════════════════
+//  BAD PRINT FILTER
+// ══════════════════════════════════════════════════════════
+const nbboCache=new Map();
+async function fetchNBBO(sym,ts,mins){
+  const key=`${sym}:${ts}`;
+  if(nbboCache.has(key)) return nbboCache.get(key);
+  const s=(ts*1e9).toFixed(0), e=((ts+mins*60)*1e9).toFixed(0);
+  try{
+    const r=await fetch(`${POLY}/v3/quotes/${encodeURIComponent(sym)}?timestamp.gte=${s}&timestamp.lt=${e}&limit=20&sort=timestamp&order=asc&apiKey=${API_KEY}`);
+    if(!r.ok){nbboCache.set(key,null);return null;}
+    const j=await r.json();
+    if(!j.results?.length){nbboCache.set(key,null);return null;}
+    let lo=Infinity,hi=-Infinity;
+    for(const q of j.results){
+      const bid=+(q.bid_price||0),ask=+(q.ask_price||0);
+      if(bid>0.01&&bid<lo) lo=bid;
+      if(ask>0.01&&ask>hi) hi=ask;
+    }
+    if(lo===Infinity){nbboCache.set(key,null);return null;}
+    const res={lo:lo*0.994,hi:hi*1.006};
+    nbboCache.set(key,res); return res;
+  }catch(e){nbboCache.set(key,null);return null;}
+}
+function sanityOk(b){
+  if(!b||b.open<=0||b.high<=0||b.low<=0||b.close<=0) return false;
+  if(b.high<b.low) return false;
+  return true;
+}
+function rollingMedATR(bars,win=30){
+  const tr=new Float64Array(bars.length);
+  let a=0;
+  for(let i=0;i<bars.length;i++){
+    const b=bars[i],pc=i>0?bars[i-1].close:b.open;
+    tr[i]=Math.max(b.high-b.low,Math.abs(b.high-pc),Math.abs(b.low-pc));
+    a=i===0?tr[i]:(a*13+tr[i])/14;
+  }
+  const sa=new Float64Array(bars.length);
+  a=0;
+  for(let i=0;i<bars.length;i++){a=i===0?tr[i]:(a*13+tr[i])/14;sa[i]=a;}
+  const med=new Float64Array(bars.length);
+  const tmp=[];
+  for(let i=0;i<bars.length;i++){
+    const s=Math.max(0,i-win),e=Math.min(bars.length-1,i+win);
+    tmp.length=0;
+    for(let j=s;j<=e;j++) tmp.push(sa[j]);
+    tmp.sort((a,b)=>a-b);
+    med[i]=tmp[Math.floor(tmp.length/2)];
+  }
+  return med;
+}
+function buildProtectedSet(bars){
+  const s=new Set();
+  const KEY_MINS=[240,241,242,243,244,568,569,570,571,572,960,961,962];
+  let lastRegularOpen=-1;
+  for(let i=0;i<bars.length;i++){
+    if(typeof bars[i].time!=='number') continue;
+    const mins=nyMins(bars[i].time);
+    if(KEY_MINS.includes(mins)){s.add(i);}
+    if(i>0&&typeof bars[i-1].time==='number'){
+      if(getSession(bars[i].time)!==getSession(bars[i-1].time)) s.add(i);
+      if(bars[i].time-bars[i-1].time>20*60) s.add(i);
+    }
+    if(getSession(bars[i].time)==='regular'){
+      if(i===0||getSession(bars[i-1]?.time)!=='regular') lastRegularOpen=i;
+      if(lastRegularOpen>=0&&i-lastRegularOpen<12) s.add(i);
+    }
+  }
+  return s;
+}
+async function filterBadPrints(sym,bars,tfMins){
+  if(bars.length<4) return bars;
+  // Log what sanityOk drops
+  bars.filter(b=>!sanityOk(b)).forEach(b=>{
+    const t=typeof b.time==='number'?new Date(b.time*1000).toISOString():b.time;
+    console.warn(`[sanityOk DROP] ${t} O=${b.open} H=${b.high} L=${b.low} C=${b.close}`);
+  });
+  bars=bars.filter(b=>sanityOk(b));
+  if(bars.length<4) return bars;
+  const protected_=buildProtectedSet(bars);
+  const med=rollingMedATR(bars);
+  const remove=new Set(),needNBBO=[];
+  const atrReliable=bars.length>=60;
+  for(let i=1;i<bars.length-1;i++){
+    if(protected_.has(i)) continue;
+    const b=bars[i],pv=bars[i-1],nx=bars[i+1];
+    const sess=getSession(b.time);
+    const mATR=med[i]||pv.close*0.001;
+    const range=b.high-b.low,body=Math.abs(b.close-b.open)||mATR*0.01;
+    const upWick=b.high-Math.max(b.open,b.close);
+    const dnWick=Math.min(b.open,b.close)-b.low;
+    const bigWick=Math.max(upWick,dnWick);
+
+    // Flag for NBBO verification:
+    // (a) wide range: >5× average of surrounding 6-bar ranges
+    // (b) big wick: wick >3× body AND wick >2× mATR
+    // (c) regular session extreme: range >8× mATR (existing logic)
+    const neighborRanges=[i-3,i-2,i-1,i+1,i+2,i+3]
+      .filter(j=>j>=0&&j<bars.length)
+      .map(j=>bars[j].high-bars[j].low);
+    const avgNeighborRange=neighborRanges.length
+      ? neighborRanges.reduce((a,v)=>a+v,0)/neighborRanges.length
+      : mATR;
+
+    const isWideRange = range > avgNeighborRange*5;
+    const isBigWick   = bigWick > body*3 && bigWick > mATR*2;
+    const isExtremeRegular = sess==='regular' && atrReliable && range > mATR*8;
+
+    if(isWideRange||isBigWick||isExtremeRegular){
+      needNBBO.push(i);
+      continue;
+    }
+
+    // Moderate ATR removal (regular session only, no NBBO needed)
+    if(sess==='regular'&&atrReliable&&range>mATR*5){
+      console.warn(`[ATR DROP] ${new Date(b.time*1000).toISOString()} range=${range.toFixed(3)} threshold=${(mATR*5).toFixed(3)}`);
+      remove.add(i);continue;
+    }
+
+    // Island check — close isolated >8% from both neighbours in all sessions
+    const dP=Math.abs(b.close-pv.close)/Math.max(pv.close,0.001);
+    const dN=Math.abs(b.close-nx.open)/Math.max(nx.open,0.001);
+    if(dP>0.08&&dN>0.08){
+      console.warn(`[ISLAND DROP] ${new Date(b.time*1000).toISOString()} dP=${dP.toFixed(3)} dN=${dN.toFixed(3)}`);
+      remove.add(i);continue;
+    }
+  }
+  for(let si=0;si<needNBBO.length;si+=4){
+    await Promise.all(needNBBO.slice(si,si+4).map(async idx=>{
+      if(protected_.has(idx)) return;
+      const b=bars[idx];
+      if(typeof b.time!=='number'){remove.add(idx);return;}
+      const nb=await fetchNBBO(sym,b.time,tfMins);
+      if(nb){
+        const bodyOk=b.open>=nb.lo&&b.open<=nb.hi&&b.close>=nb.lo&&b.close<=nb.hi;
+        if(bodyOk){
+          // Body is real — trim any wicks that exceed NBBO bounds
+          const clippedHigh=Math.min(b.high,nb.hi);
+          const clippedLow =Math.max(b.low, nb.lo);
+          if(clippedHigh!==b.high||clippedLow!==b.low)
+            console.warn(`[NBBO TRIM] ${new Date(b.time*1000).toISOString()} H:${b.high.toFixed(2)}→${clippedHigh.toFixed(2)} L:${b.low.toFixed(2)}→${clippedLow.toFixed(2)}`);
+          bars[idx]={...b,high:clippedHigh,low:clippedLow};
+        } else {
+          // Body outside NBBO — whole bar is bad
+          console.warn(`[NBBO DROP] ${new Date(b.time*1000).toISOString()} body outside [${nb.lo.toFixed(2)},${nb.hi.toFixed(2)}]`);
+          remove.add(idx);
+        }
+      } else {
+        // No NBBO — only remove if body is isolated >12% from neighbours
+        const pv2=idx>0?bars[idx-1]:null,nx2=idx<bars.length-1?bars[idx+1]:null;
+        const ref=pv2&&nx2?(pv2.close+nx2.open)/2:pv2?pv2.close:b.close;
+        if(Math.abs(b.close-ref)/Math.max(ref,.001)>0.12){
+          console.warn(`[NO-NBBO DROP] ${new Date(b.time*1000).toISOString()}`);
+          remove.add(idx);
+        }
+        // Otherwise keep as-is — can't verify, don't remove
+      }
+    }));
+  }
+  console.log(`[filter] ${sym} ${tfMins}m: kept ${bars.length-remove.size}/${bars.length}`);
+  return bars.filter((_,i)=>!remove.has(i));
+}
+
+// ══════════════════════════════════════════════════════════
+//  RENDERER  — gap-compressed bar positioning
+//  Overnight / weekend gaps are collapsed so bars pack
+//  contiguously like TradingView. Each visible bar gets one
+//  equal-width slot regardless of wall-clock gaps.
+// ══════════════════════════════════════════════════════════
+function renderPanel(p){
+  const{canvas,ctx,data,W,H,PRICE_W,TIME_H,viewStart,viewBars,cx,cy,tf,inds:pi}=p;
+  if(!ctx||W<=0||H<=0||!data.length) return;
+  const chartW=W-PRICE_W;
+  const volH=pi.vol?Math.round(H*VOL_FRAC):0;
+  const priceH=H-TIME_H-volH;
+  if(chartW<=0||priceH<=10) return;
+
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle=C.axisbg;
+  ctx.fillRect(chartW,0,PRICE_W,H);
+  ctx.fillRect(0,H-TIME_H,W,TIME_H);
+
+  const maxStart=Math.max(0,data.length-viewBars);
+  const vs=Math.max(0,Math.min(viewStart,maxStart));
+  const ve=Math.min(vs+viewBars,data.length);
+  const visible=data.slice(vs,ve);
+  if(!visible.length) return;
+
+  // ── Bar sizing — simple: N visible bars + fixed right pad, bars start at x=0 ──
+  const RIGHT_PAD=6; // fixed slots of empty space after last candle
+  const barW=chartW/Math.max(visible.length+RIGHT_PAD,1);
+  const GAP=Math.max(2,Math.round(barW*0.25));
+  const candleW=Math.max(1,barW-GAP);
+  const xCtr=(i)=>i*barW+barW/2;
+  const xLc =(i)=>i*barW+GAP/2; // candle left edge (gap-offset)
+  const xL  =(i)=>i*barW;
+
+  // ── Price range — candles only, then clamp pToY so nothing clips ──
+  let minP=Infinity,maxP=-Infinity;
+  for(const b of visible){if(b.low<minP)minP=b.low;if(b.high>maxP)maxP=b.high;}
+  const pad=(maxP-minP)*0.15||minP*0.02;
+  minP-=pad; maxP+=pad;
+  const priceRange=maxP-minP;
+  const pToY=v=>Math.max(0,Math.min(priceH, priceH-((v-minP)/priceRange)*priceH));
+
+  // ── Annotation time→X (search ALL data, extrapolate off-screen) ──
+  function annTimeToX(t){
+    const ts=toUnix(t);
+    // Search full dataset so off-screen endpoints extrapolate correctly
+    let best=-1,bestD=Infinity;
+    for(let i=0;i<data.length;i++){
+      const d=Math.abs(toUnix(data[i].time)-ts);
+      if(d<bestD){bestD=d;best=i;}
+    }
+    if(best<0||bestD>86400*400) return null;
+    // Convert absolute data index to pixel x, relative to current viewport
+    // xCtr(i) maps visible[i] → (i+0.5)*barW, so data[best] → (best-vs+0.5)*barW
+    return (best-vs+0.5)*barW;
+  }
+
+  // ── GRID ──
+  ctx.strokeStyle=C.grid; ctx.lineWidth=1;
+  const priceSteps=6;
+  for(let i=0;i<=priceSteps;i++){
+    const y=Math.round(priceH*i/priceSteps)+.5;
+    ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(chartW,y);ctx.stroke();
+  }
+  const timeSteps=Math.min(8,Math.floor(chartW/80));
+  for(let i=0;i<=timeSteps;i++){
+    const x=Math.round(chartW*i/timeSteps)+.5;
+    ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,priceH+volH);ctx.stroke();
+  }
+
+  // ── PRICE AXIS ──
+  ctx.fillStyle='#6878a8'; ctx.font='bold 10px Courier New'; ctx.textAlign='right';
+  for(let i=0;i<=priceSteps;i++){
+    const price=minP+priceRange*(1-i/priceSteps);
+    ctx.fillText(fmtPrice(price),W-4,Math.round(priceH*i/priceSteps)+4);
+  }
+
+  // ── TIME AXIS ── labels across visible bars + projected future times
+  ctx.fillStyle='#6878a8'; ctx.font='bold 9px Courier New'; ctx.textAlign='center';
+
+  const lastBar=visible[visible.length-1];
+  const barIntervalSec=visible.length>1
+    ? (Number(visible[visible.length-1].time)-Number(visible[0].time))/(visible.length-1)
+    : (parseInt(tf)||5)*60;
+
+  const totalLabelSlots=visible.length+RIGHT_PAD;
+  const labelCount=Math.min(8,Math.floor(chartW/70));
+  for(let li=0;li<=labelCount;li++){
+    const slotIdx=Math.round(li/labelCount*(totalLabelSlots-1));
+    const x=slotIdx*barW+barW/2;
+    if(x>chartW-4) break;
+    let label;
+    if(slotIdx<visible.length){
+      label=fmtTimeAxis(visible[slotIdx].time,tf);
+    } else {
+      const futureOffset=slotIdx-visible.length+1;
+      const futureTs=typeof lastBar.time==='number'
+        ? lastBar.time+futureOffset*barIntervalSec : null;
+      label=futureTs?fmtTimeAxis(futureTs,tf):'';
+    }
+    ctx.fillText(label,Math.round(x),H-TIME_H+13);
+  }
+
+  // ── BT DATE HIGHLIGHTS ──
+  if(btHighlightDates && btSelected){
+    const tradeDates=new Set([btSelected.date]);
+    ctx.save();
+    const hlCol='rgba(245,158,11,0.10)';
+    if(isIntraday(tf)){
+      let segStart=-1, segDate=null;
+      const flushSeg=(endX)=>{
+        if(tradeDates.has(segDate)){
+          ctx.fillStyle=hlCol;
+          ctx.fillRect(segStart,0,endX-segStart,priceH+volH);
+        }
+      };
+      for(let i=0;i<visible.length;i++){
+        const ny=getNY(visible[i].time);
+        const dk=`${ny.year}-${String(ny.month).padStart(2,'0')}-${String(ny.day).padStart(2,'0')}`;
+        if(dk!==segDate){
+          if(segDate!==null) flushSeg(xL(i));
+          segStart=xL(i); segDate=dk;
+        }
+      }
+      if(segDate!==null) flushSeg(xL(visible.length-1)+barW);
+    } else {
+      for(let i=0;i<visible.length;i++){
+        const dk=typeof visible[i].time==='string'?visible[i].time:fmtDate(new Date(visible[i].time*1000));
+        if(tradeDates.has(dk)){
+          ctx.fillStyle=hlCol;
+          ctx.fillRect(xL(i),0,barW,priceH+volH);
+        }
+      }
+    }
+    ctx.restore();
+  }
+
+  // ── SESSION SHADING + BOUNDARY LINES ──
+  if(isIntraday(tf)){
+    let spanStart=-1, spanSess=null, spanEndBar=-1;
+    const flushSpan=(endX)=>{
+      if(spanSess==='pre')   {ctx.fillStyle=C.pre;   ctx.fillRect(spanStart,0,endX-spanStart,priceH+volH);}
+      if(spanSess==='after') {ctx.fillStyle=C.after; ctx.fillRect(spanStart,0,endX-spanStart,priceH+volH);}
+    };
+
+    // First pass: shade sessions
+    for(let i=0;i<visible.length;i++){
+      const sess=getSession(visible[i].time);
+      const bL=xL(i);
+
+      if(sess==='pre'||sess==='after'){
+        if(spanSess!==sess){
+          if(spanSess) flushSpan(bL);
+          spanStart=bL; spanSess=sess;
+        }
+        spanEndBar=i;
+      } else {
+        // sess is 'regular' or null
+        if(spanSess==='pre'){
+          // Extend pre-market shading all the way to this bar's left edge
+          // so there's no unshaded gap between last pre bar and 9:30 open
+          flushSpan(bL);
+        } else if(spanSess==='after'){
+          flushSpan(bL);
+        }
+        spanStart=-1; spanSess=null; spanEndBar=-1;
+      }
+    }
+    if(spanSess) flushSpan(xL(visible.length-1)+barW);
+
+    // Precompute PDC map from FULL data array (not just visible) so zoom never shifts it
+    // pdcMap: date-string -> last regular-session close price for that date
+    if(!p._pdcMap||p._pdcMapLen!==data.length){
+      const m={};
+      for(let i=0;i<data.length;i++){
+        if(getSession(data[i].time)==='regular'){
+          const ny=getNY(data[i].time);
+          const dk=`${ny.year}-${ny.month}-${ny.day}`;
+          m[dk]=data[i].close; // keep overwriting -> last regular bar of day wins
+        }
+      }
+      p._pdcMap=m; p._pdcMapLen=data.length;
+    }
+    const pdcMap=p._pdcMap;
+
+    // Second pass: vertical boundary lines at session transitions and day changes
+    let prevSess=visible[0]?getSession(visible[0].time):null;
+    let prevDay=visible[0]?getNY(visible[0].time):{day:-1,month:-1};
+    const pdcSegs=[];
+    for(let i=1;i<visible.length;i++){
+      const b=visible[i];
+      const sess=getSession(b.time);
+      const ny=getNY(b.time);
+      const bL=xL(i);
+      const dayChanged=ny.day!==prevDay.day||ny.month!==prevDay.month;
+
+      if(dayChanged){
+        // Look up prior day's regular close from precomputed map
+        const pd=prevDay;
+        const dk=`${pd.year}-${pd.month}-${pd.day}`;
+        const pdcPrice=pdcMap[dk]??null;
+        if(pdcPrice!==null){
+          // Find where this day ends (next day boundary or chart edge)
+          let endX=chartW;
+          pdcSegs.push({x:bL, endX, price:pdcPrice, dayKey:dk});
+          if(pdcSegs.length>1) pdcSegs[pdcSegs.length-2].endX=bL;
+        }
+        ctx.strokeStyle='rgba(80,100,150,0.5)'; ctx.lineWidth=1.5; ctx.setLineDash([]);
+        ctx.beginPath();ctx.moveTo(bL,0);ctx.lineTo(bL,priceH+volH);ctx.stroke();
+      } else if(sess!==prevSess&&(prevSess==='pre'||sess==='regular')){
+        ctx.strokeStyle='rgba(100,140,200,0.35)'; ctx.lineWidth=1; ctx.setLineDash([2,3]);
+        ctx.beginPath();ctx.moveTo(bL,0);ctx.lineTo(bL,priceH+volH);ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      prevSess=sess; prevDay=ny;
+    }
+    // Also draw PDC for the FIRST visible day if we're mid-day (no boundary visible)
+    if(visible.length>0&&pdcSegs.length===0){
+      const ny0=getNY(visible[0].time);
+      // Find prior calendar day's close
+      let priorDk=null, priorClose=null;
+      // Walk back through data before vs to find last regular close of prior day
+      for(let i=vs-1;i>=0;i--){
+        if(getSession(data[i].time)==='regular'){
+          const ny=getNY(data[i].time);
+          if(ny.day!==ny0.day||ny.month!==ny0.month){
+            priorClose=data[i].close; break;
+          }
+        }
+      }
+      if(priorClose!==null) pdcSegs.push({x:0, endX:chartW, price:priorClose});
+    }
+    // Also handle case where first visible boundary is mid-chart
+    if(visible.length>0&&pdcSegs.length>0&&pdcSegs[0].x>0){
+      // May need a segment from x=0 to first boundary for the starting day's PDC
+      const ny0=getNY(visible[0].time);
+      let priorClose=null;
+      for(let i=vs-1;i>=0;i--){
+        if(getSession(data[i].time)==='regular'){
+          const ny=getNY(data[i].time);
+          if(ny.day!==ny0.day||ny.month!==ny0.month){priorClose=data[i].close;break;}
+        }
+      }
+      if(priorClose!==null) pdcSegs.unshift({x:0, endX:pdcSegs[0].x, price:priorClose});
+    }
+    // Draw prior-day close lines
+    if(p.showPDC){
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0,0,chartW,priceH); ctx.clip();
+      ctx.lineWidth=1.5; ctx.setLineDash([5,4]);
+      for(const seg of pdcSegs){
+        const y=pToY(seg.price);
+        if(y<0||y>priceH) continue;
+        ctx.strokeStyle='rgba(190,200,220,0.70)';
+        ctx.beginPath(); ctx.moveTo(seg.x,y); ctx.lineTo(seg.endX,y); ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+  }
+
+  // ── VOLUME ──
+  if(volH>0){
+    const maxVol=Math.max(...visible.map(b=>b.volume||0))||1;
+    for(let i=0;i<visible.length;i++){
+      const b=visible[i];
+      const vh=Math.max(1,((b.volume||0)/maxVol)*volH*0.92);
+      const vx=Math.round(xLc(i));
+      const vw=Math.min(Math.round(candleW),chartW-vx-1);
+      if(vw<=0) continue;
+      ctx.fillStyle=b.close>=b.open?C.vol_up:C.vol_dn;
+      ctx.fillRect(vx,priceH+volH-vh,vw,vh);
+    }
+    ctx.fillStyle='#4a5580'; ctx.font='bold 8px Courier New'; ctx.textAlign='right';
+    ctx.fillText(fmtVol(Math.max(...visible.map(b=>b.volume||0))),W-4,priceH+10);
+    ctx.strokeStyle='#1e2535'; ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(0,priceH);ctx.lineTo(chartW,priceH);ctx.stroke();
+  }
+
+  // ── INDICATORS ──
+  const needE9=pi.ema9||pi.db_upper;
+  const e9=needE9?calcEMA(data,9):null;
+  const atr9=(pi.db_upper)?calcATRSMA(data,9):null;
+  const atr20=(pi.db_low1||pi.db_low2)?calcATRSMA(data,20):null;
+  const e20=(pi.ema20||pi.db_low2)?calcEMA(data,20):null;
+  const e50=pi.ema50?calcEMA(data,50):null;
+  const e200=pi.ema200?calcEMA(data,200):null;
+  const e150=pi.ema150?calcEMA(data,150):null;
+  const e40=(pi.ema40_60)?calcEMA(data,40):null;
+  const e60=(pi.ema40_60)?calcEMA(data,60):null;
+  const vwap=pi.vwap?calcVWAP(data,isIntraday(p.tf)):null;
+
+  function drawLine(vals,color,lw,dashed){
+    if(!vals) return;
+    ctx.strokeStyle=color; ctx.lineWidth=lw||1.6; ctx.setLineDash(dashed?[6,4]:[]);
+    ctx.beginPath(); let s=false;
+    for(let i=0;i<visible.length;i++){
+      const ai=vs+i; if(vals[ai]==null||isNaN(vals[ai])){s=false;continue;}
+      const x=xCtr(i),y=pToY(vals[ai]);
+      if(y<-2||y>priceH+2){s=false;continue;}
+      if(!s){ctx.moveTo(x,y);s=true;}else ctx.lineTo(x,y);
+    }
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  // Draw only the filled area of a band (no border lines)
+  function drawBandFill(tV,bV,fill){
+    if(!tV||!bV) return;
+    ctx.beginPath(); let s=false;
+    for(let i=0;i<visible.length;i++){
+      const ai=vs+i; if(tV[ai]==null){s=false;continue;}
+      const x=xCtr(i),y=pToY(tV[ai]);
+      if(!s){ctx.moveTo(x,y);s=true;}else ctx.lineTo(x,y);
+    }
+    for(let i=visible.length-1;i>=0;i--){
+      const ai=vs+i; if(bV[ai]==null) continue;
+      ctx.lineTo(xCtr(i),pToY(bV[ai]));
+    }
+    ctx.closePath(); ctx.fillStyle=fill; ctx.fill();
+  }
+  // Draw only the border lines of a band
+  function drawBandLines(tV,bV,line){
+    if(!tV||!bV) return;
+    for(const vals of[tV,bV]){
+      ctx.strokeStyle=line; ctx.lineWidth=1.2; ctx.setLineDash([]); ctx.beginPath(); let s=false;
+      for(let i=0;i<visible.length;i++){
+        const ai=vs+i; if(vals[ai]==null){s=false;continue;}
+        const x=xCtr(i),y=pToY(vals[ai]);
+        if(!s){ctx.moveTo(x,y);s=true;}else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    }
+  }
+
+  // PASS 1 — band fills only (drawn before candles so candles appear on top)
+  if(pi.ema40_60&&e40&&e60) drawBandFill(e40,e60,C.ema40_60_fill);
+  if(e9&&atr9&&pi.db_upper)  drawBandFill(e9.map((v,i)=>v+(atr9[i]||0)),      e9.map((v,i)=>v+(atr9[i]||0)*.5),   C.db_upper_fill);
+  if(e20&&atr20&&pi.db_low1) drawBandFill(e20.map((v,i)=>v-(atr20[i]||0)*.5), e20.map((v,i)=>v-(atr20[i]||0)),     C.db_low1_fill);
+  if(e20&&atr20&&pi.db_low2) drawBandFill(e20.map((v,i)=>v-(atr20[i]||0)*2),  e20.map((v,i)=>v-(atr20[i]||0)*2.5), C.db_low2_fill);
+
+  // ── CANDLES (drawn after band fills, before indicator lines) ──
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0,0,chartW,priceH+volH); ctx.clip();
+  for(let i=0;i<visible.length;i++){
+    const b=visible[i], up=b.close>=b.open, col=up?C.up:C.dn;
+    const cx2=Math.min(Math.round(xCtr(i))+.5, chartW-1);
+    const bodyX=Math.round(xLc(i));
+    const bodyW=Math.min(Math.round(candleW), chartW-bodyX-1);
+    if(bodyW<=0) continue;
+    const hY=Math.round(pToY(b.high)), lY=Math.round(pToY(b.low));
+    ctx.strokeStyle=col; ctx.lineWidth=1; ctx.setLineDash([]);
+    ctx.beginPath();ctx.moveTo(cx2,hY);ctx.lineTo(cx2,lY);ctx.stroke();
+    const bTop=Math.round(Math.min(pToY(b.open),pToY(b.close)));
+    const bH=Math.max(2,Math.round(Math.abs(pToY(b.close)-pToY(b.open))));
+    ctx.fillStyle=col; ctx.fillRect(bodyX,bTop,bodyW,bH);
+  }
+  ctx.restore();
+
+  // PASS 2 — band border lines + EMA lines (drawn after candles so they appear on top)
+  if(e9&&atr9&&pi.db_upper)  drawBandLines(e9.map((v,i)=>v+(atr9[i]||0)),      e9.map((v,i)=>v+(atr9[i]||0)*.5),   C.db_upper_line);
+  if(e20&&atr20&&pi.db_low1) drawBandLines(e20.map((v,i)=>v-(atr20[i]||0)*.5), e20.map((v,i)=>v-(atr20[i]||0)),     C.db_low1_line);
+  if(e20&&atr20&&pi.db_low2) drawBandLines(e20.map((v,i)=>v-(atr20[i]||0)*2),  e20.map((v,i)=>v-(atr20[i]||0)*2.5), C.db_low2_line);
+  if(pi.ema40_60&&e40&&e60){
+    drawBandLines(e40,e60,C.ema40_60_line);
+  }
+  if(pi.ema150) drawLine(e150,C.ema150,1.2,true);
+  if(pi.ema200) drawLine(e200,C.ema200,1.4);
+  if(pi.ema50)  drawLine(e50, C.ema50, 1.4);
+  if(pi.ema20)  drawLine(e20, C.ema20, 1.4);
+  if(pi.ema9&&e9) drawLine(e9,C.ema9,  1.7);
+  if(pi.vwap&&vwap) drawLine(vwap,C.vwap,1.8);
+
+
+
+  // ── ANNOTATIONS (clipped to chart area) ──
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0,0,chartW,priceH); ctx.clip();
+
+  if(p.showTL||p.showAnn){
+    for(const ann of annotations){
+      const isTL=ann.type==='trendline', isBox=ann.type.startsWith('box_'), isTxt=ann.type.startsWith('text_'), isHl=ann.type.startsWith('hl_');
+      const isExecAnn=ann.type==='entry_arrow'||ann.type==='exit_arrow'||ann.type==='short_arrow'||ann.type==='cover_arrow'||ann.type==='stop_line'||ann.type==='trail_stop';
+      const isFib=ann.type==='fib_ret';
+      if(isTL&&!p.showTL) continue;
+      if((isBox||isTxt||isHl)&&!p.showAnn) continue;
+      if(isExecAnn&&!p.showExec) continue;
+      // If OTHER is toggled off, skip annotations drawn on different panels
+      if(!p.showOtherAnn && ann.panelIdx!=null && ann.panelIdx!==p.idx) continue;
+      if(!isTL&&!isBox&&!isTxt&&!isHl&&!isExecAnn&&!isFib) continue; // safety guard
+      if(isFib){
+        const fibHigh=Math.max(ann.y1,ann.y2);
+        const fibLow =Math.min(ann.y1,ann.y2);
+        const swing  =fibHigh-fibLow;
+        if(swing<=0) continue;
+        const FIB_LEVELS=[
+          {pct:0.30,col:'#f472b6',label:'30%'},
+          {pct:0.40,col:'#fb923c',label:'40%'},
+          {pct:0.50,col:'#facc15',label:'50%'},
+          {pct:0.60,col:'#34d399',label:'60%'},
+          {pct:0.70,col:'#60a5fa',label:'70%'},
+        ];
+        ctx.font='bold 10px Courier New';
+        for(const fl of FIB_LEVELS){
+          const price=fibHigh-swing*fl.pct;
+          const y=pToY(price);
+          if(y<-2||y>priceH+2) continue;
+          ctx.strokeStyle=fl.col; ctx.lineWidth=1.2; ctx.setLineDash([6,4]);
+          ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(chartW,y); ctx.stroke();
+          ctx.setLineDash([]);
+          const lbl=`${fl.label} ${fmtPrice(price)}`;
+          const tw=ctx.measureText(lbl).width;
+          ctx.fillStyle='rgba(10,12,20,0.78)';
+          ctx.fillRect(chartW-tw-8,y-11,tw+6,13);
+          ctx.fillStyle=fl.col; ctx.textAlign='right';
+          ctx.fillText(lbl,chartW-4,y-1);
+        }
+        // High/low boundary lines (dim purple dashes)
+        for(const bPrice of [fibHigh,fibLow]){
+          const y=pToY(bPrice);
+          if(y<-2||y>priceH+2) continue;
+          ctx.strokeStyle='rgba(167,139,250,0.35)'; ctx.lineWidth=1; ctx.setLineDash([2,3]);
+          ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(chartW,y); ctx.stroke();
+          ctx.setLineDash([]);
+        }
+        continue;
+      }
+      if(isExecAnn){
+        const x=annTimeToX(ann.x1); if(x==null) continue;
+        const y=pToY(ann.y1);
+        const lbl=ann.label||fmtPrice(ann.y1);
+        // Smart label placement helper (inline, same logic as BT markers)
+        const execPlaceLbl=(lbl2,col,anchorY,prefBelow)=>{
+          ctx.font='bold 11px Courier New';
+          const tw=ctx.measureText(lbl2).width, th=12, pad=4;
+          const nearBars=[];
+          for(let ni=0;ni<visible.length;ni++){const bx=(ni+0.5)*barW;if(Math.abs(bx-x)<barW*2.5)nearBars.push(visible[ni]);}
+          const chY=nearBars.length?Math.min(...nearBars.map(b=>pToY(b.high))):0;
+          const clY=nearBars.length?Math.max(...nearBars.map(b=>pToY(b.low))):priceH;
+          const cands=prefBelow?
+            [{tx:x,ty:anchorY+pad+th,al:'center'},{tx:x,ty:anchorY-pad,al:'center'},{tx:x+tw/2+pad+4,ty:anchorY+4,al:'left'},{tx:x-tw/2-pad-4,ty:anchorY+4,al:'right'}]:
+            [{tx:x,ty:anchorY-pad,al:'center'},{tx:x,ty:anchorY+pad+th,al:'center'},{tx:x+tw/2+pad+4,ty:anchorY+4,al:'left'},{tx:x-tw/2-pad-4,ty:anchorY+4,al:'right'}];
+          const sc=(pos)=>{
+            let pen=0;
+            if(pos.ty>chY&&(pos.ty-th)<clY)pen+=100;
+            if(pos.ty<0||pos.ty>priceH)pen+=200;
+            const tl=pos.al==='center'?pos.tx-tw/2:pos.al==='left'?pos.tx:pos.tx-tw;
+            if(tl<0)pen+=50; if(tl+tw>chartW)pen+=50;
+            return pen;
+          };
+          cands.sort((a,b)=>sc(a)-sc(b));
+          const best=cands[0];
+          ctx.textAlign=best.al;
+          const bgX=best.al==='center'?best.tx-tw/2-2:best.al==='left'?best.tx-2:best.tx-tw-2;
+          ctx.fillStyle='rgba(10,12,20,0.75)'; ctx.fillRect(bgX,best.ty-th,tw+4,th+2);
+          ctx.fillStyle=col; ctx.fillText(lbl2,best.tx,best.ty);
+        };
+        if(ann.type==='entry_arrow'){
+          const col='#ff9800'; const size=7;
+          ctx.beginPath(); ctx.moveTo(x,y-size-2); ctx.lineTo(x+size,y+2); ctx.lineTo(x-size,y+2); ctx.closePath();
+          ctx.fillStyle=col; ctx.fill();
+          // If this entry has a linked stop below, prefer label ABOVE arrow to avoid overlap
+          const prefBelow=ann.stopPrice==null;
+          execPlaceLbl(lbl,col,ann.stopPrice!=null?y-size-2:y+size+2,prefBelow);
+          ctx.strokeStyle=col+'55'; ctx.lineWidth=1; ctx.setLineDash([2,3]);
+          ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,priceH); ctx.stroke(); ctx.setLineDash([]);
+        } else if(ann.type==='exit_arrow'){
+          const col='#40c4ff'; const size=7;
+          ctx.beginPath(); ctx.moveTo(x,y+size+2); ctx.lineTo(x+size,y-2); ctx.lineTo(x-size,y-2); ctx.closePath();
+          ctx.fillStyle=col; ctx.fill();
+          execPlaceLbl(lbl,col,y-size-2,false);
+          ctx.strokeStyle=col+'55'; ctx.lineWidth=1; ctx.setLineDash([2,3]);
+          ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,priceH); ctx.stroke(); ctx.setLineDash([]);
+        } else if(ann.type==='short_arrow'){
+          // Short entry: downward-pointing filled triangle, red
+          const col='#ff5252'; const size=7;
+          ctx.beginPath(); ctx.moveTo(x,y+size+2); ctx.lineTo(x+size,y-2); ctx.lineTo(x-size,y-2); ctx.closePath();
+          ctx.fillStyle=col; ctx.fill();
+          const prefBelow2=ann.stopPrice==null;
+          execPlaceLbl(lbl,col,ann.stopPrice!=null?y+size+2:y-size-2,prefBelow2);
+          ctx.strokeStyle=col+'55'; ctx.lineWidth=1; ctx.setLineDash([2,3]);
+          ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,priceH); ctx.stroke(); ctx.setLineDash([]);
+        } else if(ann.type==='cover_arrow'){
+          // Cover (close short): upward-pointing filled triangle, green
+          const col='#00e676'; const size=7;
+          ctx.beginPath(); ctx.moveTo(x,y-size-2); ctx.lineTo(x+size,y+2); ctx.lineTo(x-size,y+2); ctx.closePath();
+          ctx.fillStyle=col; ctx.fill();
+          execPlaceLbl(lbl,col,y+size+2,true);
+          ctx.strokeStyle=col+'55'; ctx.lineWidth=1; ctx.setLineDash([2,3]);
+          ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,priceH); ctx.stroke(); ctx.setLineDash([]);
+        } else if(ann.type==='stop_line'){
+          // Auto-stops (paired with entry): extend right, label to the right of line
+          // Manual stops: use smart placement
+          if(ann._autoStop){
+            // Extend line further right so label clears the entry label above
+            const leftW=Math.max(14,barW*1.5);
+            const rightW=Math.max(60,barW*8);
+            ctx.strokeStyle='#facc15'; ctx.lineWidth=1.5; ctx.setLineDash([3,2]);
+            ctx.beginPath(); ctx.moveTo(x-leftW,y); ctx.lineTo(x+rightW,y); ctx.stroke(); ctx.setLineDash([]);
+            // Label always to the right of the line end
+            ctx.font='bold 10px Courier New'; ctx.textAlign='left';
+            const slbl2='S:'+lbl;
+            const sw=ctx.measureText(slbl2).width;
+            const lx=x+rightW+3, ly=y+4;
+            ctx.fillStyle='rgba(10,12,20,0.8)'; ctx.fillRect(lx-2,ly-10,sw+4,12);
+            ctx.fillStyle='#facc15'; ctx.fillText(slbl2,lx,ly);
+          } else {
+            const halfW=Math.max(14,barW*2.5);
+            ctx.strokeStyle='#facc15'; ctx.lineWidth=1.5; ctx.setLineDash([3,2]);
+            ctx.beginPath(); ctx.moveTo(x-halfW,y); ctx.lineTo(x+halfW,y); ctx.stroke(); ctx.setLineDash([]);
+            execPlaceLbl('S:'+lbl,'#facc15',y,false);
+          }
+        } else if(ann.type==='trail_stop'){
+          const halfW=Math.max(14,barW*2.5);
+          ctx.strokeStyle='#38bdf8'; ctx.lineWidth=1.5; ctx.setLineDash([4,2]);
+          ctx.beginPath(); ctx.moveTo(x-halfW,y); ctx.lineTo(x+halfW,y); ctx.stroke(); ctx.setLineDash([]);
+          execPlaceLbl('T:'+lbl,'#38bdf8',y,false);
+        }
+        if((activeTool==='del'||activeTool==='edit')&&cx>=0&&cy>=0&&isAnnNear(ann,cx,cy,p,annTimeToX,pToY)){
+          const hlCol=activeTool==='edit'?'rgba(251,191,36,0.7)':'rgba(255,61,87,0.7)';
+          ctx.strokeStyle=hlCol; ctx.lineWidth=2; ctx.setLineDash([4,3]);
+          ctx.beginPath(); ctx.arc(x,y,18,0,Math.PI*2); ctx.stroke(); ctx.setLineDash([]);
+        }
+        continue;
+      }
+      const x1=annTimeToX(ann.x1); if(x1==null) continue;
+      const y1=pToY(ann.y1);
+      if(isTL){
+        const x2=annTimeToX(ann.x2); if(x2==null) continue;
+        const y2=pToY(ann.y2);
+        ctx.strokeStyle=C.trendline; ctx.lineWidth=2; ctx.setLineDash([]);
+        ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+        ctx.fillStyle=C.trendline;
+        ctx.beginPath();ctx.arc(x1,y1,3,0,Math.PI*2);ctx.fill();
+        ctx.beginPath();ctx.arc(x2,y2,3,0,Math.PI*2);ctx.fill();
+        // Hollow centre so endpoints look like handles
+        ctx.fillStyle=C.bg;
+        ctx.beginPath();ctx.arc(x1,y1,1.5,0,Math.PI*2);ctx.fill();
+        ctx.beginPath();ctx.arc(x2,y2,1.5,0,Math.PI*2);ctx.fill();
+      } else if(isBox){
+        const x2=annTimeToX(ann.x2); if(x2==null) continue;
+        const y2=pToY(ann.y2);
+        const col=ann.type==='box_orange'?C.box_orange:C.box_yellow;
+        const bxX=Math.min(x1,x2),bxY=Math.min(y1,y2),bxW=Math.abs(x2-x1),bxH=Math.abs(y2-y1);
+        ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.setLineDash([]);
+        ctx.strokeRect(bxX,bxY,bxW,bxH);
+        const rv=parseInt(col.slice(1,3),16),gv=parseInt(col.slice(3,5),16),bv=parseInt(col.slice(5,7),16);
+        ctx.fillStyle=`rgba(${rv},${gv},${bv},0.07)`; ctx.fillRect(bxX,bxY,bxW,bxH);
+      } else if(isTxt){
+        ctx.fillStyle=ann.type==='text_orange'?C.box_orange:C.box_yellow;
+        ctx.font='bold 12px Courier New'; ctx.textAlign='left';
+        ctx.fillText(ann.text||'',x1,y1);
+      } else if(isHl){
+        const x2=annTimeToX(ann.x2); if(x2==null) continue;
+        const y2=pToY(ann.y2);
+        const col=C[ann.type]||'#22d3ee';
+        const bxX=Math.min(x1,x2),bxY=Math.min(y1,y2),bxW=Math.abs(x2-x1),bxH=Math.abs(y2-y1);
+        const rv=parseInt(col.slice(1,3),16),gv=parseInt(col.slice(3,5),16),bv=parseInt(col.slice(5,7),16);
+        const op=ann.opacity??0.15;
+        ctx.fillStyle=`rgba(${rv},${gv},${bv},${op})`; ctx.fillRect(bxX,bxY,bxW,bxH);
+        ctx.strokeStyle=`rgba(${rv},${gv},${bv},${Math.min(1,op+0.15)})`; ctx.lineWidth=1; ctx.setLineDash([]);
+        ctx.strokeRect(bxX,bxY,bxW,bxH);
+      }
+      if(activeTool==='del'&&cx>=0&&cy>=0&&isAnnNear(ann,cx,cy,p,annTimeToX,pToY)){
+        ctx.strokeStyle='rgba(255,61,87,0.7)'; ctx.lineWidth=2; ctx.setLineDash([4,3]);
+        if(isTL){const x2=annTimeToX(ann.x2)||x1,y2=pToY(ann.y2);ctx.beginPath();ctx.moveTo(x1-4,y1-4);ctx.lineTo(x2+4,y2+4);ctx.stroke();}
+        else if(isBox||isHl){const x2=annTimeToX(ann.x2)||x1,y2=pToY(ann.y2);ctx.strokeRect(Math.min(x1,x2)-3,Math.min(y1,y2)-3,Math.abs(x2-x1)+6,Math.abs(y2-y1)+6);}
+        else if(isTxt){ctx.strokeRect(x1-3,y1-14,60,18);}
+        ctx.setLineDash([]);
+      }
+    }
+  }
+
+  // ── ANNOTATION PREVIEW ──
+  if(activeTool&&toolStep==='second'&&toolAnchor?.panelIdx===p.idx&&cx>=0&&cy>=0){
+    const ax=annTimeToX(toolAnchor.time)||toolAnchor.rawX, ay=pToY(toolAnchor.price);
+    const col=activeTool==='trendline'?C.trendline:C[activeTool]||(activeTool==='box_orange'?C.box_orange:C.box_yellow);
+    if(activeTool==='trendline'){
+      ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.setLineDash([4,3]);
+      ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(cx,cy);ctx.stroke();
+      ctx.setLineDash([]);
+    } else if(activeTool.startsWith('box_')){
+      ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.setLineDash([4,3]);
+      ctx.strokeRect(Math.min(ax,cx),Math.min(ay,cy),Math.abs(cx-ax),Math.abs(cy-ay));
+      ctx.setLineDash([]);
+    } else if(activeTool.startsWith('hl_')){
+      const rv=parseInt(col.slice(1,3),16),gv=parseInt(col.slice(3,5),16),bv=parseInt(col.slice(5,7),16);
+      const op=(parseInt(document.getElementById('hl-opacity').value)||15)/100;
+      ctx.fillStyle=`rgba(${rv},${gv},${bv},${op})`;
+      ctx.fillRect(Math.min(ax,cx),Math.min(ay,cy),Math.abs(cx-ax),Math.abs(cy-ay));
+      ctx.strokeStyle=`rgba(${rv},${gv},${bv},${Math.min(1,op+0.15)})`; ctx.lineWidth=1; ctx.setLineDash([4,3]);
+      ctx.strokeRect(Math.min(ax,cx),Math.min(ay,cy),Math.abs(cx-ax),Math.abs(cy-ay));
+      ctx.setLineDash([]);
+    } else if(activeTool==='fib_ret'){
+      const {min:gMin,max:gMax}=getMinMax(p);
+      const cursorPrice=gMin+(gMax-gMin)*(1-cy/priceH);
+      const gH=Math.max(toolAnchor.price,cursorPrice);
+      const gL=Math.min(toolAnchor.price,cursorPrice);
+      const gSwing=gH-gL;
+      if(gSwing>0){
+        const GHOST_LEVELS=[
+          {pct:0.30,col:'#f472b6'},{pct:0.40,col:'#fb923c'},
+          {pct:0.50,col:'#facc15'},{pct:0.60,col:'#34d399'},{pct:0.70,col:'#60a5fa'},
+        ];
+        ctx.font='bold 10px Courier New';
+        ctx.fillStyle='rgba(167,139,250,0.8)';
+        ctx.beginPath(); ctx.arc(ax,ay,4,0,Math.PI*2); ctx.fill();
+        for(const fl of GHOST_LEVELS){
+          const price=gH-gSwing*fl.pct;
+          const y=pToY(price);
+          if(y<-2||y>priceH+2) continue;
+          ctx.strokeStyle=fl.col+'aa'; ctx.lineWidth=1; ctx.setLineDash([5,4]);
+          ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(chartW,y); ctx.stroke();
+          ctx.setLineDash([]);
+          const lbl=`${(fl.pct*100).toFixed(0)}% ${fmtPrice(price)}`;
+          const tw=ctx.measureText(lbl).width;
+          ctx.fillStyle='rgba(10,12,20,0.65)';
+          ctx.fillRect(chartW-tw-8,y-11,tw+6,13);
+          ctx.fillStyle=fl.col+'cc'; ctx.textAlign='right';
+          ctx.fillText(lbl,chartW-4,y-1);
+        }
+      }
+    }
+  }
+  ctx.restore();
+
+  // ── BACKTEST MARKERS ──
+  if(btMarkers.length && p.showBtExec){
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0,0,chartW,priceH); ctx.clip();
+    const useDate=!isIntraday(p.tf);
+
+    // Smart label placement: pick above/below/side with most clearance from candles
+    const placeLbl=(ctx,lbl,col,x,anchorY,prefBelow)=>{
+      ctx.font='bold 11px Courier New';
+      const tw=ctx.measureText(lbl).width;
+      const th=12, pad=4;
+      // Sample candle pixel ranges for bars near x (within ±2 bars)
+      const nearBars=[];
+      for(let ni=0;ni<visible.length;ni++){
+        const bx=(ni+0.5)*barW;
+        if(Math.abs(bx-x)<barW*2.5) nearBars.push(visible[ni]);
+      }
+      const candleHighY=nearBars.length?Math.min(...nearBars.map(b=>pToY(b.high))):0;
+      const candleLowY =nearBars.length?Math.max(...nearBars.map(b=>pToY(b.low))):priceH;
+      // Candidate positions: below anchor, above anchor, right side, left side
+      const below={tx:x, ty:anchorY+pad+th, align:'center'};
+      const above={tx:x, ty:anchorY-pad,     align:'center'};
+      const right={tx:x+tw/2+pad+4, ty:anchorY+4, align:'left'};
+      const left ={tx:x-tw/2-pad-4, ty:anchorY+4, align:'right'};
+      // Score each: lower = less overlap with candle bodies
+      const score=(pos)=>{
+        const ly=pos.ty, lx=pos.tx;
+        // penalise if text rect overlaps candle zone
+        const txtTop=ly-th, txtBot=ly, txtL=lx-tw/2, txtR=lx+tw/2;
+        let penalty=0;
+        if(txtBot>candleHighY && txtTop<candleLowY) penalty+=100; // overlaps candle range
+        if(ly<0||ly>priceH) penalty+=200; // off screen
+        if(txtL<0) penalty+=50;
+        if(txtR>chartW) penalty+=50;
+        return penalty;
+      };
+      const candidates=prefBelow?[below,above,right,left]:[above,below,right,left];
+      candidates.sort((a,b)=>score(a)-score(b));
+      const best=candidates[0];
+      ctx.textAlign=best.align;
+      // Dark background for readability
+      const bgX=best.align==='center'?best.tx-tw/2-2:best.align==='left'?best.tx-2:best.tx-tw-2;
+      ctx.fillStyle='rgba(10,12,20,0.75)';
+      ctx.fillRect(bgX,best.ty-th,tw+4,th+2);
+      ctx.fillStyle=col;
+      ctx.fillText(lbl,best.tx,best.ty);
+    };
+
+    for(const m of btMarkers){
+      const matchTime=useDate?m.date:m.time;
+      const x=annTimeToX(matchTime); if(x==null) continue;
+      const y=pToY(m.price);
+      const isEntry=m.type==='entry';
+      const isStop=m.type==='stop';
+
+      if(isStop){
+        const halfW=Math.max(14, barW*2.5);
+        ctx.strokeStyle='#facc15'; ctx.lineWidth=1.5; ctx.setLineDash([3,2]);
+        ctx.beginPath(); ctx.moveTo(x-halfW,y); ctx.lineTo(x+halfW,y); ctx.stroke();
+        ctx.setLineDash([]);
+        placeLbl(ctx,'S:'+m.label,'#facc15',x+halfW+ctx.measureText('S:'+m.label).width/2+4,y,false);
+        continue;
+      }
+
+      const col=(btStrategyMode==='long')?(isEntry?'#00e676':'#ff5252'):(isEntry?'#ff5252':'#00e676');
+      const size=7;
+      ctx.beginPath();
+      if(isEntry){
+        ctx.moveTo(x,y-size-2); ctx.lineTo(x+size,y+2); ctx.lineTo(x-size,y+2);
+      } else {
+        ctx.moveTo(x,y+size+2); ctx.lineTo(x+size,y-2); ctx.lineTo(x-size,y-2);
+      }
+      ctx.closePath(); ctx.fillStyle=col; ctx.fill();
+      placeLbl(ctx,m.label,col,x,isEntry?y+size+2:y-size-2,isEntry);
+      ctx.strokeStyle=col+'55'; ctx.lineWidth=1; ctx.setLineDash([2,3]);
+      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,priceH); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.restore();
+  }
+  // Sync crosshair from another panel
+  if((cx<0||cx>chartW)&&globalCrossTime>0&&data.length){
+    // Find bar index matching globalCrossTime
+    let syncBi=-1,bestD=Infinity;
+    for(let _i=0;_i<visible.length;_i++){
+      const d=Math.abs(visible[_i].time-globalCrossTime);
+      if(d<bestD){bestD=d;syncBi=_i;}
+    }
+    if(syncBi>=0){
+      const syncX=xCtr(syncBi);
+      ctx.strokeStyle='rgba(180,200,255,0.25)'; ctx.lineWidth=1; ctx.setLineDash([3,4]);
+      // Vertical line
+      ctx.beginPath();ctx.moveTo(syncX,0);ctx.lineTo(syncX,priceH+volH);ctx.stroke();
+      // Horizontal line at the source panel's cursor price (mapped to this panel's scale)
+      if(globalCrossPrice>0&&priceRange>0){
+        const syncY=priceH*(1-(globalCrossPrice-minP)/priceRange);
+        if(syncY>=0&&syncY<=priceH){
+          ctx.beginPath();ctx.moveTo(0,syncY);ctx.lineTo(chartW,syncY);ctx.stroke();
+          ctx.setLineDash([]);
+          // Price label on right axis
+          ctx.fillStyle='#141a2a';ctx.fillRect(chartW,syncY-10,PRICE_W,20);
+          ctx.strokeStyle='#2a3050';ctx.lineWidth=1;ctx.strokeRect(chartW,syncY-10,PRICE_W,20);
+          ctx.fillStyle='#8090b0';ctx.font='bold 10px Courier New';ctx.textAlign='right';
+          ctx.fillText(fmtPrice(globalCrossPrice),W-4,syncY+4);
+        }
+      }
+      ctx.setLineDash([]);
+      // Time label
+      const slbl=fmtTimeCross(visible[syncBi].time,tf);
+      ctx.font='bold 9px Courier New'; ctx.textAlign='center';
+      const stw=ctx.measureText(slbl).width+10;
+      ctx.fillStyle='#141a2a';ctx.fillRect(syncX-stw/2,H-TIME_H,stw,TIME_H);
+      ctx.strokeStyle='#2a3050';ctx.lineWidth=1;ctx.strokeRect(syncX-stw/2,H-TIME_H,stw,TIME_H);
+      ctx.fillStyle='#8090b0';ctx.fillText(slbl,syncX,H-TIME_H+13);
+    }
+  }
+
+  if(cx>=0&&cx<=chartW&&cy>=0&&cy<=priceH+volH){
+    ctx.strokeStyle=C.cross; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+    ctx.beginPath();ctx.moveTo(cx,0);ctx.lineTo(cx,priceH+volH);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,cy);ctx.lineTo(chartW,cy);ctx.stroke();
+    ctx.setLineDash([]);
+    if(cy<=priceH){
+      const hp=minP+priceRange*(1-cy/priceH);
+      ctx.fillStyle='#1a2040';ctx.fillRect(chartW,cy-10,PRICE_W,20);
+      ctx.strokeStyle='#2a3050';ctx.lineWidth=1;ctx.strokeRect(chartW,cy-10,PRICE_W,20);
+      ctx.fillStyle='#00e676';ctx.font='bold 10px Courier New';ctx.textAlign='right';
+      ctx.fillText(fmtPrice(hp),W-4,cy+4);
+    } else if(volH>0&&cy>priceH&&cy<=priceH+volH){
+      // Cursor is in volume pane — show volume value on right axis
+      const maxVol=Math.max(...visible.map(b=>b.volume||0))||1;
+      const volFrac=1-(cy-priceH)/volH;
+      const hv=maxVol*volFrac/0.92; // reverse the 0.92 scale factor
+      ctx.fillStyle='#1a2040';ctx.fillRect(chartW,cy-10,PRICE_W,20);
+      ctx.strokeStyle='#2a3050';ctx.lineWidth=1;ctx.strokeRect(chartW,cy-10,PRICE_W,20);
+      ctx.fillStyle='#8080e8';ctx.font='bold 10px Courier New';ctx.textAlign='right';
+      ctx.fillText(fmtVol(Math.max(0,hv)),W-4,cy+4);
+    }
+    // Find bar closest to cursor (compressed slots = simple division)
+    const bi=Math.max(0,Math.min(visible.length-1,Math.round(cx/barW)));
+    const bar=visible[bi];
+    if(bar){
+      const lbl=fmtTimeCross(bar.time,tf);
+      ctx.font='bold 9px Courier New'; ctx.textAlign='center';
+      const tw=ctx.measureText(lbl).width+10;
+      const lx=xCtr(bi);
+      ctx.fillStyle='#1a2040';ctx.fillRect(lx-tw/2,H-TIME_H,tw,TIME_H);
+      ctx.strokeStyle='#2a3050';ctx.strokeRect(lx-tw/2,H-TIME_H,tw,TIME_H);
+      ctx.fillStyle='#D4AF37';ctx.fillText(lbl,lx,H-TIME_H+13);
+      const chg=bar.close-bar.open,pct=((chg/bar.open)*100).toFixed(2);
+      const cc=chg>=0?'#26a69a':'#ef5350';
+      document.getElementById(`ohlc-${p.idx}`).innerHTML=
+        `O<span style="color:#dde3f0"> ${fmtPrice(bar.open)}</span> `+
+        `H<span style="color:#26a69a"> ${fmtPrice(bar.high)}</span> `+
+        `L<span style="color:#ef5350"> ${fmtPrice(bar.low)}</span> `+
+        `C<span style="color:${cc}"> ${fmtPrice(bar.close)}</span> `+
+        `V<span style="color:#8080e8"> ${fmtVol(bar.volume)}</span> `+
+        `<span style="color:${cc}">(${chg>=0?'+':''}${pct}%)</span>`;
+    }
+  }
+
+  ctx.strokeStyle='#1e2535';ctx.lineWidth=1;ctx.setLineDash([]);
+  ctx.strokeRect(.5,.5,chartW-1,priceH+volH-1);
+
+  // ── LIVE PRICE LINE ──
+  if(showPriceLine&&data.length){
+    const lastClose=data[data.length-1].close;
+    const ly=pToY(lastClose);
+    if(ly>=0&&ly<=priceH){
+      const lineCol=data[data.length-1].close>=data[data.length-1].open?'#26a69a':'#ef5350';
+      ctx.save();
+      ctx.strokeStyle=lineCol; ctx.lineWidth=1.2; ctx.setLineDash([4,3]);
+      ctx.beginPath();ctx.moveTo(0,ly);ctx.lineTo(chartW,ly);ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle=lineCol; ctx.fillRect(chartW,ly-10,PRICE_W,20);
+      ctx.fillStyle='#fff'; ctx.font='bold 10px Courier New'; ctx.textAlign='right';
+      ctx.fillText(fmtPrice(lastClose),W-4,ly+4);
+      ctx.restore();
+    }
+  }
+}
+
+
+// Check if annotation is near mouse (for delete highlight)
+// Find if (mx,my) is near a trendline endpoint — returns {ann, endpoint:'1'|'2'} or null
+function findTLEndpoint(mx,my,p,chartW,priceH){
+  const HIT=20;
+  const vs=Math.max(0,Math.min(p.viewStart,Math.max(0,p.data.length-p.viewBars)));
+  const vlen=Math.min(p.viewBars,p.data.length-vs);
+  const barW=chartW/Math.max(vlen+6,1); // must match renderPanel RIGHT_PAD=6
+  function toX(t){
+    const ts=toUnix(t); let best=-1,bestD=Infinity;
+    for(let i=0;i<p.data.length;i++){const d=Math.abs(toUnix(p.data[i].time)-ts);if(d<bestD){bestD=d;best=i;}}
+    return best<0?null:(best-vs+0.5)*barW;
+  }
+  const {min,max}=getMinMax(p);
+  const toY=v=>Math.max(0,Math.min(priceH, priceH-((v-min)/(max-min))*priceH));
+  let bestHit=null, bestDist=Infinity;
+  for(const ann of annotations){
+    if(ann.type!=='trendline') continue;
+    const x1=toX(ann.x1); if(x1==null) continue;
+    const y1=toY(ann.y1);
+    const x2=toX(ann.x2); if(x2==null) continue;
+    const y2=toY(ann.y2);
+    const d1=Math.hypot(mx-x1,my-y1);
+    const d2=Math.hypot(mx-x2,my-y2);
+    if(d1<HIT && d1<bestDist){bestDist=d1; bestHit={ann,endpoint:'1'};}
+    if(d2<HIT && d2<bestDist){bestDist=d2; bestHit={ann,endpoint:'2'};}
+  }
+  return bestHit;
+}
+
+function isAnnNear(ann,mx,my,p,annTimeToX,pToY){
+  const x1=annTimeToX(ann.x1); if(x1==null) return false;
+  const y1=pToY(ann.y1);
+  const HIT=18;
+  if(ann.type==='trendline'){
+    const x2=annTimeToX(ann.x2); if(x2==null) return false;
+    const y2=pToY(ann.y2);
+    // Point-to-line distance
+    const dx=x2-x1,dy=y2-y1,len=Math.sqrt(dx*dx+dy*dy)||1;
+    const d=Math.abs((my-y1)*dx-(mx-x1)*dy)/len;
+    const t=((mx-x1)*dx+(my-y1)*dy)/(len*len);
+    return d<HIT&&t>=0&&t<=1;
+  } else if(ann.type.startsWith('box_')||ann.type.startsWith('hl_')){
+    const x2=annTimeToX(ann.x2); if(x2==null) return false;
+    const y2=pToY(ann.y2);
+    const bX=Math.min(x1,x2)-HIT,bY=Math.min(y1,y2)-HIT;
+    const bW=Math.abs(x2-x1)+HIT*2,bH=Math.abs(y2-y1)+HIT*2;
+    return mx>=bX&&mx<=bX+bW&&my>=bY&&my<=bY+bH;
+  } else if(ann.type.startsWith('text_')){
+    return Math.abs(mx-x1)<60&&Math.abs(my-y1)<20;
+  } else if(ann.type==='entry_arrow'||ann.type==='exit_arrow'||ann.type==='short_arrow'||ann.type==='cover_arrow'||ann.type==='stop_line'||ann.type==='trail_stop'){
+    return Math.hypot(mx-x1,my-y1)<22;
+  } else if(ann.type==='fib_ret'){
+    // Hit if cursor is within HIT px of any of the 5 level lines (horizontal, full width)
+    const fibHigh=Math.max(ann.y1,ann.y2);
+    const fibLow =Math.min(ann.y1,ann.y2);
+    const swing  =fibHigh-fibLow;
+    if(swing<=0) return false;
+    for(const pct of [0.30,0.40,0.50,0.60,0.70]){
+      const ly=pToY(fibHigh-swing*pct);
+      if(Math.abs(my-ly)<HIT) return true;
+    }
+    return false;
+  }
+  return false;
+}
+
+// ══════════════════════════════════════════════════════════
+//  OHLCV TOOLTIP (shown on mousedown hold)
+// ══════════════════════════════════════════════════════════
+function showOHLCVTip(p,bar,screenX,screenY){
+  let tip=document.getElementById(`tip-${p.idx}`);
+  if(!tip){
+    tip=document.createElement('div');
+    tip.id=`tip-${p.idx}`;
+    tip.className='ohlcv-tip';
+    document.getElementById(`cw-${p.idx}`).appendChild(tip);
+  }
+  const chg=bar.close-bar.open, pct=((chg/bar.open)*100).toFixed(2);
+  const up=chg>=0;
+  const e9=calcEMA(p.data,9); const e20=calcEMA(p.data,20); const e50=calcEMA(p.data,50);
+  const idx=p.data.indexOf(bar);
+  const e9v=e9[idx]!=null?fmtPrice(e9[idx]):'—';
+  const e20v=e20[idx]!=null?fmtPrice(e20[idx]):'—';
+  const e50v=e50[idx]!=null?fmtPrice(e50[idx]):'—';
+
+  tip.innerHTML=`
+    <div class="tip-header">${fmtTimeCross(bar.time,p.tf)}</div>
+    <hr class="tip-divider">
+    <div class="tip-row"><span class="tip-label">Open</span><span class="tip-val" style="color:#dde3f0">${fmtPrice(bar.open)}</span></div>
+    <div class="tip-row"><span class="tip-label">High</span><span class="tip-val" style="color:#26a69a">${fmtPrice(bar.high)}</span></div>
+    <div class="tip-row"><span class="tip-label">Low</span><span class="tip-val" style="color:#ef5350">${fmtPrice(bar.low)}</span></div>
+    <div class="tip-row"><span class="tip-label">Close</span><span class="tip-val" style="color:${up?'#26a69a':'#ef5350'}">${fmtPrice(bar.close)}</span></div>
+    <div class="tip-row"><span class="tip-label">Change</span><span class="tip-val" style="color:${up?'#26a69a':'#ef5350'}">${up?'+':''}${chg.toFixed(2)} (${pct}%)</span></div>
+    <div class="tip-row"><span class="tip-label">Volume</span><span class="tip-val" style="color:#8080e8">${fmtVol(bar.volume)}</span></div>
+    <div class="tip-row"><span class="tip-label">$Volume</span><span class="tip-val" style="color:#a78bfa">${fmtVol(bar.volume*bar.close)}</span></div>
+    <hr class="tip-divider">
+    <div class="tip-row"><span class="tip-label">EMA 9</span><span class="tip-val" style="color:#e8d000">${e9v}</span></div>
+    <div class="tip-row"><span class="tip-label">EMA 20</span><span class="tip-val" style="color:#3a70e0">${e20v}</span></div>
+    <div class="tip-row"><span class="tip-label">EMA 50</span><span class="tip-val" style="color:#00c8e8">${e50v}</span></div>
+  `;
+  tip.style.display='block';
+  const wrap=document.getElementById(`cw-${p.idx}`);
+  const wr=wrap.getBoundingClientRect();
+  let tx=screenX-wr.left+14, ty=screenY-wr.top-20;
+  if(tx+200>wr.width) tx=screenX-wr.left-210;
+  if(ty<0) ty=4;
+  tip.style.left=tx+'px'; tip.style.top=ty+'px';
+}
+function hideOHLCVTip(idx){
+  const t=document.getElementById(`tip-${idx}`);
+  if(t) t.style.display='none';
+}
+
+// ══════════════════════════════════════════════════════════
+//  SCROLLBAR
+// ══════════════════════════════════════════════════════════
+function updateScrollbar(p){
+  const thumb=document.getElementById(`sb-thumb-${p.idx}`);
+  const track=document.getElementById(`sb-track-${p.idx}`);
+  if(!thumb||!track||!p.data.length) return;
+  const trackW=track.clientWidth;
+  const total=p.data.length;
+  const ratio=p.viewBars/total;
+  const thumbW=Math.max(20,Math.round(trackW*ratio));
+  const maxOff=trackW-thumbW;
+  const off=Math.round((p.viewStart/Math.max(1,total-p.viewBars))*maxOff);
+  thumb.style.width=thumbW+'px';
+  thumb.style.left=Math.min(off,maxOff)+'px';
+}
+
+// ══════════════════════════════════════════════════════════
+//  PANEL DOM
+// ══════════════════════════════════════════════════════════
+function buildPanels(){
+  const grid=document.getElementById('grid');
+  panels.forEach((p,i)=>{
+    const div=document.createElement('div');
+    div.className='panel'; div.id=`panel-${i}`;
+    div.innerHTML=`
+      <div class="ph" id="ph-${i}">
+        <span class="ph-sym" id="sym-${i}">${symbol}</span>
+        <div class="tf-wrap">${TF_LIST.map(t=>`<button class="tf-btn${t.tf===p.tf?' active':''}" data-tf="${t.tf}">${t.l}</button>`).join('')}</div>
+        <span class="ph-ohlc" id="ohlc-${i}"></span>
+        <div class="panel-btns">
+          <button class="pnl-btn expand-btn" id="expand-${i}">⛶</button>
+        </div>
+      </div>
+      <div class="ind-row" id="indrow-${i}">
+        <span style="font-size:9px;color:#2a3050;letter-spacing:1px;margin-right:2px;">IND</span>
+        <button class="ptog" data-ind="ema9" data-panel="${i}">E9</button>
+        <button class="ptog" data-ind="ema20" data-panel="${i}">E20</button>
+        <button class="ptog" data-ind="ema50" data-panel="${i}">E50</button>
+        <button class="ptog" data-ind="ema200" data-panel="${i}">E200</button>
+        <button class="ptog" data-ind="ema150" data-panel="${i}">E150</button>
+        <button class="ptog" data-ind="ema40_60" data-panel="${i}">E40-60</button>
+        <button class="ptog" data-ind="vwap" data-panel="${i}">VWAP</button>
+        <button class="ptog off" data-ind="db_upper" data-panel="${i}">⬆U</button>
+        <button class="ptog off" data-ind="db_low1" data-panel="${i}">⬇L1</button>
+        <button class="ptog off" data-ind="db_low2" data-panel="${i}">⬇⬇L2</button>
+        <button class="ptog on" data-ind="vol" data-panel="${i}">VOL</button>
+        <button class="ptog on" data-ind="pdc" data-panel="${i}">PDC</button>
+        <span style="width:1px;height:10px;background:#2a3050;margin:0 3px;"></span>
+        <button class="ptog on" data-ind="tl" data-panel="${i}">LINES</button>
+        <button class="ptog on" data-ind="ann" data-panel="${i}">ANN</button>
+        <button class="ptog on" data-ind="otherann" data-panel="${i}">OTHER</button>
+        <button class="ptog on" data-ind="exec" data-panel="${i}">EXEC</button>
+        <button class="ptog on" data-ind="btexec" data-panel="${i}">BTEXEC</button>
+        <span style="width:1px;height:10px;background:#2a3050;margin:0 3px;"></span>
+        <button class="ptog on adj-panel-btn" data-panel="${i}" style="border-color:#f59e0b;color:#f59e0b;">ADJ</button>
+      </div>
+      <div class="pdr" id="pdr-${i}">
+        <label>FROM</label><input type="date" id="from-${i}" autocomplete="off"/>
+        <label>TO</label><input type="date" id="to-${i}" autocomplete="off"/>
+        <div class="pdr-sep"></div>
+        <label>TARGET</label><input type="date" id="tgt-${i}" autocomplete="off"/>
+        <label>BACK</label><input type="number" id="back-${i}" min="1" max="9999" placeholder="days" style="width:52px"/>
+        <label>FWD</label><input type="number" id="fwd-${i}" min="0" max="9999" placeholder="days" style="width:52px"/>
+        <button class="appl" id="apply-${i}">APPLY</button>
+        <button class="appl" id="applyall-${i}" style="border-color:#D4AF37;color:#D4AF37;">APPLY ALL</button>
+      </div>
+      <div class="cwrap" id="cw-${i}">
+        <canvas id="canvas-${i}"></canvas>
+        <div class="overlay active" id="ov-${i}" style="background:rgba(12,14,20,.75)">
+          <div class="spinner"></div><div class="ov-msg">LOADING…</div>
+        </div>
+      </div>
+      <div class="scrollbar-wrap" id="sb-${i}">
+        <div class="scrollbar-track" id="sb-track-${i}">
+            <div class="scrollbar-thumb" id="sb-thumb-${i}"></div>
+          </div>
+        </div>
+        <div style="position:absolute;bottom:22px;right:4px;display:flex;gap:2px;z-index:10;">
+          <button id="sa-left-${i}" style="background:#1a1e2e;border:1px solid #3a4870;color:#8aa0c0;font-size:13px;padding:4px 10px;cursor:pointer;border-radius:4px;font-weight:700;line-height:1;" title="Scroll left 1 candle">◀</button>
+          <button id="sa-right-${i}" style="background:#1a1e2e;border:1px solid #3a4870;color:#8aa0c0;font-size:13px;padding:4px 10px;cursor:pointer;border-radius:4px;font-weight:700;line-height:1;" title="Scroll right 1 candle">▶</button>
+        </div>
+      </div>`;
+    grid.appendChild(div);
+
+    // TF buttons
+    div.querySelectorAll('.tf-btn').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        div.querySelectorAll('.tf-btn').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active'); p.tf=btn.dataset.tf; loadPanel(i);
+      });
+      // Double-click TF button: restore previous daily view if we drilled in
+      btn.addEventListener('dblclick',()=>{
+        if(p._prevTf){
+          p.tf=p._prevTf; p.startDate=p._prevStart; p.endDate=p._prevEnd;
+          document.getElementById('from-'+i).value=p.startDate||'';
+          document.getElementById('to-'+i).value=p.endDate||'';
+          div.querySelectorAll('.tf-btn').forEach(b=>b.classList.toggle('active',b.dataset.tf===p.tf));
+          p._prevTf=null; p._prevStart=null; p._prevEnd=null;
+          toast('↩ Restored previous view');
+          loadPanel(i);
+        }
+      });
+    });
+
+    // Indicator toggles
+    div.querySelectorAll('.ptog').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const ind=btn.dataset.ind;
+        if(ind==='tl'){p.showTL=!p.showTL;btn.classList.toggle('on',p.showTL);btn.classList.toggle('off',!p.showTL);}
+        else if(ind==='ann'){p.showAnn=!p.showAnn;btn.classList.toggle('on',p.showAnn);btn.classList.toggle('off',!p.showAnn);}
+        else if(ind==='otherann'){p.showOtherAnn=!p.showOtherAnn;btn.classList.toggle('on',p.showOtherAnn);btn.classList.toggle('off',!p.showOtherAnn);}
+        else if(ind==='exec'){p.showExec=!p.showExec;btn.classList.toggle('on',p.showExec);btn.classList.toggle('off',!p.showExec);}
+        else if(ind==='btexec'){p.showBtExec=!p.showBtExec;btn.classList.toggle('on',p.showBtExec);btn.classList.toggle('off',!p.showBtExec);}
+        else if(ind==='pdc'){p.showPDC=!p.showPDC;btn.classList.toggle('on',p.showPDC);btn.classList.toggle('off',!p.showPDC);}
+        else{p.inds[ind]=!p.inds[ind];btn.classList.toggle('on',p.inds[ind]);btn.classList.toggle('off',!p.inds[ind]);}
+        if(p.data.length){renderPanel(p);updateScrollbar(p);}
+      });
+    });
+
+    // Sync initial button on/off classes from inds state
+    div.querySelectorAll('.ptog[data-ind]').forEach(btn=>{
+      const ind=btn.dataset.ind;
+      if(['ema9','ema20','ema50','ema200','ema150','ema40_60','vwap','db_upper','db_low1','db_low2'].includes(ind)){
+        btn.classList.toggle('on', !!p.inds[ind]);
+        btn.classList.toggle('off', !p.inds[ind]);
+      }
+    });
+
+    // Per-panel ADJ toggle
+    div.querySelector('.adj-panel-btn').addEventListener('click', function(){
+      p.adjusted=!p.adjusted;
+      this.classList.toggle('on',p.adjusted);
+      this.classList.toggle('off',!p.adjusted);
+      this.style.color=p.adjusted?'#f59e0b':'#4a5580';
+      this.style.borderColor=p.adjusted?'#f59e0b':'#4a5580';
+      this.style.textDecoration=p.adjusted?'':'line-through';
+      loadPanel(i);
+    });
+
+    document.getElementById(`apply-${i}`).addEventListener('click',()=>applyDates(i));
+    document.getElementById(`applyall-${i}`).addEventListener('click',()=>applyDatesAll(i));
+    document.getElementById(`expand-${i}`).addEventListener('click',()=>toggleFullscreen(i));
+
+    // Canvas events
+    const wrap=document.getElementById(`cw-${i}`);
+    const canvas=document.getElementById(`canvas-${i}`);
+    p.canvas=canvas; p.ctx=canvas.getContext('2d');
+
+    wrap.addEventListener('mousemove',evt=>{
+      const r=wrap.getBoundingClientRect();
+      p.cx=evt.clientX-r.left; p.cy=evt.clientY-r.top;
+      // Sync crosshair time to other panels
+      const chartW_=p.W-p.PRICE_W;
+      const vs_=Math.max(0,Math.min(p.viewStart,p.data.length-p.viewBars));
+      const bw_=chartW_/Math.max(Math.min(p.viewBars,p.data.length-vs_)+6,1);
+      const bi_=Math.max(0,Math.min(p.data.length-vs_-1,Math.round(p.cx/bw_)));
+      const bar_=p.data[vs_+bi_];
+      const newT=bar_?bar_.time:-1;
+      // Also capture the price at cursor y position
+      const priceH_=p.H-p.TIME_H-(p.inds.vol?Math.round(p.H*VOL_FRAC):0);
+      const{min:minP_,max:maxP_}=getMinMax(p);
+      const priceRange_=maxP_-minP_;
+      const cursorPrice=priceRange_>0&&p.cy>=0&&p.cy<=priceH_?minP_+priceRange_*(1-p.cy/priceH_):-1;
+      if(newT!==globalCrossTime||cursorPrice!==globalCrossPrice){
+        globalCrossTime=newT;
+        globalCrossPrice=cursorPrice;
+        panels.forEach(op=>{ if(op!==p&&op.data.length) renderPanel(op); });
+      }
+      renderPanel(p);
+    });
+    // Right-click to show OHLCV tooltip
+    wrap.addEventListener('contextmenu',evt=>{
+      evt.preventDefault();
+      const r=wrap.getBoundingClientRect();
+      const mx=evt.clientX-r.left;
+      const chartW=p.W-p.PRICE_W;
+      const vs=Math.max(0,Math.min(p.viewStart,p.data.length-p.viewBars));
+      const bw=chartW/Math.max(Math.min(p.viewBars,p.data.length-vs)+6,1);
+      const bi=Math.max(0,Math.min(p.data.length-vs-1,Math.round(mx/bw)));
+      const bar=p.data[vs+bi];
+      if(bar) showOHLCVTip(p,bar,evt.clientX,evt.clientY);
+    });
+
+    wrap.addEventListener('mouseleave',()=>{
+      p.cx=-1;p.cy=-1;
+      globalCrossTime=-1; globalCrossPrice=-1;
+      panels.forEach(op=>{ if(op!==p&&op.data.length) renderPanel(op); });
+      renderPanel(p);hideOHLCVTip(i);
+    });
+
+    // Double-click chart
+    wrap.addEventListener('dblclick',evt=>{
+      evt.preventDefault(); evt.stopPropagation();
+      if(!p.data||!p.data.length) return;
+      
+      // If this is a DAILY/WEEKLY panel, switch to 5m intraday for that candle's date
+      if(p.tf==='D'||p.tf==='W'){
+        const r=wrap.getBoundingClientRect();
+        const mx=evt.clientX-r.left;
+        const chartW=p.W-p.PRICE_W;
+        const vs=Math.max(0,Math.min(p.viewStart,p.data.length-p.viewBars));
+        const bw=chartW/Math.max(Math.min(p.viewBars,p.data.length-vs)+6,1);
+        const bi=Math.max(0,Math.min(p.data.length-vs-1,Math.round(mx/bw)));
+        const bar=p.data[vs+bi];
+        if(bar&&bar.time){
+          const dateStr=typeof bar.time==='string'?bar.time:fmtDate(new Date(bar.time*1000));
+          // Store original TF/dates so user can go back
+          p._prevTf=p.tf; p._prevStart=p.startDate; p._prevEnd=p.endDate;
+          // Load from day before to day after
+          const clickedD=new Date(dateStr+'T12:00:00Z');
+          const prevD=new Date(clickedD); prevD.setUTCDate(prevD.getUTCDate()-1);
+          const nextD=new Date(clickedD); nextD.setUTCDate(nextD.getUTCDate()+1);
+          const fromStr=fmtDate(prevD);
+          const toStr=fmtDate(nextD);
+          p.tf='5'; p.startDate=fromStr; p.endDate=toStr;
+          // Update the UI inputs
+          const panelDiv=document.getElementById('panel-'+i);
+          panelDiv.querySelectorAll('.tf-btn').forEach(b=>{b.classList.toggle('active',b.dataset.tf==='5');});
+          document.getElementById('from-'+i).value=fromStr;
+          document.getElementById('to-'+i).value=toStr;
+          toast('📈 '+symbol+' 5m — '+fromStr+' → '+toStr+' (dbl-click TF to go back)');
+          loadPanel(i);
+          return;
+        }
+      }
+      
+      // Otherwise: fill stop price input
+      const stopInput=document.getElementById('pct-stop-input');
+      if(!stopInput) return;
+      const r=wrap.getBoundingClientRect();
+      const my=evt.clientY-r.top;
+      const volH=p.inds.vol?Math.round(p.H*VOL_FRAC):0;
+      const priceH=p.H-p.TIME_H-volH;
+      if(my>priceH||my<0) return;
+      const{min,max}=getMinMax(p);
+      const pad=(max-min)*0.15||(min*0.02);
+      const maxP=max+pad, minP=Math.max(0,min-pad);
+      const price=maxP-(my/priceH)*(maxP-minP);
+      if(price>0){
+        stopInput.value=price.toFixed(2);
+        stopInput.style.borderColor='#facc15';
+        stopInput.style.background='#2a2000';
+        setTimeout(()=>{stopInput.style.borderColor='';stopInput.style.background='';},600);
+        // Show brief confirmation
+        const dblToast=document.createElement('div');
+        dblToast.textContent='STOP → $'+price.toFixed(2);
+        dblToast.style.cssText='position:fixed;top:80px;left:50%;transform:translateX(-50%);background:#facc15;color:#000;padding:4px 12px;border-radius:4px;font-size:11px;font-weight:700;z-index:9999;';
+        document.body.appendChild(dblToast);
+        setTimeout(()=>dblToast.remove(),800);
+      }
+    });
+
+    wrap.addEventListener('wheel',evt=>{
+      evt.preventDefault();
+      if(!p.data.length) return;
+      const delta=evt.deltaY>0?1:-1;
+      const newBars=Math.max(10,Math.min(p.data.length,Math.round(p.viewBars*(1+delta*0.12))));
+      const frac=p.cx/Math.max(p.W-p.PRICE_W,1);
+      const center=p.viewStart+frac*p.viewBars;
+      p.viewBars=newBars; p.viewStart=Math.round(center-frac*newBars);
+      clampView(p); renderPanel(p); updateScrollbar(p);
+    },{passive:false});
+
+    // Mouse down — trendline endpoint drag, chart drag, or tooltip hold
+    wrap.addEventListener('mousedown',evt=>{
+      if(evt.button!==0) return;
+      const r=wrap.getBoundingClientRect();
+      const mx=evt.clientX-r.left, my=evt.clientY-r.top;
+      const chartW=p.W-p.PRICE_W;
+      const volH=p.inds.vol?Math.round(p.H*VOL_FRAC):0;
+      const priceH=p.H-p.TIME_H-volH;
+      // Always check for trendline endpoint hit FIRST — takes priority over everything
+      if(mx<chartW && my<priceH){
+        const hit=findTLEndpoint(mx,my,p,chartW,priceH);
+        if(hit){p.tlDrag=hit; wrap.style.cursor='grabbing'; evt.preventDefault(); evt.stopPropagation(); return;}
+      }
+      p.mouseDown=true; p.mouseDownX=evt.clientX; p.mouseDownY=evt.clientY; p.mouseDownTime=Date.now();
+      if(!activeTool){
+        p.dragging=true; p.dragStartX=evt.clientX; p.dragViewStart=p.viewStart;
+        wrap.style.cursor='grabbing';
+      }
+      p._holdTimer=setTimeout(()=>{
+        if(p.mouseDown&&!p.dragging){
+          const r2=wrap.getBoundingClientRect();
+          const mx2=p.mouseDownX-r2.left;
+          const chartW2=p.W-p.PRICE_W;
+          const vs2=Math.max(0,Math.min(p.viewStart,Math.max(0,p.data.length-p.viewBars)));
+          const vlen2=Math.min(p.viewBars,p.data.length-vs2);
+          const barW2=chartW2/Math.max(vlen2+3,1);
+          const bi=Math.round(mx2/barW2);
+          const di=Math.max(0,Math.min(p.data.length-1,vs2+bi));
+          if(p.data[di]) showOHLCVTip(p,p.data[di],p.mouseDownX,p.mouseDownY);
+        }
+      },350);
+    });
+
+    window.addEventListener('mousemove',evt=>{
+      // Trendline endpoint drag
+      if(p.tlDrag){
+        const r=wrap.getBoundingClientRect();
+        const mx=evt.clientX-r.left, my=evt.clientY-r.top;
+        const chartW=p.W-p.PRICE_W;
+        const volH=p.inds.vol?Math.round(p.H*VOL_FRAC):0;
+        const priceH=p.H-p.TIME_H-volH;
+        const {min,max}=getMinMax(p);
+        const price=max-Math.max(0,Math.min(my,priceH))/priceH*(max-min);
+        const vs=Math.max(0,Math.min(p.viewStart,Math.max(0,p.data.length-p.viewBars)));
+        const ve2=Math.min(vs+p.viewBars,p.data.length);
+        const vlen=ve2-vs;
+        const barW=chartW/Math.max(vlen+6,1); // must match renderPanel RIGHT_PAD=6
+        const bi=Math.max(0,Math.min(vlen-1,Math.floor(mx/barW)));
+        const di=Math.max(0,Math.min(p.data.length-1,vs+bi));
+        const time=toUnix(p.data[di].time);
+        if(p.tlDrag.endpoint==='1'){p.tlDrag.ann.x1=time; p.tlDrag.ann.y1=price;}
+        else                        {p.tlDrag.ann.x2=time; p.tlDrag.ann.y2=price;}
+        renderPanel(p); return;
+      }
+      if(!p.dragging) return;
+      const dx=evt.clientX-p.dragStartX;
+      const chartW=p.W-p.PRICE_W;
+      p.viewStart=Math.round(p.dragViewStart-dx*(p.viewBars/Math.max(chartW,1)));
+      clampView(p); renderPanel(p); updateScrollbar(p);
+    });
+    window.addEventListener('mouseup',()=>{
+      if(p.tlDrag){p.tlDrag=null; wrap.style.cursor=''; renderAll(); return;}
+      if(p.dragging){p.dragging=false;wrap.style.cursor=activeTool?'crosshair':'';}
+      p.mouseDown=false; clearTimeout(p._holdTimer); hideOHLCVTip(i);
+    });
+
+    // Cursor: show grab when hovering near a trendline endpoint
+    wrap.addEventListener('mousemove',evt=>{
+      if(p.tlDrag) return;
+      const r=wrap.getBoundingClientRect();
+      const mx=evt.clientX-r.left, my=evt.clientY-r.top;
+      const chartW=p.W-p.PRICE_W;
+      const volH=p.inds.vol?Math.round(p.H*VOL_FRAC):0;
+      const priceH=p.H-p.TIME_H-volH;
+      if(mx<chartW&&my<priceH){
+        const hit=findTLEndpoint(mx,my,p,chartW,priceH);
+        if(hit){wrap.style.cursor='grab'; return;}
+      }
+      wrap.style.cursor=activeTool?'crosshair':'';
+    });
+
+    // Click for annotation
+    wrap.addEventListener('click',evt=>{
+      if(!activeTool||!p.data.length) return;
+      const r=wrap.getBoundingClientRect();
+      const mx=evt.clientX-r.left, my=evt.clientY-r.top;
+      const chartW=p.W-p.PRICE_W;
+      const volH=p.inds.vol?Math.round(p.H*VOL_FRAC):0;
+      const priceH=p.H-p.TIME_H-volH;
+      if(mx>chartW||my>priceH+volH) return;
+      if(activeTool==='del'){handleDelete(mx,my,p);return;}
+      if(activeTool==='edit'){handleEdit(mx,my,p,evt);return;}
+      handleAnnotationClick(i,mx,my,chartW,priceH,p);
+    });
+
+    // Scrollbar drag
+    const sbThumb=document.getElementById(`sb-thumb-${i}`);
+    const sbTrack=document.getElementById(`sb-track-${i}`);
+    sbThumb.addEventListener('mousedown',evt=>{
+      evt.stopPropagation();
+      p.sbDragging=true; p.sbDragStartX=evt.clientX; p.sbDragViewStart=p.viewStart;
+      sbThumb.classList.add('dragging');
+    });
+    sbTrack.addEventListener('click',evt=>{
+      if(p.sbDragging) return;
+      const r=sbTrack.getBoundingClientRect();
+      const frac=(evt.clientX-r.left)/r.width;
+      p.viewStart=Math.round(frac*Math.max(0,p.data.length-p.viewBars));
+      clampView(p); renderPanel(p); updateScrollbar(p);
+    });
+    window.addEventListener('mousemove',evt=>{
+      if(!p.sbDragging) return;
+      const track=document.getElementById(`sb-track-${i}`);
+      const trackW=track.clientWidth;
+      const thumbW=sbThumb.offsetWidth;
+      const maxOff=trackW-thumbW;
+      const dx=evt.clientX-p.sbDragStartX;
+      const dView=Math.round((dx/maxOff)*Math.max(1,p.data.length-p.viewBars));
+      p.viewStart=p.sbDragViewStart+dView;
+      clampView(p); renderPanel(p); updateScrollbar(p);
+    });
+    window.addEventListener('mouseup',()=>{
+      if(p.sbDragging){p.sbDragging=false;sbThumb.classList.remove('dragging');}
+    });
+
+    // Arrow buttons for candle-by-candle scrolling
+    document.getElementById(`sa-left-${i}`).addEventListener('click',(e)=>{
+      e.stopPropagation();
+      if(!p.data||!p.data.length) return;
+      p.viewStart=Math.max(0,(p.viewStart||0)-1);
+      clampView(p); renderPanel(p); updateScrollbar(p);
+    });
+    document.getElementById(`sa-right-${i}`).addEventListener('click',(e)=>{
+      e.stopPropagation();
+      if(!p.data||!p.data.length) return;
+      p.viewStart=Math.min(Math.max(0,p.data.length-(p.viewBars||50)),(p.viewStart||0)+1);
+      clampView(p); renderPanel(p); updateScrollbar(p);
+    });
+
+    const ro=new ResizeObserver(()=>resizePanel(p));
+    ro.observe(wrap);
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+//  ANNOTATION HANDLING
+// ══════════════════════════════════════════════════════════
+function handleAnnotationClick(panelIdx,mx,my,chartW,priceH,p){
+  const vs2=Math.max(0,Math.min(p.viewStart,Math.max(0,p.data.length-p.viewBars))); const vlen2=Math.min(p.viewBars,p.data.length-vs2); const barW=chartW/Math.max(vlen2+6,1);
+  const vs=Math.max(0,Math.min(p.viewStart,p.data.length-p.viewBars));
+  const bi=Math.floor(mx/barW);
+  const di=Math.max(0,Math.min(p.data.length-1,vs+bi));
+  const{min,max}=getMinMax(p);
+  const price=min+(max-min)*(1-my/priceH);
+  const time=toUnix(p.data[di].time);
+
+  if(activeTool==='trendline'||activeTool.startsWith('box_')||activeTool.startsWith('hl_')||activeTool==='fib_ret'){
+    if(!toolStep||toolStep==='first'){
+      toolAnchor={panelIdx,time,price,rawX:mx,rawY:my};
+      toolStep='second';
+      updateHint(activeTool==='fib_ret'?'FIB: click LOW point':'Click END point');
+    } else {
+      const annObj={id:nextId++,type:activeTool,panelIdx:toolAnchor.panelIdx,x1:toolAnchor.time,y1:toolAnchor.price,x2:time,y2:price};
+      if(activeTool.startsWith('hl_')) annObj.opacity=(parseInt(document.getElementById('hl-opacity').value)||15)/100;
+      annotations.push(annObj);
+      toolStep='first'; toolAnchor=null;
+      updateHint(activeTool==='fib_ret'?'FIB: click HIGH point → click LOW point':'Click START point');
+      renderAll(); toast(`✓ ${activeTool} placed`);
+    }
+  } else if(activeTool.startsWith('text_')){
+    pendingText={panelIdx,time,price,color:activeTool};
+    const wrap=document.getElementById(`cw-${panelIdx}`);
+    const wr=wrap.getBoundingClientRect();
+    showTextPopup(wr.left+mx,wr.top+my-60);
+  } else if(activeTool==='entry_arrow'||activeTool==='exit_arrow'||activeTool==='short_arrow'||activeTool==='cover_arrow'||activeTool==='stop_line'||activeTool==='trail_stop'){
+    if(activeTool==='entry_arrow'||activeTool==='exit_arrow'||activeTool==='short_arrow'||activeTool==='cover_arrow'){
+      // Show % popup for entries and exits
+      pendingExec={type:activeTool,panelIdx,time,price};
+      const wrap=document.getElementById(`cw-${panelIdx}`);
+      const wr=wrap.getBoundingClientRect();
+      showPctPopup(wr.left+mx, wr.top+my-80, activeTool);
+    } else {
+      // Stops placed immediately, no % needed
+      annotations.push({id:nextId++,type:activeTool,panelIdx,x1:time,y1:price,label:price.toFixed(2),pct:100});
+      updateSimPnl(); renderAll();
+      const lbl=activeTool==='trail_stop'?'Trail Stop':'Stop';
+      toast(`✓ ${lbl} placed @ ${price.toFixed(2)}`);
+    }
+  }
+}
+
+function handleDelete(mx,my,p){
+  const chartW_=p.W-p.PRICE_W;
+  const vs=Math.max(0,Math.min(p.viewStart,p.data.length-p.viewBars));
+  const vlen=Math.min(p.viewBars,p.data.length-vs);
+  const barW=chartW_/Math.max(vlen+6,1);
+  const volH=p.inds.vol?Math.round(p.H*VOL_FRAC):0;
+  const priceH=p.H-p.TIME_H-volH;
+  const{min,max}=getMinMax(p);
+  function annTimeToX(t){
+    const ts=toUnix(t); let best=-1,bestD=Infinity;
+    for(let i=0;i<p.data.length;i++){
+      const d=Math.abs(toUnix(p.data[i].time)-ts);
+      if(d<bestD){bestD=d;best=i;}
+    }
+    if(best<0||bestD>86400*400) return null;
+    return(best-vs+0.5)*barW;
+  }
+  const pToY=price=>priceH-((price-min)/(max-min))*priceH;
+  for(let k=annotations.length-1;k>=0;k--){
+    if(isAnnNear(annotations[k],mx,my,p,annTimeToX,pToY)){
+      annotations.splice(k,1);
+      updateSimPnl();
+      renderAll(); toast('🗑 Annotation deleted'); return;
+    }
+  }
+  toast('⚠ Click closer to an annotation to delete it');
+}
+
+function handleEdit(mx,my,p,evt){
+  const chartW_=p.W-p.PRICE_W;
+  const vs=Math.max(0,Math.min(p.viewStart,p.data.length-p.viewBars));
+  const vlen=Math.min(p.viewBars,p.data.length-vs);
+  const barW=chartW_/Math.max(vlen+6,1);
+  const volH=p.inds.vol?Math.round(p.H*VOL_FRAC):0;
+  const priceH=p.H-p.TIME_H-volH;
+  const{min,max}=getMinMax(p);
+  function annTimeToX(t){
+    const ts=toUnix(t); let best=-1,bestD=Infinity;
+    for(let i=0;i<p.data.length;i++){
+      const d=Math.abs(toUnix(p.data[i].time)-ts);
+      if(d<bestD){bestD=d;best=i;}
+    }
+    if(best<0||bestD>86400*400) return null;
+    return(best-vs+0.5)*barW;
+  }
+  const pToY=price=>priceH-((price-min)/(max-min))*priceH;
+
+  // Find nearest exec annotation
+  let bestAnn=null, bestDist=Infinity;
+  for(const ann of annotations){
+    const isExec=ann.type==='entry_arrow'||ann.type==='exit_arrow'||ann.type==='short_arrow'||ann.type==='cover_arrow'||ann.type==='stop_line'||ann.type==='trail_stop';
+    if(!isExec) continue;
+    if(isAnnNear(ann,mx,my,p,annTimeToX,pToY)){
+      const x1=annTimeToX(ann.x1); if(x1==null) continue;
+      const y1=pToY(ann.y1);
+      const dist=Math.hypot(mx-x1,my-y1);
+      if(dist<bestDist){ bestDist=dist; bestAnn=ann; }
+    }
+  }
+
+  if(!bestAnn){
+    toast('⚠ Click closer to an annotation to edit it');
+    return;
+  }
+
+  // For stop_line / trail_stop — edit price directly with a prompt
+  if(bestAnn.type==='stop_line'||bestAnn.type==='trail_stop'){
+    const newP=prompt(`Edit ${bestAnn.type==='trail_stop'?'Trail Stop':'Stop'} price:`,bestAnn.y1.toFixed(4));
+    if(newP===null) return;
+    const np=parseFloat(newP);
+    if(isNaN(np)){toast('Invalid price',true);return;}
+    bestAnn.y1=Math.round(np*100)/100;
+    bestAnn.label=bestAnn.y1.toFixed(2);
+    updateSimPnl(); renderAll();
+    toast(`✎ Stop updated → ${bestAnn.y1.toFixed(2)}`);
+    return;
+  }
+
+  // For entry/exit/short/cover — open pct popup pre-filled
+  const wrap=document.getElementById(`cw-${p.idx}`);
+  const wr=wrap.getBoundingClientRect();
+  pendingExec={
+    type:bestAnn.type,
+    panelIdx:bestAnn.panelIdx,
+    time:bestAnn.x1,
+    price:bestAnn.y1,
+    _editId:bestAnn.id,
+  };
+  showPctPopup(wr.left+mx, wr.top+my-80, bestAnn.type, bestAnn);
+}
+
+function showTextPopup(sx,sy){
+  const pop=document.getElementById('text-popup');
+  const inp=document.getElementById('text-input');
+  pop.style.left=Math.min(sx,window.innerWidth-260)+'px';
+  pop.style.top=Math.max(10,sy)+'px';
+  pop.classList.add('show');
+  inp.value=''; setTimeout(()=>inp.focus(),50);
+}
+
+function showPctPopup(sx,sy,toolType,editAnn){
+  const pop=document.getElementById('pct-popup');
+  // Ensure popup doesn't overlay topbar (min 60px from top)
+  sy=Math.max(60, sy);
+  // Keep away from right edge if backtest sidebar is open
+  const sbOpen=document.getElementById('bt-sidebar')?.classList.contains('open');
+  const maxLeft=window.innerWidth-(sbOpen?560:280);
+  sx=Math.min(sx, maxLeft);
+  const title=document.getElementById('pct-popup-title');
+  const hint=document.getElementById('pct-popup-hint');
+  const stopRow=document.getElementById('pct-stop-label');
+  const stopInp=document.getElementById('pct-stop-input');
+  const pnlLabel=document.getElementById('pct-pnlrisk-label');
+  const pnlInp=document.getElementById('pct-pnlrisk-input');
+  const modeNorm=document.getElementById('pct-mode-normal');
+  const modePnl=document.getElementById('pct-mode-pnl');
+  const rebuyBtn=document.getElementById('pct-rebuy');
+  const priceLabel=document.getElementById('pct-price-label');
+  const priceInp=document.getElementById('pct-price-input');
+  const okBtn=document.getElementById('pct-ok');
+  const isEntry=toolType==='entry_arrow'||toolType==='short_arrow';
+  const isShort=toolType==='short_arrow';
+  const isCover=toolType==='cover_arrow';
+  const isEditing=!!editAnn;
+  const col=toolType==='entry_arrow'?'#ff9800':toolType==='short_arrow'?'#ff5252':toolType==='cover_arrow'?'#00e676':'#40c4ff';
+
+  const toolLabel=toolType==='entry_arrow'?'LONG':toolType==='short_arrow'?'SHORT':toolType==='cover_arrow'?'COVER':'SELL';
+  title.textContent=isEditing?'EDIT '+toolLabel:toolLabel;
+  title.style.color=isEditing?'#fbbf24':col;
+  pop.style.borderColor=isEditing?'#fbbf24':col;
+  const btnCol=isEditing?'#fbbf24':col;
+  pop.querySelectorAll('button:not(.cancel):not(#pct-rebuy):not(#pct-mode-normal):not(#pct-mode-pnl)').forEach(b=>{b.style.borderColor=btnCol;b.style.color=btnCol;});
+  okBtn.textContent=isEditing?'UPDATE':'PLACE';
+
+  // Show price input when editing
+  priceLabel.style.display=isEditing?'':'none';
+  priceInp.style.display=isEditing?'':'none';
+  if(isEditing) priceInp.value=editAnn.y1.toFixed(4);
+
+  const ev=isEntry?'':'none';
+  stopRow.style.display=ev; stopInp.style.display=ev;
+  modeNorm.style.display=ev; modePnl.style.display=ev;
+  rebuyBtn.style.display=ev;
+  pnlLabel.style.display='none'; pnlInp.style.display='none';
+  // Update rebuy label and all dynamic button colors to match tool type
+  rebuyBtn.textContent='\u21ba '+( toolType==='entry_arrow'?'RE-LONG':toolType==='short_arrow'?'RE-SHORT':toolType==='cover_arrow'?'RE-COVER':'RE-SELL');
+  rebuyBtn.style.borderColor=col; rebuyBtn.style.color=col;
+  modeNorm.style.background=col+'18'; modeNorm.style.color=col; modeNorm.style.borderColor=col;
+  modePnl.style.background='none'; modePnl.style.color='#4a6080'; modePnl.style.borderColor='#2a3050';
+  let pnlMode=false;
+
+  if(isEntry){
+    if(isEditing&&editAnn.stopPrice!=null){
+      stopInp.value=editAnn.stopPrice.toFixed(4);
+    } else {
+      const lastStop=annotations.filter(a=>a.type==='stop_line'||a.type==='trail_stop').slice(-1)[0];
+      stopInp.value=lastStop?lastStop.y1.toFixed(4):'';
+    }
+  }
+
+  function getCurrentPosition(){
+    const ep2=Math.round((pendingExec?.price||0)*100)/100;
+    const editId=pendingExec?._editId||null;
+    // When editing, also find the paired auto-stop to exclude
+    const editAnnObj=editId?annotations.find(a=>a.id===editId):null;
+    const editAutoStopId=editAnnObj?annotations.find(a=>a._autoStop&&a.x1===editAnnObj.x1&&a.type==='stop_line')?.id:null;
+    const allExec=annotations
+      .filter(a=>(a.type==='entry_arrow'||a.type==='exit_arrow'||a.type==='short_arrow'||a.type==='cover_arrow'||a.type==='stop_line'||a.type==='trail_stop')&&a.id!==editId&&a.id!==editAutoStopId)
+      .sort((a,b)=>a.x1-b.x1);
+    let legs=[],lockedPnl=0,lastExitSh=0,lastExitPx=0,isLongPos=null;
+    for(const ea of allExec){
+      if(ea.type==='entry_arrow'||ea.type==='short_arrow'){
+        let sp=ea.stopPrice??null;
+        if(sp==null){const ps=allExec.filter(s=>(s.type==='stop_line'||s.type==='trail_stop')&&s.x1<=ea.x1).slice(-1)[0];if(ps)sp=ps.y1;}
+        const esPct=(ea.pct??100),esRisk=getRiskAmount()*(esPct/100);
+        const eSh=legs.reduce((s,l)=>s+l.shares,0);
+        const eAvg=eSh>0?legs.reduce((s,l)=>s+l.entryPrice*l.shares,0)/eSh:0;
+        if(sp!=null){
+          const d=sp-ea.y1;
+          const sR2=(sp>ea.y1)?esRisk:-esRisk;
+          const sh=d===0?0:Math.max(0,Math.round((sR2-eSh*(sp-eAvg))/d));
+          if(isLongPos===null)isLongPos=ea.y1>sp;
+          legs.push({entryPrice:ea.y1,shares:sh});
+          lastExitSh=0; // reset: count exits only since this (latest) entry
+        }
+      } else if(ea.type==='exit_arrow'||ea.type==='cover_arrow'){
+        const ep2b=(ea.pct??100),tot=legs.reduce((s,l)=>s+l.shares,0);
+        const closedThisExit=Math.round(tot*(ep2b/100));
+        lastExitSh+=closedThisExit; // accumulate all exits since last entry
+        lastExitPx=ea.y1;
+        for(let i=0;i<legs.length;i++){
+          const take=Math.round(legs[i].shares*(ep2b/100));
+          const pnl=isLongPos===false?(legs[i].entryPrice-ea.y1)*take:(ea.y1-legs[i].entryPrice)*take;
+          lockedPnl+=pnl; legs[i]={...legs[i],shares:legs[i].shares-take};
+        }
+        legs=legs.filter(l=>l.shares>0);
+      }
+    }
+    const exSh=legs.reduce((s,l)=>s+l.shares,0);
+    const exAvg=exSh>0?legs.reduce((s,l)=>s+l.entryPrice*l.shares,0)/exSh:0;
+    return{exSh,exAvg,lockedPnl,lastExitSh,lastExitPx,isLongPos,ep:ep2};
+  }
+
+  function updateHint(){
+    const s2=parseFloat(stopInp.value);
+    const pctVal=Math.max(0,parseFloat(document.getElementById('pct-input').value)||0);
+    const pos=getCurrentPosition();
+    const{exSh,exAvg,lockedPnl,ep:ep3}=pos;
+    if(!isEntry){hint.textContent='% of remaining position to close';return;}
+    if(!s2||!ep3){hint.textContent='enter stop to see share size';return;}
+    let riskAlloc;
+    if(pnlMode){
+      const baseExtra=Math.max(0,parseFloat(pnlInp.value)||0);
+      riskAlloc=lockedPnl+getRiskAmount()*(baseExtra/100);
+      if(riskAlloc<=0){hint.textContent='PnL locked: $'+lockedPnl.toFixed(2)+' — sell first';return;}
+    } else {
+      riskAlloc=getRiskAmount()*(pctVal/100);
+    }
+    const denom=s2-ep3;
+    const sRiskH=(s2>ep3)?riskAlloc:-riskAlloc;
+    const sh=denom===0?0:Math.max(0,Math.round((sRiskH-exSh*(s2-exAvg))/denom));
+    const totalAfter=exSh+sh;
+    const newAvg=totalAfter>0?(exSh*exAvg+sh*ep3)/totalAfter:ep3;
+    let msg=sh.toLocaleString()+'sh';
+    if(exSh>0)msg+=' → avg '+newAvg.toFixed(2);
+    msg+=' | $'+riskAlloc.toFixed(0)+' risk';
+    if(pnlMode)msg+=' (locked $'+lockedPnl.toFixed(0)+')';
+    // BP check
+    const totalAfterH=exSh+sh;
+    const newAvgH=totalAfterH>0?(exSh*exAvg+sh*ep3)/totalAfterH:ep3;
+    const posValH=totalAfterH*newAvgH;
+    const bpH=getBuyingPower();
+    if(bpH && posValH>bpH){
+      msg+=' ⚠ EXCEEDS BP ($'+posValH.toLocaleString(undefined,{maximumFractionDigits:0})+' > $'+bpH.toLocaleString(undefined,{maximumFractionDigits:0})+')';
+      hint.style.color='#ef5350';
+    } else {
+      hint.style.color='';
+    }
+    hint.textContent=msg;
+  }
+
+  rebuyBtn.onclick=()=>{
+    const pos=getCurrentPosition();
+    const{exSh,exAvg,lastExitSh}=pos;
+    const s2=parseFloat(stopInp.value);
+    const ep4=Math.round((pendingExec?.price||0)*100)/100;
+    if(!s2||!ep4||lastExitSh<=0){hint.textContent='no prior exit to rebuy';return;}
+    // Solve: (-ra - exSh*(s2-exAvg))/(s2-ep4) = lastExitSh  →  ra = -lastExitSh*(s2-ep4) - exSh*(s2-exAvg)
+    const isShortRB=(s2>ep4);
+    const neededRisk=isShortRB?(lastExitSh*(s2-ep4)+exSh*(s2-exAvg)):(-lastExitSh*(s2-ep4)-exSh*(s2-exAvg));
+    const pct=Math.round((neededRisk/getRiskAmount())*100);
+    document.getElementById('pct-input').value=Math.max(0,pct);
+    pnlMode=false;
+    pnlLabel.style.display='none'; pnlInp.style.display='none';
+    modeNorm.style.background=col+'18'; modeNorm.style.color=col; modeNorm.style.borderColor=col;
+    modePnl.style.background='none'; modePnl.style.color='#4a6080'; modePnl.style.borderColor='#2a3050';
+    updateHint();
+  };
+
+  modeNorm.onclick=()=>{
+    pnlMode=false; pnlLabel.style.display='none'; pnlInp.style.display='none';
+    modeNorm.style.background=col+'18'; modeNorm.style.color=col; modeNorm.style.borderColor=col;
+    modePnl.style.background='none'; modePnl.style.color='#4a6080'; modePnl.style.borderColor='#2a3050';
+    updateHint();
+  };
+  modePnl.onclick=()=>{
+    pnlMode=true; pnlLabel.style.display=''; pnlInp.style.display='';
+    modePnl.style.background='#a78bfa18'; modePnl.style.color='#a78bfa'; modePnl.style.borderColor='#a78bfa';
+    modeNorm.style.background='none'; modeNorm.style.color='#4a6080'; modeNorm.style.borderColor='#2a3050';
+    if(!pnlInp.value) pnlInp.value='0';
+    updateHint();
+  };
+
+  stopInp.oninput=updateHint;
+  priceInp.oninput=()=>{
+    // Update pendingExec price when user edits
+    if(pendingExec&&isEditing){
+      const v=parseFloat(priceInp.value);
+      if(!isNaN(v)) pendingExec.price=v;
+    }
+    updateHint();
+  };
+  document.getElementById('pct-input').oninput=updateHint;
+  pnlInp.oninput=updateHint;
+
+  pop.style.left=Math.min(sx,window.innerWidth-280)+'px';
+  pop.style.top=Math.max(10,sy)+'px';
+  pop.classList.add('show');
+  if(isEditing){
+    document.getElementById('pct-input').value=editAnn.pct??100;
+    // Restore PNL mode if annotation was in PNL mode
+    if(editAnn.pnlMode){
+      pnlMode=true; pnlLabel.style.display=''; pnlInp.style.display='';
+      pnlInp.value=editAnn.pnlBaseExtra||0;
+      modePnl.style.background='#a78bfa18'; modePnl.style.color='#a78bfa'; modePnl.style.borderColor='#a78bfa';
+      modeNorm.style.background='none'; modeNorm.style.color='#4a6080'; modeNorm.style.borderColor='#2a3050';
+    }
+    setTimeout(()=>{priceInp.focus();priceInp.select();},50);
+  } else {
+    document.getElementById('pct-input').value='100';
+    setTimeout(()=>{document.getElementById('pct-input').focus();document.getElementById('pct-input').select();},50);
+  }
+  updateHint();
+}
+function commitPctExec(){
+  if(!pendingExec) return;
+  const _pctRaw=document.getElementById('pct-input').value;
+const pct=Math.max(0,_pctRaw===''||_pctRaw==null?100:parseInt(_pctRaw));
+  const{type,panelIdx,time}=pendingExec;
+  const isEditing=!!pendingExec._editId;
+  // For edits, use the price input; for new placements, use the clicked price
+  let price;
+  if(isEditing){
+    const editedPrice=parseFloat(document.getElementById('pct-price-input').value);
+    price=isNaN(editedPrice)?Math.round(pendingExec.price*100)/100:Math.round(editedPrice*100)/100;
+  } else {
+    price=Math.round(pendingExec.price*100)/100;
+  }
+  let stopPrice=null;
+  let pnlMode=false, pnlBaseExtra=0;
+  const isEntryType=type==='entry_arrow'||type==='short_arrow';
+  if(isEntryType){
+    const sv=parseFloat(document.getElementById('pct-stop-input').value);
+    stopPrice=isNaN(sv)?null:Math.round(sv*100)/100;
+    // Check if PNL mode was active (modePnl has active styling)
+    const modePnlBtn=document.getElementById('pct-mode-pnl');
+    if(modePnlBtn&&modePnlBtn.style.color==='rgb(167, 139, 250)'){
+      pnlMode=true;
+      pnlBaseExtra=Math.max(0,parseFloat(document.getElementById('pct-pnlrisk-input').value)||0);
+    }
+  }
+  const lbl=`${price.toFixed(2)} (${pct}%)`;
+
+  if(isEditing){
+    // ── UPDATE existing annotation in-place ──
+    const editId=pendingExec._editId;
+    const ann=annotations.find(a=>a.id===editId);
+    if(ann){
+      ann.y1=price;
+      ann.label=lbl;
+      ann.pct=pct;
+      if(isEntryType){
+        ann.stopPrice=stopPrice;
+        ann.pnlMode=pnlMode;
+        ann.pnlBaseExtra=pnlBaseExtra;
+        // Update paired auto-stop if exists
+        const autoStop=annotations.find(a=>a._autoStop&&a.x1===ann.x1&&a.type==='stop_line');
+        if(autoStop&&stopPrice!=null){
+          autoStop.y1=stopPrice;
+          autoStop.label=stopPrice.toFixed(2);
+        } else if(!autoStop&&stopPrice!=null){
+          // Create new auto-stop
+          annotations.push({id:nextId++,type:'stop_line',panelIdx:ann.panelIdx,x1:ann.x1,y1:stopPrice,label:stopPrice.toFixed(2),pct:100,_autoStop:true});
+        }
+      }
+    }
+    updateSimPnl(); renderAll();
+    const tLabel=type==='entry_arrow'?'Long':type==='short_arrow'?'Short':type==='cover_arrow'?'Cover':'Sell';
+    toast(`✎ Updated ${tLabel} → ${price.toFixed(2)} ${pct}%`);
+  } else {
+    // ── NEW annotation ──
+    annotations.push({id:nextId++,type,panelIdx,x1:time,y1:price,label:lbl,pct,stopPrice,pnlMode,pnlBaseExtra});
+    if(isEntryType&&stopPrice!=null){
+      annotations.push({id:nextId++,type:'stop_line',panelIdx,x1:time,y1:stopPrice,label:stopPrice.toFixed(2),pct:100,_autoStop:true});
+    }
+    updateSimPnl(); renderAll();
+    const tLabel=type==='entry_arrow'?'Long':type==='short_arrow'?'Short':type==='cover_arrow'?'Cover':'Sell';
+    toast(`✓ ${tLabel} @ ${price.toFixed(2)} ${pct}%`);
+  }
+  pendingExec=null;
+}
+
+document.getElementById('pct-ok').addEventListener('click',()=>{
+  document.getElementById('pct-popup').classList.remove('show');
+  commitPctExec();
+});
+document.getElementById('pct-cancel').addEventListener('click',(e)=>{
+  e.stopPropagation(); // Don't propagate to fullscreen backdrop
+  document.getElementById('pct-popup').classList.remove('show');
+  pendingExec=null;
+});
+document.getElementById('pct-input').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    // Tab to stop if visible and empty, else commit
+    const stopInp=document.getElementById('pct-stop-input');
+    if(stopInp.style.display!=='none'&&!stopInp.value){
+      stopInp.focus(); stopInp.select();
+    } else {
+      document.getElementById('pct-ok').click();
+    }
+  }
+  if(e.key==='Escape'){e.stopPropagation(); document.getElementById('pct-cancel').click();}
+});
+document.getElementById('pct-price-input').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    document.getElementById('pct-input').focus(); document.getElementById('pct-input').select();
+  }
+  if(e.key==='Escape'){e.stopPropagation(); document.getElementById('pct-cancel').click();}
+});
+document.getElementById('pct-stop-input').addEventListener('keydown',e=>{
+  if(e.key==='Enter') document.getElementById('pct-ok').click();
+  if(e.key==='Escape'){e.stopPropagation(); document.getElementById('pct-cancel').click();}
+});
+document.getElementById('text-ok').addEventListener('click',()=>{
+  const txt=document.getElementById('text-input').value.trim();
+  if(txt&&pendingText){
+    annotations.push({id:nextId++,type:pendingText.color,panelIdx:pendingText.panelIdx,x1:pendingText.time,y1:pendingText.price,text:txt});
+    renderAll(); toast('✓ Text placed');
+  }
+  document.getElementById('text-popup').classList.remove('show'); pendingText=null;
+});
+document.getElementById('text-cancel').addEventListener('click',()=>{
+  document.getElementById('text-popup').classList.remove('show'); pendingText=null;
+});
+document.getElementById('text-input').addEventListener('keydown',e=>{
+  if(e.key==='Enter') document.getElementById('text-ok').click();
+  if(e.key==='Escape'){e.stopPropagation(); document.getElementById('text-cancel').click();}
+});
+
+// ══════════════════════════════════════════════════════════
+//  PANEL UTILS
+// ══════════════════════════════════════════════════════════
+function getMinMax(p){
+  const vs=Math.max(0,Math.min(p.viewStart,p.data.length-p.viewBars));
+  const ve=Math.min(vs+p.viewBars,p.data.length);
+  let min=Infinity,max=-Infinity;
+  for(let i=vs;i<ve;i++){if(p.data[i].low<min)min=p.data[i].low;if(p.data[i].high>max)max=p.data[i].high;}
+  const pad=(max-min)*0.15||min*0.02; // must match renderPanel padding exactly
+  return{min:min-pad,max:max+pad};
+}
+function clampView(p){
+  p.viewBars=Math.max(5,Math.min(p.viewBars,p.data.length));
+  p.viewStart=Math.max(0,Math.min(p.viewStart,Math.max(0,p.data.length-p.viewBars)));
+}
+function resizePanel(p){
+  const wrap=document.getElementById(`cw-${p.idx}`);
+  if(!wrap) return;
+  const w=wrap.clientWidth,h=wrap.clientHeight;
+  if(w<=0||h<=0) return;
+  p.W=w; p.H=h;
+  const dpr=window.devicePixelRatio||1;
+  p.canvas.style.width=w+'px'; p.canvas.style.height=h+'px';
+  p.canvas.width=Math.round(w*dpr); p.canvas.height=Math.round(h*dpr);
+  p.ctx.scale(dpr,dpr);
+  renderPanel(p); updateScrollbar(p);
+}
+function renderAll(){panels.forEach(p=>{if(p.data.length){renderPanel(p);updateScrollbar(p);}});}
+
+// ══════════════════════════════════════════════════════════
+//  TOOLBAR VISIBILITY TOGGLE
+// ══════════════════════════════════════════════════════════
+document.getElementById('toggle-bars-btn').addEventListener('click',()=>{
+  barsVisible=!barsVisible;
+  document.getElementById('toggle-bars-btn').textContent=barsVisible?'≡ HIDE BARS':'≡ SHOW BARS';
+  panels.forEach((_,i)=>{
+    ['indrow-','pdr-'].forEach(pfx=>{
+      const el=document.getElementById(pfx+i);
+      if(el) el.style.display=barsVisible?'':'none';
+    });
+  });
+  setTimeout(()=>panels.forEach(p=>resizePanel(p)),50);
+});
+
+document.getElementById('price-line-btn').addEventListener('click',()=>{
+  showPriceLine=!showPriceLine;
+  const btn=document.getElementById('price-line-btn');
+  btn.classList.toggle('off',!showPriceLine);
+  btn.textContent=showPriceLine?'— PRICE LINE':'— PRICE LINE OFF';
+  renderAll();
+});
+
+document.getElementById('adj-btn').addEventListener('click',()=>{
+  useAdjusted=!useAdjusted;
+  // Sync all panels to global setting
+  panels.forEach(p=>{ p.adjusted=useAdjusted; });
+  // Update all per-panel ADJ buttons
+  document.querySelectorAll('.adj-panel-btn').forEach(b=>{
+    b.classList.toggle('on',useAdjusted);
+    b.style.color=useAdjusted?'#f59e0b':'#4a5580';
+    b.style.borderColor=useAdjusted?'#f59e0b':'#4a5580';
+    b.style.textDecoration=useAdjusted?'':'line-through';
+  });
+  const btn=document.getElementById('adj-btn');
+  btn.classList.toggle('unadj',!useAdjusted);
+  btn.textContent=useAdjusted?'ADJ':'UNADJ';
+  btn.style.borderColor=useAdjusted?'#f59e0b':'#4a5580';
+  btn.style.color=useAdjusted?'#f59e0b':'#4a5580';
+  loadAll();
+  toast(useAdjusted?'Adjusted prices (split-adjusted)':'Unadjusted prices (raw)');
+});
+
+document.getElementById('clean-btn').addEventListener('click',()=>{
+  cleanPrints=!cleanPrints;
+  const btn=document.getElementById('clean-btn');
+  btn.classList.toggle('on',cleanPrints);
+  btn.style.textDecoration=cleanPrints?'none':'line-through';
+  btn.style.borderColor=cleanPrints?'#e879f9':'#4a5580';
+  btn.style.color=cleanPrints?'#e879f9':'#4a5580';
+  loadAll();
+  toast(cleanPrints?'Clean prints ON — filtering suspicious bars':'Clean prints OFF — raw data');
+});
+
+// ══════════════════════════════════════════════════════════
+//  FULLSCREEN
+// ══════════════════════════════════════════════════════════
+function toggleFullscreen(i){
+  const div=document.getElementById(`panel-${i}`);
+  const btn=document.getElementById(`expand-${i}`);
+  const bd=document.getElementById('fs-backdrop');
+  if(fullscreenPanel===i){
+    div.classList.remove('fullscreen-panel');
+    div.style.right=''; // clear inline style
+    div.style.top=''; div.style.left=''; div.style.bottom='';
+    btn.textContent='⛶'; bd.classList.remove('show'); fullscreenPanel=null;
+    // Resize ALL panels after exiting fullscreen
+    setTimeout(()=>panels.forEach(p=>resizePanel(p)),80);
+  } else {
+    if(fullscreenPanel!==null){
+      const prev=document.getElementById(`panel-${fullscreenPanel}`);
+      prev.classList.remove('fullscreen-panel');
+      prev.style.right=''; prev.style.top=''; prev.style.left=''; prev.style.bottom='';
+      document.getElementById(`expand-${fullscreenPanel}`).textContent='⛶';
+    }
+    div.classList.add('fullscreen-panel');
+    btn.textContent='✕'; bd.classList.add('show'); fullscreenPanel=i;
+    adjustFullscreenRight();
+  }
+}
+
+// ── Fullscreen panel auto-adjust for sidebar/scan panel ──
+function adjustFullscreenRight(){
+  if(fullscreenPanel===null) return;
+  const fp=document.getElementById('panel-'+fullscreenPanel);
+  if(!fp||!fp.classList.contains('fullscreen-panel')) return;
+  const btOpen=document.getElementById('bt-sidebar')?.classList.contains('open');
+  const scanOpen=document.getElementById('scan-panel')?.classList.contains('open');
+  let right=0;
+  if(scanOpen) right=Math.max(right,522); // scan panel = 520px + 2px border
+  if(btOpen) right=Math.max(right,302);   // bt sidebar = 300px + 2px border
+  fp.style.right=right+'px';
+  setTimeout(()=>resizePanel(panels[fullscreenPanel]),60);
+}
+
+document.getElementById('fs-backdrop').addEventListener('click',()=>{if(fullscreenPanel!==null) toggleFullscreen(fullscreenPanel);});
+
+// ══════════════════════════════════════════════════════════
+//  OVERLAY
+// ══════════════════════════════════════════════════════════
+function showLoading(i,msg){
+  const el=document.getElementById(`ov-${i}`);
+  el.className='overlay active'; el.style.background='rgba(12,14,20,.55)';
+  el.innerHTML=`<div class="spinner"></div><div class="ov-msg">${msg||'LOADING…'}</div>`;
+}
+function showError(i,msg){
+  const el=document.getElementById(`ov-${i}`);
+  el.className='overlay active'; el.style.background='rgba(12,14,20,.92)';
+  el.innerHTML=`<div class="ov-err">⚠  ${msg}</div><button class="retry-btn" onclick="loadPanel(${i})">↺ RETRY</button>`;
+}
+function hideOverlay(i){document.getElementById(`ov-${i}`).className='overlay';}
+
+// ══════════════════════════════════════════════════════════
+//  FETCH
+// ══════════════════════════════════════════════════════════
+async function fetchBars(sym,tf,from,to,adjOverride){
+  const{mul,ts}=tfToPolygon(tf);
+  let fromAdj=from, toAdj=to;
+  if(isIntraday(tf)){
+    const fd=new Date(from+'T12:00:00Z'); fd.setUTCDate(fd.getUTCDate()-1); fromAdj=fmtDate(fd);
+    const td=new Date(to+'T12:00:00Z'); td.setUTCDate(td.getUTCDate()+1); toAdj=fmtDate(td);
+  }
+
+  // Main fetch: full range ascending
+  const adjFlag=(adjOverride!==undefined)?adjOverride:useAdjusted;
+  let url=`${POLY}/v2/aggs/ticker/${encodeURIComponent(sym)}/range/${mul}/${ts}/${fromAdj}/${toAdj}?adjusted=${adjFlag}&sort=asc&limit=50000&apiKey=${API_KEY}`;
+  let all=[],pages=0;
+  while(url&&pages<25){
+    pages++;
+    let res;
+    try{res=await fetch(url);}
+    catch(e){throw new Error(`Network error: ${e.message}\n\nOpen this file directly in Chrome/Firefox.`);}
+    if(!res.ok){const t=await res.text().catch(()=>'');throw new Error(`HTTP ${res.status}: ${t.slice(0,200)}`);}
+    let j;try{j=await res.json();}catch(e){throw new Error(`JSON error: ${e.message}`);}
+    if(j.status==='ERROR') throw new Error(`Polygon: ${j.error||j.message}`);
+    if(j.results?.length){
+      for(const b of j.results){
+        all.push({
+          time:(ts==='day'||ts==='week'||ts==='month')?fmtDate(new Date(b.t)):Math.floor(b.t/1000),
+          open:+b.o,high:+b.h,low:+b.l,close:+b.c,volume:b.v||0,
+        });
+      }
+    }
+    url=j.next_url?j.next_url+'&apiKey='+API_KEY:null;
+  }
+
+  // For intraday: also fetch the most recent bars descending
+  // BUT only when no explicit end date is set (i.e. not in BT mode or date-ranged mode)
+  const todayStr=fmtDate(new Date());
+  const fetchingToday=!to||(to>=todayStr);
+  if(isIntraday(tf)&&fetchingToday){
+    try{
+      const now=new Date();
+      const recentFrom=fmtDate(new Date(now.getTime()-3*86400000));
+      const recentTo=fmtDate(new Date(now.getTime()+86400000));
+      const r2=await fetch(`${POLY}/v2/aggs/ticker/${encodeURIComponent(sym)}/range/${mul}/${ts}/${recentFrom}/${recentTo}?adjusted=${adjFlag}&sort=desc&limit=1000&apiKey=${API_KEY}`);
+      if(r2.ok){
+        const j2=await r2.json();
+        if(j2.results?.length){
+          for(const b of j2.results){
+            all.push({
+              time:Math.floor(b.t/1000),
+              open:+b.o,high:+b.h,low:+b.l,close:+b.c,volume:b.v||0,
+            });
+          }
+        }
+      }
+    }catch(e){/* silent */}
+  }
+
+  const seen=new Set();
+  let bars=all
+    .filter(b=>{const k=String(b.time);if(seen.has(k))return false;seen.add(k);return true;})
+    .sort((a,b)=>String(a.time)<String(b.time)?-1:1);
+  if(isIntraday(tf)&&cleanPrints) bars=await filterBadPrints(sym,bars,parseInt(tf)||1);
+  return bars;
+}
+
+// ══════════════════════════════════════════════════════════
+//  LOAD
+// ══════════════════════════════════════════════════════════
+function applyDates(i){
+  // Turn off live mode when applying custom dates
+  if(liveMode) setLiveMode(false);
+  const p=panels[i];
+  const tgt=document.getElementById(`tgt-${i}`).value;
+  const backV=document.getElementById(`back-${i}`).value;
+  const fwdV=document.getElementById(`fwd-${i}`).value;
+  const back=backV?parseInt(backV):null;
+  const fwd=fwdV?parseInt(fwdV):null;
+  if(tgt){
+    const t=new Date(tgt+'T12:00:00Z');
+    const s=new Date(t); s.setUTCDate(s.getUTCDate()-(back||60));
+    const e=new Date(t); if(fwd!=null) e.setUTCDate(e.getUTCDate()+fwd);
+    p.startDate=fmtDate(s); p.endDate=fmtDate(e);
+    document.getElementById(`from-${i}`).value=p.startDate;
+    document.getElementById(`to-${i}`).value=p.endDate;
+  } else {
+    p.startDate=document.getElementById(`from-${i}`).value||null;
+    p.endDate=document.getElementById(`to-${i}`).value||null;
+  }
+  loadPanel(i);
+}
+
+function applyDatesAll(srcIdx){
+  if(liveMode) setLiveMode(false);
+  // Get the source panel's resolved dates
+  const src=panels[srcIdx];
+  const tgt=document.getElementById(`tgt-${srcIdx}`).value;
+  const backV=document.getElementById(`back-${srcIdx}`).value;
+  const fwdV=document.getElementById(`fwd-${srcIdx}`).value;
+  const back=backV?parseInt(backV):null;
+  const fwd=fwdV?parseInt(fwdV):null;
+
+  let fromDate, toDate;
+  if(tgt){
+    const t=new Date(tgt+'T12:00:00Z');
+    const s=new Date(t); s.setUTCDate(s.getUTCDate()-(back||60));
+    const e=new Date(t); if(fwd!=null) e.setUTCDate(e.getUTCDate()+fwd);
+    fromDate=fmtDate(s); toDate=fmtDate(e);
+  } else {
+    fromDate=document.getElementById(`from-${srcIdx}`).value||null;
+    toDate=document.getElementById(`to-${srcIdx}`).value||null;
+  }
+  if(!fromDate||!toDate){toast('Set a date range first',true);return;}
+
+  panels.forEach((p,i)=>{
+    // For daily/weekly/monthly panels, use 1 year lookback from toDate instead
+    let pFrom=fromDate, pTo=toDate;
+    if(!isIntraday(p.tf)){
+      const toD=new Date(toDate+'T12:00:00');
+      const fromD=new Date(toD); fromD.setUTCDate(fromD.getUTCDate()-365);
+      pFrom=fmtDate(fromD); pTo=toDate;
+    }
+    p.startDate=pFrom; p.endDate=pTo;
+    document.getElementById(`from-${i}`).value=pFrom;
+    document.getElementById(`to-${i}`).value=pTo;
+    if(tgt) document.getElementById(`tgt-${i}`).value=tgt;
+    loadPanel(i);
+  });
+  toast(`Applied date range to all ${panels.length} panels`);
+}
+
+async function loadPanel(i){
+  const p=panels[i];
+  showLoading(i,isIntraday(p.tf)?'FETCHING + FILTERING…':'FETCHING…');
+  let from=p.startDate,to=p.endDate;
+  if(liveMode){
+    const lr=liveRange(p.tf);
+    from=lr.from; to=lr.to;
+  }
+  if(!from||!to){
+    const def=defaultRange(p.tf);
+    from=from||def.from; to=to||def.to;
+    document.getElementById(`from-${i}`).value=from;
+    document.getElementById(`to-${i}`).value=to;
+  }
+  let bars;
+  try{bars=await fetchBars(symbol,p.tf,from,to,p.adjusted);}
+  catch(err){showError(i,err.message);toast(err.message,true);return;}
+  if(!bars?.length){showError(i,`No data for "${symbol}" (${p.tf})\n${from} → ${to}`);return;}
+  // Filter intraday bars: keep only bars within FROM 4AM ET to TO+1 midnight ET
+  // This removes the ±1 day expansion padding from fetchBars
+  if(isIntraday(p.tf) && from && to){
+    const fromD=new Date(from+'T08:00:00Z'); // ~4AM ET (EDT)
+    const toD=new Date(to+'T08:00:00Z');
+    toD.setDate(toD.getDate()+1);
+    toD.setHours(toD.getHours()+16); // extend to ~midnight ET next day
+    const fromTs=Math.floor(fromD.getTime()/1000);
+    const toTs=Math.floor(toD.getTime()/1000);
+    const filtered=bars.filter(b=>{
+      const t=typeof b.time==='number'?b.time:0;
+      return t>=fromTs && t<=toTs;
+    });
+    // Only apply filter if it keeps some bars — otherwise show all (safer)
+    if(filtered.length>0) bars=filtered;
+  }
+  p.data=bars;
+  p.viewBars=Math.min(50,bars.length);
+  p.viewStart=Math.max(0,bars.length-p.viewBars);
+  document.getElementById(`sym-${i}`).textContent=symbol;
+  hideOverlay(i);
+  resizePanel(p);
+}
+
+async function loadAll(){
+  const btn=document.getElementById('load-btn');
+  btn.disabled=true; btn.textContent='…';
+  if(!liveMode) annotations=[];
+  panels.forEach((_,i)=>document.getElementById(`sym-${i}`).textContent=symbol);
+  await Promise.all(panels.map((_,i)=>loadPanel(i)));
+  btn.disabled=false; btn.textContent='▶ LOAD';
+  // Update ticker info from a daily panel
+  const dp=panels.find(p=>p.data.length&&!isIntraday(p.tf))||panels.find(p=>p.data.length);
+  if(dp?.data.length){
+    const last=dp.data[dp.data.length-1],prev=dp.data[dp.data.length-2]||last;
+    const chg=last.close-prev.close,pct=((chg/prev.close)*100).toFixed(2);
+    document.getElementById('ti-sym').textContent=symbol;
+    document.getElementById('ti-price').textContent=`$${last.close.toFixed(2)}`;
+    document.getElementById('ti-chg').innerHTML=`<span style="color:${chg>=0?'#26a69a':'#ef5350'}">${chg>=0?'+':''}${chg.toFixed(2)} (${pct}%)</span>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  LIVE MODE
+//  Two-tier approach:
+//   • Every 1s  → fetch last trade price from Polygon /v2/last/trade
+//                 update the current (latest) bar's close in-memory + re-render
+//   • Every 3s  → fetch recent aggregate bars to catch newly closed bars
+// ══════════════════════════════════════════════════════════
+let liveTickTimer=null, liveBarTimer=null;
+
+function setLiveMode(on){
+  liveMode=on;
+  const btn=document.getElementById('live-btn');
+  const ind=document.getElementById('live-indicator');
+  btn.classList.toggle('active',on);
+  ind.classList.toggle('show',on);
+  clearInterval(liveTickTimer); liveTickTimer=null;
+  clearInterval(liveBarTimer);  liveBarTimer=null;
+  if(on){
+    loadAll();
+    // 1-second tick: update last bar close with latest trade
+    liveTickTimer=setInterval(liveTick, 1000);
+    // 3-second bar refresh: pull new aggregate bars
+    liveBarTimer=setInterval(liveRefresh, 3000);
+    document.getElementById('live-label').textContent='LIVE 1s';
+    toast('⬤ LIVE mode ON — 1s updates');
+  } else {
+    toast('LIVE mode OFF — timers stopped');
+  }
+}
+
+async function liveTick(){
+  try{
+    // Try last trade first — most reliable for real-time price
+    let price=0;
+    const r=await fetch(`${POLY}/v2/last/trade/${encodeURIComponent(symbol)}?apiKey=${API_KEY}`);
+    if(r.ok){
+      const j=await r.json();
+      price=j.results?.p||j.last?.price||0;
+    }
+    // Fallback: snapshot endpoint
+    if(!price){
+      const r2=await fetch(`${POLY}/v2/snapshot/locale/us/markets/stocks/tickers/${encodeURIComponent(symbol)}?apiKey=${API_KEY}`);
+      if(r2.ok){
+        const j2=await r2.json();
+        const snap=j2.ticker;
+        price=snap?.lastTrade?.p||snap?.day?.c||snap?.prevDay?.c||0;
+      }
+    }
+    if(!price||price<=0) return;
+
+    const nowSec=Math.floor(Date.now()/1000);
+
+    for(const p of panels){
+      if(!p.data.length) continue;
+      const last=p.data[p.data.length-1];
+
+      if(isIntraday(p.tf)&&typeof last.time==='number'){
+        const tfMins=parseInt(p.tf)||1;
+        const barEndSec=last.time+(tfMins*60);
+        if(nowSec>=barEndSec){
+          liveRefresh();
+          return;
+        }
+      }
+
+      p.data[p.data.length-1]={
+        ...last,
+        close:price,
+        high:Math.max(last.high,price),
+        low:Math.min(last.low,price),
+      };
+      // Auto-advance viewStart if user is at (or near) the end
+      const maxStart=Math.max(0,p.data.length-p.viewBars);
+      const atEnd=p.viewStart>=maxStart-2;
+      if(atEnd) p.viewStart=maxStart;
+      renderPanel(p);updateScrollbar(p);
+    }
+
+    const refP=panels.find(p=>p.data.length);
+    if(refP&&refP.data.length>=2){
+      const prev=refP.data[refP.data.length-2].close||price;
+      const chg=price-prev, pct=((chg/prev)*100).toFixed(2);
+      document.getElementById('ti-sym').textContent=symbol;
+      document.getElementById('ti-price').textContent=`$${price.toFixed(2)}`;
+      document.getElementById('ti-chg').innerHTML=
+        `<span style="color:${chg>=0?'#26a69a':'#ef5350'}">${chg>=0?'+':''}${chg.toFixed(2)} (${pct}%)</span>`;
+    }
+  }catch(e){/* silent */}
+}
+
+async function liveRefresh(){
+  // Pull the most recent bars for each panel and merge into data
+  // Use sort=desc&limit=20 to get newest bars first (avoids pagination lag)
+  for(const p of panels){
+    if(!p.data.length) continue;
+    try{
+      const now=new Date();
+      // Push "to" one day ahead so today's late bars aren't cut off by date boundary
+      const toDate=new Date(now); toDate.setDate(toDate.getDate()+1);
+      const fromDate=new Date(now); fromDate.setDate(fromDate.getDate()-2);
+      const from=fmtDate(fromDate);
+      const to=fmtDate(toDate);
+      const{mul,ts}=tfToPolygon(p.tf);
+      // Fetch newest bars first (sort=desc) to minimise latency — only need last ~20
+      const url=`${POLY}/v2/aggs/ticker/${encodeURIComponent(symbol)}/range/${mul}/${ts}/${from}/${to}?adjusted=${useAdjusted}&sort=desc&limit=20&apiKey=${API_KEY}`;
+      const res=await fetch(url);
+      if(!res.ok) continue;
+      const j=await res.json();
+      if(!j.results?.length) continue;
+      const fresh=j.results.map(b=>({
+        time:(ts==='day'||ts==='week'||ts==='month')?fmtDate(new Date(b.t)):Math.floor(b.t/1000),
+        open:+b.o,high:+b.h,low:+b.l,close:+b.c,volume:b.v||0,
+      }));
+      // Merge by time key — new bars overwrite stale ones
+      const existMap=new Map(p.data.map(b=>[String(b.time),b]));
+      for(const b of fresh) existMap.set(String(b.time),b);
+      const merged=[...existMap.values()].sort((a,b)=>String(a.time)<String(b.time)?-1:1);
+      const wasAtEnd=p.viewStart>=p.data.length-p.viewBars-2;
+      p.data=merged;
+      if(wasAtEnd){p.viewStart=Math.max(0,p.data.length-p.viewBars);clampView(p);}
+      renderPanel(p); updateScrollbar(p);
+    }catch(e){/* silent */}
+  }
+}
+
+document.getElementById('live-btn').addEventListener('click',()=>setLiveMode(!liveMode));
+
+// ══════════════════════════════════════════════════════════
+function setActiveTool(tool){
+  activeTool=tool; toolStep=tool?'first':null; toolAnchor=null;
+  document.querySelectorAll('.tool-btn').forEach(b=>b.classList.toggle('active',b.dataset.tool===tool));
+  document.querySelectorAll('.cwrap').forEach(w=>w.style.cursor=tool?'crosshair':'');
+  if(tool){
+    const labels={
+      trendline:'LINE: click START → click END',
+      box_orange:'BOX ORG: click corner 1 → corner 2',
+      box_yellow:'BOX YLW: click corner 1 → corner 2',
+      text_orange:'TEXT ORG: click to place',
+      text_yellow:'TEXT YLW: click to place',
+      del:'DELETE: click on any annotation to remove it',
+      edit:'EDIT: click on any entry/exit/stop to modify it',
+      entry_arrow:'LONG: click chart to place long entry + price',
+      exit_arrow:'SELL: click chart to place sell/exit + price',
+      short_arrow:'SHORT: click chart to place short entry + price',
+      cover_arrow:'COVER: click chart to place cover (close short) + price',
+      stop_line:'STOP: click chart to place stop level line + price',
+      trail_stop:'TRAIL STOP: click chart to place trailing stop (blue)',
+      hl_cyan:'HIGHLIGHT CYN: click corner 1 → corner 2',
+      hl_magenta:'HIGHLIGHT MAG: click corner 1 → corner 2',
+      hl_green:'HIGHLIGHT GRN: click corner 1 → corner 2',
+      hl_white:'HIGHLIGHT WHT: click corner 1 → corner 2',
+      fib_ret:'FIB: click HIGH point → click LOW point',
+    };
+    updateHint(labels[tool]||'Click to place');
+  } else {
+    document.getElementById('draw-hint').classList.remove('show');
+  }
+}
+function updateHint(msg){
+  const h=document.getElementById('draw-hint');
+  h.textContent=`📐 ${msg}  —  ESC to cancel`;
+  h.classList.add('show');
+}
+document.querySelectorAll('.tool-btn[data-tool]').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    const t=btn.dataset.tool;
+    setActiveTool(activeTool===t?null:t);
+  });
+});
+document.getElementById('hl-opacity').addEventListener('input',function(){ document.getElementById('hl-opacity-val').textContent=this.value+'%'; });
+document.getElementById('clr-btn').addEventListener('click',()=>{
+  annotations=[]; toolStep=null; toolAnchor=null;
+  updateSimPnl(); renderAll(); toast('All annotations cleared');
+});
+document.getElementById('bt-sim-clear').addEventListener('click',()=>{
+  annotations=annotations.filter(a=>a.type!=='entry_arrow'&&a.type!=='exit_arrow'&&a.type!=='short_arrow'&&a.type!=='cover_arrow'&&a.type!=='stop_line'&&a.type!=='trail_stop');
+  updateSimPnl(); renderAll(); toast('Sim annotations cleared');
+});
+
+// ══════════════════════════════════════════════════════════
+//  SAVE / LOAD REVIEW
+// ══════════════════════════════════════════════════════════
+function reviewStatusMsg(msg,color,duration){
+  const el=document.getElementById('review-status');
+  el.textContent=msg; el.style.display='block';
+  el.style.color=color; el.style.background=color+'15'; el.style.border='1px solid '+color;
+  if(duration) setTimeout(()=>{el.style.display='none';},duration);
+}
+
+function buildReviewData(){
+  const now=new Date();
+  return {
+    _version:1,
+    _saved:now.toISOString(),
+    symbol,
+    annotations: annotations.map(a=>({...a})),
+    nextId,
+    sim:{
+      riskPct: parseFloat(document.getElementById('bt-sim-riskpct').value)||1,
+      equity: parseFloat(document.getElementById('bt-sim-equity').value)||0,
+      bpMult: parseFloat(document.getElementById('bt-sim-bpmult').value)||4,
+      rDirect: parseFloat(document.getElementById('bt-sim-rdirect').value)||0,
+    },
+    panels: panels.map(p=>({
+      tf: p.tf,
+      startDate: p.startDate || document.getElementById(`from-${p.idx}`).value||null,
+      endDate: p.endDate || document.getElementById(`to-${p.idx}`).value||null,
+      viewStart: p.viewStart,
+      viewBars: p.viewBars,
+      inds: {...p.inds},
+      showTL: p.showTL, showAnn: p.showAnn, showExec: p.showExec,
+      showBtExec: p.showBtExec, showOtherAnn: p.showOtherAnn,
+      showPDC: p.showPDC, adjusted: p.adjusted,
+      btBack: p.btBack, btFwd: p.btFwd,
+    })),
+    btStrategyMode,
+  };
+}
+
+function saveReview(){
+  try{
+    const data=buildReviewData();
+    const json=JSON.stringify(data,null,2);
+    const blob=new Blob([json],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const d=new Date();
+    const dateStr=d.toISOString().slice(0,10);
+    const timeStr=d.toTimeString().slice(0,5).replace(':','');
+    a.href=url; a.download=`review_${symbol}_${dateStr}_${timeStr}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    // Also save to localStorage as autosave
+    try{ localStorage.setItem('prochart_autosave',json); }catch(e){}
+    reviewStatusMsg('✓ Saved: '+a.download,'#26a69a',4000);
+    toast('💾 Review saved: '+a.download);
+  }catch(err){
+    reviewStatusMsg('✗ Save failed: '+err.message,'#ef5350',5000);
+  }
+}
+
+async function loadReview(data){
+  try{
+    if(!data.symbol||!data.annotations){throw new Error('Invalid review file');}
+    reviewStatusMsg('Loading '+data.symbol+'…','#38bdf8');
+
+    // 1. Restore symbol
+    symbol=data.symbol;
+    document.getElementById('symbol-input').value=symbol;
+
+    // 2. Restore sim inputs
+    if(data.sim){
+      // Support both new riskPct and old risk (dollar) format
+      if(data.sim.riskPct!=null) document.getElementById('bt-sim-riskpct').value=data.sim.riskPct;
+      else if(data.sim.risk&&data.sim.equity) document.getElementById('bt-sim-riskpct').value=(data.sim.risk/data.sim.equity*100).toFixed(2);
+      else if(data.sim.risk) document.getElementById('bt-sim-riskpct').value=1;
+      if(data.sim.equity) document.getElementById('bt-sim-equity').value=data.sim.equity;
+      else document.getElementById('bt-sim-equity').value='';
+      document.getElementById('bt-sim-bpmult').value=data.sim.bpMult||4;
+      if(data.sim.rDirect) document.getElementById('bt-sim-rdirect').value=data.sim.rDirect;
+      else document.getElementById('bt-sim-rdirect').value='';
+      getRiskAmount(); // update dollar display
+    }
+
+    // 3. Restore panel configs (TF, dates, indicators)
+    if(data.panels){
+      data.panels.forEach((sp,i)=>{
+        if(i>=panels.length) return;
+        const p=panels[i];
+        if(sp.tf) p.tf=sp.tf;
+        p.startDate=sp.startDate||null;
+        p.endDate=sp.endDate||null;
+        if(sp.inds) p.inds={...p.inds,...sp.inds};
+        if(sp.showTL!=null) p.showTL=sp.showTL;
+        if(sp.showAnn!=null) p.showAnn=sp.showAnn;
+        if(sp.showExec!=null) p.showExec=sp.showExec;
+        if(sp.showBtExec!=null) p.showBtExec=sp.showBtExec;
+        if(sp.showOtherAnn!=null) p.showOtherAnn=sp.showOtherAnn;
+        if(sp.showPDC!=null) p.showPDC=sp.showPDC;
+        if(sp.adjusted!=null) p.adjusted=sp.adjusted;
+        if(sp.btBack!=null) p.btBack=sp.btBack;
+        if(sp.btFwd!=null) p.btFwd=sp.btFwd;
+        // Update date inputs
+        if(sp.startDate) document.getElementById(`from-${i}`).value=sp.startDate;
+        if(sp.endDate) document.getElementById(`to-${i}`).value=sp.endDate;
+      });
+    }
+    if(data.btStrategyMode) btStrategyMode=data.btStrategyMode;
+
+    // 4. Show backtest panel (so sim is visible)
+    if(!btActive){
+      document.getElementById('bt-btn').click();
+    }
+
+    // 5. Load chart data (this clears annotations internally)
+    if(liveMode) setLiveMode(false);
+    const btn=document.getElementById('load-btn');
+    btn.disabled=true; btn.textContent='…';
+    panels.forEach((_,i)=>document.getElementById(`sym-${i}`).textContent=symbol);
+    await Promise.all(panels.map((_,i)=>loadPanel(i)));
+    btn.disabled=false; btn.textContent='▶ LOAD';
+    // Update ticker info
+    const dp=panels.find(p=>p.data.length&&!isIntraday(p.tf))||panels.find(p=>p.data.length);
+    if(dp?.data.length){
+      const last=dp.data[dp.data.length-1],prev=dp.data[dp.data.length-2]||last;
+      const chg=last.close-prev.close,pct=((chg/prev.close)*100).toFixed(2);
+      document.getElementById('ti-sym').textContent=symbol;
+      document.getElementById('ti-price').textContent=`$${last.close.toFixed(2)}`;
+      document.getElementById('ti-chg').innerHTML=`<span style="color:${chg>=0?'#26a69a':'#ef5350'}">${chg>=0?'+':''}${chg.toFixed(2)} (${pct}%)</span>`;
+    }
+
+    // 6. Restore annotations AFTER load (loadAll would have cleared them)
+    annotations=data.annotations||[];
+    nextId=data.nextId||annotations.length+1;
+
+    // 7. Restore viewStart/viewBars per panel
+    if(data.panels){
+      data.panels.forEach((sp,i)=>{
+        if(i>=panels.length) return;
+        const p=panels[i];
+        if(sp.viewStart!=null && sp.viewStart<p.data.length) p.viewStart=sp.viewStart;
+        if(sp.viewBars!=null) p.viewBars=Math.min(sp.viewBars,p.data.length);
+      });
+    }
+
+    // 8. Rebuild the panel config UI (TF buttons, toggle states)
+    panels.forEach((p,i)=>{
+      const wrap=document.getElementById(`cfg-${i}`);
+      if(wrap){
+        wrap.querySelectorAll('.tf-btn').forEach(b=>{
+          b.classList.toggle('active',b.dataset.tf===p.tf);
+        });
+      }
+    });
+
+    updateSimPnl();
+    renderAll();
+    reviewStatusMsg('✓ Loaded: '+data.symbol+' ('+data.annotations.length+' annotations)','#26a69a',4000);
+    toast('📂 Review loaded: '+data.symbol);
+  }catch(err){
+    reviewStatusMsg('✗ Load failed: '+err.message,'#ef5350',5000);
+    toast('Load failed: '+err.message,true);
+  }
+}
+
+document.getElementById('review-save-btn').addEventListener('click',saveReview);
+document.getElementById('review-load-btn').addEventListener('click',()=>{
+  document.getElementById('review-file-input').click();
+});
+document.getElementById('review-file-input').addEventListener('change',e=>{
+  const f=e.target.files[0];
+  if(!f) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const data=JSON.parse(ev.target.result);
+      loadReview(data);
+    }catch(err){
+      reviewStatusMsg('✗ Invalid JSON file','#ef5350',4000);
+      toast('Invalid review file',true);
+    }
+  };
+  reader.readAsText(f);
+  e.target.value=''; // reset so same file can be loaded again
+});
+
+// Autosave to localStorage on annotation changes
+const _origPushAnn=Array.prototype.push;
+function autoSaveReview(){
+  try{
+    if(annotations.length>0) localStorage.setItem('prochart_autosave',JSON.stringify(buildReviewData()));
+  }catch(e){}
+}
+// Periodic autosave every 30s if annotations exist
+setInterval(()=>{if(annotations.length>0)autoSaveReview();},30000);
+
+// On startup: check for autosave
+// On startup: check for autosave (deferred so all functions are defined)
+setTimeout(function checkAutosave(){
+  try{
+    const saved=localStorage.getItem('prochart_autosave');
+    if(!saved) return;
+    const data=JSON.parse(saved);
+    if(!data.annotations||data.annotations.length===0) return;
+    // Show a restore prompt — need BT sidebar open
+    if(!btActive) document.getElementById('bt-btn').click();
+    document.getElementById('bt-sim').style.display='block';
+    const statusEl=document.getElementById('review-status');
+    const ts=data._saved?new Date(data._saved).toLocaleString():'unknown';
+    statusEl.innerHTML='<span style="color:#f59e0b;">⚡ Autosave found: '+data.symbol+' ('+data.annotations.length+' ann, '+ts+')</span> '
+      +'<button id="review-restore-btn" style="background:#f59e0b;color:#000;border:none;font-family:\'Courier New\',monospace;font-size:9px;font-weight:700;padding:2px 8px;border-radius:2px;cursor:pointer;margin-left:4px;">RESTORE</button> '
+      +'<button id="review-dismiss-btn" style="background:none;color:#4a6080;border:1px solid #2a3050;font-family:\'Courier New\',monospace;font-size:9px;padding:2px 6px;border-radius:2px;cursor:pointer;">DISMISS</button>';
+    statusEl.style.display='block';
+    statusEl.style.color='#f59e0b'; statusEl.style.background='rgba(245,158,11,0.08)'; statusEl.style.border='1px solid #f59e0b33';
+    // Need to wait for bt panel to be visible; attach handlers after DOM is ready
+    setTimeout(()=>{
+      document.getElementById('review-restore-btn')?.addEventListener('click',()=>{
+        statusEl.style.display='none';
+        loadReview(data);
+      });
+      document.getElementById('review-dismiss-btn')?.addEventListener('click',()=>{
+        statusEl.style.display='none';
+        localStorage.removeItem('prochart_autosave');
+      });
+    },100);
+  }catch(e){}
+},500);
+
+document.getElementById('load-btn').addEventListener('click',()=>{
+  const s=document.getElementById('symbol-input').value.trim().toUpperCase();
+  if(!s) return; symbol=s;
+  if(liveMode) setLiveMode(false);
+  panels.forEach(p=>{p.startDate=null;p.endDate=null;});
+  loadAll();
+});
+document.getElementById('symbol-input').addEventListener('keydown',e=>{
+  if(e.key==='Enter') document.getElementById('load-btn').click();
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){
+    const pctPopup=document.getElementById('pct-popup');
+    const textPopup=document.getElementById('text-popup');
+    const pctOpen=pctPopup.classList.contains('show');
+    const textOpen=textPopup.classList.contains('show');
+    const toolActive=activeTool!=null;
+    
+    // Priority 1: close popups
+    if(pctOpen){ pctPopup.classList.remove('show'); pendingExec=null; e.preventDefault(); return; }
+    if(textOpen){ textPopup.classList.remove('show'); pendingExec=null; e.preventDefault(); return; }
+    // Priority 2: deactivate tool
+    if(toolActive){ setActiveTool(null); e.preventDefault(); return; }
+    // Priority 3: exit fullscreen (only if nothing else to close)
+    if(fullscreenPanel!==null) toggleFullscreen(fullscreenPanel);
+  }
+  // Ctrl+S / Cmd+S = save review
+  if((e.ctrlKey||e.metaKey)&&e.key==='s'){
+    e.preventDefault();
+    if(annotations.length>0) saveReview();
+    else toast('Nothing to save — place some annotations first');
+  }
+});
+
+// ══════════════════════════════════════════════════════════
+//  RISK PER R — ADJUSTABLE
+// ══════════════════════════════════════════════════════════
+function getRiskAmount(){
+  // Direct R$ override takes priority over EQ×%
+  const directR=parseFloat(document.getElementById('bt-sim-rdirect')?.value);
+  if(directR>0){
+    const rdEl=document.getElementById('btsim-rdollar');
+    if(rdEl) rdEl.textContent='= $'+directR.toLocaleString(undefined,{maximumFractionDigits:0})+' (direct)';
+    return Math.max(1,directR);
+  }
+  const pct=parseFloat(document.getElementById('bt-sim-riskpct')?.value)||1;
+  const eq=getEquity();
+  const dollarRisk=eq?(eq*pct/100):pct*1000; // fallback: treat pct as multiplier of $1000 if no equity set
+  // Update the dollar display
+  const rdEl=document.getElementById('btsim-rdollar');
+  if(rdEl) rdEl.textContent=eq?'= $'+dollarRisk.toLocaleString(undefined,{maximumFractionDigits:0}):'(set EQ$)';
+  return Math.max(1,dollarRisk);
+}
+function getEquity(){ const v=parseFloat(document.getElementById('bt-sim-equity')?.value); return (v>0)?v:null; }
+function getBPMult(){ return Math.max(1, parseFloat(document.getElementById('bt-sim-bpmult')?.value)||4); }
+function getBuyingPower(){ const eq=getEquity(); return eq?eq*getBPMult():null; }
+document.getElementById('bt-sim-riskpct').addEventListener('input',()=>{ getRiskAmount(); updateSimPnl(); });
+document.getElementById('bt-sim-equity').addEventListener('input',()=>{ getRiskAmount(); updateSimPnl(); });
+document.getElementById('bt-sim-bpmult').addEventListener('input',()=>{ updateSimPnl(); });
+document.getElementById('bt-sim-rdirect').addEventListener('input',()=>{ getRiskAmount(); updateSimPnl(); });
+
+// ══════════════════════════════════════════════════════════
+//  MANUAL SIM PNL CALCULATOR
+// ══════════════════════════════════════════════════════════
+function updateEqSummary(riskDeployed){
+  const el=document.getElementById('btsim-eq-summary');
+  const eq=getEquity();
+  if(!eq){el.textContent='';return;}
+  const bp=eq*getBPMult();
+  el.textContent='BP $'+bp.toLocaleString(undefined,{maximumFractionDigits:0});
+}
+function updateSimPnl(){
+  const RISK=getRiskAmount();
+  const execAnns=annotations
+    .filter(a=>a.type==='entry_arrow'||a.type==='exit_arrow'||a.type==='short_arrow'||a.type==='cover_arrow'||a.type==='stop_line'||a.type==='trail_stop')
+    .sort((a,b)=>a.x1-b.x1);
+
+  const panel=document.getElementById('bt-sim');
+  const legsEl=document.getElementById('bt-sim-legs');
+  const entryEl=document.getElementById('btsim-entry');
+  const sharesEl=document.getElementById('btsim-shares');
+  const stopEl=document.getElementById('btsim-stop');
+  const riskEl=document.getElementById('btsim-risk');
+  const exitEl=document.getElementById('btsim-exit');
+  const pnlEl=document.getElementById('btsim-pnl');
+  const rEl=document.getElementById('btsim-r');
+
+  if(!execAnns.length){
+    if(btActive) panel.style.display='block';
+    else panel.style.display='none';
+    legsEl.innerHTML=''; entryEl.textContent='—'; sharesEl.textContent='—';
+    stopEl.textContent='—'; riskEl.textContent='—'; exitEl.textContent='—';
+    const ae=document.getElementById('btsim-avgexit'); if(ae) ae.textContent='—';
+    pnlEl.textContent='—'; pnlEl.style.color='#4a6080';
+    rEl.textContent='—'; rEl.style.color='#4a6080';
+    document.getElementById('btsim-rmath').textContent='—';
+    document.getElementById('btsim-status').textContent='—';
+    document.getElementById('btsim-status').style.color='#4a6080';
+    document.getElementById('btsim-posval').textContent='—';
+    document.getElementById('btsim-bpused').textContent='—';
+    document.getElementById('btsim-bp-warn').style.display='none';
+    updateEqSummary(0);
+    return;
+  }
+  panel.style.display='block';
+
+  // Each entry annotation carries ann.stopPrice (entered in popup).
+  // shares = round(RISK * pct/100 / |entryPrice - stopPrice|)
+  // Exits close pct% of total open shares FIFO, accumulate realised PnL.
+
+  let openLegs=[];          // {entryPrice, shares, stopPrice, pct}
+  let closedPnl=0;
+  let totalRiskDeployed=0;
+  let entryLegsCount=0;
+  let legDescs=[];
+  let lastExitPrice=null, lastExitPct=null;
+  let isLong=null;
+  // Avg exit tracking
+  let totalExitShares=0, totalExitCost=0;
+  // BP tracking
+  let peakPosValue=0, bpExceeded=false;
+  const bp=getBuyingPower();
+  // Peak position tracking (for closed-trade display)
+  let peakShares=0, peakAvgEntry=0, lastStopUsed=null;
+  let totalEntryShares=0; // total shares ever entered (across all legs)
+  let preCloseAvg=0, preCloseShares=0; // snapshot right before full close
+
+  // ── Helper: size shares — exact Excel formula =(D4-(D2*(D3-D1)))/(D3-D5) ──
+  function sizeEntry(addPrice, stop, riskAlloc, existingShares, existingAvg){
+    if(stop==null) return 0;
+    const denom = stop - addPrice;
+    if(denom===0) return 0;
+    // Long: stop<addPrice → denom<0 → use -riskAlloc. Short: stop>addPrice → denom>0 → use +riskAlloc
+    const signedRisk = (stop > addPrice) ? riskAlloc : -riskAlloc;
+    const shares = (signedRisk - existingShares*(stop - existingAvg)) / denom;
+    return Math.max(0, Math.round(shares));
+  }
+
+  // ── Helper: get bar data for a panel to check price between annotations ──
+  function getBarsInRange(panelIdx, fromTs, toTs) {
+    const p = panels[panelIdx];
+    if (!p || !p.data || !p.data.length) return [];
+    return p.data.filter(b => {
+      const t = typeof b.time === 'number' ? b.time : toUnix(b.time);
+      return t > fromTs && t < toTs;
+    });
+  }
+
+  let prevAnnTime = 0;
+  let autoStopCount = 0;
+
+  for(const a of execAnns){
+    const annTime = a.x1;
+
+    // ── AUTO-STOP DETECTION ──
+    // Before processing this annotation, check if price crossed any stop between prevAnn and now
+    if(openLegs.length > 0 && prevAnnTime > 0 && annTime > prevAnnTime) {
+      const currentStop2 = openLegs[openLegs.length - 1].stopPrice;
+      if(currentStop2 != null) {
+        // Find the panel with the most data (usually the intraday panel where annotations live)
+        const annPanel = a.panelIdx != null ? a.panelIdx : 0;
+        const barsInGap = getBarsInRange(annPanel, prevAnnTime, annTime);
+
+        let stopHit = false;
+        let stopHitPrice = currentStop2;
+
+        for(const bar of barsInGap) {
+          if(isLong === false) {
+            // SHORT position: stop hit when HIGH >= stop price
+            if(bar.high >= currentStop2) { stopHit = true; break; }
+          } else if(isLong === true) {
+            // LONG position: stop hit when LOW <= stop price
+            if(bar.low <= currentStop2) { stopHit = true; break; }
+          }
+        }
+
+        if(stopHit) {
+          // Auto-close ALL open shares at the stop price
+          const totalOpen = openLegs.reduce((s,l) => s + l.shares, 0);
+          if(totalOpen > 0) {
+            preCloseAvg = openLegs.reduce((s,l) => s + l.entryPrice * l.shares, 0) / totalOpen;
+            preCloseShares = totalOpen;
+            let stopPnl = 0;
+            for(const leg of openLegs) {
+              const legPnl = (isLong === false)
+                ? (leg.entryPrice - stopHitPrice) * leg.shares
+                : (stopHitPrice - leg.entryPrice) * leg.shares;
+              stopPnl += legPnl;
+            }
+            closedPnl += stopPnl;
+            totalExitShares += totalOpen;
+            totalExitCost += stopHitPrice * totalOpen;
+            const sr = (closedPnl >= 0 ? '+' : '') + closedPnl.toFixed(2);
+            const stopR = (stopPnl / RISK).toFixed(2);
+            legDescs.push('<span style="color:#ef5350;font-weight:700;">⚠ AUTO-STOP ' + totalOpen.toLocaleString() + 'sh @ ' + stopHitPrice.toFixed(2) + ' → $' + (stopPnl >= 0 ? '+' : '') + stopPnl.toFixed(2) + ' (' + (stopPnl >= 0 ? '+' : '') + stopR + 'R)</span>');
+            openLegs = [];
+            autoStopCount++;
+            isLong = null; // reset direction for next entry
+          }
+        }
+      }
+    }
+
+    prevAnnTime = annTime;
+    
+    if(a.type==='entry_arrow'||a.type==='short_arrow'){
+      let sp=a.stopPrice??null;
+      if(sp==null){
+        const precedingStop=execAnns
+          .filter(s=>(s.type==='stop_line'||s.type==='trail_stop')&&s.x1<=a.x1)
+          .slice(-1)[0];
+        if(precedingStop) sp=precedingStop.y1;
+      }
+      const existingShares=openLegs.reduce((s,l)=>s+l.shares,0);
+      const existingAvg=existingShares>0
+        ?openLegs.reduce((s,l)=>s+l.entryPrice*l.shares,0)/existingShares:0;
+      let shares=0;
+      if(sp!=null){
+        // Determine risk allocation
+        let riskAlloc;
+        if(a.pnlMode){
+          // PNL mode: use locked PnL + baseExtra% of RISK$
+          riskAlloc=closedPnl+RISK*((a.pnlBaseExtra||0)/100);
+          riskAlloc=Math.max(0,riskAlloc);
+        } else {
+          const pct=(a.pct??100);
+          riskAlloc=RISK*(pct/100);
+        }
+        shares=sizeEntry(a.y1, sp, riskAlloc, existingShares, existingAvg);
+        const totalAfter=existingShares+shares;
+        const newAvg=totalAfter>0?(existingShares*existingAvg+shares*a.y1)/totalAfter:a.y1;
+        if(isLong===null) isLong=a.y1>sp;
+        totalRiskDeployed+=riskAlloc;
+        entryLegsCount++;
+        const modeTag=a.pnlMode?` PNL+${a.pnlBaseExtra||0}%`:` ${(a.pct??100)}%`;
+        const eArrow=a.type==='short_arrow'?'▼ ':'▲ ';
+        const entryTag=a.type==='short_arrow'?'SHORT':'LONG';
+        legDescs.push(eArrow+shares.toLocaleString()+'sh @ '+a.y1.toFixed(2)
+          +' ['+entryTag+modeTag+']'
+          +(existingShares>0?' avg→'+newAvg.toFixed(2):'')
+          +' $'+riskAlloc.toFixed(0)+' stop:'+sp.toFixed(2));
+        // Track peak position
+        if(totalAfter>peakShares){ peakShares=totalAfter; peakAvgEntry=newAvg; }
+        totalEntryShares+=shares;
+        lastStopUsed=sp;
+        // BP check
+        const posVal=totalAfter*newAvg;
+        if(posVal>peakPosValue) peakPosValue=posVal;
+        if(bp && posVal>bp){
+          bpExceeded=true;
+          legDescs.push('<span style="color:#ef5350;font-size:10px;">⚠ BP EXCEEDED: $'+posVal.toLocaleString(undefined,{maximumFractionDigits:0})+' > $'+bp.toLocaleString(undefined,{maximumFractionDigits:0})+' BP</span>');
+        }
+      } else {
+        legDescs.push('▲ ?sh @ '+a.y1.toFixed(2)+' [no stop found]');
+      }
+      openLegs.push({entryPrice:a.y1,shares,stopPrice:sp,pct:(a.pct??100)});
+
+    } else if(a.type==='exit_arrow'||a.type==='cover_arrow'){
+      const pct=(a.pct??100);
+      lastExitPrice=a.y1; lastExitPct=pct;
+      const totalOpen=openLegs.reduce((s,l)=>s+l.shares,0);
+      if(totalOpen>0){
+        // Snapshot before this exit (in case it fully closes)
+        const preAvg=openLegs.reduce((s,l)=>s+l.entryPrice*l.shares,0)/totalOpen;
+        preCloseAvg=preAvg; preCloseShares=totalOpen;
+        let closedSh=0;
+        for(let i=0;i<openLegs.length;i++){
+          const take=Math.round(openLegs[i].shares*(pct/100));
+          const legPnl=(isLong===false)
+            ?(openLegs[i].entryPrice-a.y1)*take
+            :(a.y1-openLegs[i].entryPrice)*take;
+          closedPnl+=legPnl;
+          closedSh+=take;
+          openLegs[i]={...openLegs[i],shares:openLegs[i].shares-take};
+        }
+        openLegs=openLegs.filter(l=>l.shares>0);
+        // Track weighted avg exit
+        totalExitShares+=closedSh;
+        totalExitCost+=a.y1*closedSh;
+        const s=(closedPnl>=0?'+':'')+closedPnl.toFixed(2);
+        const exitArrow=a.type==='cover_arrow'?'▲ ':'▼ ';
+        const exitTag=a.type==='cover_arrow'?'COVER':'SELL';
+        legDescs.push(exitArrow+closedSh.toLocaleString()+'sh @ '+a.y1.toFixed(2)+' ['+exitTag+' '+pct+'%] → $'+s);
+      }
+    }
+    // stop_line / trail_stop: update stop for open legs (used by auto-stop detection)
+    if((a.type==='stop_line'||a.type==='trail_stop') && openLegs.length > 0) {
+      for(let i=0;i<openLegs.length;i++){
+        openLegs[i] = {...openLegs[i], stopPrice: a.y1};
+      }
+      lastStopUsed = a.y1;
+    }
+  }
+
+  const openShares=openLegs.reduce((s,l)=>s+l.shares,0);
+  const avgEntry=openShares>0
+    ?openLegs.reduce((s,l)=>s+l.entryPrice*l.shares,0)/openShares:0;
+  const avgExit=totalExitShares>0?totalExitCost/totalExitShares:null;
+  const lastStopAnn=execAnns.filter(a=>(a.type==='stop_line'&&!a._autoStop)||a.type==='trail_stop').slice(-1)[0];
+  const currentStop=lastStopAnn?.y1??null;
+
+  const avgExitEl=document.getElementById('btsim-avgexit');
+  const isClosed=openShares===0&&closedPnl!==0;
+  const displayAvg=openShares>0?avgEntry:(isClosed?(preCloseAvg||peakAvgEntry):0);
+  const displayShares=openShares>0?openShares:(isClosed?preCloseShares:0);
+  entryEl.textContent=openShares>0?avgEntry.toFixed(3):(isClosed?displayAvg.toFixed(3):'—');
+  if(isClosed) entryEl.style.color='#6a80a0'; else entryEl.style.color='#dde3f0';
+  sharesEl.textContent=openShares>0?openShares.toLocaleString():(isClosed?'0 (pk '+peakShares.toLocaleString()+')':'0');
+  if(isClosed) sharesEl.style.color='#6a80a0'; else sharesEl.style.color='#dde3f0';
+  stopEl.textContent=currentStop!=null?currentStop.toFixed(3):(isClosed&&lastStopUsed!=null?lastStopUsed.toFixed(3):'—');
+  if(isClosed&&openShares===0) stopEl.style.color='#8a7520'; else stopEl.style.color='#facc15';
+  riskEl.textContent=totalRiskDeployed>0?'$'+totalRiskDeployed.toFixed(0)+' ('+entryLegsCount+'×)':'—';
+  if(avgExitEl) avgExitEl.textContent=avgExit!=null?avgExit.toFixed(3):'—';
+  exitEl.textContent=lastExitPrice!=null
+    ?lastExitPrice.toFixed(3)+(lastExitPct&&lastExitPct<100?' ('+lastExitPct+'%)':''):'—';
+
+  // R is always relative to 1 full risk unit (adjustable) — standard trading R
+  const rmathEl=document.getElementById('btsim-rmath');
+  const statusEl2=document.getElementById('btsim-status');
+  if(closedPnl!==0||lastExitPrice!=null){
+    pnlEl.textContent=(closedPnl>=0?'+':'')+closedPnl.toFixed(2);
+    pnlEl.style.color=closedPnl>=0?'#26a69a':'#ef5350';
+    const r=closedPnl/RISK; // R = PnL / risk unit (not scaled by legs)
+    rEl.textContent=(r>=0?'+':'')+r.toFixed(2)+'R';
+    rEl.style.color=r>=0?'#26a69a':'#ef5350';
+    // R math breakdown
+    rmathEl.textContent='$'+(closedPnl>=0?'+':'')+closedPnl.toFixed(0)+' / $'+RISK.toFixed(0)+' = '+(r>=0?'+':'')+r.toFixed(2)+'R';
+    rmathEl.style.color=r>=0?'#26a69a80':'#ef535080';
+  } else {
+    pnlEl.textContent='(place exit)'; pnlEl.style.color='#4a6080';
+    rEl.textContent='—'; rEl.style.color='#4a6080';
+    rmathEl.textContent='—'; rmathEl.style.color='#4a6080';
+  }
+  // Status
+  if(isClosed){
+    statusEl2.textContent='CLOSED — last '+preCloseShares.toLocaleString()+'sh, pk '+peakShares.toLocaleString()+'sh'+(autoStopCount?' ('+autoStopCount+' auto-stop'+(autoStopCount>1?'s':'')+')':'');
+    statusEl2.style.color=closedPnl>=0?'#26a69a':'#ef5350';
+  } else if(openShares>0){
+    statusEl2.textContent='OPEN '+openShares.toLocaleString()+'sh';
+    statusEl2.style.color='#f59e0b';
+  } else {
+    statusEl2.textContent='—'; statusEl2.style.color='#4a6080';
+  }
+
+  // ── Position value & BP ──
+  const posValEl=document.getElementById('btsim-posval');
+  const bpUsedEl=document.getElementById('btsim-bpused');
+  const bpWarnEl=document.getElementById('btsim-bp-warn');
+  const currentPosVal=openShares>0?openShares*avgEntry:0;
+  const peakVal=Math.max(peakPosValue,currentPosVal);
+  posValEl.textContent=currentPosVal>0?'$'+currentPosVal.toLocaleString(undefined,{maximumFractionDigits:0})
+    +(peakVal>currentPosVal?' (pk $'+peakVal.toLocaleString(undefined,{maximumFractionDigits:0})+')':''):'—';
+  if(bp){
+    const bpPct=(peakVal/bp*100);
+    bpUsedEl.textContent=bpPct.toFixed(1)+'%';
+    bpUsedEl.style.color=bpPct>100?'#ef5350':bpPct>80?'#f59e0b':'#26a69a';
+    if(bpExceeded){
+      bpWarnEl.style.display='block';
+      bpWarnEl.textContent='⚠ POSITION EXCEEDED BUYING POWER — peak $'+peakVal.toLocaleString(undefined,{maximumFractionDigits:0})+' vs $'+bp.toLocaleString(undefined,{maximumFractionDigits:0})+' BP';
+    } else { bpWarnEl.style.display='none'; }
+  } else {
+    bpUsedEl.textContent='—'; bpUsedEl.style.color='#4a6080';
+    bpWarnEl.style.display='none';
+  }
+  updateEqSummary(totalRiskDeployed);
+
+  legsEl.innerHTML=legDescs.map(d=>{
+    // BP warning spans are already styled HTML
+    if(d.startsWith('<span')) return d;
+    // Entries have 'S:' stop marker; exits have '→'
+    const isLongEntry=d.startsWith('▲')&&d.includes('[LONG');
+    const isShortEntry=d.startsWith('▼')&&d.includes('[SHORT');
+    const isSell=d.startsWith('▼')&&d.includes('→');
+    const isCover=d.startsWith('▲')&&d.includes('→');
+    const col=isLongEntry?'#ff9800':isShortEntry?'#ff5252':isSell?'#40c4ff':isCover?'#00e676':'#8aa0c0';
+    return '<div style="color:'+col+';margin-bottom:3px;font-size:11px;font-weight:700;line-height:1.5;letter-spacing:0.2px;">'+d+'</div>';
+  }).join('');
+}
+
+//  BACKTEST ENGINE
+// ══════════════════════════════════════════════════════════
+
+function parseTimestamp(s){
+  // Parses "Timestamp('2024-01-08 09:57:00-0500', tz='US/Eastern')" or plain datetime
+  // Converts local time to UTC Unix seconds
+  if(!s) return null;
+  const m=s.match(/(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})/);
+  if(!m) return null;
+  const dateStr=m[1], timeStr=m[2];
+  const utcMs=new Date(dateStr+'T'+timeStr+'Z').getTime();
+  // If the string has an explicit tz offset like -0500 or +0400, use it directly
+  const tzMatch=s.match(/([+-])(\d{2}):?(\d{2})(?:\s|'|,|$)/);
+  if(tzMatch){
+    const sign=tzMatch[1]==='+'?1:-1;
+    const offSec=sign*(parseInt(tzMatch[2])*3600+parseInt(tzMatch[3])*60);
+    return Math.floor(utcMs/1000)-offSec; // localtime-as-UTC minus offset = actual UTC
+  }
+  // Fallback: DST-aware ET offset
+  const [y,mo,d]=dateStr.split('-').map(Number);
+  const isEDT=(()=>{
+    if(mo>3&&mo<11) return true;
+    if(mo<3||mo>11) return false;
+    if(mo===3){const secondSun=8+(7-(new Date(y,2,1).getDay()||7))%7;return d>=secondSun;}
+    if(mo===11){const firstSun=1+(7-(new Date(y,10,1).getDay()||7))%7;return d<firstSun;}
+    return false;
+  })();
+  return Math.floor(utcMs/1000)+(isEDT?4*3600:5*3600);
+}
+
+function parseList(s){
+  // "[val1, val2]" or "[Timestamp(...), ...]"
+  if(!s||s==='[]'||s==='"[]"') return [];
+  // Strip surrounding double-quotes added by CSV quoting: "[...]" -> [...]
+  s=s.replace(/^"|"$/g,'').trim();
+  if(!s||s==='[]') return [];
+  // Normalise escaped single-quotes produced by Python repr inside CSV: \' -> '
+  s=s.replace(/\\'/g,"'");
+  // Strip numpy wrappers: np.float64(1.23) -> 1.23
+  s=s.replace(/np\.\w+\(([^)]+)\)/g,'$1');
+  // Extract Timestamps — match datetime string up to closing quote, ignore extra tz args
+  const tsPat=/Timestamp\('(\d{4}-\d{2}-\d{2}[^']*)'/g;
+  const tsMatches=[]; let tm;
+  while((tm=tsPat.exec(s))!==null) tsMatches.push(tm[1]);
+  if(tsMatches.length) return tsMatches;
+  // Extract numbers/strings
+  return s.replace(/^\[|\]$/g,'').split(',').map(x=>x.trim().replace(/^'|'$/g,''));
+}
+
+function parseBtCSV(text){
+  const lines=text.trim().split('\n');
+  const header=lines[0].split(',').map(s=>s.trim());
+  const col=k=>header.indexOf(k);
+  const trades=[];
+  for(let i=1;i<lines.length;i++){
+    // Smart CSV split respecting brackets
+    const raw=lines[i];
+    const cells=[]; let cur='',depth=0;
+    for(const ch of raw){
+      if(ch==='['||ch==='(') depth++;
+      else if(ch===']'||ch===')') depth--;
+      if(ch===','&&depth===0){cells.push(cur);cur='';}
+      else cur+=ch;
+    }
+    cells.push(cur);
+    const g=k=>cells[col(k)]?.trim()||'';
+    const pnl=parseFloat(g('pnl'))||0;
+    const entryTimes=parseList(g('entry_time_list'));
+    const exitTimes=parseList(g('exit_time_list'));
+    const entryPrices=parseList(g('entry_list'));
+    const exitPrices=parseList(g('exit_list'));
+    const entryShares=parseList(g('shares_entered_list'));
+    const exitShares=parseList(g('shares_covered_list'));
+    const entryReasons=parseList(g('entry_reason_list'));
+    const exitReasons=parseList(g('exit_reason_list'));
+    const stopPrices=parseList(g('stop_list'));
+
+    const entries=entryTimes.map((t,j)=>({
+      time: parseTimestamp(t) || parseTimestamp(g('entry_time')),
+      price: parseFloat(entryPrices[j])||parseFloat(g('avg_entry'))||0,
+      shares: parseInt(entryShares[j])||0,
+      reason: entryReasons[j]||g('entry_name'),
+      stop: parseFloat(stopPrices[j])||null,
+    })).filter(e=>e.time&&e.price);
+
+    const exits=exitTimes.map((t,j)=>({
+      time: parseTimestamp(t) || parseTimestamp(g('exit_time')),
+      price: parseFloat(exitPrices[j])||parseFloat(g('avg_exit'))||0,
+      shares: parseInt(exitShares[j])||0,
+      reason: exitReasons[j]||g('last_exit_reason'),
+    })).filter(e=>e.time&&e.price);
+
+    trades.push({
+      date: g('date'),
+      ticker: g('ticker').toUpperCase(),
+      pnl, entries, exits,
+      avg_entry: parseFloat(g('avg_entry'))||0,
+      avg_exit: parseFloat(g('avg_exit'))||0,
+      shares: parseInt(g('total_shares'))||0,
+      entry_time: g('entry_time'),
+      exit_time: g('exit_time'),
+      exit_reason: g('last_exit_reason'),
+      R_pnl: parseFloat(g('R_pnl'))||0,
+    });
+  }
+  return trades.filter(t=>t.ticker&&t.date);
+}
+
+
+function mergeBtTrades(trades){
+  const key=t=>t.ticker+'|'+t.date;
+  const groups={};
+  for(const t of trades){
+    const k=key(t);
+    if(!groups[k]) groups[k]=[];
+    groups[k].push(t);
+  }
+  const merged=[];
+  for(const k of Object.keys(groups)){
+    const grp=groups[k];
+    if(grp.length===1){merged.push(grp[0]);continue;}
+    const allEntries=grp.flatMap(t=>t.entries).sort((a,b)=>a.time-b.time);
+    const allExits=grp.flatMap(t=>t.exits).sort((a,b)=>a.time-b.time);
+    const totalPnl=grp.reduce((s,t)=>s+t.pnl,0);
+    const totalShares=grp.reduce((s,t)=>s+t.shares,0);
+    const totalR=grp.reduce((s,t)=>s+t.R_pnl,0);
+    const wEntry=allEntries.reduce((s,e)=>s+e.price*e.shares,0);
+    const sEntry=allEntries.reduce((s,e)=>s+e.shares,0);
+    const wExit=allExits.reduce((s,e)=>s+e.price*e.shares,0);
+    const sExit=allExits.reduce((s,e)=>s+e.shares,0);
+    const avgEntry=sEntry>0?wEntry/sEntry:grp[0].avg_entry;
+    const avgExit=sExit>0?wExit/sExit:grp[grp.length-1].avg_exit;
+    const entryTimes=grp.map(t=>t.entry_time).filter(Boolean).sort();
+    const exitTimes=grp.map(t=>t.exit_time).filter(Boolean).sort();
+    const reasons=[...new Set(grp.map(t=>t.exit_reason).filter(Boolean))].join('+');
+    merged.push({
+      date:grp[0].date, ticker:grp[0].ticker,
+      pnl:totalPnl, entries:allEntries, exits:allExits,
+      avg_entry:avgEntry, avg_exit:avgExit, shares:totalShares,
+      entry_time:entryTimes[0]||'', exit_time:exitTimes[exitTimes.length-1]||'',
+      exit_reason:reasons, R_pnl:totalR, _merged:grp.length,
+    });
+  }
+  return merged;
+}
+function btStats(trades){
+  const total=trades.reduce((s,t)=>s+t.pnl,0);
+  const wins=trades.filter(t=>t.pnl>0);
+  const losses=trades.filter(t=>t.pnl<0);
+  const wr=trades.length?((wins.length/trades.length)*100).toFixed(0)+'%':'—';
+  const avgW=wins.length?(wins.reduce((s,t)=>s+t.pnl,0)/wins.length).toFixed(2):'—';
+  const avgL=losses.length?(losses.reduce((s,t)=>s+t.pnl,0)/losses.length).toFixed(2):'—';
+  const best=trades.length?Math.max(...trades.map(t=>t.pnl)).toFixed(2):'—';
+  const worst=trades.length?Math.min(...trades.map(t=>t.pnl)).toFixed(2):'—';
+  return{total,wr,avgW,avgL,best,worst,n:trades.length};
+}
+
+function fmtPnl(v){
+  const n=parseFloat(v);
+  if(isNaN(n)) return v;
+  return (n>=0?'+':'')+n.toFixed(2);
+}
+
+function renderBtList(){
+  const search=document.getElementById('bt-search').value.toUpperCase().trim();
+  const sort=document.getElementById('bt-sort').value;
+  let trades=[...btTrades];
+  if(search) trades=trades.filter(t=>t.ticker.includes(search));
+
+  if(sort==='pnl_desc') trades.sort((a,b)=>b.pnl-a.pnl);
+  else if(sort==='pnl_asc') trades.sort((a,b)=>a.pnl-b.pnl);
+  else if(sort==='ticker') trades.sort((a,b)=>a.ticker.localeCompare(b.ticker));
+  else if(sort==='date_desc') trades.sort((a,b)=>b.date.localeCompare(a.date));
+  else trades.sort((a,b)=>a.date.localeCompare(b.date)); // date_asc default
+
+  // Group by date
+  const byDate={};
+  for(const t of trades){
+    if(!byDate[t.date]) byDate[t.date]=[];
+    byDate[t.date].push(t);
+  }
+  const dates=Object.keys(byDate).sort((a,b)=>
+    sort==='date_desc'?b.localeCompare(a):a.localeCompare(b));
+
+  const list=document.getElementById('bt-list');
+  list.innerHTML='';
+  for(const date of dates){
+    const dayTrades=byDate[date];
+    const dayPnl=dayTrades.reduce((s,t)=>s+t.pnl,0);
+    const dayDiv=document.createElement('div');
+    dayDiv.className='bt-day';
+
+    const hdr=document.createElement('div');
+    hdr.className='bt-day-hdr';
+    hdr.innerHTML=`<span class="bdd">${date}</span><span class="bdd-pnl" style="color:${dayPnl>=0?'#26a69a':'#ef5350'}">${fmtPnl(dayPnl)}</span>`;
+    dayDiv.appendChild(hdr);
+
+    const tradesDiv=document.createElement('div');
+    for(const t of dayTrades){
+      const row=document.createElement('div');
+      row.className='bt-trade'+(btSelected===t?' active':'');
+      const reasonCls=t.exit_reason==='stop'?'stop':t.exit_reason==='eod'?'eod':'other';
+      const entryT=t.entry_time?t.entry_time.slice(11,16):'';
+      const exitT=t.exit_time?t.exit_time.slice(11,16):'';
+      row.innerHTML=`
+        <div class="bt-trade-top">
+          <span class="bt-sym">${t.ticker}</span>
+          ${t._merged>1?`<span style="font-size:8px;color:#D4AF37;border:1px solid #D4AF3733;padding:0 3px;border-radius:2px;font-family:'Courier New',monospace;">${t._merged}×</span>`:''}
+          <span class="bt-reason ${reasonCls}">${t.exit_reason||'—'}</span>
+          <span class="bt-pnl ${t.pnl>=0?'pos':'neg'}">${fmtPnl(t.pnl)}</span>
+          <span class="bt-del-btn" title="Remove trade">×</span>
+        </div>
+        <div class="bt-trade-sub" style="display:flex;gap:6px;align-items:center;">
+          <span style="color:#26a69a;font-weight:700;">E:${t.avg_entry.toFixed(2)}</span>
+          <span style="color:#3a5070;">→</span>
+          <span style="color:#ef5350;font-weight:700;">X:${t.avg_exit.toFixed(2)}</span>
+          <span style="color:#2a4060;margin-left:auto;">${t.shares.toLocaleString()}sh</span>
+        </div>
+        <div class="bt-trade-sub" style="color:#2a4060">
+          ${entryT} → ${exitT}
+          &nbsp;|&nbsp;<span style="color:${t.R_pnl>=0?'#26a69a':'#ef5350'};font-weight:700;opacity:0.5">${t.R_pnl>=0?'+':''}${t.R_pnl.toFixed(2)}R</span>
+        </div>`;
+      row.addEventListener('click',()=>selectBtTrade(t, row));
+      row.querySelector('.bt-del-btn').addEventListener('click', e=>{
+        e.stopPropagation();
+        const idx=btTrades.indexOf(t);
+        if(idx>-1) btTrades.splice(idx,1);
+        if(btSelected===t){ btSelected=null; btMarkers=[]; renderAll(); }
+        renderBtList();
+      });
+      tradesDiv.appendChild(row);
+    }
+    dayDiv.appendChild(tradesDiv);
+    list.appendChild(dayDiv);
+  }
+}
+
+function selectBtTrade(trade, rowEl){
+  // Deselect previous
+  document.querySelectorAll('.bt-trade.active').forEach(el=>el.classList.remove('active'));
+  if(btSelected===trade){
+    btSelected=null; btMarkers=[];
+    renderAll(); return;
+  }
+  btSelected=trade;
+  rowEl.classList.add('active');
+
+  // Build markers — store both unix time (for intraday) and date string (for daily)
+  btMarkers=[];
+  for(const e of trade.entries){
+    btMarkers.push({time:e.time, date:trade.date, price:e.price, type:'entry', label:e.price.toFixed(2)});
+    if(e.stop) btMarkers.push({time:e.time, date:trade.date, price:e.stop, type:'stop', label:e.stop.toFixed(2)});
+  }
+  for(const e of trade.exits){
+    btMarkers.push({time:e.time, date:trade.date, price:e.price, type:'exit', label:e.price.toFixed(2)});
+  }
+
+  // Load the ticker across all panels, centered on the trade date
+  const sym=trade.ticker;
+  document.getElementById('symbol-input').value=sym;
+  symbol=sym;
+  if(liveMode) setLiveMode(false);
+
+  // Set each panel's date range — use custom btBack/btFwd if set, else defaults
+  const tradeDate=new Date(trade.date+'T12:00:00Z');
+  panels.forEach(p=>{
+    const from=new Date(tradeDate), to=new Date(tradeDate);
+    const backDays = p.btBack!=null ? p.btBack : (!isIntraday(p.tf) ? 365 : 14);
+    const fwdDays  = p.btFwd!=null  ? p.btFwd  : 14;
+    from.setDate(from.getDate()-backDays);
+    to.setDate(to.getDate()+fwdDays);
+    p.startDate=fmtDate(from); p.endDate=fmtDate(to);
+  });
+
+  loadAll();
+  toast(`📊 ${sym} — ${trade.date} — ${fmtPnl(trade.pnl)}`);
+}
+
+// ══════════════════════════════════════════════════════════
+//  SCAN ENGINE — INSIDE DAY LONG
+// ══════════════════════════════════════════════════════════
+// Pattern: D1 (big vol runner) → Inside/Rest Day (contained in D1 range) → Trade Day (HOD break above rest day high)
+//
+// Filter 1: $400M D1 $vol, SSR, gap≥0%, retrace≤80%, no warrants, no MDR, no bags, PM $vol≥$2M
+// Filter 2: $1B D1 $vol, SSR, gap≥-20%, retrace≤80%, no warrants, no MDR, no bags (no PM vol req)
+// Filter 3: Both (passes either)
+//
+// Automatable: D1 $vol, inside day pattern, retrace, gap, SSR (approx), MDR (with history), bags (with history)
+// Manual verify: warrants, PM $vol, PM pump/trend break, D1 HOD timing ≥9:30
+
+// Helper: determine UTC offset for US Eastern Time (EDT=-4, EST=-5)
+function getETOffset(dateStr){
+  const d=new Date(dateStr+'T12:00:00Z');
+  const y=d.getUTCFullYear();
+  let mar2nd=new Date(Date.UTC(y,2,1)); while(mar2nd.getUTCDay()!==0) mar2nd.setUTCDate(mar2nd.getUTCDate()+1); mar2nd.setUTCDate(mar2nd.getUTCDate()+7);
+  let nov1st=new Date(Date.UTC(y,10,1)); while(nov1st.getUTCDay()!==0) nov1st.setUTCDate(nov1st.getUTCDate()+1);
+  return (d>=mar2nd&&d<nov1st)?4:5;
+}
+
+function getTradingDates(n) {
+  // Returns n most recent trading days INCLUDING today (most recent first)
+  const dates = [];
+  let d = new Date();
+  // Include today if it's a weekday
+  if (d.getDay() !== 0 && d.getDay() !== 6) dates.push(d.toISOString().slice(0, 10));
+  while (dates.length < n) {
+    d.setDate(d.getDate() - 1);
+    if (d.getDay() !== 0 && d.getDay() !== 6) dates.push(d.toISOString().slice(0, 10));
+  }
+  return dates;
+}
+
+async function fetchGroupedDaily(date) {
+  const url = `${POLY}/v2/aggs/grouped/locale/us/market/stocks/${date}?adjusted=true&apiKey=${API_KEY}`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`Grouped bars ${date}: ${r.status}`);
+  const j = await r.json();
+  if (!j.results) return {};
+  const map = {};
+  for (const b of j.results) {
+    if (!b.T || !b.o || !b.h || !b.l || !b.c || !b.v) continue;
+    map[b.T] = { open: b.o, high: b.h, low: b.l, close: b.c, vol: b.v, vw: b.vw || b.c };
+  }
+  return map;
+}
+
+async function fetchTickerHistory(ticker, from, to) {
+  const url = `${POLY}/v2/aggs/ticker/${encodeURIComponent(ticker)}/range/1/day/${from}/${to}?adjusted=true&sort=asc&limit=200&apiKey=${API_KEY}`;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return [];
+    const j = await r.json();
+    return (j.results || []).map(b => ({
+      date: new Date(b.t).toISOString().slice(0, 10),
+      open: b.o, high: b.h, low: b.l, close: b.c, vol: b.v, vw: b.vw || b.c,
+      dolVol: b.v * b.c,
+    }));
+  } catch { return []; }
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function runScan() {
+  const btn = document.getElementById('scan-run-btn');
+  const statusEl = document.getElementById('scan-status');
+  const wlEl = document.getElementById('scan-watchlist');
+  const countEl = document.getElementById('scan-count');
+  const filterMode = document.querySelector('input[name="scan-filter"]:checked')?.value || '3';
+
+  btn.disabled = true; btn.textContent = '⏳ SCANNING…';
+  statusEl.textContent = 'Phase 1: Fetching grouped daily bars…';
+  wlEl.innerHTML = '';
+  countEl.textContent = '';
+
+  try {
+    // ═══════ PHASE 1: Grouped daily scan ═══════
+    const dates = getTradingDates(6);
+    const dayMaps = await Promise.all(dates.map(fetchGroupedDaily));
+
+    statusEl.textContent = `Phase 1: Analyzing ${Object.keys(dayMaps[0]).length}+ tickers…`;
+
+    const candidates = [];
+
+    // Check for inside day pattern: D1 can be 1 or 2 days before rest
+    for (let offset = 0; offset < 3; offset++) {
+      for (let gap = 1; gap <= 2; gap++) {
+      if (offset + gap >= dates.length - 1) continue;
+      const restMap = dayMaps[offset];
+      const d1Map  = dayMaps[offset + gap];
+      const preD1  = (offset + gap + 1 < dayMaps.length) ? dayMaps[offset + gap + 1] : null;
+      const restDate = dates[offset];
+      const d1Date = dates[offset + gap];
+      if (!restMap || !d1Map) continue;
+
+      for (const ticker of Object.keys(restMap)) {
+        // Skip non-equities (warrants, units, options)
+        if (ticker.length > 5 || ticker.includes('.') || ticker.includes('/') || ticker.includes('+')) continue;
+
+        const rest = restMap[ticker];
+        const d1 = d1Map[ticker];
+        if (!rest || !d1) continue;
+
+        // ── D1 DOLLAR VOLUME (shares × close) ──
+        const d1DolVol = d1.vol * d1.close;
+        const passF1Vol = d1DolVol >= 300e6; // lowered for micro-cap coverage
+        const passF2Vol = d1DolVol >= 1e9;
+        if (filterMode === '1' && !passF1Vol) continue;
+        if (filterMode === '2' && !passF2Vol) continue;
+        if (filterMode === '3' && !passF1Vol && !passF2Vol) continue;
+
+        // ── D1 EXTENSION (D1 high vs prior day close) ──
+        const preD1Bar = preD1?.[ticker];
+        const d1ExtBase = preD1Bar ? preD1Bar.close : d1.open; // fallback to open if no prior day
+        const d1ExtPct = d1ExtBase > 0 ? ((d1.high - d1ExtBase) / d1ExtBase) * 100 : 0;
+        if (d1ExtPct < 70) continue; // D1 high must extend 70%+ from prior close
+        const d1RangePct = ((d1.high - d1.low) / d1.low) * 100;
+        const d1IntradayPct = ((d1.close - d1.open) / d1.open) * 100;
+
+        // Price filter (skip sub-penny)
+        if (d1ExtBase < 0.20) continue;
+
+        // ── INSIDE DAY CHECK (rest day contained within D1 range) ──
+        // Allow tolerance — real inside days sometimes have slight wick violations
+        const d1Range = d1.high - d1.low;
+        const lowTol  = d1Range * 0.25; // 25% of D1 range for low
+        // Rest day high can be up to 2% above D1 high (micro-cap wick tolerance)
+        const highTol = d1.high * 0.03;
+        if (rest.high > d1.high + highTol || rest.low < d1.low - lowTol) continue;
+        const isStrictInside = rest.low >= d1.low; // high is always strict now
+
+        // ── RETRACEMENT ≤ 80% ──
+        // Retracement = how much of the TOTAL MOVE (prior close → D1 high) was given back
+        const totalMove = d1.high - d1ExtBase; // d1ExtBase = prior close
+        const retracePct = totalMove > 0 ? ((d1.high - rest.low) / totalMove) * 100 : 0;
+        if (retracePct > 85) continue;
+
+        // ── REST DAY GAP (rest day open vs D1 close) — informational ──
+        const restGapPct = ((rest.open - d1.close) / d1.close) * 100;
+
+        // ── FILTER PASS CHECK ──
+        // F1: trade day gap >= 0% (no gap down). Since trade day hasn't happened for live,
+        // this will be checked in manual notes. For now pass F1 on volume only.
+        const passF1 = passF1Vol;
+        const passF2 = passF2Vol;
+        if (filterMode === '1' && !passF1) continue;
+        if (filterMode === '2' && !passF2) continue;
+        if (filterMode === '3' && !passF1 && !passF2) continue;
+
+        // ── SSR PREFILTER (daily bar) ──
+        // SSR from rest day: rest low ≤ D1 close × 0.90
+        // SSR from D1: D1 low ≤ prior close × 0.90 (carries into rest day)
+        // SSR check — informational flag, NOT a hard filter
+        const ssrFromRest = (rest.low <= d1.close * 0.95);
+        const ssrFromD1 = preD1Bar ? (d1.low <= preD1Bar.close * 0.95) : false;
+        const ssrPossible = ssrFromRest || ssrFromD1;
+        // SSR info stored but does not filter out candidates
+
+        // ── D1 CLOSE-TO-CLOSE ──
+        const d1C2C = preD1Bar ? ((d1.close - preD1Bar.close) / preD1Bar.close * 100) : d1IntradayPct;
+
+        // ── TRIGGER: rest day high ──
+        const triggerPrice = rest.high;
+
+        if (!isStrictInside) continue; // only show strict inside day, not NEAR
+        if (candidates.find(c => c.ticker === ticker)) continue;
+
+        candidates.push({
+          ticker, d1Date, restDate, offset,
+          // Trade date: the day after rest day
+          tradeDate: offset > 0 ? dates[offset - 1] : null, // null = tomorrow (next trading day)
+          d1DolVol, d1IntradayPct, d1C2C, d1RangePct, d1ExtPct,
+          d1Open: d1.open, d1High: d1.high, d1Low: d1.low, d1Close: d1.close, d1Vol: d1.vol,
+          restOpen: rest.open, restHigh: rest.high, restLow: rest.low, restClose: rest.close, restVol: rest.vol,
+          isStrictInside, retracePct, restGapPct,
+          ssrPossible, ssrFromRest, ssrFromD1,
+          passF1, passF2,
+          triggerPrice,
+          idVolRatio: rest.vol / d1.vol,
+        });
+      }
+      } // end gap loop
+    }
+
+    statusEl.textContent = `Phase 1: ${candidates.length} candidates. Phase 2: Deep checks…`;
+
+    // ═══════ PHASE 2: Per-ticker deep checks (bags, MDR) ═══════
+    const results = [];
+    let checked = 0;
+    for (const c of candidates) {
+      checked++;
+      if (checked % 5 === 0) {
+        statusEl.textContent = `Phase 2: Checking ${checked}/${candidates.length}…`;
+        await sleep(50);
+      }
+
+      // Fetch 70-day history for bags + MDR check
+      const histFrom = new Date(c.d1Date + 'T12:00:00');
+      histFrom.setDate(histFrom.getDate() - 75);
+      const histTo = c.d1Date;
+      let hist = [];
+      try{ hist = await fetchTickerHistory(c.ticker, histFrom.toISOString().slice(0, 10), histTo); }catch(e){}
+      await sleep(250);
+
+      const d1Idx = hist.findIndex(b => b.date === c.d1Date);
+
+      let hasBags = false;
+      let bagDetails = '';
+      if(hist.length>0){
+        const lookback60 = hist.filter(b => {
+          const diff = (new Date(c.d1Date) - new Date(b.date)) / 86400000;
+          return diff > 0 && diff <= 60 && b.date !== c.d1Date;
+        });
+        for (const b of lookback60) {
+          if (b.vol >= 100e6 && b.high > c.restOpen) { // 100M shares
+            hasBags = true;
+            bagDetails = `${b.date} $${(b.dolVol/1e6).toFixed(0)}M H=${b.high.toFixed(2)}`;
+            break;
+          }
+        }
+      }
+
+      let hasMDR = false;
+      let mdrDetails = '';
+      if (d1Idx > 0) {
+        const mdrWindow = hist.slice(Math.max(0, d1Idx - 11), d1Idx);
+        for (const b of mdrWindow) {
+          const movePct = ((b.high - b.low) / b.low) * 100;
+          if (movePct >= 20 && b.vol >= 10e6) { // 10M+ shares traded
+            hasMDR = true;
+            mdrDetails = `${b.date} ${movePct.toFixed(0)}% ${(b.vol/1e6).toFixed(0)}M shares`;
+            break;
+          }
+        }
+      }
+
+      let filterTag = [];
+      const f1Pass = c.passF1 && !hasBags && !hasMDR;
+      const f2Pass = c.passF2 && !hasBags && !hasMDR;
+
+      if (f1Pass) filterTag.push('F1');
+      if (f2Pass) filterTag.push('F2');
+
+      if (filterMode === '1' && !f1Pass) continue;
+      if (filterMode === '2' && !f2Pass) continue;
+      if (filterMode === '3' && !f1Pass && !f2Pass) continue;
+
+      results.push({
+        ...c,
+        hasBags, bagDetails,
+        hasMDR, mdrDetails,
+        filterTag,
+        // Manual checks needed
+        manualChecks: [
+          '⚠ SSR: rest day must trade 10% below D1 close in RTH',
+          '⚠ D1 HOD must be after 9:30 AM',
+          c.passF1 && !c.passF2 ? '⚠ F1: trade day must NOT gap down' : null,
+          c.passF1 && !c.passF2 ? '⚠ F1: needs PM $vol ≥ $2M' : null,
+          '⚠ Trade day must NOT break D1 HOD in premarket',
+          '⚠ ORB: must break rest day high between 9:35-10:30',
+          '⚠ Check warrants',
+        ].filter(Boolean),
+      });
+    }
+
+    // Sort: freshest first, then by D1 dollar volume
+    results.sort((a, b) => a.offset - b.offset || b.d1DolVol - a.d1DolVol);
+
+    countEl.textContent = results.length + ' found';
+    if (!results.length) {
+      statusEl.innerHTML = `<span style="color:#f59e0b;">0 setups passed filters.</span> ${candidates.length} candidates checked. Try F3 (Both) or wait for setups.`;
+    } else {
+      statusEl.innerHTML = `<span style="color:#4ade80;">${results.length} setups</span> from ${candidates.length} candidates. Click to load chart.`;
+    }
+
+    // ═══════ RENDER WATCHLIST ═══════
+    wlEl.innerHTML = results.map((r, idx) => {
+      const today = new Date().toISOString().slice(0,10);
+      const freshTag = r.tradeDate === null
+        ? '<span style="color:#4ade80;font-size:9px;font-weight:700;">● TRADE TOMORROW</span>'
+        : r.tradeDate === today
+        ? '<span style="color:#4ade80;font-size:9px;font-weight:700;">● TRADE TODAY</span>'
+        : r.tradeDate > today
+        ? '<span style="color:#4ade80;font-size:9px;font-weight:700;">● TRADE TOMORROW</span>'
+        : '<span style="color:#4a6080;font-size:8px;">● traded '+r.tradeDate+'</span>';
+
+      const fTag = r.filterTag.map(f =>
+        f === 'F1' ? '<span style="background:#4ade8020;color:#4ade80;font-size:7px;padding:1px 4px;border-radius:2px;font-weight:700;">F1</span>'
+                   : '<span style="background:#38bdf820;color:#38bdf8;font-size:7px;padding:1px 4px;border-radius:2px;font-weight:700;">F2</span>'
+      ).join(' ');
+
+      const strictTag = r.isStrictInside
+        ? '<span style="color:#4ade80;font-size:7px;">✓ INSIDE</span>'
+        : '<span style="color:#f59e0b;font-size:7px;">~ NEAR</span>';
+
+      const ssrTag = r.ssrPossible
+        ? '<span style="color:#4ade80;font-size:8px;font-weight:700;">SSR ✓</span>'
+        : '<span style="color:#ef5350;font-size:8px;font-weight:700;">SSR ✗</span>';
+
+      const d1VolStr = '$' + (r.d1DolVol / 1e6).toFixed(0) + 'M';
+      const volRatioCol = r.idVolRatio < 0.5 ? '#26a69a' : r.idVolRatio < 1 ? '#f59e0b' : '#ef5350';
+
+      const manualHtml = r.manualChecks.length
+        ? '<div style="margin-top:3px;padding-top:3px;border-top:1px solid #1a2030;font-size:8px;color:#f59e0b;line-height:1.6;">' + r.manualChecks.join('<br>') + '</div>'
+        : '';
+
+      return `<div class="scan-item" data-ticker="${r.ticker}" data-trigger="${r.triggerPrice}" data-d1date="${r.d1Date}" data-restdate="${r.restDate}" style="padding:6px 8px;margin-bottom:4px;background:${idx%2===0?'#0d1220':'#101828'};border:1px solid #1e2840;border-radius:4px;cursor:pointer;transition:border-color .1s;" onmouseover="this.style.borderColor='#4ade80'" onmouseout="this.style.borderColor='#1e2840'">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
+          <span style="color:#dde3f0;font-weight:800;font-size:14px;font-family:'Courier New',monospace;">${r.ticker}</span>
+          <span style="display:flex;gap:4px;align-items:center;">${fTag} ${ssrTag} ${strictTag} ${freshTag}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px 8px;font-size:9px;">
+          <span style="color:#6a80a0;">D1 $vol</span><span style="color:#8aa0c0;font-weight:700;">${d1VolStr}</span>
+          <span style="color:#6a80a0;">D1 shares</span><span style="color:#8aa0c0;">${(r.d1Vol/1e6).toFixed(1)}M</span>
+          <span style="color:#6a80a0;">D1 ext</span><span style="color:#26a69a;font-weight:700;">+${(r.d1ExtPct||0).toFixed(0)}% (HOD vs PCL)</span>
+          <span style="color:#6a80a0;">D1 range</span><span style="color:#8aa0c0;">$${r.d1Low.toFixed(2)}–$${r.d1High.toFixed(2)} (${r.d1RangePct.toFixed(0)}%)</span>
+          <span style="color:#6a80a0;">D1 close</span><span style="color:#8aa0c0;">$${r.d1Close.toFixed(2)}</span>
+          <span style="color:#6a80a0;">Rest range</span><span style="color:#8aa0c0;">$${r.restLow.toFixed(2)}–$${r.restHigh.toFixed(2)}</span>
+          <span style="color:#6a80a0;">Rest vol</span><span style="color:${volRatioCol};">${(r.idVolRatio*100).toFixed(0)}% of D1</span>
+          <span style="color:#6a80a0;">Retrace</span><span style="color:${r.retracePct>60?'#f59e0b':'#26a69a'};">${r.retracePct.toFixed(0)}%</span>
+          <span style="color:#6a80a0;">Gap</span><span style="color:${r.restGapPct<-5?'#ef5350':r.restGapPct<0?'#f59e0b':'#26a69a'};">${r.restGapPct>=0?'+':''}${r.restGapPct.toFixed(1)}%</span>
+          <span style="color:#4ade80;font-weight:700;">▲ TRIGGER</span><span style="color:#4ade80;font-weight:800;">$${r.triggerPrice.toFixed(2)} (rest day high break)</span>
+        </div>${manualHtml}
+      </div>`;
+    }).join('');
+
+    // Click to load chart
+    wlEl.querySelectorAll('.scan-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const ticker = el.dataset.ticker;
+        const d1date = el.dataset.d1date;
+        symbol = ticker;
+        document.getElementById('symbol-input').value = symbol;
+        const d1 = new Date(d1date + 'T12:00:00');
+        const toD = new Date(); toD.setDate(toD.getDate() + 1);
+        panels.forEach((p, i) => {
+          if (isIntraday(p.tf)) {
+            const f = new Date(d1); f.setDate(f.getDate() - 1);
+            p.startDate = fmtDate(f); p.endDate = fmtDate(toD);
+          } else {
+            const f = new Date(d1); f.setDate(f.getDate() - 90);
+            p.startDate = fmtDate(f); p.endDate = fmtDate(toD);
+          }
+          document.getElementById(`from-${i}`).value = p.startDate;
+          document.getElementById(`to-${i}`).value = p.endDate;
+        });
+        if (liveMode) setLiveMode(false);
+        loadAll();
+        toast(`📈 ${ticker} — trigger ▲ $${parseFloat(el.dataset.trigger).toFixed(2)}`);
+        wlEl.querySelectorAll('.scan-item').forEach(e => e.style.borderColor = '#1e2840');
+        el.style.borderColor = '#4ade80';
+      });
+    });
+
+  } catch (err) {
+    statusEl.textContent = '✗ Scan failed: ' + err.message;
+    statusEl.style.color = '#ef5350';
+    console.error('Scan error:', err);
+  } finally {
+    btn.disabled = false; btn.textContent = '▶ SCAN';
+  }
+}
+
+// ── Scan panel toggle ──
+let scanMode='live'; // 'live' or 'historical'
+document.getElementById('scan-btn').addEventListener('click',()=>{
+  const panel=document.getElementById('scan-panel');
+  const isOpen=panel.classList.contains('open');
+  panel.classList.toggle('open',!isOpen);
+  document.getElementById('scan-btn').classList.toggle('active',!isOpen);
+  adjustFullscreenRight();
+  // Also adjust non-fullscreen grid
+  document.getElementById('main-area').style.marginRight=(!isOpen)?'522px':'0';
+  setTimeout(()=>panels.forEach(p=>resizePanel(p)),100);
+});
+document.getElementById('scan-close').addEventListener('click',()=>{
+  document.getElementById('scan-panel').classList.remove('open');
+  document.getElementById('scan-btn').classList.remove('active');
+  adjustFullscreenRight();
+  document.getElementById('main-area').style.marginRight='0';
+  setTimeout(()=>panels.forEach(p=>resizePanel(p)),100);
+});
+
+// ── Tab switching ──
+document.querySelectorAll('.scan-tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.scan-tab').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active');
+    scanMode=tab.dataset.scantab;
+    const isHist=scanMode==='historical';
+    document.getElementById('scan-watchlist').style.display=isHist?'none':'';
+    document.getElementById('scan-historical').style.display=isHist?'':'none';
+    document.getElementById('scan-date-range').style.display=isHist?'':'none';
+    document.getElementById('scan-run-btn').textContent=isHist?'▶ SCAN RANGE':'▶ SCAN';
+    document.getElementById('scan-status').textContent='';
+    document.getElementById('scan-count').textContent='';
+    // Default dates if empty
+    if(isHist && !document.getElementById('scan-from').value){
+      const to=new Date(), from=new Date();
+      from.setDate(from.getDate()-90);
+      document.getElementById('scan-from').value=from.toISOString().slice(0,10);
+      document.getElementById('scan-to').value=to.toISOString().slice(0,10);
+    }
+  });
+});
+
+// ── Date preset buttons ──
+document.querySelectorAll('.scan-preset').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    const days=parseInt(btn.dataset.days);
+    const to=new Date(), from=new Date();
+    from.setDate(from.getDate()-days);
+    document.getElementById('scan-from').value=from.toISOString().slice(0,10);
+    document.getElementById('scan-to').value=to.toISOString().slice(0,10);
+    document.querySelectorAll('.scan-preset').forEach(b=>{b.style.borderColor='#2a3050';b.style.color='#4a6080';});
+    btn.style.borderColor='#a855f7'; btn.style.color='#a855f7';
+  });
+});
+
+// ── Run button dispatches to live or historical ──
+document.getElementById('scan-run-btn').addEventListener('click',()=>{
+  if(scanMode==='historical') runHistoricalScan();
+  else runScan();
+});
+
+// ══════════════════════════════════════════════════════════
+//  HISTORICAL SCAN (custom date range)
+// ══════════════════════════════════════════════════════════
+function getTradingDatesBetween(fromStr, toStr) {
+  // Generate all weekday dates from fromStr to toStr (inclusive), most recent first
+  const dates = [];
+  const from = new Date(fromStr + 'T12:00:00');
+  const to = new Date(toStr + 'T12:00:00');
+  let d = new Date(to);
+  while (d >= from) {
+    if (d.getDay() !== 0 && d.getDay() !== 6) {
+      dates.push(d.toISOString().slice(0, 10));
+    }
+    d.setDate(d.getDate() - 1);
+  }
+  return dates; // most recent first
+}
+
+
+async function runHistoricalScan(){
+  const btn=document.getElementById('scan-run-btn');
+  const statusEl=document.getElementById('scan-status');
+  const histEl=document.getElementById('scan-historical');
+  const countEl=document.getElementById('scan-count');
+  const filterMode=document.querySelector('input[name="scan-filter"]:checked')?.value||'3';
+
+  // Get dates from inputs
+  const fromStr=document.getElementById('scan-from').value;
+  const toStr=document.getElementById('scan-to').value;
+  if(!fromStr||!toStr){
+    statusEl.textContent='Set FROM and TO dates first.';
+    statusEl.style.color='#f59e0b';
+    return;
+  }
+
+  btn.disabled=true; btn.textContent='⏳ SCANNING…';
+  histEl.innerHTML=''; countEl.textContent='';
+
+  // Add 3 buffer days before FROM to catch patterns at the start of range
+  const bufferFrom=new Date(fromStr+'T12:00:00');
+  bufferFrom.setDate(bufferFrom.getDate()-5); // 5 calendar days = ~3 trading days
+  const bufFromStr=bufferFrom.toISOString().slice(0,10);
+  const allDates=getTradingDatesBetween(bufFromStr, toStr);
+  const totalDays=allDates.length;
+  if(totalDays>500){
+    statusEl.innerHTML=`<span style="color:#f59e0b;">⚠ ${totalDays} trading days — this will take ~${Math.ceil(totalDays/5*1.2/60)} minutes. Consider a shorter range.</span>`;
+  }
+  if(totalDays<3){
+    statusEl.textContent='Need at least 3 trading days in range.';
+    statusEl.style.color='#f59e0b';
+    btn.disabled=false; btn.textContent='▶ SCAN RANGE';
+    return;
+  }
+  statusEl.textContent=`Fetching ${totalDays} trading days (${fromStr} → ${toStr})…`;
+
+  try{
+    // Fetch in batches of 5 to stay within rate limits
+    const dayMaps=[];
+    for(let i=0;i<allDates.length;i+=5){
+      const batch=allDates.slice(i,i+5);
+      const maps=await Promise.all(batch.map(fetchGroupedDaily));
+      dayMaps.push(...maps);
+      statusEl.textContent=`Fetched ${dayMaps.length}/${totalDays} days… ~${Math.ceil((totalDays-dayMaps.length)/5)}s remaining`;
+      if(i+5<allDates.length) await sleep(1100); // rate limit: 5 calls/sec
+    }
+
+    statusEl.textContent=`Phase 1: Scanning ${totalDays} days for inside day patterns…`;
+
+    const candidates=[];
+
+    // Scan patterns: D1 can be 1 or 2 trading days before rest day
+    // gap=1: standard consecutive (D1 yesterday, rest today)
+    // gap=2: one skip day between D1 and rest
+    for(let i=0;i<allDates.length-2;i++){
+      for(let gap=1;gap<=2;gap++){
+      if(i+gap>=allDates.length-1) continue;
+      const restMap=dayMaps[i];
+      const d1Map=dayMaps[i+gap];
+      const preD1Map=(i+gap+1<allDates.length)?dayMaps[i+gap+1]:null;
+      const restDate=allDates[i];
+      const d1Date=allDates[i+gap];
+      if(!restMap||!d1Map) continue;
+
+      for(const ticker of Object.keys(restMap)){
+        if(ticker.length>5||ticker.includes('.')||ticker.includes('/')||ticker.includes('+')) continue;
+        const rest=restMap[ticker];
+        const d1=d1Map[ticker];
+        if(!rest||!d1) continue;
+        const _dbg=ticker==='BIAF'; // debug flag for specific ticker
+
+        const d1DolVol=d1.vol*d1.close;
+        const passF1Vol=d1DolVol>=300e6;
+        const passF2Vol=d1DolVol>=1e9;
+        if(filterMode==='1'&&!passF1Vol) continue;
+        if(filterMode==='2'&&!passF2Vol) continue;
+        if(filterMode==='3'&&!passF1Vol&&!passF2Vol){if(_dbg)console.log('BIAF killed: vol',d1DolVol,restDate,d1Date);continue;}
+
+        const preD1Bar=preD1Map?.[ticker];
+        const d1ExtBase=preD1Bar?preD1Bar.close:d1.open;
+        const d1ExtPct=d1ExtBase>0?((d1.high-d1ExtBase)/d1ExtBase)*100:0;
+        if(d1ExtPct<70){if(_dbg)console.log('BIAF killed: ext',d1ExtPct.toFixed(1)+'%',restDate);continue;}
+        const d1RangePct=((d1.high-d1.low)/d1.low)*100;
+        const d1IntradayPct=((d1.close-d1.open)/d1.open)*100;
+        if(d1ExtBase<0.20) continue;
+
+        const d1Range=d1.high-d1.low;
+        const lowTol=d1Range*0.25;
+        // Rest day high can be up to 2% above D1 high (micro-cap wick tolerance)
+        const highTol=d1.high*0.03;
+        if(rest.high>d1.high+highTol||rest.low<d1.low-lowTol){if(_dbg)console.log('BIAF killed: inside day','restH='+rest.high,'d1H='+d1.high+'+'+highTol.toFixed(2),'restL='+rest.low,'d1L='+d1.low+'-'+lowTol.toFixed(2),restDate);continue;}
+        const isStrictInside=rest.low>=d1.low; // high is always strict now
+
+        // Retracement = (D1 high - rest low) / (D1 high - prior close)
+        const totalMove=d1.high-d1ExtBase;
+        const retracePct=totalMove>0?((d1.high-rest.low)/totalMove)*100:0;
+        if(retracePct>85){if(_dbg)console.log('BIAF killed: retrace',retracePct.toFixed(1)+'%',restDate);continue;}
+
+        const restGapPct=((rest.open-d1.close)/d1.close)*100;
+        // Gap filter removed per user
+        // Calculate trade day gap for display only
+        const tdMapGap=i>0?dayMaps[i-1]:null;
+        const tdBarGap=tdMapGap?.[ticker];
+        const tdGapPct=tdBarGap?((tdBarGap.open-rest.close)/rest.close*100):null;
+        // F1 requires trade day gap >= 0% (no gap down)
+        const passF1Gap=tdGapPct!=null?(tdGapPct>=-3):true; // allow tiny gap down tolerance
+        const passF1=passF1Vol&&passF1Gap;
+        const passF2=passF2Vol; // F2 has no gap requirement
+        if(filterMode==='1'&&!passF1) continue;
+        if(filterMode==='2'&&!passF2) continue;
+        if(filterMode==='3'&&!passF1&&!passF2) continue;
+
+        // SSR prefilter: rest day low ≤ D1 close × 0.90 OR D1 low ≤ prior close × 0.90
+        const ssrFromRest=(rest.low<=d1.close*0.95);
+        const ssrFromD1=preD1Bar?(d1.low<=preD1Bar.close*0.95):false;
+        const ssrPossible=ssrFromRest||ssrFromD1;
+        if(_dbg)console.log('BIAF SSR:','ssrPossible='+ssrPossible,'restL='+rest.low,'thresh='+d1.close*0.95,'d1L='+d1.low);
+        const d1C2C=preD1Bar?((d1.close-preD1Bar.close)/preD1Bar.close*100):d1IntradayPct;
+
+        // Check if trade day data exists (day after rest day)
+        const tdMap=i>0?dayMaps[i-1]:null;
+        const tdBar=tdMap?.[ticker];
+        const tdHodAboveRestHigh=tdBar?(tdBar.high>rest.high):null;
+        const tdResult=tdBar?((tdBar.close-tdBar.open)/tdBar.open*100):null;
+
+        // ── TRADE DAY OPEN MUST BE BELOW D1 HOD ──
+        // Trade day open vs D1 high — rough daily-bar precheck
+        // Precise PM check done in Phase 2 with 5-min bars
+        if(tdBar && tdBar.open >= d1.high){if(_dbg)console.log('BIAF killed: tdOpen',tdBar.open,'>=',d1.high,restDate);continue;}
+        if(_dbg)console.log('BIAF PASSED Phase 1!',restDate,d1Date,'vol=$'+Math.round(d1DolVol/1e6)+'M ext='+d1ExtPct.toFixed(0)+'% ret='+retracePct.toFixed(0)+'%');
+
+        candidates.push({
+          ticker, d1Date, restDate,
+          tradeDate:i>0?allDates[i-1]:null,
+          d1DolVol, d1IntradayPct, d1C2C, d1RangePct, d1ExtPct,
+          d1Close:d1.close, d1High:d1.high, d1Low:d1.low,
+          restHigh:rest.high, restLow:rest.low, restClose:rest.close, restOpen:rest.open,
+          isStrictInside, retracePct, restGapPct, tdGapPct,
+          ssrPossible,
+          passF1, passF2,
+          triggerPrice:rest.high,
+          idVolRatio:rest.vol/d1.vol,
+          tdHodAboveRestHigh, tdResult, tdOpen:tdBar?tdBar.open:null,
+        });
+      }
+
+      if(i%10===0) {
+        statusEl.textContent=`Phase 1: Scanned ${i+1}/${totalDays-2} days… ${candidates.length} candidates`;
+        await sleep(10);
+      }
+      } // end gap loop
+    }
+
+    // Dedupe: keep most recent occurrence per ticker-d1Date pair
+    const seen=new Set();
+    const deduped=candidates.filter(c=>{
+      // Dedupe by ticker + trade date (what the user actually sees)
+      const td=c.tradeDate||c.restDate;
+      const key=c.ticker+'_'+td;
+      if(seen.has(key)) return false;
+      seen.add(key); return true;
+    });
+
+    statusEl.textContent=`Phase 2: Deep-checking ${deduped.length} candidates (bags + MDR)…`;
+
+    // Phase 2: bags + MDR only (1 API call per candidate)
+    // Intraday checks (SSR RTH, D1 HOD timing, ORB) skipped for speed — verify manually
+    const results=[];
+    let checked=0;
+    const killReasons={bags:0,mdr:0,histFail:0,f1f2:0};
+    for(const c of deduped){
+      checked++;
+      const _dbg2=(c.ticker==='BIAF');
+      if(_dbg2) console.log('BIAF Phase2 entry:',c.restDate,c.d1Date,'passF1='+c.passF1);
+      if(checked%5===0){
+        statusEl.textContent=`Phase 2: ${checked}/${deduped.length} — ${results.length} pass | bags:${killReasons.bags} mdr:${killReasons.mdr} flt:${killReasons.f1f2}`;
+        await sleep(10);
+      }
+      const histFrom=new Date(c.d1Date+'T12:00:00');
+      histFrom.setDate(histFrom.getDate()-75);
+      let hist=[];
+      try{
+        hist=await fetchTickerHistory(c.ticker,histFrom.toISOString().slice(0,10),c.d1Date);
+      }catch(e){ killReasons.histFail++; }
+      await sleep(250);
+
+      const d1Idx=hist.findIndex(b=>b.date===c.d1Date);
+      let hasBags=false,bagDetails='';
+      if(hist.length>0){
+        const lb60=hist.filter(b=>{
+          const diff=(new Date(c.d1Date)-new Date(b.date))/86400000;
+          return diff>0&&diff<=60&&b.date!==c.d1Date;
+        });
+        for(const b of lb60){
+          const bagRef=c.tdOpen||c.restOpen;
+          if(b.vol>=100e6&&b.high>bagRef){hasBags=true;bagDetails=b.date;break;} // 100M shares
+        }
+      }
+      let hasMDR=false,mdrDetails='';
+      if(d1Idx>0){
+        const mdrW=hist.slice(Math.max(0,d1Idx-11),d1Idx);
+        for(const b of mdrW){
+          const mv=((b.high-b.low)/b.low)*100;
+          if(mv>=20&&b.vol>=10e6){hasMDR=true;mdrDetails=b.date;break;} // 10M+ shares traded
+        }
+      }
+
+      const f1Pass=c.passF1&&!hasBags&&!hasMDR;
+      const f2Pass=c.passF2&&!hasBags&&!hasMDR;
+      if(_dbg2) console.log('BIAF Phase2:','bags='+hasBags+(hasBags?'('+bagDetails+')':''),'mdr='+hasMDR+(hasMDR?'('+mdrDetails+')':''),'f1='+f1Pass,'f2='+f2Pass);
+      if(hasBags){ killReasons.bags++; }
+      if(hasMDR){ killReasons.mdr++; }
+      if(filterMode==='1'&&!f1Pass){ killReasons.f1f2++; continue; }
+      if(filterMode==='2'&&!f2Pass){ killReasons.f1f2++; continue; }
+      if(filterMode==='3'&&!f1Pass&&!f2Pass){ killReasons.f1f2++; continue; }
+
+      const filterTag=[];
+      if(f1Pass) filterTag.push('F1');
+      if(f2Pass) filterTag.push('F2');
+
+      results.push({...c,hasBags,bagDetails,hasMDR,mdrDetails,filterTag});
+    }
+
+    // Sort by date (most recent first)
+    results.sort((a,b)=>(b.tradeDate||b.restDate).localeCompare(a.tradeDate||a.restDate));
+
+    countEl.textContent=results.length+' found';
+    const kr=killReasons;
+    statusEl.innerHTML=`<span style="color:#4ade80;">${results.length} setups</span> from ${deduped.length} candidates (${fromStr} → ${toStr}).<br>`
+      +`<span style="color:#6a80a0;font-size:10px;">Filtered: bags:${kr.bags} mdr:${kr.mdr} d1hod:${kr.d1hod} ssr:${kr.ssr} orb:${kr.tdOrb} f1f2:${kr.f1f2}</span>`;
+
+    // Render as compact table
+    histEl.innerHTML=`<div style="font-size:11px;color:#8aa0c0;padding:8px 4px;border-bottom:2px solid #2a3050;display:grid;grid-template-columns:78px 52px 48px 42px 30px 30px 36px 38px 28px;gap:2px;font-weight:700;letter-spacing:0.3px;">
+      <span>TRADE DATE</span><span>TICKER</span><span>D1$VOL</span><span>D1EXT</span><span>RET</span><span>SSR</span><span>GAP</span><span>TDRES</span><span>FLT</span>
+    </div>`+results.map((r,idx)=>{
+      const fTag=r.filterTag.join('/');
+      const fCol=fTag.includes('F1')&&fTag.includes('F2')?'#f59e0b':fTag.includes('F2')?'#38bdf8':'#4ade80';
+      const tdCol=r.tdResult!=null?(r.tdResult>=0?'#26a69a':'#ef5350'):'#4a6080';
+      const tdTxt=r.tdResult!=null?(r.tdResult>=0?'+':'')+r.tdResult.toFixed(1)+'%':'—';
+// TD GAP column removed, replaced with SSR
+      const bgCol=idx%2===0?'#0d1220':'#101828';
+      return `<div class="scan-item" data-ticker="${r.ticker}" data-trigger="${r.triggerPrice}" data-d1date="${r.d1Date}" data-restdate="${r.restDate}" style="display:grid;grid-template-columns:78px 52px 48px 42px 30px 30px 36px 38px 28px;gap:2px;padding:6px 3px;font-size:11px;background:${bgCol};border:1px solid #1e2840;border-radius:3px;margin-bottom:2px;cursor:pointer;align-items:center;" onmouseover="this.style.borderColor='#4ade80'" onmouseout="this.style.borderColor='#1e2840'">
+        <span style="color:#8aa0c0;font-weight:600;">${r.tradeDate||r.restDate}</span>
+        <span style="color:#dde3f0;font-weight:800;font-family:'Segoe UI',Arial,sans-serif;font-size:12px;">${r.ticker}</span>
+        <span style="color:#8aa0c0;font-weight:600;">$${(r.d1DolVol/1e6).toFixed(0)}M</span>
+        <span style="color:#26a69a;font-weight:700;">+${(r.d1ExtPct||0).toFixed(0)}%</span>
+        <span style="color:${r.retracePct>60?'#f59e0b':'#8aa0c0'};font-weight:600;">${r.retracePct.toFixed(0)}%</span>
+        <span style="color:${r.ssrPossible?'#4ade80':'#ef5350'};font-weight:700;font-size:9px;">${r.ssrPossible?'YES':'NO'}</span>
+        <span style="color:${r.restGapPct<-5?'#ef5350':r.restGapPct<0?'#f59e0b':'#26a69a'};font-weight:600;">${r.restGapPct>=0?'+':''}${r.restGapPct.toFixed(1)}%</span>
+        <span style="color:${tdCol};font-weight:700;">${tdTxt}</span>
+        <span style="color:${fCol};font-weight:700;">${fTag}</span>
+      </div>`;
+    }).join('');
+
+    // Click to load chart
+    histEl.querySelectorAll('.scan-item').forEach(el=>{
+      el.addEventListener('click',()=>{
+        const ticker=el.dataset.ticker;
+        const d1date=el.dataset.d1date;
+        symbol=ticker;
+        document.getElementById('symbol-input').value=symbol;
+        const d1=new Date(d1date+'T12:00:00');
+        const toD=new Date(d1date+'T12:00:00'); toD.setDate(toD.getDate()+5);
+        panels.forEach((p,i)=>{
+          if(isIntraday(p.tf)){
+            const f=new Date(d1); f.setDate(f.getDate()-1);
+            p.startDate=fmtDate(f); p.endDate=fmtDate(toD);
+          }else{
+            const f=new Date(d1); f.setDate(f.getDate()-90);
+            p.startDate=fmtDate(f); p.endDate=fmtDate(toD);
+          }
+          document.getElementById(`from-${i}`).value=p.startDate;
+          document.getElementById(`to-${i}`).value=p.endDate;
+        });
+        if(liveMode) setLiveMode(false);
+        loadAll();
+        toast(`📈 ${ticker} — ${el.dataset.restdate} — trigger ▲ $${parseFloat(el.dataset.trigger).toFixed(2)}`);
+        histEl.querySelectorAll('.scan-item').forEach(e=>e.style.borderColor='#1e2840');
+        el.style.borderColor='#4ade80';
+      });
+    });
+
+  }catch(err){
+    statusEl.textContent='✗ Historical scan failed: '+err.message;
+    statusEl.style.color='#ef5350';
+    console.error('Historical scan error:',err);
+  }finally{
+    btn.disabled=false; btn.textContent='▶ SCAN RANGE';
+  }
+}
+
+function openBtSidebar(){
+  btActive=true;
+  document.getElementById('bt-sidebar').classList.add('open');
+  adjustFullscreenRight();
+  document.getElementById('bt-btn').classList.add('active');
+  buildBtRangeUI();
+  updateSimPnl();
+  setTimeout(()=>panels.forEach(p=>resizePanel(p)),50);
+}
+
+function buildBtRangeUI(){
+  const cfg=document.getElementById('bt-range-cfg');
+  const container=document.getElementById('bt-panel-ranges');
+  cfg.style.display='block';
+  container.innerHTML='';
+  panels.forEach((p,i)=>{
+    const defaultBack=!isIntraday(p.tf)?365:14;
+    const defaultFwd=14;
+    const row=document.createElement('div');
+    row.className='bt-range-row';
+    row.innerHTML=`
+      <span class="bt-range-tf">P${i+1} <span style="color:#4a6080">${p.tf==='D'?'D':p.tf==='W'?'W':p.tf==='M'?'Mo':p.tf+'m'}</span></span>
+      <span class="bt-range-label">BACK</span>
+      <input class="bt-range-input" id="bt-back-${i}" type="number" min="1" max="1000" placeholder="${defaultBack}" value="${p.btBack??''}"/>
+      <span class="bt-range-label" style="width:24px">FWD</span>
+      <input class="bt-range-input" id="bt-fwd-${i}" type="number" min="0" max="500" placeholder="${defaultFwd}" value="${p.btFwd??''}"/>`;
+    // Wire inputs — update p.btBack/btFwd immediately on change, don't reload
+    row.querySelector(`#bt-back-${i}`).addEventListener('change',e=>{
+      const v=parseInt(e.target.value);
+      p.btBack=isNaN(v)||v<=0?null:v;
+    });
+    row.querySelector(`#bt-fwd-${i}`).addEventListener('change',e=>{
+      const v=parseInt(e.target.value);
+      p.btFwd=isNaN(v)||v<0?null:v;
+    });
+    container.appendChild(row);
+  });
+}
+
+function closeBtSidebar(){
+  btActive=false;
+  btSelected=null; btMarkers=[];
+  document.getElementById('bt-sidebar').classList.remove('open');
+  adjustFullscreenRight();
+  document.getElementById('bt-btn').classList.remove('active');
+  document.getElementById('bt-sim').style.display='none';
+  document.querySelectorAll('.bt-trade.active').forEach(el=>el.classList.remove('active'));
+  renderAll();
+  setTimeout(()=>panels.forEach(p=>resizePanel(p)),50);
+}
+
+function loadBtFile(file){
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      btTrades=mergeBtTrades(parseBtCSV(e.target.result));
+      if(!btTrades.length){toast('No trades found in CSV',true);return;}
+      // Update stats
+      const s=btStats(btTrades);
+      document.getElementById('bts-trades').textContent=s.n;
+      const pnlEl=document.getElementById('bts-pnl');
+      pnlEl.textContent=fmtPnl(s.total);
+      pnlEl.className='bt-stat-v '+(s.total>=0?'pos':'neg');
+      document.getElementById('bts-wr').textContent=s.wr;
+      document.getElementById('bts-aw').textContent=s.avgW!=='—'?'+'+s.avgW:s.avgW;
+      document.getElementById('bts-al').textContent=s.avgL;
+      document.getElementById('bts-best').textContent='+'+s.best;
+      document.getElementById('bts-worst').textContent=s.worst;
+      document.getElementById('bt-stats').classList.add('show');
+  document.getElementById('bt-strategy').style.display='';
+      document.getElementById('bt-filter').classList.add('show');
+      // Update drop label
+      document.getElementById('bt-drop-label').innerHTML=`<span style="color:#26a69a">✓ ${file.name}</span><br><span style="color:#3a5070">${s.n} trades loaded — click to replace</span>`;
+      renderBtList();
+      toast(`✓ Loaded ${s.n} trades from ${file.name}`);
+    }catch(err){
+      toast('Error parsing CSV: '+err.message, true);
+    }
+  };
+  reader.readAsText(file);
+}
+
+// BT event wiring
+document.getElementById('bt-btn').addEventListener('click',()=>{
+  const wasActive=btActive;
+  if(wasActive) closeBtSidebar(); else openBtSidebar();
+  // Adjust fullscreen after sidebar toggle
+  setTimeout(()=>{adjustFullscreenRight();panels.forEach(p=>resizePanel(p));},100);
+});
+document.getElementById('bt-close').addEventListener('click',closeBtSidebar);
+document.getElementById('bt-file-input').addEventListener('change',e=>{
+  loadBtFile(e.target.files[0]);
+  e.target.value='';
+});
+const btDrop=document.getElementById('bt-drop');
+btDrop.addEventListener('dragover',e=>{e.preventDefault();btDrop.classList.add('drag-over');});
+btDrop.addEventListener('dragleave',()=>btDrop.classList.remove('drag-over'));
+btDrop.addEventListener('drop',e=>{
+  e.preventDefault(); btDrop.classList.remove('drag-over');
+  loadBtFile(e.dataTransfer.files[0]);
+});
+document.getElementById('bt-search').addEventListener('input',renderBtList);
+document.getElementById('bt-sort').addEventListener('change',renderBtList);
+document.getElementById('bt-hldt-btn').addEventListener('click',()=>{
+  btHighlightDates=!btHighlightDates;
+  const btn=document.getElementById('bt-hldt-btn');
+  btn.style.background=btHighlightDates?'#f59e0b18':'transparent';
+  btn.style.color=btHighlightDates?'#f59e0b':'#3a4560';
+  btn.style.borderColor=btHighlightDates?'#f59e0b':'#2a3050';
+  renderAll();
+});
+
+// ══════════════════════════════════════════════════════════
+//  TOAST
+// ══════════════════════════════════════════════════════════
+let toastT;
+function toast(msg,isErr){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.classList.toggle('err',!!isErr); el.classList.add('show');
+  clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('show','err'),3500);
+}
+
+// ══════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════
+buildPanels();
+requestAnimationFrame(()=>requestAnimationFrame(()=>{
+  panels.forEach(p=>resizePanel(p));
+  loadAll();
+}));
+
+// ── Sidebar drag divider ──
+(function(){
+  const divider = document.getElementById('bt-divider');
+  const topPane = document.getElementById('bt-top-pane');
+  if(!divider||!topPane) return;
+
+  // Default top pane height — set on first open or when sim becomes visible
+  let isDragging=false, startY=0, startH=0;
+
+  function initHeight(){
+    if(!topPane.style.height){
+      // Default: 45% of sidebar inner height
+      const sb=document.getElementById('bt-sidebar');
+      const hdr=document.getElementById('bt-header');
+      const avail=(sb.offsetHeight||600)-(hdr.offsetHeight||32)-6;
+      topPane.style.height=Math.round(avail*0.45)+'px';
+    }
+  }
+
+  divider.addEventListener('mousedown',e=>{
+    isDragging=true;
+    startY=e.clientY;
+    startH=topPane.offsetHeight;
+    divider.classList.add('dragging');
+    document.body.style.cursor='ns-resize';
+    document.body.style.userSelect='none';
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove',e=>{
+    if(!isDragging) return;
+    const sb=document.getElementById('bt-sidebar');
+    const hdr=document.getElementById('bt-header');
+    const avail=sb.offsetHeight-(hdr.offsetHeight||32)-6;
+    const delta=e.clientY-startY;
+    const newH=Math.max(40, Math.min(avail-40, startH+delta));
+    topPane.style.height=newH+'px';
+  });
+
+  document.addEventListener('mouseup',()=>{
+    if(!isDragging) return;
+    isDragging=false;
+    divider.classList.remove('dragging');
+    document.body.style.cursor='';
+    document.body.style.userSelect='';
+  });
+
+  // Init height when sidebar opens or sim becomes visible
+  const btBtn=document.getElementById('bt-btn');
+  if(btBtn) btBtn.addEventListener('click',()=>setTimeout(initHeight,50));
+
+  // Also init when updateSimPnl shows the panel
+  const simPanel=document.getElementById('bt-sim');
+  if(simPanel){
+    const obs=new MutationObserver(()=>{ if(simPanel.style.display!=='none') initHeight(); });
+    obs.observe(simPanel,{attributes:true,attributeFilter:['style']});
+  }
+})();
+
+// ── BT Strategy Mode Toggle ──
+document.getElementById('bt-strat-long').addEventListener('click',()=>{
+  btStrategyMode='long';
+  document.getElementById('bt-strat-long').style.borderColor='#00e676';
+  document.getElementById('bt-strat-long').style.background='#00e67618';
+  document.getElementById('bt-strat-long').style.color='#00e676';
+  document.getElementById('bt-strat-short').style.borderColor='#2a3050';
+  document.getElementById('bt-strat-short').style.background='none';
+  document.getElementById('bt-strat-short').style.color='#4a5580';
+  renderAll();
+});
+document.getElementById('bt-strat-short').addEventListener('click',()=>{
+  btStrategyMode='short';
+  document.getElementById('bt-strat-short').style.borderColor='#ff5252';
+  document.getElementById('bt-strat-short').style.background='#ff525218';
+  document.getElementById('bt-strat-short').style.color='#ff5252';
+  document.getElementById('bt-strat-long').style.borderColor='#2a3050';
+  document.getElementById('bt-strat-long').style.background='none';
+  document.getElementById('bt-strat-long').style.color='#4a5580';
+  renderAll();
+});
+
+// ── Draggable popup ──
+(function(){
+  const popup=document.getElementById('pct-popup');
+  const handle=document.getElementById('pct-popup-title');
+  let dx=0,dy=0,dragging=false;
+  handle.addEventListener('mousedown',e=>{
+    dragging=true; dx=e.clientX-popup.offsetLeft; dy=e.clientY-popup.offsetTop;
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove',e=>{
+    if(!dragging) return;
+    popup.style.left=(e.clientX-dx)+'px'; popup.style.top=(e.clientY-dy)+'px';
+  });
+  document.addEventListener('mouseup',()=>{dragging=false;});
+})();
+
+// ── Dropdown menus ──
+document.querySelectorAll('.dropdown-trigger').forEach(btn=>{
+  btn.addEventListener('click',e=>{
+    e.stopPropagation();
+    const menu=btn.nextElementSibling;
+    const wasOpen=menu.classList.contains('open');
+    document.querySelectorAll('.dropdown-content').forEach(m=>m.classList.remove('open'));
+    document.querySelectorAll('.dropdown-trigger').forEach(b=>b.classList.remove('active'));
+    if(!wasOpen){menu.classList.add('open');btn.classList.add('active');}
+  });
+});
+document.addEventListener('click',()=>{
+  document.querySelectorAll('.dropdown-content').forEach(m=>m.classList.remove('open'));
+  document.querySelectorAll('.dropdown-trigger').forEach(b=>b.classList.remove('active'));
+});
+document.querySelectorAll('.dropdown-content').forEach(menu=>{
+  menu.addEventListener('click',e=>e.stopPropagation());
+  // Close dropdown when a tool is selected
+  menu.querySelectorAll('.tool-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      // Don't close for highlight/opacity controls
+      if(!btn.dataset.tool?.startsWith('hl_')){
+        menu.classList.remove('open');
+        menu.previousElementSibling?.classList.remove('active');
+      }
+    });
+  });
+});
+
+
+
+</script>
+</body>
+</html>

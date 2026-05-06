@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Renata API Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #0a0a0a; color: white; }
+        button { padding: 10px 20px; margin: 10px; background: #d4af37; color: black; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #b8941f; }
+        #result { background: #1a1a1a; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        textarea { width: 100%; height: 100px; background: #1a1a1a; color: white; border: 1px solid #333; padding: 10px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>Renata API Test</h1>
+
+    <textarea id="message" placeholder="Type your message here...">hello</textarea>
+    <br>
+
+    <button onclick="testAPI()">Test Renata API</button>
+    <button onclick="clearResult()">Clear</button>
+
+    <div id="result"></div>
+
+    <script>
+        async function testAPI() {
+            const message = document.getElementById('message').value;
+            const resultDiv = document.getElementById('result');
+
+            resultDiv.innerHTML = '<p>🔄 Testing API...</p>';
+
+            try {
+                console.log('Sending request to Renata API...');
+
+                const response = await fetch('/api/renata/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        mode: 'renata',
+                        model: 'anthropic/claude-3.5-sonnet'
+                    })
+                });
+
+                console.log('Response status:', response.status);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                console.log('Response data:', data);
+
+                resultDiv.innerHTML = `
+                    <h3>✅ Success!</h3>
+                    <p><strong>Status:</strong> ${response.status}</p>
+                    <p><strong>Response:</strong> ${data.response}</p>
+                    <p><strong>Mode:</strong> ${data.mode}</p>
+                    <p><strong>Model:</strong> ${data.model}</p>
+                    <p><strong>Timestamp:</strong> ${data.timestamp}</p>
+                    ${data.navigationCommands && data.navigationCommands.length > 0 ?
+                        `<p><strong>Navigation Commands:</strong> ${JSON.stringify(data.navigationCommands)}</p>` : ''}
+                `;
+
+            } catch (error) {
+                console.error('API Test Error:', error);
+                resultDiv.innerHTML = `
+                    <h3>❌ Error!</h3>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <p><strong>Details:</strong> Check browser console for more info</p>
+                `;
+            }
+        }
+
+        function clearResult() {
+            document.getElementById('result').innerHTML = '';
+            document.getElementById('message').value = 'hello';
+        }
+
+        // Test on page load
+        window.onload = function() {
+            console.log('Renata API Test Page Loaded');
+            document.getElementById('result').innerHTML = '<p>Ready to test. Click "Test Renata API" button.</p>';
+        }
+    </script>
+</body>
+</html>

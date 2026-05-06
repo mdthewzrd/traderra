@@ -10,7 +10,11 @@ html,body{height:100%;overflow:hidden;background:#0b0d12;color:#dde3f0;font-fami
 body{display:flex;flex-direction:column;}
 
 /* ── TOP BAR ── */
-#topbar{background:#10131a;border-bottom:2px solid #222840;min-height:36px;display:flex;align-items:center;padding:4px 8px;gap:4px 5px;flex-shrink:0;z-index:600;flex-wrap:nowrap;overflow:hidden;position:relative;}
+#topbar{background:#10131a;border-bottom:2px solid #222840;min-height:36px;display:flex;align-items:center;padding:4px 8px;gap:4px 5px;flex-shrink:0;z-index:600;flex-wrap:wrap;position:relative;}
+.tbtn-row{display:flex;align-items:center;gap:4px;flex-shrink:0;flex-wrap:wrap;}
+.tbtn-row .tbtn{padding:4px 10px!important;font-size:11px!important;min-width:0!important;}
+.tbtn-row .tbtn.active{background:#D4AF37!important;border-color:#D4AF37!important;color:#000!important;}
+@media(max-width:1100px){.tbtn-row .tbtn{padding:3px 7px!important;font-size:10px!important;}}
 @media(max-width:1100px){#topbar{gap:4px 5px;padding:3px 8px;}.tbtn{padding:4px 10px;font-size:11px;min-width:36px;}}
 @media(max-width:800px){.tbtn{padding:3px 7px;font-size:10px;min-width:30px;}}
 #logo{font-weight:900;font-size:17px;color:#D4AF37;letter-spacing:-0.5px;margin-right:4px;}
@@ -646,40 +650,34 @@ body.light .lt-sep{background:#d0d0d0!important;}
       <button class="tool-btn" data-tool="trail_stop" style="border-color:#38bdf8;color:#38bdf8;">— Trail Stop</button>
     </div>
   </div>
-  <div class="sep"></div>
-  <button class="tbtn" id="toggle-bars-btn">≡ BARS</button>
-  <div class="sep"></div>
-  <div style="display:flex;gap:2px;">
-    <button class="tbtn active" id="ly1" style="background:#D4AF37!important;border-color:#D4AF37!important;color:#000!important;min-width:26px;text-align:center;font-weight:900;font-size:12px;padding:4px 7px;" style="min-width:26px;text-align:center;font-weight:900;font-size:12px;padding:4px 7px;">1</button>
-    <button class="tbtn" id="ly2" style="min-width:26px;text-align:center;font-weight:900;font-size:12px;padding:4px 7px;">2</button>
-    <button class="tbtn" id="ly4" style="min-width:26px;text-align:center;font-weight:900;font-size:12px;padding:4px 7px;">4</button>
-  </div>
-  <button class="tbtn" id="price-line-btn" style="border-color:#26a69a;color:#26a69a;background:#0a0c12;">— LINE</button>
-  <button class="tbtn" id="adj-btn" style="border-color:#f59e0b;color:#f59e0b;background:#0a0c12;">ADJ</button>
-  <button class="tbtn on" id="clean-btn" style="border-color:#e879f9;color:#e879f9;text-decoration:none;background:#0a0c12;">CLN</button>
-  <div class="sep"></div>
-  <button class="tbtn" id="bt-btn" style="border-color:#f59e0b!important;color:#f59e0b!important;">⏱ BACKTEST</button>
-  <button class="tbtn" id="scan-btn" style="border-color:#4ade80!important;color:#4ade80!important;">📡 SCAN</button>
-  <button class="tbtn" id="vault-btn" style="border-color:#a78bfa!important;color:#a78bfa!important;">📦 VAULT</button>
-  <button class="tbtn" id="settings-btn" style="border-color:#D4AF37!important;color:#D4AF37!important;">⚙ LOOK</button>
-  <button class="tbtn" id="tools-btn" style="border-color:#D4AF37!important;color:#D4AF37!important;" onclick="sbOpen('tools')">🔧 TOOLS</button>
-  <button class="tbtn" id="input-settings-btn" style="border-color:#22d3ee!important;color:#22d3ee!important;">⚙ SETTINGS</button>
-  <div style="flex:1;"></div>
-  <div class="sep"></div>
-  <div id="ind-btns-container" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;"></div>
-  <div id="hot-btns-container" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;"></div>
-  <button class="tbtn" id="add-ind-btn" style="border-color:#3a4a68;color:#3a4a68;min-width:28px;text-align:center;font-size:14px;padding:4px 6px;" onclick="openIndBtnPopup()" title="Add indicator button">＋</button>
-  <div class="sep"></div>
-  <div class="dropdown-group">
-    <button class="tbtn dropdown-trigger" id="tpl-menu-btn" style="border-color:#D4AF37;color:#D4AF37;">📋 TPL ▾</button>
-    <div class="dropdown-content" id="tpl-dropdown" style="min-width:180px;">
+  <div class="tbtn-row">
+    <button class="tbtn" id="toggle-bars-btn">≡ BARS</button>
+    <button class="tbtn" id="price-line-btn" style="border-color:#26a69a;color:#26a69a;">— LINE</button>
+    <button class="tbtn" id="adj-btn" style="border-color:#f59e0b;color:#f59e0b;">ADJ</button>
+    <button class="tbtn on" id="clean-btn" style="border-color:#e879f9;color:#e879f9;text-decoration:none;">CLN</button>
+    <button class="tbtn active" id="ly1" style="font-weight:900;">1</button>
+    <button class="tbtn" id="ly2" style="font-weight:900;">2</button>
+    <button class="tbtn" id="ly4" style="font-weight:900;">4</button>
+    <button class="tbtn" id="bt-btn" style="border-color:#f59e0b!important;color:#f59e0b!important;">⏱ BACKTEST</button>
+    <button class="tbtn" id="scan-btn" style="border-color:#4ade80!important;color:#4ade80!important;">📡 SCAN</button>
+    <button class="tbtn" id="vault-btn" style="border-color:#a78bfa!important;color:#a78bfa!important;">📦 VAULT</button>
+    <button class="tbtn" id="settings-btn" style="border-color:#D4AF37!important;color:#D4AF37!important;">⚙ LOOK</button>
+    <button class="tbtn" id="tools-btn" style="border-color:#D4AF37!important;color:#D4AF37!important;" onclick="sbOpen('tools')">🔧 TOOLS</button>
+    <button class="tbtn" id="input-settings-btn" style="border-color:#22d3ee!important;color:#22d3ee!important;">⚙ SETTINGS</button>
+    <div style="flex:1;"></div>
+    <div id="ind-btns-container" style="display:flex;gap:4px;align-items:center;flex-wrap:nowrap;"></div>
+    <div id="hot-btns-container" style="display:flex;gap:4px;align-items:center;flex-wrap:nowrap;"></div>
+    <button class="tbtn" id="add-ind-btn" style="border-color:#3a4a68;color:#3a4a68;" onclick="openIndBtnPopup()" title="Add indicator button">＋</button>
+    <div class="dropdown-group">
+      <button class="tbtn dropdown-trigger" id="tpl-menu-btn" style="border-color:#D4AF37;color:#D4AF37;">📋 TPL ▾</button>
+      <div class="dropdown-content" id="tpl-dropdown" style="min-width:180px;">
       <div style="padding:4px 10px;font-size:10px;color:#4a6080;font-weight:700;">CHART TEMPLATES</div>
       <div id="tpl-list"></div>
       <hr style="border:none;border-top:1px solid #2a3050;margin:2px 0;">
       <div class="tool-btn" onmousedown="saveNewTemplate()" style="color:#D4AF37;">💾 Save Current as Template</div>
     </div>
+    <button class="tbtn" id="theme-toggle-btn" style="border-color:#5a6a88;color:#5a6a88;">🌙</button>
   </div>
-  <button class="tbtn" id="theme-toggle-btn" style="border-color:#5a6a88;color:#5a6a88;min-width:28px;text-align:center;font-size:14px;padding:4px 7px;">🌙</button>
   <div id="ticker-info">
     <span id="ti-sym" style="color:#dde3f0;font-weight:700;font-size:14px;"></span>
     <span id="ti-price" style="font-size:13px;"></span>
@@ -1194,7 +1192,8 @@ body.light .lt-sep{background:#d0d0d0!important;}
           <div class="vr"><label>Time Labels</label><input id="sf-t2" type="range" min="7" max="16" value="9" style="flex:1;accent-color:#a78bfa;"><span id="sf-t2-v" class="vrv">9</span></div>
         </div>
         <div style="display:flex;gap:6px;">
-          <button id="is-reset" style="flex:1;padding:4px;border:1px solid #ef5350;color:#ef5350;background:transparent;border-radius:4px;font-size:9px;font-weight:700;cursor:pointer;">↺ RESET ALL</button>
+          <button id="is-save" style="flex:2;padding:4px;border:1px solid #D4AF37;color:#000;background:#D4AF37;border-radius:4px;font-size:9px;font-weight:700;cursor:pointer;">💾 SAVE</button>
+          <button id="is-reset" style="flex:1;padding:4px;border:1px solid #ef5350;color:#ef5350;background:transparent;border-radius:4px;font-size:9px;font-weight:700;cursor:pointer;">↺ RESET</button>
         </div>
       </div>
     </div>
@@ -7908,10 +7907,8 @@ function setLayout(n){
       el.style.cssText='display:flex;flex-direction:column;overflow:hidden;min-height:0;position:relative;';
     });
   }
-  // Update buttons
-  document.getElementById('ly1').style.cssText=(n===1?'background:#D4AF37;border-color:#D4AF37;color:#000;':'')+'min-width:26px;text-align:center;font-weight:900;font-size:12px;padding:4px 7px;';
-  document.getElementById('ly2').style.cssText=(n===2?'background:#D4AF37;border-color:#D4AF37;color:#000;':'')+'min-width:26px;text-align:center;font-weight:900;font-size:12px;padding:4px 7px;';
-  document.getElementById('ly4').style.cssText=(n===4?'background:#D4AF37;border-color:#D4AF37;color:#000;':'')+'min-width:26px;text-align:center;font-weight:900;font-size:12px;padding:4px 7px;';
+  // Update layout buttons
+  ['ly1','ly2','ly4'].forEach(id=>{const b=document.getElementById(id);if(b){b.classList.toggle('active',id==='ly'+n);}});
   // Resize visible panels
   setTimeout(()=>{panels.forEach((p,i)=>{const el=document.getElementById('panel-'+i);if(el&&el.style.display!=='none')resizePanel(p);});renderAll();},80);
 }
@@ -8033,6 +8030,17 @@ function initS(){try{
     if(_rp)_rp.oninput=function(){_rpv.textContent=_rp.value;window.RIGHT_PAD=+_rp.value;_si();renderAll();};
     const _ir=_$('is-reset');
     if(_ir)_ir.onclick=function(){_iz.value=0.15;_izv.textContent='0.15';_it.value=0.5;_itv.textContent='0.50';_im.value=1.0;_imv.textContent='1.0';_rp.value=6;_rpv.textContent='6';window.RIGHT_PAD=6;_si();};
+    // SETTINGS tab save button
+    const _isSave=_$('is-save');
+    if(_isSave)_isSave.onclick=function(){_si();saveTools();_isSave.textContent='✓ SAVED';_isSave.style.background='#22c55e';_isSave.style.borderColor='#22c55e';setTimeout(()=>{_isSave.textContent='💾 SAVE';_isSave.style.background='#D4AF37';_isSave.style.borderColor='#D4AF37';},1500);};
+    // Settings tab display sliders
+    const _sp2=_$('sf-p2'),_sp2v=_$('sf-p2-v');
+    const _st2=_$('sf-t2'),_st2v=_$('sf-t2-v');
+    const _scr2=_$('sc-cr2'),_scro2=_$('sc-cro2'),_scro2v=_$('sc-cro2-v');
+    if(_sp2)_sp2.oninput=function(){F.p=+_sp2.value;_sp2v.textContent=_sp2.value;renderAll();};
+    if(_st2)_st2.oninput=function(){F.t=+_st2.value;_st2v.textContent=_st2.value;renderAll();};
+    if(_scr2)_scr2.oninput=function(){liveS();};
+    if(_scro2)_scro2.oninput=function(){if(_scro2v)_scro2v.textContent=_scro2.value+'%';liveS();};
     try{const sv=JSON.parse(localStorage.getItem('traderra-trackpad')||'{}');if(sv.zoomSens){_iz.value=sv.zoomSens;_izv.textContent=sv.zoomSens;}if(sv.trackPanSens){_it.value=sv.trackPanSens;_itv.textContent=sv.trackPanSens;}if(sv.mousePanSens){_im.value=sv.mousePanSens;_imv.textContent=sv.mousePanSens;}if(sv.rightPad!=null){_rp.value=sv.rightPad;_rpv.textContent=sv.rightPad;window.RIGHT_PAD=sv.rightPad;}}catch(e){}
   }
   // Vault panel toggle
@@ -8816,10 +8824,12 @@ function openToolSettings(toolId, panelIdx){
 
   // Bottom buttons
   html += '<div style="padding:8px 16px;border-top:1px solid #1e2535;display:flex;gap:6px;">';
-  html += '<button onclick="duplicateTool(\''+tool.id+'\','+panelIdx+')" style="flex:1;padding:5px;border:1px solid #5a9ae6;color:#5a9ae6;background:transparent;border-radius:4px;font-size:10px;font-weight:700;cursor:pointer;font-family:monospace;">⧉ DUPLICATE</button>';
-  html += '<button onclick="resetToolSettings(\''+tool.id+'\','+panelIdx+')" style="flex:1;padding:5px;border:1px solid #ef5350;color:#ef5350;background:transparent;border-radius:4px;font-size:10px;font-weight:700;cursor:pointer;font-family:monospace;">↺ RESET</button>';
-  html += '<button onclick="deleteToolConfirm(\''+tool.id+'\','+panelIdx+')" style="flex:1;padding:5px;border:1px solid #ef5350;color:#ef5350;background:transparent;border-radius:4px;font-size:10px;font-weight:700;cursor:pointer;font-family:monospace;">✕ DELETE</button>';
+  html += '<button onclick="confirmToolSave(\''+tool.id+'\',"+panelIdx+")" id="tool-save-btn" style="flex:2;padding:6px;border:1px solid #D4AF37;color:#000;background:#D4AF37;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;font-family:monospace;">💾 SAVE</button>';
+  html += '<button onclick="duplicateTool(\''+tool.id+'\',"+panelIdx+")" style="flex:1;padding:5px;border:1px solid #5a9ae6;color:#5a9ae6;background:transparent;border-radius:4px;font-size:10px;font-weight:700;cursor:pointer;font-family:monospace;">⧉ DUPE</button>';
+  html += '<button onclick="resetToolSettings(\''+tool.id+'\',"+panelIdx+")" style="flex:1;padding:5px;border:1px solid #ef5350;color:#ef5350;background:transparent;border-radius:4px;font-size:10px;font-weight:700;cursor:pointer;font-family:monospace;">↺ RESET</button>';
+  html += '<button onclick="deleteToolConfirm(\''+tool.id+'\',"+panelIdx+")" style="flex:1;padding:5px;border:1px solid #ef5350;color:#ef5350;background:transparent;border-radius:4px;font-size:10px;font-weight:700;cursor:pointer;font-family:monospace;">✕ DEL</button>';
   html += '</div>';
+  html += '<div id="tool-save-status" style="padding:4px 16px 8px;text-align:center;font-size:9px;color:#5a6a88;font-family:monospace;">Changes auto-saved</div>';
 
   body.innerHTML = html;
 }
@@ -8902,6 +8912,14 @@ function duplicateTool(toolId, panelIdx){
 }
 
 // Delete a tool
+function confirmToolSave(toolId, panelIdx){
+  saveTools();
+  const status = document.getElementById('tool-save-status');
+  if(status){status.textContent='✓ Saved!';status.style.color='#22c55e';setTimeout(()=>{if(status){status.textContent='Changes auto-saved';status.style.color='#5a6a88';}},2000);}
+  const btn = document.getElementById('tool-save-btn');
+  if(btn){btn.textContent='✓ SAVED';setTimeout(()=>{if(btn)btn.textContent='💾 SAVE';},1500);}
+}
+
 function deleteToolConfirm(toolId, panelIdx){
   removeTool(panelIdx||0, toolId);
   openSingleIndSettings(null, panelIdx||0);

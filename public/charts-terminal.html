@@ -1993,7 +1993,19 @@ try{
   const savedTools=JSON.parse(localStorage.getItem(TOOLS_KEY)||'null');
   if(savedTools){
     panels.forEach((p,i)=>{
-      if(savedTools[i]&&savedTools[i].length){p.tools=savedTools[i];p.inds=deriveInds(p.tools);}
+      if(savedTools[i]&&savedTools[i].length){
+        p.tools=savedTools[i];
+        // Migrate: set hot defaults for existing tools missing them
+        p.tools.forEach(function(t){
+          if(t.hot===undefined && t.on){
+            t.hot=true;
+            const cat=IND_CATALOG[t.indKey]||IND_REGISTRY[t.indKey];
+            if(!t.hotLabel) t.hotLabel=t.name||(cat?.label)||t.indKey||'TOOL';
+            if(!t.hotColor) t.hotColor='#D4AF37';
+          }
+        });
+        p.inds=deriveInds(p.tools);
+      }
       else migrateIndsToTools(p);
     });
   } else {

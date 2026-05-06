@@ -2002,15 +2002,16 @@ try{
       if(savedTools[i]&&savedTools[i].length){
         p.tools=savedTools[i];
         // One-time migration: set hot defaults for tools missing them
-        if(!localStorage.getItem('traderra-hot-migrated')){
-          p.tools.forEach(function(t){
-            if(t.on && !t.hot){
-              const cat=IND_CATALOG[t.indKey]||IND_REGISTRY[t.indKey];
-              t.hot=true;
-              if(!t.hotLabel) t.hotLabel=t.name||(cat?.label)||t.indKey||'TOOL';
-              if(!t.hotColor) t.hotColor='#D4AF37';
-            }
-          });
+        p.tools.forEach(function(t){
+          if(t.on && !t.hot && !HOT_EXCLUDE[t.indKey]){
+            const cat=IND_CATALOG[t.indKey]||IND_REGISTRY[t.indKey];
+            t.hot=true;
+            if(!t.hotLabel) t.hotLabel=t.name||(cat?.label)||t.indKey||'TOOL';
+            if(!t.hotColor) t.hotColor='#D4AF37';
+          }
+          // Force OFF system tools that should never be hot
+          if(HOT_EXCLUDE[t.indKey]) t.hot=false;
+        });
         }
         p.inds=deriveInds(p.tools);
       }
@@ -2018,11 +2019,6 @@ try{
     });
   } else {
     panels.forEach(p=>migrateIndsToTools(p));
-  }
-  // Mark hot migration complete and persist
-  if(!localStorage.getItem('traderra-hot-migrated')){
-    localStorage.setItem('traderra-hot-migrated','1');
-    if(typeof saveTools==='function') saveTools();
   }
   panels.forEach((_,i)=>buildIndicatorRow(i));
 }catch(e){console.error('load error',e);}
@@ -9057,6 +9053,8 @@ function setToolHotColor(input){
 }
 
 // ── HOT BUTTONS — toolbar quick-toggles for tools marked as hot ──
+// System indKeys that should NEVER appear as hot buttons
+var HOT_EXCLUDE = {tl:1,ann:1,otherann:1,exec:1,btexec:1,adjusted:1,adj:1};
 function renderHotButtons(){
   const container = document.getElementById('hot-btns-container');
   if(!container) return;
@@ -9065,6 +9063,7 @@ function renderHotButtons(){
     if(!p.tools) return;
     p.tools.forEach(function(tool){
       if(!tool.on || !tool.hot) return;
+      if(HOT_EXCLUDE[tool.indKey]) return;
       const cat = IND_CATALOG[tool.indKey];
       const name = tool.hotLabel || tool.name || cat?.label || tool.indKey;
       const color = tool.hotColor || '#D4AF37';

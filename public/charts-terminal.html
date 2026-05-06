@@ -3037,7 +3037,12 @@ function renderPanel(p){
   // ── TOOL LOOP (PASS 0+2 for tool instances) ──
   // Render all active tool instances that have catalog render functions
   // Separated into fill pass (before candles) and line pass (after candles)
-  const activeTools = (p.tools||[]).filter(t => t.on && IND_CATALOG[t.indKey]?.render);
+  // Build set of legacy keys owned by tool instances so legacy rendering can skip them
+  const _toolOwned = new Set();
+  if(p.tools) p.tools.forEach(t => {
+    if(t.on && t.legacyKeys && IND_CATALOG[t.indKey]?.linePass) t.legacyKeys.forEach(k => _toolOwned.add(k));
+  });
+  const activeTools = (p.tools||[]).filter(t => t.on && IND_CATALOG[t.indKey]?.linePass);
   const toolHelpers = {drawLine,drawBandFill,drawBandLines,drawEMABand,drawDevBand,pToY,vs,visible,xCtr,calcCache,isIntraday:isIntraday(p.tf)};
 
   // TOOL FILL PASS (before candles)
@@ -3045,19 +3050,18 @@ function renderPanel(p){
     const cat = IND_CATALOG[t.indKey];
     const prms = toolParams(t);
     const clrs = toolColors(t);
-    // Only render fills for tools that draw bands
     if(cat.fillPass) cat.fillPass(ctx,data,{...t,params:prms,colors:clrs},toolHelpers);
   });
 
   // PASS 1 — band fills only (drawn before candles so candles appear on top)
-  if(pi.ema40_60&&e40&&e60) drawBandFill(e40,e60,C.ema40_60_fill);
-  if(e9&&atr9&&pi.db_upper)  drawBandFill(e9.map((v,i)=>v+(atr9[i]||0)),      e9.map((v,i)=>v+(atr9[i]||0)*.5),   getIndColor('db_upper',0)||C.db_upper_fill);
-  if(e20&&atr20&&pi.db_low1) drawBandFill(e20.map((v,i)=>v-(atr20[i]||0)*.5), e20.map((v,i)=>v-(atr20[i]||0)),     getIndColor('db_low1',0)||C.db_low1_fill);
-  if(e20&&atr20&&pi.db_low2) drawBandFill(e20.map((v,i)=>v-(atr20[i]||0)*2),  e20.map((v,i)=>v-(atr20[i]||0)*2.5), getIndColor('db_low2',0)||C.db_low2_fill);
+  if(!_toolOwned.has('ema40_60') && pi.ema40_60&&e40&&e60) drawBandFill(e40,e60,C.ema40_60_fill);
+  if(!_toolOwned.has('db_upper') && e9&&atr9&&pi.db_upper)  drawBandFill(e9.map((v,i)=>v+(atr9[i]||0)),      e9.map((v,i)=>v+(atr9[i]||0)*.5),   getIndColor('db_upper',0)||C.db_upper_fill);
+  if(!_toolOwned.has('db_low1') && e20&&atr20&&pi.db_low1) drawBandFill(e20.map((v,i)=>v-(atr20[i]||0)*.5), e20.map((v,i)=>v-(atr20[i]||0)),     getIndColor('db_low1',0)||C.db_low1_fill);
+  if(!_toolOwned.has('db_low2') && e20&&atr20&&pi.db_low2) drawBandFill(e20.map((v,i)=>v-(atr20[i]||0)*2),  e20.map((v,i)=>v-(atr20[i]||0)*2.5), getIndColor('db_low2',0)||C.db_low2_fill);
 
-  // EMA bands (Mike preset)
-  if(pi.band_9_20)  drawEMABand(e9,e20, getIndColor('band_9_20',0)||C.band_9_20_bull_fill, getIndColor('band_9_20',2)||C.band_9_20_bear_fill, getIndColor('band_9_20',1)||C.band_9_20_bull_line, getIndColor('band_9_20',3)||C.band_9_20_bear_line);
-  if(pi.band_72_89) drawEMABand(e72,e89,getIndColor('band_72_89',0)||C.band_72_89_bull_fill,getIndColor('band_72_89',2)||C.band_72_89_bear_fill,getIndColor('band_72_89',1)||C.band_72_89_bull_line,getIndColor('band_72_89',3)||C.band_72_89_bear_line);
+  // EMA bands
+  if(!_toolOwned.has('band_9_20') && pi.band_9_20)  drawEMABand(e9,e20, getIndColor('band_9_20',0)||C.band_9_20_bull_fill, getIndColor('band_9_20',2)||C.band_9_20_bear_fill, getIndColor('band_9_20',1)||C.band_9_20_bull_line, getIndColor('band_9_20',3)||C.band_9_20_bear_line);
+  if(!_toolOwned.has('band_72_89') && pi.band_72_89) drawEMABand(e72,e89,getIndColor('band_72_89',0)||C.band_72_89_bull_fill,getIndColor('band_72_89',2)||C.band_72_89_bear_fill,getIndColor('band_72_89',1)||C.band_72_89_bull_line,getIndColor('band_72_89',3)||C.band_72_89_bear_line);
 
   // Deviation bands — read multipliers from saved settings, fallback to preset defaults
   function devMults(indKey, presetKey){
@@ -3069,9 +3073,9 @@ function renderPanel(p){
     const dnHigh=getIndCustom(indKey,'params','dnHigh') ?? def?.dn?.[1] ?? 2.4;
     return [[upLow,upHigh],[dnLow,dnHigh]];
   }
-  if(pi.dev_s_9_20){const [u,d]=devMults('dev_s_9_20','s_9_20');drawDevBand(e9,atr9,e20,atr20,u,d, getIndColor('dev_s_9_20',0)||'rgba(239,68,68,.15)',getIndColor('dev_s_9_20',1)||'rgba(239,68,68,.40)', getIndColor('dev_s_9_20',2)||'rgba(34,197,94,.15)',getIndColor('dev_s_9_20',3)||'rgba(34,197,94,.40)');}
-  if(pi.dev_l_9_20){const [u,d]=devMults('dev_l_9_20','l_9_20');drawDevBand(e9,atr9,e20,atr20,u,d, getIndColor('dev_l_9_20',0)||'rgba(239,68,68,.15)',getIndColor('dev_l_9_20',1)||'rgba(239,68,68,.40)', getIndColor('dev_l_9_20',2)||'rgba(34,197,94,.15)',getIndColor('dev_l_9_20',3)||'rgba(34,197,94,.40)');}
-  if(pi.db_72_89){const [u,d]=devMults('db_72_89','db_72_89');drawDevBand(e72,atr72,e89,atr89,u,d, getIndColor('db_72_89',0)||'rgba(239,68,68,.15)',getIndColor('db_72_89',1)||'rgba(239,68,68,.40)', getIndColor('db_72_89',2)||'rgba(34,197,94,.15)',getIndColor('db_72_89',3)||'rgba(34,197,94,.40)');}
+  if(!_toolOwned.has('dev_s_9_20') && pi.dev_s_9_20){const [u,d]=devMults('dev_s_9_20','s_9_20');drawDevBand(e9,atr9,e20,atr20,u,d, getIndColor('dev_s_9_20',0)||'rgba(239,68,68,.15)',getIndColor('dev_s_9_20',1)||'rgba(239,68,68,.40)', getIndColor('dev_s_9_20',2)||'rgba(34,197,94,.15)',getIndColor('dev_s_9_20',3)||'rgba(34,197,94,.40)');}
+  if(!_toolOwned.has('dev_l_9_20') && pi.dev_l_9_20){const [u,d]=devMults('dev_l_9_20','l_9_20');drawDevBand(e9,atr9,e20,atr20,u,d, getIndColor('dev_l_9_20',0)||'rgba(239,68,68,.15)',getIndColor('dev_l_9_20',1)||'rgba(239,68,68,.40)', getIndColor('dev_l_9_20',2)||'rgba(34,197,94,.15)',getIndColor('dev_l_9_20',3)||'rgba(34,197,94,.40)');}
+  if(!_toolOwned.has('db_72_89') && pi.db_72_89){const [u,d]=devMults('db_72_89','db_72_89');drawDevBand(e72,atr72,e89,atr89,u,d, getIndColor('db_72_89',0)||'rgba(239,68,68,.15)',getIndColor('db_72_89',1)||'rgba(239,68,68,.40)', getIndColor('db_72_89',2)||'rgba(34,197,94,.15)',getIndColor('db_72_89',3)||'rgba(34,197,94,.40)');}
 
   // ── CANDLES (drawn after band fills, before indicator lines) ──
   ctx.save();
@@ -3163,28 +3167,29 @@ function renderPanel(p){
   ctx.restore();
 
   // PASS 2 — band border lines + EMA lines (drawn after candles so they appear on top)
-  if(e9&&atr9&&pi.db_upper)  drawBandLines(e9.map((v,i)=>v+(atr9[i]||0)),      e9.map((v,i)=>v+(atr9[i]||0)*.5),   getIndColor('db_upper',1)||C.db_upper_line);
-  if(e20&&atr20&&pi.db_low1) drawBandLines(e20.map((v,i)=>v-(atr20[i]||0)*.5), e20.map((v,i)=>v-(atr20[i]||0)),     getIndColor('db_low1',1)||C.db_low1_line);
-  if(e20&&atr20&&pi.db_low2) drawBandLines(e20.map((v,i)=>v-(atr20[i]||0)*2),  e20.map((v,i)=>v-(atr20[i]||0)*2.5), getIndColor('db_low2',1)||C.db_low2_line);
-  if(pi.ema40_60&&e40&&e60){
+  // _toolOwned already defined before PASS 1
+  if(!_toolOwned.has('db_upper') && e9&&atr9&&pi.db_upper)  drawBandLines(e9.map((v,i)=>v+(atr9[i]||0)),      e9.map((v,i)=>v+(atr9[i]||0)*.5),   getIndColor('db_upper',1)||C.db_upper_line);
+  if(!_toolOwned.has('db_low1') && e20&&atr20&&pi.db_low1) drawBandLines(e20.map((v,i)=>v-(atr20[i]||0)*.5), e20.map((v,i)=>v-(atr20[i]||0)),     getIndColor('db_low1',1)||C.db_low1_line);
+  if(!_toolOwned.has('db_low2') && e20&&atr20&&pi.db_low2) drawBandLines(e20.map((v,i)=>v-(atr20[i]||0)*2),  e20.map((v,i)=>v-(atr20[i]||0)*2.5), getIndColor('db_low2',1)||C.db_low2_line);
+  if(!_toolOwned.has('ema40_60') && pi.ema40_60&&e40&&e60){
     drawBandLines(e40,e60,C.ema40_60_line);
   }
-  if(pi.ema150) drawLine(e150,C.ema150,1.2,true);
-  if(pi.ema200) drawLine(e200,C.ema200,1.4);
-  if(pi.ema50)  drawLine(e50, C.ema50, 1.4);
-  if(pi.ema20)  drawLine(e20, C.ema20, 1.4);
-  if(pi.ema9&&e9) drawLine(e9,C.ema9,  1.7);
-  if(pi.vwap&&vwap) drawLine(vwap,C.vwap,1.8);
+  if(!_toolOwned.has('ema150')) { if(pi.ema150) drawLine(e150,C.ema150,1.2,true); }
+  if(!_toolOwned.has('ema200')) { if(pi.ema200) drawLine(e200,C.ema200,1.4); }
+  if(!_toolOwned.has('ema50'))  { if(pi.ema50)  drawLine(e50, C.ema50, 1.4); }
+  if(!_toolOwned.has('ema20'))  { if(pi.ema20)  drawLine(e20, C.ema20, 1.4); }
+  if(!_toolOwned.has('ema9'))   { if(pi.ema9&&e9) drawLine(e9,C.ema9,  1.7); }
+  if(!_toolOwned.has('vwap'))   { if(pi.vwap&&vwap) drawLine(vwap,C.vwap,1.8); }
 
   // SMA line
-  if(pi.sma){
+  if(!_toolOwned.has('sma') && pi.sma){
     const sp=gatherParams('sma');
     const smaVals=calcSMA(data,sp.period||20);
     const smaClr=getIndColor('sma',0)||C.sma_color;
     drawLine(smaVals,smaClr,1.4);
   }
   // Bollinger Bands
-  if(pi.bollinger){
+  if(!_toolOwned.has('bollinger') && pi.bollinger){
     const bp=gatherParams('bollinger');
     const bb=calcBollinger(data,bp.period||20,bp.stddev||2);
     const bbFillClr=getIndColor('bollinger',0)||C.bb_fill;

@@ -1894,6 +1894,9 @@ function loadPreset(name){
   localStorage.setItem(PRESET_KEY,name);
   if(name==='Mike'&&panels[0]) panels[0].tf='15';
   else if(name==='Sam'&&panels[0]) panels[0].tf='5';
+  // Set default chart style per preset
+  if(name==='Mike') setChartStyle('hollow');
+  else if(name==='Sam') setChartStyle('candles');
   panels.forEach(p=>migrateIndsToTools(p));
   updatePresetButtons();
   panels.forEach((_,i)=>buildIndicatorRow(i));

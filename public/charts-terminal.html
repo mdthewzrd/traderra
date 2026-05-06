@@ -1754,7 +1754,10 @@ function migrateIndsToTools(p){
       name: reg ? reg.label : key,
       on: isOn,
       params: {...map.params, ...savedParams},
-      colors: savedColors
+      colors: savedColors,
+      hot: isOn,
+      hotLabel: reg ? reg.label : key,
+      hotColor: '#D4AF37'
     });
   }
   // Derive p.inds from tools
@@ -1778,7 +1781,10 @@ function createTool(indKey, name, params, colors){
     name: name || cat.label,
     on: true,
     params: {...defParams, ...params},
-    colors: {...defColors, ...colors}
+    colors: {...defColors, ...colors},
+    hot: true,
+    hotLabel: name || cat.label,
+    hotColor: '#D4AF37'
   };
 }
 
@@ -1995,21 +2001,28 @@ try{
     panels.forEach((p,i)=>{
       if(savedTools[i]&&savedTools[i].length){
         p.tools=savedTools[i];
-        // Migrate: set hot defaults for existing tools missing them
-        p.tools.forEach(function(t){
-          if(t.hot===undefined && t.on){
-            t.hot=true;
-            const cat=IND_CATALOG[t.indKey]||IND_REGISTRY[t.indKey];
-            if(!t.hotLabel) t.hotLabel=t.name||(cat?.label)||t.indKey||'TOOL';
-            if(!t.hotColor) t.hotColor='#D4AF37';
-          }
-        });
+        // One-time migration: set hot defaults for tools missing them
+        if(!localStorage.getItem('traderra-hot-migrated')){
+          p.tools.forEach(function(t){
+            if(t.on && !t.hot){
+              const cat=IND_CATALOG[t.indKey]||IND_REGISTRY[t.indKey];
+              t.hot=true;
+              if(!t.hotLabel) t.hotLabel=t.name||(cat?.label)||t.indKey||'TOOL';
+              if(!t.hotColor) t.hotColor='#D4AF37';
+            }
+          });
+        }
         p.inds=deriveInds(p.tools);
       }
       else migrateIndsToTools(p);
     });
   } else {
     panels.forEach(p=>migrateIndsToTools(p));
+  }
+  // Mark hot migration complete and persist
+  if(!localStorage.getItem('traderra-hot-migrated')){
+    localStorage.setItem('traderra-hot-migrated','1');
+    if(typeof saveTools==='function') saveTools();
   }
   panels.forEach((_,i)=>buildIndicatorRow(i));
 }catch(e){console.error('load error',e);}

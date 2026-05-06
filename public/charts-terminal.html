@@ -8695,6 +8695,7 @@ function openSingleIndSettings(indKey, panelIdx){
   if(!indKey){
     if(label) label.textContent='SELECT INDICATOR';
     body.innerHTML = buildToolPickerHTML(panelIdx);
+    wireToolDrag(body);
     // Don't call sbOpen here — we're already in sbTab
     return;
   }
@@ -8802,10 +8803,10 @@ function openToolSettings(toolId, panelIdx){
   html += '<button onclick="openSingleIndSettings(null,'+panelIdx+')" style="background:none;border:1px solid #2a3050;color:#6a7a98;font-size:10px;font-weight:700;cursor:pointer;padding:3px 10px;border-radius:3px;font-family:monospace;">← Back to list</button>';
   html += '</div>';
 
-  // Toggle + name row
+  // Toggle + name row (editable name)
   html += '<div class="is-item" style="padding:8px 16px;border-bottom:1px solid #1e2535;">';
   html += '<button class="is-toggle '+(tool.on?'on':'')+'" data-toolid="'+tool.id+'" data-panel="'+panelIdx+'" onclick="toggleToolById(this,\''+tool.id+'\','+panelIdx+');openToolSettings(\''+tool.id+'\','+panelIdx+')"></button>';
-  html += '<span class="is-label" style="min-width:auto;">'+(tool.name||cat.label)+'</span>';
+  html += '<input id="tool-name-input" type="text" value="'+(tool.name||cat.label).replace(/"/g,'&quot;')+'" maxlength="30" data-toolid="'+tool.id+'" onchange="setToolName(this)" style="flex:1;min-width:0;background:none;border:1px solid transparent;color:#dde3f0;font-size:13px;font-weight:700;font-family:Courier New,monospace;padding:2px 4px;border-radius:3px;outline:none;cursor:text;" onfocus="this.style.borderColor=\'#D4AF37\';this.select()" onblur="this.style.borderColor=\'transparent\'" title="Click to rename">';
   html += '<span style="margin-left:auto;font-size:10px;color:'+(tool.on?'#22c55e':'#5a6a88')+';font-weight:700;">'+(tool.on?'ON':'OFF')+'</span>';
   html += '</div>';
 
@@ -9023,6 +9024,20 @@ function setToolHotColor(input){
   renderHotButtons();
 }
 
+function setToolName(input){
+  const toolId = input.dataset.toolid;
+  const p = panels[0]; if(!p) return;
+  const tool = p.tools?.find(t=>t.id===toolId); if(!tool) return;
+  var newName = input.value.trim();
+  if(!newName) { input.value = tool.name; return; }
+  tool.name = newName;
+  // Update the settings header label too
+  var label = document.getElementById('tools-ind-label');
+  if(label) label.textContent = newName;
+  buildIndicatorRow(0);
+  renderHotButtons();
+}
+
 // ── HOT BUTTONS — toolbar quick-toggles for tools marked as hot ──
 // System indKeys that should NEVER appear as hot buttons
 var HOT_EXCLUDE = {tl:1,ann:1,otherann:1,exec:1,btexec:1,adjusted:1,adj:1};
@@ -9145,6 +9160,70 @@ function buildAllIndSettingsHTML(panelIdx){
   return html;
 }
 
+// ── Drag-and-drop reordering for active tool rows ──
+function wireToolDrag(container){
+  var rows = container.querySelectorAll('.tool-row[draggable]');
+  var dragRow = null;
+  rows.forEach(function(row){
+    // Open settings on click (but not on drag handle or toggle btn)
+    row.addEventListener('mousedown', function(e){
+      if(e.target.closest('.drag-handle') || e.target.closest('.is-toggle')) return;
+      var toolId = row.dataset.toolid;
+      var panelIdx = parseInt(row.dataset.panel);
+      openToolSettings(toolId, panelIdx);
+    });
+    row.addEventListener('dragstart', function(e){
+      dragRow = row;
+      row.style.opacity = '0.4';
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', row.dataset.toolid);
+    });
+    row.addEventListener('dragend', function(){
+      row.style.opacity = '';
+      dragRow = null;
+      rows.forEach(function(r){ r.style.borderTop=''; r.style.borderBottom=''; });
+    });
+    row.addEventListener('dragover', function(e){
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if(!dragRow || dragRow === row) return;
+      // Clear all indicators
+      rows.forEach(function(r){ r.style.borderTop=''; r.style.borderBottom=''; });
+      var rect = row.getBoundingClientRect();
+      var midY = rect.top + rect.height / 2;
+      if(e.clientY < midY) row.style.borderTop = '2px solid #D4AF37';
+      else row.style.borderBottom = '2px solid #D4AF37';
+    });
+    row.addEventListener('dragleave', function(){
+      row.style.borderTop = '';
+      row.style.borderBottom = '';
+    });
+    row.addEventListener('drop', function(e){
+      e.preventDefault();
+      if(!dragRow || dragRow === row) return;
+      var p = panels[parseInt(row.dataset.panel)];
+      if(!p || !p.tools) return;
+      var fromId = dragRow.dataset.toolid;
+      var toId = row.dataset.toolid;
+      var fromIdx = p.tools.findIndex(function(t){ return t.id===fromId; });
+      var toIdx = p.tools.findIndex(function(t){ return t.id===toId; });
+      if(fromIdx===-1 || toIdx===-1) return;
+      // Determine insert position based on drop location
+      var rect = row.getBoundingClientRect();
+      var midY = rect.top + rect.height / 2;
+      var insertIdx = (e.clientY < midY) ? toIdx : toIdx + 1;
+      // Remove from old position, insert at new
+      var moved = p.tools.splice(fromIdx, 1)[0];
+      if(fromIdx < insertIdx) insertIdx--;
+      p.tools.splice(insertIdx, 0, moved);
+      p.inds = deriveInds(p.tools);
+      renderAll();
+      buildIndicatorRow(parseInt(row.dataset.panel));
+      renderHotButtons();
+    });
+  });
+}
+
 function closeIndSettings(){
   openSingleIndSettings(null,0);
   renderAll();
@@ -9161,11 +9240,12 @@ function buildToolPickerHTML(panelIdx){
   
   if(activeTools.length){
     html+='<div style="padding:6px 12px 3px;font-size:9px;font-weight:700;color:#22c55e;letter-spacing:1px;">● ACTIVE</div>';
-    activeTools.forEach(function(tool){
+    activeTools.forEach(function(tool, idx){
       const cat = IND_CATALOG[tool.indKey];
       const name = tool.name || cat?.label || tool.indKey;
       const isHot = tool.hot;
-      html+='<div style="display:flex;align-items:center;padding:5px 12px;cursor:pointer;border-radius:3px;margin:0 6px 1px;background:#151925;" onmousedown="openToolSettings(\''+tool.id+'\','+panelIdx+')">';
+      html+='<div class="tool-row" draggable="true" data-toolid="'+tool.id+'" data-panel="'+panelIdx+'" style="display:flex;align-items:center;padding:5px 8px 5px 12px;cursor:pointer;border-radius:3px;margin:0 6px 1px;background:#151925;transition:opacity .15s,transform .15s;">';
+      html+='<span class="drag-handle" style="cursor:grab;color:#2a3050;font-size:10px;margin-right:4px;user-select:none;" title="Drag to reorder">⠿</span>';
       html+='<button class="is-toggle on" data-toolid="'+tool.id+'" data-panel="'+panelIdx+'" onclick="event.stopPropagation();toggleToolById(this,\''+tool.id+'\','+panelIdx+')" style="margin-right:6px;"></button>';
       html+='<span style="flex:1;font-size:11px;font-weight:700;color:#dde3f0;font-family:Courier New,monospace;">'+name+'</span>';
       html+='<span style="font-size:9px;color:#D4AF37;margin-left:4px;">⚙</span>';

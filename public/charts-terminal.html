@@ -3801,7 +3801,7 @@ function renderPanel(p){
     const lastClose=data[data.length-1].close;
     const ly=pToY(lastClose);
     if(ly>=0&&ly<=priceH){
-      const lineCol=data[data.length-1].close>=data[data.length-1].open?'#26a69a':'#ef5350';
+      const lineCol=data[data.length-1].close>=data[data.length-1].open?C.up:C.dn;
       ctx.save();
       ctx.strokeStyle=lineCol; ctx.lineWidth=1.2; ctx.setLineDash([4,3]);
       ctx.beginPath();ctx.moveTo(0,ly);ctx.lineTo(chartW,ly);ctx.stroke();

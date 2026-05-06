@@ -17,19 +17,11 @@ The toolbar row (inside the chart area, right side of topbar) shows quick-toggle
 - Remove fire emoji from the HOT BUTTON section label in tool settings
 - Just show the tool name as the button text
 
-### 2. Left-Click Opens Settings
-- Currently: left-click toggles tool on/off, right-click opens settings
-- Change to: left-click opens tool settings panel (same as right-click)
-- Toggle on/off happens via the toggle switch inside the settings panel
-- The toolbar button is for quick access to settings, not toggling
-
-Wait — actually re-reading the conversation: the user said "click any of the names in the toolbar it should open the param and style menus". So left-click = open settings. But they also said the toolbar is for "easy toggling on and off". Need to clarify: does clicking the toolbar button toggle the tool, or open settings?
-
-**Decision**: Toolbar button left-click = toggle tool on/off (current behavior minus emoji). Right-click = open settings. This matches the user's description of "easy toggling" and clicking names opens settings refers to the sidebar list, not the toolbar buttons.
-
-Actually, re-reading again: "when i click any of the names in the toolbar it should open the param and style menus". The user explicitly wants left-click to open settings. But they also said "easy toggle". 
-
-**Final**: Make left-click toggle the tool (the primary use case for a quick-toggle button). Right-click opens settings. Both already work — just strip the emoji and add label/color customization.
+### 2. Toolbar Button Click Behavior
+- **Left-click**: Toggle tool on/off on the chart (primary action)
+- **Right-click**: Open tool settings panel (current behavior, keep it)
+- Settings are also accessible via the settings button above the chart or the sidebar TOOLS panel
+- The toolbar is for quick toggling, not for opening settings
 
 ### 3. Tool Settings — Hot Button Section
 In `openToolSettings()`, the existing HOT BUTTON section expands:

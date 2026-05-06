@@ -4501,29 +4501,7 @@ function buildPanels(){
         <button class="preset-btn${activePreset==='Sam'?' active':''}" data-preset="Sam" onclick="loadPreset('Sam')" style="padding:2px 6px;border-radius:3px;font-size:8px;font-weight:700;cursor:pointer;">SAM</button>
         <button class="preset-btn${activePreset==='Mike'?' active':''}" data-preset="Mike" onclick="loadPreset('Mike')" style="padding:2px 6px;border-radius:3px;font-size:8px;font-weight:700;cursor:pointer;">MIKE</button>
         <span style="width:1px;height:10px;background:#2a3050;margin:0 2px;"></span>
-        <button class="ptog" data-ind="ema9" data-panel="${i}">E9</button>
-        <button class="ptog" data-ind="ema20" data-panel="${i}">E20</button>
-        <button class="ptog" data-ind="ema50" data-panel="${i}">E50</button>
-        <button class="ptog" data-ind="ema200" data-panel="${i}">E200</button>
-        <button class="ptog" data-ind="ema150" data-panel="${i}">E150</button>
-        <button class="ptog" data-ind="ema40_60" data-panel="${i}">E40-60</button>
-        <button class="ptog" data-ind="band_9_20" data-panel="${i}" style="border-color:#22c55e;color:#22c55e;background:#0a0c12;">B9/20</button>
-        <button class="ptog" data-ind="band_72_89" data-panel="${i}" style="border-color:#22c55e;color:#22c55e;background:#0a0c12;">B72/89</button>
-        <button class="ptog" data-ind="vwap" data-panel="${i}">VWAP</button>
-        <button class="ptog off" data-ind="db_upper" data-panel="${i}">⬆U</button>
-        <button class="ptog off" data-ind="db_low1" data-panel="${i}">⬇L1</button>
-        <button class="ptog off" data-ind="db_low2" data-panel="${i}">⬇⬇L2</button>
-        <button class="ptog" data-ind="dev_s_9_20" data-panel="${i}" style="border-color:#ff8c00;color:#ff8c00;background:#0a0c12;">DS9/20</button>
-        <button class="ptog" data-ind="dev_l_9_20" data-panel="${i}" style="border-color:#00bfff;color:#00bfff;background:#0a0c12;">DL9/20</button>
-        <button class="ptog" data-ind="db_72_89" data-panel="${i}" style="border-color:#ff8c00;color:#ff8c00;background:#0a0c12;">DB72/89</button>
-        <button class="ptog" data-ind="pzones" data-panel="${i}" style="border-color:#22c55e;color:#22c55e;background:#0a0c12;">LEVELS</button>
-        <button class="ptog on" data-ind="vol" data-panel="${i}">VOL</button>
-        <button class="ptog" data-ind="sma_vol" data-panel="${i}" style="border-color:#D4AF37;color:#D4AF37;background:#0a0c12;">VSMA</button>
-        <button class="ptog on" data-ind="pdc" data-panel="${i}">PDC</button>
-        <span style="width:1px;height:10px;background:#2a3050;margin:0 3px;"></span>
-        <button class="ptog" data-ind="bollinger" data-panel="${i}" style="border-color:#6495ed;color:#6495ed;background:#0a0c12;">BB</button>
-        <button class="ptog" data-ind="sma" data-panel="${i}" style="border-color:#5a9ae6;color:#5a9ae6;background:#0a0c12;">SMA</button>
-        <span style="width:1px;height:10px;background:#2a3050;margin:0 3px;"></span>
+        <div id="ind-hot-${i}" style="display:flex;gap:4px;align-items:center;"></div>
       </div>
       <div class="pdr" id="pdr-${i}">
         <label>FROM</label><input type="date" id="from-${i}" autocomplete="off"/>
@@ -9049,9 +9027,14 @@ function setToolHotColor(input){
 // System indKeys that should NEVER appear as hot buttons
 var HOT_EXCLUDE = {tl:1,ann:1,otherann:1,exec:1,btexec:1,adjusted:1,adj:1};
 function renderHotButtons(){
-  const container = document.getElementById('hot-btns-container');
-  if(!container) return;
-  container.innerHTML = '';
+  // Clear all containers
+  const topContainer = document.getElementById('hot-btns-container');
+  if(topContainer) topContainer.innerHTML = '';
+  panels.forEach(function(p,pi){
+    var indHot = document.getElementById('ind-hot-'+pi);
+    if(indHot) indHot.innerHTML = '';
+  });
+  // Build buttons for each panel
   panels.forEach(function(p,pi){
     if(!p.tools) return;
     p.tools.forEach(function(tool){
@@ -9060,26 +9043,33 @@ function renderHotButtons(){
       const cat = IND_CATALOG[tool.indKey];
       const name = tool.hotLabel || tool.name || cat?.label || tool.indKey;
       const color = tool.hotColor || '#D4AF37';
-      var b = document.createElement('button');
-      b.className = 'ptog'+(tool.on?' on':'');
-      b.style.cssText = 'border-color:'+color+';color:'+color+';background:#0a0c12;';
-      b.dataset.toolid = tool.id;
-      b.dataset.panel = pi;
-      b.textContent = name.toUpperCase().slice(0,10);
-      b.onmousedown = function(e){
-        e.stopPropagation();
-        tool.on=!tool.on;
-        p.inds=deriveInds(p.tools);
-        renderAll();
-        buildIndicatorRow(pi);
-        renderHotButtons();
-        vaultRender();
-      };
-      b.oncontextmenu = function(e){
-        e.preventDefault();
-        openToolSettings(tool.id,pi);
-      };
-      container.appendChild(b);
+      function makeBtn(){
+        var b = document.createElement('button');
+        b.className = 'ptog'+(tool.on?' on':'');
+        b.style.cssText = 'border-color:'+color+';color:'+color+';background:#0a0c12;';
+        b.dataset.toolid = tool.id;
+        b.dataset.panel = pi;
+        b.textContent = name.toUpperCase().slice(0,10);
+        b.onmousedown = function(e){
+          e.stopPropagation();
+          tool.on=!tool.on;
+          p.inds=deriveInds(p.tools);
+          renderAll();
+          buildIndicatorRow(pi);
+          renderHotButtons();
+          vaultRender();
+        };
+        b.oncontextmenu = function(e){
+          e.preventDefault();
+          openToolSettings(tool.id,pi);
+        };
+        return b;
+      }
+      // Add to topbar
+      if(topContainer) topContainer.appendChild(makeBtn());
+      // Add to per-panel ind-row
+      var indHot = document.getElementById('ind-hot-'+pi);
+      if(indHot) indHot.appendChild(makeBtn());
     });
   });
 }

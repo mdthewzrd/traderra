@@ -8415,26 +8415,39 @@ function sbTab(tab){
   if(tab==='tools')openSingleIndSettings(null,0);
 }
 
-// ── Vault: render grouped indicators (TV-style) ──
+// ── Vault: render only active indicators (no tools, no templates, no annotations) ──
+var VAULT_EXCLUDE = {tl:1,ann:1,otherann:1,exec:1,btexec:1};
 function vaultRender(){
   var el=document.getElementById('vault-list');if(!el)return;
   var p=panels[0];
+  if(!p||!p.inds){el.innerHTML='<div style="padding:20px;text-align:center;color:#3a4a60;font-size:10px;">No indicators active</div>';return;}
+  // Build lookup of active tools by legacyKey for linking
+  var toolByKey = {};
+  if(p.tools) p.tools.forEach(function(t){
+    if(t.on && t.legacyKeys) t.legacyKeys.forEach(function(lk){ toolByKey[lk]=t; });
+    else if(t.on) toolByKey[t.indKey]=t;
+  });
   var groups={};
-  for(var key in IND_REGISTRY){
-    var reg=IND_REGISTRY[key];var g=reg.group||'Other';
+  for(var key in p.inds){
+    if(!p.inds[key]) continue; // only ON indicators
+    if(VAULT_EXCLUDE[key]) continue; // skip non-indicators
+    var reg=IND_REGISTRY[key];
+    if(!reg) continue; // skip unknown
+    var g=reg.group||'Other';
     if(!groups[g])groups[g]=[];
     groups[g].push({key:key,label:reg.label,colors:reg.colors,colorLabels:reg.colorLabels,hasParams:!!(reg.params&&reg.params.length),hasColors:!!(reg.colors&&reg.colors.length)});
   }
   var html='';
+  var hasAny=false;
   for(var gn in groups){
+    hasAny=true;
     html+='<div class="vg"><div class="vg-title">'+gn.toUpperCase()+'</div>';
     groups[gn].forEach(function(ind){
-      var isOn=p&&p.inds&&p.inds[ind.key];
       var mainColor=ind.colors?getIndColor(ind.key,0):'#2a3050';
-      if(!mainColor||mainColor==='#444') mainColor=isOn?'#a78bfa':'#2a3050';
-      var dotColor=isOn?(ind.colors?mainColor:'#a78bfa'):'#2a3050';
-      html+='<div class="vi'+(isOn?' on':'')+'" onclick="vaultToggle(\''+ind.key+'\')">';
-      html+='<span class="vi-dot" style="background:'+dotColor+';'+(isOn?'color:'+dotColor:'')+'"></span>';
+      if(!mainColor||mainColor==='#444') mainColor='#a78bfa';
+      var dotColor=mainColor;
+      html+='<div class="vi on" onclick="vaultToggle(\''+ind.key+'\')">';
+      html+='<span class="vi-dot" style="background:'+dotColor+';color:'+dotColor+'"></span>';
       html+='<span class="vi-name">'+ind.label+'</span>';
       if(ind.colors&&ind.colors.length){
         html+='<span class="vi-colors">';
@@ -8444,8 +8457,14 @@ function vaultRender(){
         });
         html+='</span>';
       }
-      if(ind.hasParams||ind.hasColors){
+      // Gear icon: open tool settings if tool exists, else legacy settings
+      var tool = toolByKey[ind.key];
+      if(tool){
+        html+='<button class="vi-gear" onclick="event.stopPropagation();openToolSettings(\''+tool.id+'\',0)" title="Settings">';
+      } else if(ind.hasParams||ind.hasColors){
         html+='<button class="vi-gear" onclick="event.stopPropagation();openSingleIndSettings(\''+ind.key+'\');sbOpen(\'tools\')" title="Settings">';
+      }
+      if(tool || ind.hasParams || ind.hasColors){
         html+='<svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1l.5 2a3.5 3.5 0 011.5.9l1.9-.7.5 1.3-1.7.9a3.5 3.5 0 010 1.2l1.7.9-.5 1.3-1.9-.7a3.5 3.5 0 01-1.5.9L6 11l-.5-2a3.5 3.5 0 01-1.5-.9l-1.9.7-.5-1.3 1.7-.9a3.5 3.5 0 010-1.2l-1.7-.9.5-1.3 1.9.7a3.5 3.5 0 011.5-.9z" fill="none" stroke="currentColor" stroke-width="1"/></svg>';
         html+='</button>';
       }
@@ -8453,17 +8472,28 @@ function vaultRender(){
     });
     html+='</div>';
   }
+  if(!hasAny) html='<div style="padding:20px;text-align:center;color:#3a4a60;font-size:10px;font-style:italic;">No indicators active.<br>Use TOOLS tab to add indicators.</div>';
   el.innerHTML=html;
 }
 function vaultToggle(indKey){
   var p=panels[0];if(!p)return;
   if(!p.inds)p.inds={};
-  p.inds[indKey]=!p.inds[indKey];
-  // Sync with quick-toggle buttons
-  var ptog=document.querySelector('.ptog[data-ind="'+indKey+'"][data-panel="0"]');
-  if(ptog)ptog.classList.toggle('on',p.inds[indKey]);
+  // Find matching tool and toggle it off
+  var tool = null;
+  if(p.tools) p.tools.forEach(function(t){
+    if(t.legacyKeys && t.legacyKeys.indexOf(indKey)!==-1 && t.on){ tool=t; }
+    else if(t.indKey===indKey && t.on){ tool=t; }
+  });
+  if(tool){
+    tool.on=false;
+    p.inds=deriveInds(p.tools);
+    renderAll();
+  } else {
+    p.inds[indKey]=!p.inds[indKey];
+    loadPanel(p);renderPanel(p);updateScrollbar(p);
+  }
+  renderHotButtons();
   vaultRender();
-  loadPanel(p);renderPanel(p);updateScrollbar(p);
 }
 // ── Settings sync ──
 function setFontScale(size){
@@ -8840,13 +8870,22 @@ function openToolSettings(toolId, panelIdx){
 
   // Hot button toggle
   const isHot = tool.hot;
-  html += '<div style="padding:8px 16px;border-top:1px solid #1e2535;display:flex;align-items:center;gap:8px;">';
-  html += '<span style="font-size:10px;color:#8aa0c0;font-weight:700;">🔥 HOT BUTTON</span>';
-  html += '<span style="font-size:9px;color:#5a6a88;">Show in toolbar</span>';
+  const hotLabel = tool.hotLabel || tool.name || (IND_CATALOG[tool.indKey]?.label) || tool.indKey || 'TOOL';
+  const hotColor = tool.hotColor || '#D4AF37';
+  html += '<div style="padding:8px 16px;border-top:1px solid #1e2535;">';
+  html += '<div style="display:flex;align-items:center;gap:8px;">';
+  html += '<span style="font-size:10px;color:#8aa0c0;font-weight:700;">SHOW IN TOOLBAR</span>';
   html += '<label style="margin-left:auto;display:flex;align-items:center;gap:6px;cursor:pointer;">';
   html += '<input type="checkbox" '+(isHot?'checked':'')+' data-toolid="'+tool.id+'" onchange="setToolHot(this)" style="width:16px;height:16px;accent-color:#D4AF37;cursor:pointer;">';
   html += '<span style="font-size:10px;color:'+(isHot?'#D4AF37':'#6b7280')+';font-weight:700;font-family:monospace;">'+(isHot?'ON':'OFF')+'</span>';
   html += '</label></div>';
+  // label + color inputs (only visible when hot=on)
+  html += '<div id="hot-detail-'+tool.id+'" style="display:'+(isHot?'flex':'none')+';gap:8px;align-items:center;margin-top:6px;">';
+  html += '<span style="font-size:9px;color:#6b7280;flex-shrink:0;">Label</span>';
+  html += '<input type="text" value="'+hotLabel.replace(/"/g,'&quot;')+'" maxlength="12" data-toolid="'+tool.id+'" onchange="setToolHotLabel(this)" style="flex:1;padding:3px 6px;background:#0a0c12;border:1px solid #1e2535;color:#dde3f0;font-size:11px;font-family:monospace;border-radius:3px;">';
+  html += '<span style="font-size:9px;color:#6b7280;flex-shrink:0;margin-left:4px;">Color</span>';
+  html += '<input type="color" value="'+hotColor+'" data-toolid="'+tool.id+'" onchange="setToolHotColor(this)" style="width:24px;height:20px;border:1px solid #1e2535;background:#0a0c12;cursor:pointer;border-radius:2px;padding:0;">';
+  html += '</div></div>';
 
   // Bottom buttons
   html += '<div style="padding:8px 16px;border-top:1px solid #1e2535;display:flex;gap:6px;">';
@@ -8959,8 +8998,35 @@ function setToolHot(input){
   const p = panels[0]; if(!p) return;
   const tool = p.tools?.find(t=>t.id===toolId); if(!tool) return;
   tool.hot = input.checked;
+  // set defaults when toggling on
+  if(tool.hot){
+    if(!tool.hotLabel){
+      const cat = IND_CATALOG[tool.indKey];
+      tool.hotLabel = tool.name || cat?.label || tool.indKey || 'TOOL';
+    }
+    if(!tool.hotColor) tool.hotColor = '#D4AF37';
+  }
   var lbl = input.nextElementSibling;
   if(lbl){lbl.textContent=tool.hot?'ON':'OFF';lbl.style.color=tool.hot?'#D4AF37':'#6b7280';}
+  // toggle label/color inputs visibility
+  var detailRow = document.getElementById('hot-detail-'+tool.id);
+  if(detailRow) detailRow.style.display = tool.hot ? 'flex' : 'none';
+  renderHotButtons();
+}
+
+function setToolHotLabel(input){
+  const toolId = input.dataset.toolid;
+  const p = panels[0]; if(!p) return;
+  const tool = p.tools?.find(t=>t.id===toolId); if(!tool) return;
+  tool.hotLabel = input.value || tool.name || 'TOOL';
+  renderHotButtons();
+}
+
+function setToolHotColor(input){
+  const toolId = input.dataset.toolid;
+  const p = panels[0]; if(!p) return;
+  const tool = p.tools?.find(t=>t.id===toolId); if(!tool) return;
+  tool.hotColor = input.value;
   renderHotButtons();
 }
 
@@ -8972,15 +9038,16 @@ function renderHotButtons(){
   panels.forEach(function(p,pi){
     if(!p.tools) return;
     p.tools.forEach(function(tool){
-      if(!tool.hot) return;
+      if(!tool.on || !tool.hot) return;
       const cat = IND_CATALOG[tool.indKey];
-      const name = tool.name || cat?.label || tool.indKey;
+      const name = tool.hotLabel || tool.name || cat?.label || tool.indKey;
+      const color = tool.hotColor || '#D4AF37';
       var b = document.createElement('button');
       b.className = 'ptog'+(tool.on?' on':'');
-      b.style.cssText = 'border-color:#D4AF37;color:#D4AF37;background:#0a0c12;';
+      b.style.cssText = 'border-color:'+color+';color:'+color+';background:#0a0c12;';
       b.dataset.toolid = tool.id;
       b.dataset.panel = pi;
-      b.textContent = '🔥'+name.toUpperCase().slice(0,8);
+      b.textContent = name.toUpperCase().slice(0,10);
       b.onmousedown = function(e){
         e.stopPropagation();
         tool.on=!tool.on;
@@ -9091,7 +9158,6 @@ function buildToolPickerHTML(panelIdx){
       html+='<div style="display:flex;align-items:center;padding:5px 12px;cursor:pointer;border-radius:3px;margin:0 6px 1px;background:#151925;" onmousedown="openToolSettings(\''+tool.id+'\','+panelIdx+')">';
       html+='<button class="is-toggle on" data-toolid="'+tool.id+'" data-panel="'+panelIdx+'" onclick="event.stopPropagation();toggleToolById(this,\''+tool.id+'\','+panelIdx+')" style="margin-right:6px;"></button>';
       html+='<span style="flex:1;font-size:11px;font-weight:700;color:#dde3f0;font-family:Courier New,monospace;">'+name+'</span>';
-      if(isHot) html+='<span style="font-size:8px;color:#D4AF37;margin-left:2px;">🔥</span>';
       html+='<span style="font-size:9px;color:#D4AF37;margin-left:4px;">⚙</span>';
       html+='</div>';
     });
@@ -9107,7 +9173,6 @@ function buildToolPickerHTML(panelIdx){
       html+='<div style="display:flex;align-items:center;padding:5px 12px;cursor:pointer;border-radius:3px;margin:0 6px 1px;opacity:.6;" onmousedown="openToolSettings(\''+tool.id+'\','+panelIdx+')" onmouseover="this.style.background=\'#151925\'" onmouseout="this.style.background=\'\'">';
       html+='<button class="is-toggle" data-toolid="'+tool.id+'" data-panel="'+panelIdx+'" onclick="event.stopPropagation();toggleToolById(this,\''+tool.id+'\','+panelIdx+')" style="margin-right:6px;"></button>';
       html+='<span style="flex:1;font-size:11px;font-weight:700;color:#5a6a88;font-family:Courier New,monospace;">'+name+'</span>';
-      if(isHot) html+='<span style="font-size:8px;color:#D4AF37;margin-left:2px;">🔥</span>';
       html+='</div>';
     });
   }

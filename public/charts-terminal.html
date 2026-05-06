@@ -650,6 +650,7 @@ body.light .lt-sep{background:#d0d0d0!important;}
       <button class="tool-btn" data-tool="trail_stop" style="border-color:#38bdf8;color:#38bdf8;">— Trail Stop</button>
     </div>
   </div>
+  <div class="sep"></div>
   <div class="tbtn-row">
     <button class="tbtn" id="toggle-bars-btn">≡ BARS</button>
     <button class="tbtn" id="price-line-btn" style="border-color:#26a69a;color:#26a69a;">— LINE</button>
@@ -658,25 +659,26 @@ body.light .lt-sep{background:#d0d0d0!important;}
     <button class="tbtn active" id="ly1" style="font-weight:900;">1</button>
     <button class="tbtn" id="ly2" style="font-weight:900;">2</button>
     <button class="tbtn" id="ly4" style="font-weight:900;">4</button>
-    <button class="tbtn" id="bt-btn" style="border-color:#f59e0b!important;color:#f59e0b!important;">⏱ BACKTEST</button>
+    <button class="tbtn" id="bt-btn" style="border-color:#f59e0b!important;color:#f59e0b!important;">⏱ BT</button>
     <button class="tbtn" id="scan-btn" style="border-color:#4ade80!important;color:#4ade80!important;">📡 SCAN</button>
     <button class="tbtn" id="vault-btn" style="border-color:#a78bfa!important;color:#a78bfa!important;">📦 VAULT</button>
     <button class="tbtn" id="settings-btn" style="border-color:#D4AF37!important;color:#D4AF37!important;">⚙ LOOK</button>
     <button class="tbtn" id="tools-btn" style="border-color:#D4AF37!important;color:#D4AF37!important;" onclick="sbOpen('tools')">🔧 TOOLS</button>
-    <button class="tbtn" id="input-settings-btn" style="border-color:#22d3ee!important;color:#22d3ee!important;">⚙ SETTINGS</button>
-    <div style="flex:1;"></div>
-    <div id="ind-btns-container" style="display:flex;gap:4px;align-items:center;flex-wrap:nowrap;"></div>
-    <div id="hot-btns-container" style="display:flex;gap:4px;align-items:center;flex-wrap:nowrap;"></div>
+    <button class="tbtn" id="input-settings-btn" style="border-color:#22d3ee!important;color:#22d3ee!important;">⚙ SET</button>
+    <div id="ind-btns-container" style="display:flex;gap:4px;align-items:center;flex-shrink:0;"></div>
+    <div id="hot-btns-container" style="display:flex;gap:4px;align-items:center;flex-shrink:0;"></div>
     <button class="tbtn" id="add-ind-btn" style="border-color:#3a4a68;color:#3a4a68;" onclick="openIndBtnPopup()" title="Add indicator button">＋</button>
     <div class="dropdown-group">
       <button class="tbtn dropdown-trigger" id="tpl-menu-btn" style="border-color:#D4AF37;color:#D4AF37;">📋 TPL ▾</button>
       <div class="dropdown-content" id="tpl-dropdown" style="min-width:180px;">
-      <div style="padding:4px 10px;font-size:10px;color:#4a6080;font-weight:700;">CHART TEMPLATES</div>
-      <div id="tpl-list"></div>
-      <hr style="border:none;border-top:1px solid #2a3050;margin:2px 0;">
-      <div class="tool-btn" onmousedown="saveNewTemplate()" style="color:#D4AF37;">💾 Save Current as Template</div>
+        <div style="padding:4px 10px;font-size:10px;color:#4a6080;font-weight:700;">CHART TEMPLATES</div>
+        <div id="tpl-list"></div>
+        <hr style="border:none;border-top:1px solid #2a3050;margin:2px 0;">
+        <div class="tool-btn" onmousedown="saveNewTemplate()" style="color:#D4AF37;">💾 Save Current as Template</div>
+      </div>
     </div>
     <button class="tbtn" id="theme-toggle-btn" style="border-color:#5a6a88;color:#5a6a88;">🌙</button>
+    <button class="tbtn" id="reload-chart-btn" style="border-color:#22d3ee;color:#22d3ee;" onclick="renderAll();" title="Reload chart">⟳ RELOAD</button>
   </div>
   <div id="ticker-info">
     <span id="ti-sym" style="color:#dde3f0;font-weight:700;font-size:14px;"></span>
@@ -2918,11 +2920,18 @@ function renderPanel(p){
   const atr72=calcCache.atr_72||null, atr89=calcCache.atr_89||null;
   const vwap=pi.vwap?calcVWAP(data,isIntraday(p.tf)):null;
 
-  // Key Levels (Bjorgum-style) — pass custom params
+  // Key Levels (Bjorgum-style) — pass custom params from tool instance or legacy
   var klParams=null;
   if(pi.pzones){
     var pzReg=IND_REGISTRY.pzones;
-    if(pzReg){
+    // Try to get params from active tool instance first
+    var pzTool = p.tools ? p.tools.find(t => t.on && t.legacyKeys && t.legacyKeys.includes('pzones')) : null;
+    if(pzTool){
+      klParams = toolParams(pzTool);
+      var pzCat = IND_CATALOG[pzTool.indKey];
+      var pzClrs = toolColors(pzTool);
+      if(pzCat && pzCat.colors) pzCat.colors.forEach(function(ck){klParams[ck] = pzClrs[ck.key] || C[ck.key] || ck.def;});
+    } else if(pzReg){
       klParams={};
       if(pzReg.params) pzReg.params.forEach(function(prm){var v=getIndCustom('pzones','params',prm.key);klParams[prm.key]=v!=null?v:prm.def;});
       if(pzReg.colors) pzReg.colors.forEach(function(ck){klParams[ck]=getIndCustom('pzones','colors',ck)||C[ck];});
@@ -3064,6 +3073,12 @@ function renderPanel(p){
 
   // Deviation bands — read multipliers from saved settings, fallback to preset defaults
   function devMults(indKey, presetKey){
+    // Try to read from active tool instance first
+    var devTool = p.tools ? p.tools.find(t => t.on && t.legacyKeys && t.legacyKeys.includes(indKey)) : null;
+    if(devTool){
+      const tp = toolParams(devTool);
+      return [[tp.upLow??0.5, tp.upHigh??1], [tp.dnLow??2, tp.dnHigh??2.4]];
+    }
     const reg=IND_REGISTRY[indKey];
     const def=PRESETS[activePreset]?.dev?.[presetKey];
     const upLow=getIndCustom(indKey,'params','upLow') ?? def?.up?.[0] ?? .5;

@@ -2012,7 +2012,6 @@ try{
           // Force OFF system tools that should never be hot
           if(HOT_EXCLUDE[t.indKey]) t.hot=false;
         });
-        }
         p.inds=deriveInds(p.tools);
       }
       else migrateIndsToTools(p);

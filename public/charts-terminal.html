@@ -8485,9 +8485,10 @@ function vaultToggle(indKey){
     else if(t.indKey===indKey && t.on){ tool=t; }
   });
   if(tool){
-    tool.on=false;
+    tool.on=!tool.on;
     p.inds=deriveInds(p.tools);
     renderAll();
+    buildIndicatorRow(0);
   } else {
     p.inds[indKey]=!p.inds[indKey];
     loadPanel(p);renderPanel(p);updateScrollbar(p);
@@ -9052,8 +9053,10 @@ function renderHotButtons(){
         e.stopPropagation();
         tool.on=!tool.on;
         p.inds=deriveInds(p.tools);
-        b.classList.toggle('on',tool.on);
         renderAll();
+        buildIndicatorRow(pi);
+        renderHotButtons();
+        vaultRender();
       };
       b.oncontextmenu = function(e){
         e.preventDefault();
@@ -9195,6 +9198,8 @@ function toggleToolById(btn, toolId, panelIdx){
   renderAll();
   // Rebuild list so it moves between active/inactive sections
   buildIndicatorRow(panelIdx);
+  renderHotButtons();
+  vaultRender();
 }
 
 function addAndOpenTool(indKey, panelIdx){

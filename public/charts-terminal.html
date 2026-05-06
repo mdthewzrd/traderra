@@ -9467,6 +9467,7 @@ function saveNewTemplate(){
         chartStyle:_chartStyle,
         theme:isLight?'light':'dark',
         inds:Object.assign({},p.inds),
+        tools:JSON.parse(JSON.stringify(p.tools||[])),
         colors:{},
         params:{},
         ts:Date.now()
@@ -9494,9 +9495,17 @@ function saveNewTemplate(){
 function applyTemplate(idx){
   var tpl=templates[idx];if(!tpl)return;
   var p=panels[0];if(!p)return;
-  // Replace all indicators
-  p.inds=Object.assign({},tpl.inds);
-  // Apply saved params
+  // Restore tools if template has them
+  if(tpl.tools && tpl.tools.length){
+    p.tools = JSON.parse(JSON.stringify(tpl.tools));
+    p.inds = deriveInds(p.tools);
+  } else {
+    // Legacy template — use old inds format and migrate
+    p.inds=Object.assign({},tpl.inds);
+    p.tools = [];
+    migrateIndsToTools(p);
+  }
+  // Apply saved params (legacy support)
   if(tpl.params){
     for(var ik in tpl.params){
       if(!tpl.params[ik])continue;

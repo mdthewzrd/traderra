@@ -9280,6 +9280,13 @@ function toggleToolById(btn, toolId, panelIdx){
   const t=p.tools.find(t=>t.id===toolId);
   if(!t) return;
   t.on=!t.on;
+  // When turning on, set hot defaults if missing
+  if(t.on && !t.hot && !HOT_EXCLUDE[t.indKey]){
+    const cat=IND_CATALOG[t.indKey]||IND_REGISTRY[t.indKey];
+    t.hot=true;
+    if(!t.hotLabel) t.hotLabel=t.name||(cat?.label)||t.indKey||'TOOL';
+    if(!t.hotColor) t.hotColor='#D4AF37';
+  }
   p.inds=deriveInds(p.tools);
   btn.classList.toggle('on',t.on);
   renderAll();

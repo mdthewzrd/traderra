@@ -1669,7 +1669,12 @@ function newToolId(){ return 't'+(++_toolId); }
 // Derive p.inds boolean map from p.tools array
 function deriveInds(tools){
   const inds = {};
-  if(tools) tools.forEach(t => { if(t.on) inds[t.indKey] = true; });
+  if(tools) tools.forEach(t => {
+    if(!t.on) return;
+    // Set legacy keys so legacy rendering still works
+    if(t.legacyKeys) t.legacyKeys.forEach(k => inds[k]=true);
+    else inds[t.indKey] = true; // fallback for new-style tools
+  });
   // Always-ON indicators (not tool-instanceable)
   inds.tl = true; inds.ann = true; inds.otherann = true; inds.exec = true; inds.btexec = true;
   return inds;
@@ -1702,27 +1707,27 @@ function migrateIndsToTools(p){
   p.tools = [];
   // Map legacy IND_REGISTRY keys to catalog keys + default params
   const legacyMap = {
-    ema9:       {indKey:'ema', params:{period:9}},
-    ema20:      {indKey:'ema', params:{period:20}},
-    ema50:      {indKey:'ema', params:{period:50}},
-    ema150:     {indKey:'ema', params:{period:150}},
-    ema200:     {indKey:'ema', params:{period:200}},
-    ema40_60:   {indKey:'ema_cross', params:{fast:40,slow:60}},
-    band_9_20:  {indKey:'ema_band', params:{fast:9,slow:20}},
-    band_72_89: {indKey:'ema_band', params:{fast:72,slow:89}},
-    dev_s_9_20: {indKey:'deviation', params:{fast:9,slow:20,upLow:0.5,upHigh:1,dnLow:2,dnHigh:2.4}},
-    dev_l_9_20: {indKey:'deviation', params:{fast:9,slow:20,upLow:2,upHigh:2.4,dnLow:0.5,dnHigh:1}},
-    db_72_89:   {indKey:'deviation', params:{fast:72,slow:89,upLow:6.9,upHigh:9.6,dnLow:6.9,dnHigh:9.6}},
-    db_upper:   {indKey:'deviation_single', params:{ema:20,atr:20,mult:2}},
-    db_low1:    {indKey:'deviation_single', params:{ema:9,atr:9,mult:2}},
-    db_low2:    {indKey:'deviation_single', params:{ema:20,atr:20,mult:2.5}},
-    vwap:       {indKey:'vwap', params:{}},
-    vol:        {indKey:'vol', params:{}},
-    sma_vol:    {indKey:'sma_vol', params:{period:20}},
-    pdc:        {indKey:'pdc', params:{}},
-    pzones:     {indKey:'pzones', params:{}},
-    bollinger:  {indKey:'bollinger', params:{period:20,stddev:2}},
-    sma:        {indKey:'sma', params:{period:20}},
+    ema9:       {indKey:'ema', legacyKeys:['ema9'], params:{period:9}},
+    ema20:      {indKey:'ema', legacyKeys:['ema20'], params:{period:20}},
+    ema50:      {indKey:'ema', legacyKeys:['ema50'], params:{period:50}},
+    ema150:     {indKey:'ema', legacyKeys:['ema150'], params:{period:150}},
+    ema200:     {indKey:'ema', legacyKeys:['ema200'], params:{period:200}},
+    ema40_60:   {indKey:'ema_cross', legacyKeys:['ema40_60'], params:{fast:40,slow:60}},
+    band_9_20:  {indKey:'ema_band', legacyKeys:['band_9_20'], params:{fast:9,slow:20}},
+    band_72_89: {indKey:'ema_band', legacyKeys:['band_72_89'], params:{fast:72,slow:89}},
+    dev_s_9_20: {indKey:'deviation', legacyKeys:['dev_s_9_20'], params:{fast:9,slow:20,upLow:0.5,upHigh:1,dnLow:2,dnHigh:2.4}},
+    dev_l_9_20: {indKey:'deviation', legacyKeys:['dev_l_9_20'], params:{fast:9,slow:20,upLow:2,upHigh:2.4,dnLow:0.5,dnHigh:1}},
+    db_72_89:   {indKey:'deviation', legacyKeys:['db_72_89'], params:{fast:72,slow:89,upLow:6.9,upHigh:9.6,dnLow:6.9,dnHigh:9.6}},
+    db_upper:   {indKey:'deviation_single', legacyKeys:['db_upper'], params:{ema:20,atr:20,mult:2}},
+    db_low1:    {indKey:'deviation_single', legacyKeys:['db_low1'], params:{ema:9,atr:9,mult:2}},
+    db_low2:    {indKey:'deviation_single', legacyKeys:['db_low2'], params:{ema:20,atr:20,mult:2.5}},
+    vwap:       {indKey:'vwap', legacyKeys:['vwap'], params:{}},
+    vol:        {indKey:'vol', legacyKeys:['vol'], params:{}},
+    sma_vol:    {indKey:'sma_vol', legacyKeys:['sma_vol'], params:{period:20}},
+    pdc:        {indKey:'pdc', legacyKeys:['pdc'], params:{}},
+    pzones:     {indKey:'pzones', legacyKeys:['pzones'], params:{}},
+    bollinger:  {indKey:'bollinger', legacyKeys:['bollinger'], params:{period:20,stddev:2}},
+    sma:        {indKey:'sma', legacyKeys:['sma'], params:{period:20}},
   };
   for(let key in p.inds){
     const isOn = !!p.inds[key];
@@ -1744,6 +1749,7 @@ function migrateIndsToTools(p){
     p.tools.push({
       id: newToolId(),
       indKey: map.indKey,
+      legacyKeys: map.legacyKeys,
       name: reg ? reg.label : key,
       on: isOn,
       params: {...map.params, ...savedParams},
@@ -1762,9 +1768,12 @@ function createTool(indKey, name, params, colors){
   cat.params.forEach(p => defParams[p.key] = p.def);
   const defColors = {};
   cat.colors.forEach(c => defColors[c.key] = c.def);
+  // Generate a unique legacy key for new tools (e.g. 'ema_band_1234')
+  const legacyKey = indKey + '_' + Date.now().toString(36);
   return {
     id: newToolId(),
     indKey,
+    legacyKeys: [legacyKey],
     name: name || cat.label,
     on: true,
     params: {...defParams, ...params},

@@ -1782,6 +1782,12 @@ function createTool(indKey, name, params, colors){
 }
 
 // Add a tool to a panel, return the tool
+// Save tools to localStorage
+function saveTools(){
+  const data = panels.map(p => p.tools || []);
+  localStorage.setItem(TOOLS_KEY, JSON.stringify(data));
+}
+
 function addTool(panelIdx, indKey, params, colors, name){
   const p = panels[panelIdx];
   if(!p) return;
@@ -1849,6 +1855,7 @@ function getIndCustom(indKey, type, key){
 
 // ═══ TOOLSET PRESETS ═══
 const PRESET_KEY='traderra-preset';
+const TOOLS_KEY='traderra-tools';
 let activePreset='Mike';
 const PRESETS={
 Sam:{
@@ -1973,8 +1980,23 @@ const panels = PANEL_DEFAULTS.map((d,i)=>({
   adjusted:true,              // per-panel adj toggle (defaults to global)
 }));
 
-// Load saved preset
-try{const sp=localStorage.getItem(PRESET_KEY);if(sp&&PRESETS[sp]){activePreset=sp;panels.forEach((p)=>{p.inds=Object.assign({},PRESETS[sp].inds(p.tf));});}else{panels.forEach(p=>{p.inds=Object.assign({},PRESETS[activePreset].inds(p.tf));});}panels.forEach(p=>migrateIndsToTools(p));panels.forEach((_,i)=>buildIndicatorRow(i));}catch(e){}
+// Load saved preset + tools
+try{
+  const sp=localStorage.getItem(PRESET_KEY);
+  if(sp&&PRESETS[sp]){activePreset=sp;panels.forEach((p)=>{p.inds=Object.assign({},PRESETS[sp].inds(p.tf));});}
+  else{panels.forEach(p=>{p.inds=Object.assign({},PRESETS[activePreset].inds(p.tf));});}
+  // Restore saved tools from localStorage if they exist
+  const savedTools=JSON.parse(localStorage.getItem(TOOLS_KEY)||'null');
+  if(savedTools){
+    panels.forEach((p,i)=>{
+      if(savedTools[i]&&savedTools[i].length){p.tools=savedTools[i];p.inds=deriveInds(p.tools);}
+      else migrateIndsToTools(p);
+    });
+  } else {
+    panels.forEach(p=>migrateIndsToTools(p));
+  }
+  panels.forEach((_,i)=>buildIndicatorRow(i));
+}catch(e){console.error('load error',e);}
 
 // ══════════════════════════════════════════════════════════
 //  TIME / FORMAT HELPERS
@@ -5565,7 +5587,7 @@ function resizePanel(p){
   renderPanel(p); updateScrollbar(p);
 }
 var _saveAnnsTimer=null;
-function renderAll(){panels.forEach(p=>{if(p.data.length){renderPanel(p);updateScrollbar(p);}});updatePriceLineBtnColor();if(!_saveAnnsTimer){_saveAnnsTimer=setTimeout(function(){saveAnnotations();_saveAnnsTimer=null;},500);}}
+function renderAll(){panels.forEach(p=>{if(p.data.length){renderPanel(p);updateScrollbar(p);}});updatePriceLineBtnColor();if(typeof saveTools==='function')saveTools();if(!_saveAnnsTimer){_saveAnnsTimer=setTimeout(function(){saveAnnotations();_saveAnnsTimer=null;},500);}}
 
 // ══════════════════════════════════════════════════════════
 //  TOOLBAR VISIBILITY TOGGLE

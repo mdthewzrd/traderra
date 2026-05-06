@@ -8075,7 +8075,7 @@ function initS(){try{
     if(!cfg){
       try{const r=localStorage.getItem(SK);if(r)cfg=JSON.parse(r);source='local';}catch(e){}
     }
-    if(cfg){ap(cfg);PR.default=Object.assign({},cfg);}
+    if(cfg){ap(cfg);syn();PR.default=Object.assign({},cfg);}
     // Show save source in the button subtitle
     const hint=document.getElementById('save-hint');
     if(hint)hint.textContent=source==='cloud'?'☁ Synced to profile':'💻 Local only';
@@ -8467,19 +8467,30 @@ function vaultToggle(indKey){
 }
 // ── Settings sync ──
 function setFontScale(size){
-  var scales={small:{p:8,t:7,o:10,ui:11},medium:{p:10,t:9,o:12,ui:13},large:{p:12,t:11,o:14,ui:15}};
+  var scales={small:{p:8,t:7,o:10,ui:12},medium:{p:10,t:9,o:12,ui:13},large:{p:12,t:11,o:14,ui:15}};
   var s=scales[size];if(!s)return;
   F.p=s.p;F.t=s.t;F.o=s.o;F.ui=s.ui;
-  document.documentElement.style.fontSize=s.ui+'px';document.body.style.fontSize=s.ui+'px';
+  // Scale all UI elements via CSS custom property + font-size on root
+  document.documentElement.style.setProperty('--ui-scale', s.ui/13);
+  document.documentElement.style.fontSize=s.ui+'px';
+  document.body.style.fontSize=s.ui+'px';
+  // Apply UI scale to topbar and sidebar
+  var tb=document.getElementById('topbar');if(tb)tb.style.fontSize=s.ui+'px';
+  var sb=document.getElementById('sidebar');if(sb)sb.style.fontSize=s.ui+'px';
+  document.querySelectorAll('.tbtn,.ph,.tf-btn,.is-label,.is-toggle,.sr label,.sst,.sab,.spb').forEach(function(el){el.style.fontSize=Math.round(s.ui*0.85)+'px';});
+  try{
   document.getElementById('sf-p').value=s.p;document.getElementById('sf-p-v').textContent=s.p;
   document.getElementById('sf-t').value=s.t;document.getElementById('sf-t-v').textContent=s.t;
   document.getElementById('sf-o').value=s.o;document.getElementById('sf-o-v').textContent=s.o;
   document.getElementById('sf-ui').value=s.ui;document.getElementById('sf-ui-v').textContent=s.ui;
+  }catch(e){}
   // Highlight active button
   document.querySelectorAll('#fs-small,#fs-medium,#fs-large').forEach(function(b){b.style.borderColor='#1e2535';b.style.color='#5a6a88';});
   var btn=document.getElementById('fs-'+size);
   if(btn){btn.style.borderColor='#D4AF37';btn.style.color='#D4AF37';}
-  saveSettings();renderAll();
+  // Save
+  try{var cfg=JSON.parse(localStorage.getItem('traderra-chart-settings')||'{}');cfg.p=s.p;cfg.t=s.t;cfg.o=s.o;cfg.ui=s.ui;localStorage.setItem('traderra-chart-settings',JSON.stringify(cfg));}catch(e){}
+  renderAll();
   toast('Font scale: '+size);
 }
 

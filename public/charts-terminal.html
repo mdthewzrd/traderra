@@ -4524,13 +4524,6 @@ function buildPanels(){
         <button class="ptog" data-ind="bollinger" data-panel="${i}" style="border-color:#6495ed;color:#6495ed;background:#0a0c12;">BB</button>
         <button class="ptog" data-ind="sma" data-panel="${i}" style="border-color:#5a9ae6;color:#5a9ae6;background:#0a0c12;">SMA</button>
         <span style="width:1px;height:10px;background:#2a3050;margin:0 3px;"></span>
-        <button class="ptog on" data-ind="tl" data-panel="${i}">LINES</button>
-        <button class="ptog on" data-ind="ann" data-panel="${i}">ANN</button>
-        <button class="ptog on" data-ind="otherann" data-panel="${i}">OTHER</button>
-        <button class="ptog on" data-ind="exec" data-panel="${i}">EXEC</button>
-        <button class="ptog on" data-ind="btexec" data-panel="${i}">BTEXEC</button>
-        <span style="width:1px;height:10px;background:#2a3050;margin:0 3px;"></span>
-        <button class="ptog on adj-panel-btn" data-panel="${i}" style="border-color:#f59e0b;color:#f59e0b;">ADJ</button>
       </div>
       <div class="pdr" id="pdr-${i}">
         <label>FROM</label><input type="date" id="from-${i}" autocomplete="off"/>
@@ -4605,7 +4598,8 @@ function buildPanels(){
     });
 
     // Per-panel ADJ toggle
-    div.querySelector('.adj-panel-btn').addEventListener('click', function(){
+    var adjBtn=div.querySelector('.adj-panel-btn');
+    if(adjBtn) adjBtn.addEventListener('click', function(){
       p.adjusted=!p.adjusted;
       this.classList.toggle('on',p.adjusted);
       this.classList.toggle('off',!p.adjusted);

@@ -601,6 +601,8 @@ body.light .lt-sep{background:#d0d0d0!important;}
 </style>
 </head>
 <body>
+<!-- Profile icon - fixed top right -->
+<div id="profile-icon" style="position:fixed;top:6px;right:12px;z-index:9999;cursor:pointer;width:28px;height:28px;border-radius:50%;background:#2a3050;display:flex;align-items:center;justify-content:center;font-size:13px;color:#6a7a98;border:1px solid #3a4a68;transition:all .15s;" onmouseover="this.style.borderColor='#D4AF37';this.style.color='#D4AF37'" onmouseout="this.style.borderColor=this.style.background==='#2a3050'?'#3a4a68':this.style.borderColor;this.style.color=this.style.background==='#2a3050'?'#6a7a98':this.style.color" title="Sign in to sync your data">👤</div>
 <div id="topbar">
   <span id="logo">TRADERRA</span>
   <div class="sep"></div>
@@ -679,7 +681,6 @@ body.light .lt-sep{background:#d0d0d0!important;}
     </div>
     <button class="tbtn" id="theme-toggle-btn" style="border-color:#5a6a88;color:#5a6a88;">🌙</button>
     <button class="tbtn" id="reload-chart-btn" style="border-color:#22d3ee;color:#22d3ee;" onclick="renderAll();" title="Reload chart">⟳ RELOAD</button>
-    <button class="tbtn" id="auth-btn" style="margin-left:auto;border-color:#5a6a88;color:#5a6a88;" title="Sign in to sync"><span style="font-size:10px">SIGN IN</span></button>
   </div>
   <div id="ticker-info">
     <span id="ti-sym" style="color:#dde3f0;font-weight:700;font-size:14px;"></span>
@@ -1347,23 +1348,29 @@ var CloudStore = {
   },
 
   _updateUI: function(state){
-    var btn = document.getElementById('auth-btn');
-    if(!btn) return;
+    var icon = document.getElementById('profile-icon');
+    if(!icon) return;
     if(state==='synced'){
-      btn.innerHTML = '<span style="font-size:10px">✓ SYNCED</span>';
-      btn.style.borderColor = '#22c55e';
-      btn.style.color = '#22c55e';
-      btn.onclick = function(){ window.location.href=CloudStore.apiBase+'/sign-out'; };
+      icon.innerHTML = '<span style="font-size:11px">✓</span>';
+      icon.style.background = '#22c55e';
+      icon.style.borderColor = '#22c55e';
+      icon.style.color = '#000';
+      icon.title = 'Synced — click to sign out';
+      icon.onclick = function(){ window.location.href=CloudStore.apiBase+'/sign-out'; };
     } else if(state==='signed-in'){
-      btn.innerHTML = '<span style="font-size:10px">✓ SIGNED IN</span>';
-      btn.style.borderColor = '#D4AF37';
-      btn.style.color = '#D4AF37';
-      btn.onclick = function(){ window.location.href=CloudStore.apiBase+'/sign-out'; };
+      icon.innerHTML = '👤';
+      icon.style.background = '#D4AF37';
+      icon.style.borderColor = '#D4AF37';
+      icon.style.color = '#000';
+      icon.title = 'Signed in — click to sign out';
+      icon.onclick = function(){ window.location.href=CloudStore.apiBase+'/sign-out'; };
     } else {
-      btn.innerHTML = '<span style="font-size:10px">SIGN IN</span>';
-      btn.style.borderColor = '#5a6a88';
-      btn.style.color = '#5a6a88';
-      btn.onclick = function(){ window.location.href=CloudStore.apiBase+'/sign-in'; };
+      icon.innerHTML = '👤';
+      icon.style.background = '#2a3050';
+      icon.style.borderColor = '#3a4a68';
+      icon.style.color = '#6a7a98';
+      icon.title = 'Sign in to sync your data';
+      icon.onclick = function(){ window.location.href=CloudStore.apiBase+'/sign-in'; };
     }
   },
 

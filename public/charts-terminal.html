@@ -1470,15 +1470,29 @@ var CloudStore = {
   },
 
   signInWithGoogle: function(){
-    var callbackURL = encodeURIComponent(window.location.origin + window.location.pathname);
-    window.location.href = CloudStore.apiBase + '/api/auth/sign-in/social?provider=google&callbackURL=' + callbackURL;
+    CloudStore._socialSignIn('google');
   },
 
   signInWithGitHub: function(){
-    // Redirect to better-auth GitHub OAuth endpoint
-    // The callback will redirect back with a session cookie
-    var callbackURL = encodeURIComponent(window.location.origin + window.location.pathname);
-    window.location.href = CloudStore.apiBase + '/api/auth/sign-in/social?provider=github&callbackURL=' + callbackURL;
+    CloudStore._socialSignIn('github');
+  },
+
+  _socialSignIn: function(provider){
+    var callbackURL = window.location.origin + window.location.pathname;
+    fetch(CloudStore.apiBase + '/api/auth/sign-in/social', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      credentials: 'include',
+      body: JSON.stringify({provider: provider, callbackURL: callbackURL})
+    }).then(function(r){ return r.json(); }).then(function(d){
+      if(d.url) {
+        window.location.href = d.url;
+      } else if(d.redirect && d.url) {
+        window.location.href = d.url;
+      } else {
+        CloudStore._authErr('OAuth failed — try again');
+      }
+    }).catch(function(e){ CloudStore._authErr('OAuth failed: '+e.message); });
   },
 
   signOut: function(){

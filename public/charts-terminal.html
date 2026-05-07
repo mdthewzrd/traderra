@@ -676,6 +676,7 @@ body.light .lt-sep{background:#d0d0d0!important;}
         <div style="padding:4px 10px;font-size:10px;color:#4a6080;font-weight:700;">CHART TEMPLATES</div>
         <div id="tpl-list"></div>
         <hr style="border:none;border-top:1px solid #2a3050;margin:2px 0;">
+        <div class="tool-btn" id="tpl-update-btn" onmousedown="updateCurrentTemplate()" style="color:#22d3ee;display:none;">🔄 Update Current Template</div>
         <div class="tool-btn" onmousedown="saveNewTemplate()" style="color:#D4AF37;">💾 Save Current as Template</div>
       </div>
     </div>
@@ -9554,6 +9555,12 @@ function buildIndicatorRow(panelIdx){
     btn.classList.toggle('off',!isOn);
   });
   updatePresetButtons();
+  // Refresh sidebar tool list if it's showing
+  var label=document.getElementById('tools-ind-label');
+  if(label && label.textContent==='SELECT INDICATOR'){
+    var body=document.getElementById('tools-body');
+    if(body){ body.innerHTML=buildToolPickerHTML(panelIdx); wireToolDrag(body); }
+  }
 }
 
 // Wire gear buttons
@@ -9820,6 +9827,7 @@ renderIndButtons(); renderHotButtons();
 // ── CHART TEMPLATES ──
 var TPL_KEY='traderra-templates';
 var templates=JSON.parse(localStorage.getItem(TPL_KEY)||'[]');
+var activeTemplateIdx=-1; // tracks last-applied template
 
 function renderTemplateList(){
   var list=document.getElementById('tpl-list');
@@ -9836,6 +9844,9 @@ function renderTemplateList(){
     d.onmousedown=function(){applyTemplate(idx);};
     list.appendChild(d);
   });
+  // Show/hide update button
+  var ub=document.getElementById('tpl-update-btn');
+  if(ub) ub.style.display=(activeTemplateIdx>=0&&templates[activeTemplateIdx])?'':'none';
 }
 
 function saveNewTemplate(){
@@ -9877,8 +9888,25 @@ function saveNewTemplate(){
   ]);
 }
 
+function updateCurrentTemplate(){
+  if(activeTemplateIdx<0||!templates[activeTemplateIdx]){toast('No active template to update');return;}
+  var p=panels[0];if(!p)return;
+  var tpl=templates[activeTemplateIdx];
+  var isLight=document.body.classList.contains('light');
+  tpl.chartStyle=_chartStyle;
+  tpl.theme=isLight?'light':'dark';
+  tpl.inds=Object.assign({},p.inds);
+  tpl.tools=JSON.parse(JSON.stringify(p.tools||[]));
+  tpl.ts=Date.now();
+  localStorage.setItem(TPL_KEY,JSON.stringify(templates));
+  renderTemplateList();
+  toast('Template "'+tpl.name+'" updated');
+  document.getElementById('tpl-dropdown').classList.remove('open');
+}
+
 function applyTemplate(idx){
   var tpl=templates[idx];if(!tpl)return;
+  activeTemplateIdx=idx;
   var p=panels[0];if(!p)return;
   // Restore tools if template has them
   if(tpl.tools && tpl.tools.length){
@@ -9914,6 +9942,8 @@ function applyTemplate(idx){
 function deleteTemplate(idx){
   var name=templates[idx]?templates[idx].name:'template';
   templates.splice(idx,1);
+  if(activeTemplateIdx===idx) activeTemplateIdx=-1;
+  else if(activeTemplateIdx>idx) activeTemplateIdx--;
   localStorage.setItem(TPL_KEY,JSON.stringify(templates));
   renderTemplateList();
   toast('Template "'+name+'" deleted');

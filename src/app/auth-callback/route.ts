@@ -22,6 +22,6 @@ export async function GET(request: Request) {
     redirect(String(redirectURL));
   }
 
-  // No token — redirect without it (user will see sign-in again)
+  // No token — redirect to staging
   redirect(callbackURL);
 }

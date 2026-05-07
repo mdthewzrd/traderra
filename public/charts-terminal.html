@@ -2219,7 +2219,7 @@ function setSymbol(s){symbol=s;try{localStorage.setItem('traderra-symbol',s);}ca
 let selectedAnn=null, draggingAnn=null, dragOffset={dx:0,dy:0};
 // Drawing defaults — persist across annotations, saved to localStorage
 var drawDefaults=(function(){try{var d=JSON.parse(localStorage.getItem('traderra-draw-defaults'));if(d)return d;}catch(e){}return{color:'#dde3f0',lineWidth:2,dashed:false,opacity:1};})();
-function saveDrawDefaults(){try{localStorage.setItem('traderra-draw-defaults',JSON.stringify(drawDefaults));}catch(e){}}
+function saveDrawDefaults(){try{localStorage.setItem('traderra-draw-defaults',JSON.stringify(drawDefaults));}catch(e){} if(typeof CloudStore!=='undefined') CloudStore.save('settings');}
 function applyDrawDefaults(ann){
   ann.color=drawDefaults.color||'#dde3f0';
   if(drawDefaults.lineWidth)ann.lineWidth=drawDefaults.lineWidth;
@@ -8449,6 +8449,7 @@ function applyThemeMode(light){
     const goLight=!isLightMode();
     applyThemeMode(goLight);
     localStorage.setItem(THEME_KEY,goLight?'light':'dark');
+    if(typeof CloudStore!=='undefined') CloudStore.save('settings');
   };
   // Restore saved theme
   const saved=localStorage.getItem(THEME_KEY);
@@ -9382,9 +9383,7 @@ function renderHotButtons(){
         };
         return b;
       }
-      // Add to topbar
-      if(topContainer) topContainer.appendChild(makeBtn());
-      // Add to per-panel ind-row
+      // Only add to per-panel ind-row (inside chart area), not top bar
       var indHot = document.getElementById('ind-hot-'+pi);
       if(indHot) indHot.appendChild(makeBtn());
     });

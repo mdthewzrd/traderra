@@ -1318,67 +1318,189 @@ body.light .lt-sep{background:#d0d0d0!important;}
 <script src="/indicators/vault.js"></script>
 <script>
 // ══════════════════════════════════════════════════════════
-//  CLOUD STORE — sync localStorage to DB when signed in
+//  CLOUD STORE + AUTH — better-auth inline modal
 // ══════════════════════════════════════════════════════════
 var CloudStore = {
   userId: null,
-  _saving: null,
+  userName: null,
+  userEmail: null,
   _debounce: null,
-  // API base — auto-detect: same origin if on traderra app, else use traderra-lime
   get apiBase(){
     if(window._cloudApiBase) return window._cloudApiBase;
-    // If hosted on the traderra Next.js app, use same origin
-    if(location.hostname.indexOf('traderra-lime') !== -1 || location.hostname.indexOf('traderra-maikus') !== -1) return '';
-    // Otherwise point to the traderra app
+    if(location.hostname.indexOf('traderra-lime')!==-1 || location.hostname.indexOf('traderra-maikus')!==-1) return '';
     return 'https://traderra-lime.vercel.app';
   },
 
   init: function(){
-    fetch(CloudStore.apiBase+'/api/chart-data/session').then(function(r){return r.json();}).then(function(d){
-      if(d.authenticated && d.dbAvailable){
-        CloudStore.userId = d.userId;
-        CloudStore.loadAll();
-        CloudStore._updateUI('synced');
-      } else if(d.authenticated){
-        CloudStore._updateUI('signed-in');
-      } else {
-        CloudStore._updateUI(false);
-      }
-    }).catch(function(){});
-
+    CloudStore.checkSession();
   },
 
-  _updateUI: function(state){
+  checkSession: function(){
+    fetch(CloudStore.apiBase+'/api/chart-data/session',{credentials:'include'}).then(function(r){return r.json();}).then(function(d){
+      if(d.authenticated){
+        CloudStore.userId = d.userId;
+        CloudStore.userName = d.name || d.email;
+        CloudStore.userEmail = d.email;
+        CloudStore.loadAll();
+        CloudStore._updateIcon('synced');
+      } else {
+        CloudStore._updateIcon(false);
+      }
+    }).catch(function(){ CloudStore._updateIcon(false); });
+  },
+
+  _updateIcon: function(state){
     var icon = document.getElementById('profile-icon');
     if(!icon) return;
     if(state==='synced'){
-      icon.innerHTML = '<span style="font-size:11px">✓</span>';
-      icon.style.background = '#22c55e';
-      icon.style.borderColor = '#22c55e';
-      icon.style.color = '#000';
-      icon.title = 'Synced — click to sign out';
-      icon.onclick = function(){ window.location.href=CloudStore.apiBase+'/sign-out'; };
-    } else if(state==='signed-in'){
-      icon.innerHTML = '👤';
+      var initials = (CloudStore.userName||'U').charAt(0).toUpperCase();
+      icon.innerHTML = '<span style="font-size:12px;font-weight:700">'+initials+'</span>';
       icon.style.background = '#D4AF37';
       icon.style.borderColor = '#D4AF37';
       icon.style.color = '#000';
-      icon.title = 'Signed in — click to sign out';
-      icon.onclick = function(){ window.location.href=CloudStore.apiBase+'/sign-out'; };
+      icon.title = CloudStore.userEmail || 'Synced';
+      icon.onclick = function(e){ e.stopPropagation(); CloudStore.showProfileMenu(); };
     } else {
       icon.innerHTML = '👤';
       icon.style.background = '#2a3050';
       icon.style.borderColor = '#3a4a68';
       icon.style.color = '#6a7a98';
-      icon.title = 'Sign in to sync your data';
-      icon.onclick = function(){ window.location.href=CloudStore.apiBase+'/sign-in'; };
+      icon.title = 'Sign in to sync';
+      icon.onclick = function(e){ e.stopPropagation(); CloudStore.showAuthModal(); };
     }
   },
 
+  // ── Auth Modal ──
+  showAuthModal: function(){
+    CloudStore.hideProfileMenu();
+    if(document.getElementById('auth-modal')) return;
+    var m = document.createElement('div');
+    m.id = 'auth-modal';
+    m.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6);';
+    m.onclick = function(e){ if(e.target===m) CloudStore.hideAuthModal(); };
+    m.innerHTML = '<div style="background:#131720;border:1px solid #2a3050;border-radius:8px;width:320px;padding:24px;font-family:monospace;color:#dde3f0;">'+
+      '<div style="font-size:16px;font-weight:700;margin-bottom:16px;text-align:center;">TRADERRA</div>'+
+      '<div id="auth-tabs" style="display:flex;gap:0;margin-bottom:16px;">'+
+      '<button id="auth-tab-signin" onclick="CloudStore.authTab(\'signin\')" style="flex:1;padding:8px;background:#1a1e2e;border:1px solid #2a3050;color:#D4AF37;font-weight:700;font-size:12px;cursor:pointer;border-radius:4px 0 0 4px;font-family:monospace;">Sign In</button>'+
+      '<button id="auth-tab-signup" onclick="CloudStore.authTab(\'signup\')" style="flex:1;padding:8px;background:#0a0c12;border:1px solid #2a3050;color:#5a6a88;font-weight:700;font-size:12px;cursor:pointer;border-radius:0 4px 4px 0;font-family:monospace;">Sign Up</button>'+
+      '</div>'+
+      '<div id="auth-form-area"></div>'+
+      '<div id="auth-error" style="color:#ef5350;font-size:11px;margin-top:8px;display:none;"></div>'+
+      '</div>';
+    document.body.appendChild(m);
+    CloudStore.authTab('signin');
+  },
+
+  hideAuthModal: function(){
+    var m = document.getElementById('auth-modal');
+    if(m) m.remove();
+  },
+
+  authTab: function(tab){
+    var siBtn = document.getElementById('auth-tab-signin');
+    var suBtn = document.getElementById('auth-tab-signup');
+    var area = document.getElementById('auth-form-area');
+    var errEl = document.getElementById('auth-error');
+    if(errEl) errEl.style.display='none';
+    if(tab==='signin'){
+      siBtn.style.background='#1a1e2e'; siBtn.style.color='#D4AF37';
+      suBtn.style.background='#0a0c12'; suBtn.style.color='#5a6a88';
+      area.innerHTML = '<input id="auth-email" type="email" placeholder="Email" style="width:100%;padding:8px 10px;background:#0a0c12;border:1px solid #2a3050;color:#dde3f0;font-size:13px;border-radius:4px;margin-bottom:8px;font-family:monospace;">'+
+        '<input id="auth-pass" type="password" placeholder="Password" style="width:100%;padding:8px 10px;background:#0a0c12;border:1px solid #2a3050;color:#dde3f0;font-size:13px;border-radius:4px;margin-bottom:12px;font-family:monospace;">'+
+        '<button onclick="CloudStore.signIn()" style="width:100%;padding:10px;background:#D4AF37;color:#000;font-weight:700;border:none;border-radius:4px;font-size:13px;cursor:pointer;font-family:monospace;">Sign In</button>';
+      document.getElementById('auth-email').focus();
+    } else {
+      suBtn.style.background='#1a1e2e'; suBtn.style.color='#D4AF37';
+      siBtn.style.background='#0a0c12'; siBtn.style.color='#5a6a88';
+      area.innerHTML = '<input id="auth-name" type="text" placeholder="Name" style="width:100%;padding:8px 10px;background:#0a0c12;border:1px solid #2a3050;color:#dde3f0;font-size:13px;border-radius:4px;margin-bottom:8px;font-family:monospace;">'+
+        '<input id="auth-email" type="email" placeholder="Email" style="width:100%;padding:8px 10px;background:#0a0c12;border:1px solid #2a3050;color:#dde3f0;font-size:13px;border-radius:4px;margin-bottom:8px;font-family:monospace;">'+
+        '<input id="auth-pass" type="password" placeholder="Password (6+ chars)" style="width:100%;padding:8px 10px;background:#0a0c12;border:1px solid #2a3050;color:#dde3f0;font-size:13px;border-radius:4px;margin-bottom:12px;font-family:monospace;">'+
+        '<button onclick="CloudStore.signUp()" style="width:100%;padding:10px;background:#D4AF37;color:#000;font-weight:700;border:none;border-radius:4px;font-size:13px;cursor:pointer;font-family:monospace;">Create Account</button>';
+      document.getElementById('auth-name').focus();
+    }
+  },
+
+  _authErr: function(msg){
+    var e = document.getElementById('auth-error');
+    if(e){ e.textContent=msg; e.style.display='block'; }
+  },
+
+  signIn: function(){
+    var email = document.getElementById('auth-email').value.trim();
+    var pass = document.getElementById('auth-pass').value;
+    if(!email||!pass) return CloudStore._authErr('Email and password required');
+    fetch(CloudStore.apiBase+'/api/auth/sign-in/email',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      credentials:'include',
+      body:JSON.stringify({email:email,password:pass})
+    }).then(function(r){
+      if(!r.ok) return r.json().then(function(d){ throw new Error(d.message||'Sign in failed'); });
+      return r.json();
+    }).then(function(d){
+      CloudStore.hideAuthModal();
+      CloudStore.checkSession();
+    }).catch(function(e){ CloudStore._authErr(e.message||'Sign in failed'); });
+  },
+
+  signUp: function(){
+    var name = document.getElementById('auth-name').value.trim();
+    var email = document.getElementById('auth-email').value.trim();
+    var pass = document.getElementById('auth-pass').value;
+    if(!name||!email||!pass) return CloudStore._authErr('All fields required');
+    if(pass.length<6) return CloudStore._authErr('Password must be 6+ chars');
+    fetch(CloudStore.apiBase+'/api/auth/sign-up/email',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      credentials:'include',
+      body:JSON.stringify({name:name,email:email,password:pass})
+    }).then(function(r){
+      if(!r.ok) return r.json().then(function(d){ throw new Error(d.message||'Sign up failed'); });
+      return r.json();
+    }).then(function(d){
+      CloudStore.hideAuthModal();
+      CloudStore.checkSession();
+    }).catch(function(e){ CloudStore._authErr(e.message||'Sign up failed'); });
+  },
+
+  signOut: function(){
+    CloudStore.hideProfileMenu();
+    fetch(CloudStore.apiBase+'/api/auth/sign-out',{method:'POST',credentials:'include'}).then(function(){
+      CloudStore.userId = null;
+      CloudStore.userName = null;
+      CloudStore.userEmail = null;
+      CloudStore._updateIcon(false);
+    }).catch(function(){});
+  },
+
+  // ── Profile Menu ──
+  showProfileMenu: function(){
+    CloudStore.hideProfileMenu();
+    var icon = document.getElementById('profile-icon');
+    if(!icon) return;
+    var rect = icon.getBoundingClientRect();
+    var menu = document.createElement('div');
+    menu.id = 'profile-menu';
+    menu.style.cssText = 'position:fixed;top:'+(rect.bottom+8)+'px;right:12px;z-index:10001;background:#131720;border:1px solid #2a3050;border-radius:6px;width:200px;padding:8px 0;font-family:monospace;color:#dde3f0;';
+    menu.innerHTML = '<div style="padding:8px 14px;font-size:11px;color:#5a6a88;">'+(CloudStore.userEmail||'')+'</div>'+
+      '<div style="height:1px;background:#1e2535;margin:4px 0;"></div>'+
+      '<div style="padding:6px 14px;font-size:11px;color:#22c55e;cursor:default;">✓ Synced to cloud</div>'+
+      '<div style="height:1px;background:#1e2535;margin:4px 0;"></div>'+
+      '<div onclick="CloudStore.signOut()" style="padding:8px 14px;font-size:12px;color:#ef5350;cursor:pointer;" onmouseover="this.style.background=\'#1a1e2e\'" onmouseout="this.style.background=\'\'">🚪 Sign Out</div>';
+    document.body.appendChild(menu);
+    // Close on outside click
+    setTimeout(function(){ document.addEventListener('click', CloudStore.hideProfileMenu, {once:true}); }, 10);
+  },
+
+  hideProfileMenu: function(){
+    var m = document.getElementById('profile-menu');
+    if(m) m.remove();
+  },
+
+  // ── Data sync ──
   loadAll: function(){
     if(!CloudStore.userId) return;
-    // Load layout (tools + preset + settings)
-    fetch(CloudStore.apiBase+'/api/chart-data/layout').then(function(r){return r.json();}).then(function(d){
+    fetch(CloudStore.apiBase+'/api/chart-data/layout',{credentials:'include'}).then(function(r){return r.json();}).then(function(d){
       if(!d.layout) return;
       var l = d.layout;
       if(l.tools && l.tools.length) {
@@ -1393,49 +1515,35 @@ var CloudStore = {
     }).catch(function(){});
   },
 
-  save: function(what, data){
-    // Always save to localStorage first
+  save: function(what){
     if(what === 'tools'){
       localStorage.setItem('traderra-tools', JSON.stringify(panels.map(function(p){return p.tools||[];})));
     }
     if(!CloudStore.userId) return;
-    // Debounce cloud saves
     if(CloudStore._debounce) clearTimeout(CloudStore._debounce);
-    CloudStore._debounce = setTimeout(function(){
-      CloudStore._flushSave(what, data);
-    }, 1000);
+    CloudStore._debounce = setTimeout(function(){ CloudStore._flushSave(what); }, 1000);
   },
 
-  _flushSave: function(what, data){
-    if(what === 'tools' || what === 'layout'){
-      fetch(CloudStore.apiBase+'/api/chart-data/layout', {
-        method: 'PUT',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({
-          tools: panels.map(function(p){return p.tools||[];}),
-          preset: activePreset,
-          presetIndCustoms: presetIndCustoms,
-        })
-      }).catch(function(){});
-    } else if(what === 'annotations'){
+  _flushSave: function(what){
+    var base = CloudStore.apiBase;
+    var opts = { method:'PUT', headers:{'Content-Type':'application/json'}, credentials:'include' };
+    if(what==='tools'||what==='layout'){
+      fetch(base+'/api/chart-data/layout', Object.assign({}, opts, {body:JSON.stringify({
+        tools: panels.map(function(p){return p.tools||[];}),
+        preset: activePreset,
+        presetIndCustoms: presetIndCustoms,
+      })})).catch(function(){});
+    } else if(what==='annotations'){
       if(!symbol) return;
       var annData = JSON.parse(localStorage.getItem('traderra-annotations-'+symbol)||'[]');
-      fetch(CloudStore.apiBase+'/api/chart-data/annotations?symbol='+symbol, {
-        method: 'PUT',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ data: annData })
-      }).catch(function(){});
-    } else if(what === 'settings'){
+      fetch(base+'/api/chart-data/annotations?symbol='+symbol, Object.assign({}, opts, {body:JSON.stringify({data:annData})})).catch(function(){});
+    } else if(what==='settings'){
       var s = {};
       try{ s.drawDefaults = JSON.parse(localStorage.getItem('traderra-draw-defaults')||'{}'); }catch(e){}
       try{ s.theme = localStorage.getItem('traderra-theme')||'dark'; }catch(e){}
       try{ s.themeColors = JSON.parse(localStorage.getItem('traderra-theme-colors')||'{}'); }catch(e){}
       try{ s.trackpadSettings = JSON.parse(localStorage.getItem('traderra-trackpad')||'{}'); }catch(e){}
-      fetch(CloudStore.apiBase+'/api/chart-data/settings', {
-        method: 'PUT',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(s)
-      }).catch(function(){});
+      fetch(base+'/api/chart-data/settings', Object.assign({}, opts, {body:JSON.stringify(s)})).catch(function(){});
     }
   }
 };

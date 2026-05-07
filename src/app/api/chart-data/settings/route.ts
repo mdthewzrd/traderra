@@ -1,60 +1,59 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
-// GET /api/chart-data/settings
-export async function GET() {
+async function getAuth(req: Request) {
   try {
-    const { userId } = await auth()
-    if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    const session = await auth.api.getSession({ headers: req.headers })
+    if (session?.user?.id) return session.user.id
+  } catch {}
+  return null
+}
 
-    const settings = await prisma.chartUserSettings.findUnique({ where: { userId } })
+// GET /api/chart-data/settings
+export async function GET(req: Request) {
+  const userId = await getAuth(req)
+  if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-    if (!settings) return NextResponse.json({ settings: null })
+  const settings = await prisma.chartUserSettings.findUnique({ where: { userId } })
+  if (!settings) return NextResponse.json({ settings: null })
 
-    return NextResponse.json({
-      settings: {
-        drawDefaults: JSON.parse(settings.drawDefaults || '{}'),
-        toolbarPosition: JSON.parse(settings.toolbarPosition || '{}'),
-        theme: settings.theme || 'dark',
-        themeColors: JSON.parse(settings.themeColors || '{}'),
-        trackpadSettings: JSON.parse(settings.trackpadSettings || '{}'),
-      }
-    })
-  } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 })
-  }
+  return NextResponse.json({
+    settings: {
+      drawDefaults: JSON.parse(settings.drawDefaults || '{}'),
+      toolbarPosition: JSON.parse(settings.toolbarPosition || '{}'),
+      theme: settings.theme || 'dark',
+      themeColors: JSON.parse(settings.themeColors || '{}'),
+      trackpadSettings: JSON.parse(settings.trackpadSettings || '{}'),
+    }
+  })
 }
 
 // PUT /api/chart-data/settings
-export async function PUT(req: NextRequest) {
-  try {
-    const { userId } = await auth()
-    if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+export async function PUT(req: Request) {
+  const userId = await getAuth(req)
+  if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-    const body = await req.json()
+  const body = await req.json()
 
-    const settings = await prisma.chartUserSettings.upsert({
-      where: { userId },
-      create: {
-        userId,
-        drawDefaults: JSON.stringify(body.drawDefaults || {}),
-        toolbarPosition: JSON.stringify(body.toolbarPosition || {}),
-        theme: body.theme || 'dark',
-        themeColors: JSON.stringify(body.themeColors || {}),
-        trackpadSettings: JSON.stringify(body.trackpadSettings || {}),
-      },
-      update: {
-        drawDefaults: JSON.stringify(body.drawDefaults || {}),
-        toolbarPosition: JSON.stringify(body.toolbarPosition || {}),
-        theme: body.theme || 'dark',
-        themeColors: JSON.stringify(body.themeColors || {}),
-        trackpadSettings: JSON.stringify(body.trackpadSettings || {}),
-      },
-    })
+  await prisma.chartUserSettings.upsert({
+    where: { userId },
+    create: {
+      userId,
+      drawDefaults: JSON.stringify(body.drawDefaults || {}),
+      toolbarPosition: JSON.stringify(body.toolbarPosition || {}),
+      theme: body.theme || 'dark',
+      themeColors: JSON.stringify(body.themeColors || {}),
+      trackpadSettings: JSON.stringify(body.trackpadSettings || {}),
+    },
+    update: {
+      drawDefaults: JSON.stringify(body.drawDefaults || {}),
+      toolbarPosition: JSON.stringify(body.toolbarPosition || {}),
+      theme: body.theme || 'dark',
+      themeColors: JSON.stringify(body.themeColors || {}),
+      trackpadSettings: JSON.stringify(body.trackpadSettings || {}),
+    },
+  })
 
-    return NextResponse.json({ ok: true })
-  } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 })
-  }
+  return NextResponse.json({ ok: true })
 }

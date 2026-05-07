@@ -17,6 +17,11 @@ model User {
   learningRules    LearningRule[]
   learningMetrics  LearningMetrics?
   chartSettings String?
+  layouts     ChartLayout[]
+  annotations ChartAnnotation[]
+  watchlists  ChartWatchlist[]
+  templates   ChartTemplate[]
+  chartUserSettings ChartUserSettings?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -116,6 +121,78 @@ model LearningMetrics {
 
   createdAt             DateTime? @default(now())
   lastUpdated           DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// ── Chart Data Models ──
+
+model ChartLayout {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String   @default("default")
+  tools     String   @default("[]")          // JSON array of tool instances
+  preset    String?                           // active preset name
+  presetIndCustoms String? @default("{}")    // JSON per-preset custom params/colors
+  chartSettings String? @default("{}")       // JSON font scale, chart style, theme
+  chartStyle    String? @default("{}")       // JSON bar color overrides
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model ChartAnnotation {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol    String
+  data      String   @default("[]")          // JSON array of annotation objects
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, symbol])
+  @@index([userId])
+}
+
+model ChartWatchlist {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String   @default("default")
+  symbols   String   @default("[]")          // JSON array of symbol strings
+  columns   String?  @default("{}")          // JSON column config
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model ChartTemplate {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  tools     String   @default("[]")          // JSON snapshot of tools at save time
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model ChartUserSettings {
+  id                String  @id @default(cuid())
+  userId            String  @unique
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  drawDefaults      String? @default("{}")     // JSON annotation tool defaults
+  toolbarPosition   String? @default("{}")     // JSON toolbar pos
+  theme             String? @default("dark")   // 'dark' | 'light'
+  themeColors       String? @default("{}")     // JSON custom theme overrides
+  trackpadSettings  String? @default("{}")     // JSON trackpad config
+  updatedAt         DateTime @updatedAt
 
   @@index([userId])
 }

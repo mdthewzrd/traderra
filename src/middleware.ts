@@ -26,6 +26,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/agents(.*)',      // Multi-agent system API
   '/api/test(.*)',        // Test endpoint
   '/api/health(.*)',      // Health check endpoint
+  '/api/chart-data(.*)', // Chart data API (handles own auth)
 
   // Public pages for testing
   '/dashboard-test(.*)',

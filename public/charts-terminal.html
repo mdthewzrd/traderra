@@ -679,6 +679,7 @@ body.light .lt-sep{background:#d0d0d0!important;}
     </div>
     <button class="tbtn" id="theme-toggle-btn" style="border-color:#5a6a88;color:#5a6a88;">🌙</button>
     <button class="tbtn" id="reload-chart-btn" style="border-color:#22d3ee;color:#22d3ee;" onclick="renderAll();" title="Reload chart">⟳ RELOAD</button>
+    <button class="tbtn" id="auth-btn" style="border-color:#5a6a88;color:#5a6a88;" title="Sign in to sync"><span style="font-size:10px">SIGN IN</span></button>
   </div>
   <div id="ticker-info">
     <span id="ti-sym" style="color:#dde3f0;font-weight:700;font-size:14px;"></span>
@@ -1314,6 +1315,116 @@ body.light .lt-sep{background:#d0d0d0!important;}
 
 <script src="/indicators/vault.js"></script>
 <script>
+// ══════════════════════════════════════════════════════════
+//  CLOUD STORE — sync localStorage to DB when signed in
+// ══════════════════════════════════════════════════════════
+var CloudStore = {
+  userId: null,
+  _saving: null,
+  _debounce: null,
+
+  init: function(){
+    fetch('/api/chart-data/session').then(function(r){return r.json();}).then(function(d){
+      if(d.authenticated && d.dbAvailable){
+        CloudStore.userId = d.userId;
+        CloudStore.loadAll();
+        CloudStore._updateUI('synced');
+      } else if(d.authenticated){
+        CloudStore._updateUI('signed-in');
+      } else {
+        CloudStore._updateUI(false);
+      }
+    }).catch(function(){});
+
+  },
+
+  _updateUI: function(state){
+    var btn = document.getElementById('auth-btn');
+    if(!btn) return;
+    if(state==='synced'){
+      btn.innerHTML = '<span style="font-size:10px">✓ SYNCED</span>';
+      btn.style.borderColor = '#22c55e';
+      btn.style.color = '#22c55e';
+      btn.onclick = function(){ window.location.href='/sign-out'; };
+    } else if(state==='signed-in'){
+      btn.innerHTML = '<span style="font-size:10px">✓ SIGNED IN</span>';
+      btn.style.borderColor = '#D4AF37';
+      btn.style.color = '#D4AF37';
+      btn.onclick = function(){ window.location.href='/sign-out'; };
+    } else {
+      btn.innerHTML = '<span style="font-size:10px">SIGN IN</span>';
+      btn.style.borderColor = '#5a6a88';
+      btn.style.color = '#5a6a88';
+      btn.onclick = function(){ window.location.href='/sign-in'; };
+    }
+  },
+
+  loadAll: function(){
+    if(!CloudStore.userId) return;
+    // Load layout (tools + preset + settings)
+    fetch('/api/chart-data/layout').then(function(r){return r.json();}).then(function(d){
+      if(!d.layout) return;
+      var l = d.layout;
+      if(l.tools && l.tools.length) {
+        panels.forEach(function(p,i){
+          if(l.tools[i]) { p.tools = l.tools[i]; p.inds = deriveInds(p.tools); }
+        });
+        panels.forEach(function(_,i){ buildIndicatorRow(i); });
+        renderHotButtons();
+      }
+      if(l.preset) { activePreset = l.preset; }
+      if(l.presetIndCustoms) { presetIndCustoms = l.presetIndCustoms; }
+    }).catch(function(){});
+  },
+
+  save: function(what, data){
+    // Always save to localStorage first
+    if(what === 'tools'){
+      localStorage.setItem('traderra-tools', JSON.stringify(panels.map(function(p){return p.tools||[];})));
+    }
+    if(!CloudStore.userId) return;
+    // Debounce cloud saves
+    if(CloudStore._debounce) clearTimeout(CloudStore._debounce);
+    CloudStore._debounce = setTimeout(function(){
+      CloudStore._flushSave(what, data);
+    }, 1000);
+  },
+
+  _flushSave: function(what, data){
+    if(what === 'tools' || what === 'layout'){
+      fetch('/api/chart-data/layout', {
+        method: 'PUT',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          tools: panels.map(function(p){return p.tools||[];}),
+          preset: activePreset,
+          presetIndCustoms: presetIndCustoms,
+        })
+      }).catch(function(){});
+    } else if(what === 'annotations'){
+      if(!symbol) return;
+      var annData = JSON.parse(localStorage.getItem('traderra-annotations-'+symbol)||'[]');
+      fetch('/api/chart-data/annotations?symbol='+symbol, {
+        method: 'PUT',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ data: annData })
+      }).catch(function(){});
+    } else if(what === 'settings'){
+      var s = {};
+      try{ s.drawDefaults = JSON.parse(localStorage.getItem('traderra-draw-defaults')||'{}'); }catch(e){}
+      try{ s.theme = localStorage.getItem('traderra-theme')||'dark'; }catch(e){}
+      try{ s.themeColors = JSON.parse(localStorage.getItem('traderra-theme-colors')||'{}'); }catch(e){}
+      try{ s.trackpadSettings = JSON.parse(localStorage.getItem('traderra-trackpad')||'{}'); }catch(e){}
+      fetch('/api/chart-data/settings', {
+        method: 'PUT',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(s)
+      }).catch(function(){});
+    }
+  }
+};
+</script>
+<script>
 'use strict';
 // ══════════════════════════════════════════════════════════
 //  CONSTANTS
@@ -1793,6 +1904,7 @@ function createTool(indKey, name, params, colors){
 function saveTools(){
   const data = panels.map(p => p.tools || []);
   localStorage.setItem(TOOLS_KEY, JSON.stringify(data));
+  if(typeof CloudStore!=='undefined') CloudStore.save('tools');
 }
 
 function addTool(panelIdx, indKey, params, colors, name){
@@ -1944,6 +2056,7 @@ function loadAnnotations(){
 }
 function saveAnnotations(){
   try{localStorage.setItem(annStorageKey(),JSON.stringify({anns:annotations,nextId:nextId}));}catch(e){}
+  if(typeof CloudStore!=='undefined') CloudStore.save('annotations');
 }
 loadAnnotations();
 let liveMode=false;
@@ -8542,6 +8655,8 @@ requestAnimationFrame(()=>requestAnimationFrame(()=>{
   setLayout(activePreset==='Sam'?4:1);
   initS();
   loadAll();
+  // Init cloud sync after everything loaded
+  setTimeout(function(){ if(typeof CloudStore!=='undefined') CloudStore.init(); }, 2000);
 }));
 
 // ── Sidebar drag divider ──

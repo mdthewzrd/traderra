@@ -1,18 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { getAuthUserId } from '@/lib/auth-helpers'
 import { prisma } from '@/lib/prisma'
-
-async function getAuth(req: Request) {
-  try {
-    const session = await auth.api.getSession({ headers: req.headers })
-    if (session?.user?.id) return session.user.id
-  } catch {}
-  return null
-}
 
 // GET /api/chart-data/templates
 export async function GET(req: Request) {
-  const userId = await getAuth(req)
+  const userId = await getAuthUserId(req)
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   const templates = await prisma.chartTemplate.findMany({
@@ -31,7 +23,7 @@ export async function GET(req: Request) {
 
 // PUT /api/chart-data/templates
 export async function PUT(req: Request) {
-  const userId = await getAuth(req)
+  const userId = await getAuthUserId(req)
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   const { id, name, tools } = await req.json()
@@ -48,7 +40,7 @@ export async function PUT(req: Request) {
 
 // DELETE /api/chart-data/templates?id=xxx
 export async function DELETE(req: NextRequest) {
-  const userId = await getAuth(req)
+  const userId = await getAuthUserId(req)
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   const id = req.nextUrl.searchParams.get('id')

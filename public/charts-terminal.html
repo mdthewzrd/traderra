@@ -1324,6 +1324,7 @@ var CloudStore = {
   userId: null,
   userName: null,
   userEmail: null,
+  token: null,
   _debounce: null,
   get apiBase(){
     if(window._cloudApiBase) return window._cloudApiBase;
@@ -1331,12 +1332,33 @@ var CloudStore = {
     return 'https://traderra-lime.vercel.app';
   },
 
+  // Get auth headers for API calls
+  _authHeaders: function(){
+    var h = {'Content-Type':'application/json'};
+    var t = CloudStore.token || localStorage.getItem('traderra-auth-token');
+    if(t) h['Authorization'] = 'Bearer '+t;
+    return h;
+  },
+
   init: function(){
+    // Check for OAuth callback token in URL
+    var params = new URLSearchParams(window.location.search);
+    var cbToken = params.get('token');
+    if(cbToken){
+      localStorage.setItem('traderra-auth-token', cbToken);
+      CloudStore.token = cbToken;
+      // Clean URL
+      params.delete('token');
+      var clean = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (clean ? '?'+clean : ''));
+    } else {
+      CloudStore.token = localStorage.getItem('traderra-auth-token');
+    }
     CloudStore.checkSession();
   },
 
   checkSession: function(){
-    fetch(CloudStore.apiBase+'/api/chart-data/session',{credentials:'include'}).then(function(r){return r.json();}).then(function(d){
+    fetch(CloudStore.apiBase+'/api/chart-data/session',{headers:CloudStore._authHeaders()}).then(function(r){return r.json();}).then(function(d){
       if(d.authenticated){
         CloudStore.userId = d.userId;
         CloudStore.userName = d.name || d.email;
@@ -1344,6 +1366,8 @@ var CloudStore = {
         CloudStore.loadAll();
         CloudStore._updateIcon('synced');
       } else {
+        CloudStore.token = null;
+        localStorage.removeItem('traderra-auth-token');
         CloudStore._updateIcon(false);
       }
     }).catch(function(){ CloudStore._updateIcon(false); });
@@ -1438,12 +1462,15 @@ var CloudStore = {
     fetch(CloudStore.apiBase+'/api/auth/sign-in/email',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      credentials:'include',
       body:JSON.stringify({email:email,password:pass})
     }).then(function(r){
       if(!r.ok) return r.json().then(function(d){ throw new Error(d.message||'Sign in failed'); });
       return r.json();
     }).then(function(d){
+      if(d.token){
+        CloudStore.token = d.token;
+        localStorage.setItem('traderra-auth-token', d.token);
+      }
       CloudStore.hideAuthModal();
       CloudStore.checkSession();
     }).catch(function(e){ CloudStore._authErr(e.message||'Sign in failed'); });
@@ -1458,12 +1485,15 @@ var CloudStore = {
     fetch(CloudStore.apiBase+'/api/auth/sign-up/email',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      credentials:'include',
       body:JSON.stringify({name:name,email:email,password:pass})
     }).then(function(r){
       if(!r.ok) return r.json().then(function(d){ throw new Error(d.message||'Sign up failed'); });
       return r.json();
     }).then(function(d){
+      if(d.token){
+        CloudStore.token = d.token;
+        localStorage.setItem('traderra-auth-token', d.token);
+      }
       CloudStore.hideAuthModal();
       CloudStore.checkSession();
     }).catch(function(e){ CloudStore._authErr(e.message||'Sign up failed'); });
@@ -1478,16 +1508,16 @@ var CloudStore = {
   },
 
   _socialSignIn: function(provider){
-    var callbackURL = window.location.origin + window.location.pathname;
+    // First tell better-auth to redirect to OUR callback page (on same domain as API)
+    // Our callback page will read the session cookie and redirect to staging with the token
+    var finalDest = window.location.origin + window.location.pathname;
+    var callbackURL = CloudStore.apiBase + '/auth-callback?callbackURL=' + encodeURIComponent(finalDest);
     fetch(CloudStore.apiBase + '/api/auth/sign-in/social', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      credentials: 'include',
       body: JSON.stringify({provider: provider, callbackURL: callbackURL})
     }).then(function(r){ return r.json(); }).then(function(d){
       if(d.url) {
-        window.location.href = d.url;
-      } else if(d.redirect && d.url) {
         window.location.href = d.url;
       } else {
         CloudStore._authErr('OAuth failed — try again');
@@ -1497,12 +1527,12 @@ var CloudStore = {
 
   signOut: function(){
     CloudStore.hideProfileMenu();
-    fetch(CloudStore.apiBase+'/api/auth/sign-out',{method:'POST',credentials:'include'}).then(function(){
-      CloudStore.userId = null;
-      CloudStore.userName = null;
-      CloudStore.userEmail = null;
-      CloudStore._updateIcon(false);
-    }).catch(function(){});
+    CloudStore.token = null;
+    localStorage.removeItem('traderra-auth-token');
+    CloudStore.userId = null;
+    CloudStore.userName = null;
+    CloudStore.userEmail = null;
+    CloudStore._updateIcon(false);
   },
 
   // ── Profile Menu ──
@@ -1532,7 +1562,7 @@ var CloudStore = {
   // ── Data sync ──
   loadAll: function(){
     if(!CloudStore.userId) return;
-    fetch(CloudStore.apiBase+'/api/chart-data/layout',{credentials:'include'}).then(function(r){return r.json();}).then(function(d){
+    fetch(CloudStore.apiBase+'/api/chart-data/layout',{headers:CloudStore._authHeaders()}).then(function(r){return r.json();}).then(function(d){
       if(!d.layout) return;
       var l = d.layout;
       if(l.tools && l.tools.length) {
@@ -1558,7 +1588,7 @@ var CloudStore = {
 
   _flushSave: function(what){
     var base = CloudStore.apiBase;
-    var opts = { method:'PUT', headers:{'Content-Type':'application/json'}, credentials:'include' };
+    var opts = { method:'PUT', headers:CloudStore._authHeaders() };
     if(what==='tools'||what==='layout'){
       fetch(base+'/api/chart-data/layout', Object.assign({}, opts, {body:JSON.stringify({
         tools: panels.map(function(p){return p.tools||[];}),

@@ -1,24 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { NextResponse } from 'next/server'
+import { getAuthUserId } from '@/lib/auth-helpers'
 import { prisma } from '@/lib/prisma'
-
-type AuthContext = { userId: string }
-
-async function getAuth(req: Request): Promise<AuthContext | null> {
-  try {
-    const session = await auth.api.getSession({ headers: req.headers })
-    if (session?.user?.id) return { userId: session.user.id }
-  } catch {}
-  return null
-}
 
 // GET /api/chart-data/layout
 export async function GET(req: Request) {
-  const ctx = await getAuth(req)
-  if (!ctx) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const userId = await getAuthUserId(req)
+  if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-  let layout = await prisma.chartLayout.findFirst({ where: { userId: ctx.userId, isDefault: true } })
-  if (!layout) layout = await prisma.chartLayout.findFirst({ where: { userId: ctx.userId } })
+  let layout = await prisma.chartLayout.findFirst({ where: { userId, isDefault: true } })
+  if (!layout) layout = await prisma.chartLayout.findFirst({ where: { userId } })
   if (!layout) return NextResponse.json({ layout: null })
 
   return NextResponse.json({
@@ -36,8 +26,8 @@ export async function GET(req: Request) {
 
 // PUT /api/chart-data/layout
 export async function PUT(req: Request) {
-  const ctx = await getAuth(req)
-  if (!ctx) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const userId = await getAuthUserId(req)
+  if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   const body = await req.json()
   const { tools, preset, presetIndCustoms, chartSettings, chartStyle } = body
@@ -52,8 +42,8 @@ export async function PUT(req: Request) {
   }
 
   const layout = await prisma.chartLayout.upsert({
-    where: { id: body.id || `layout_${ctx.userId}_default` },
-    create: { id: `layout_${ctx.userId}_default`, userId: ctx.userId, name: 'default', ...data },
+    where: { id: body.id || `layout_${userId}_default` },
+    create: { id: `layout_${userId}_default`, userId, name: 'default', ...data },
     update: data,
   })
 

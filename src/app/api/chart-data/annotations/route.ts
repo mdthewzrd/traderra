@@ -1,18 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { getAuthUserId } from '@/lib/auth-helpers'
 import { prisma } from '@/lib/prisma'
-
-async function getAuth(req: Request) {
-  try {
-    const session = await auth.api.getSession({ headers: req.headers })
-    if (session?.user?.id) return session.user.id
-  } catch {}
-  return null
-}
 
 // GET /api/chart-data/annotations?symbol=AAPL
 export async function GET(req: NextRequest) {
-  const userId = await getAuth(req)
+  const userId = await getAuthUserId(req)
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   const symbol = req.nextUrl.searchParams.get('symbol')
@@ -24,7 +16,7 @@ export async function GET(req: NextRequest) {
 
 // PUT /api/chart-data/annotations?symbol=AAPL
 export async function PUT(req: NextRequest) {
-  const userId = await getAuth(req)
+  const userId = await getAuthUserId(req)
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   const symbol = req.nextUrl.searchParams.get('symbol')

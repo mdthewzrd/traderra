@@ -1,18 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { NextResponse } from 'next/server'
+import { getAuthUserId } from '@/lib/auth-helpers'
 import { prisma } from '@/lib/prisma'
-
-async function getAuth(req: Request) {
-  try {
-    const session = await auth.api.getSession({ headers: req.headers })
-    if (session?.user?.id) return session.user.id
-  } catch {}
-  return null
-}
 
 // GET /api/chart-data/settings
 export async function GET(req: Request) {
-  const userId = await getAuth(req)
+  const userId = await getAuthUserId(req)
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   const settings = await prisma.chartUserSettings.findUnique({ where: { userId } })
@@ -31,7 +23,7 @@ export async function GET(req: Request) {
 
 // PUT /api/chart-data/settings
 export async function PUT(req: Request) {
-  const userId = await getAuth(req)
+  const userId = await getAuthUserId(req)
   if (!userId) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
   const body = await req.json()

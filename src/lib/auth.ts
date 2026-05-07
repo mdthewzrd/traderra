@@ -13,6 +13,12 @@ export const auth = betterAuth({
     enabled: true,
     minPasswordLength: 6,
   },
+  socialProviders: {
+    github: {
+      clientId: process.env.GITHUB_CLIENT_ID!,
+      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+    },
+  },
   session: {
     cookieCache: {
       enabled: true,
@@ -20,6 +26,15 @@ export const auth = betterAuth({
     },
   },
   plugins: [nextCookies()],
+  cors: {
+    origins: [
+      'https://traderra-charts-staging.vercel.app',
+      'https://traderra-charts.vercel.app',
+      'http://localhost:6565',
+      'http://localhost:3000',
+    ],
+    credentials: true,
+  },
 });
 
 export type Session = typeof auth.$Infer.Session;

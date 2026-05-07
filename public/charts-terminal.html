@@ -9183,15 +9183,16 @@ function renderHotButtons(){
   panels.forEach(function(p,pi){
     if(!p.tools) return;
     p.tools.forEach(function(tool){
-      if(!tool.on || !tool.hot) return;
+      if(!tool.hot) return;
       if(HOT_EXCLUDE[tool.indKey]) return;
       const cat = IND_CATALOG[tool.indKey];
       const name = tool.hotLabel || tool.name || cat?.label || tool.indKey;
       const color = tool.hotColor || '#D4AF37';
+      const isOn = tool.on;
       function makeBtn(){
         var b = document.createElement('button');
-        b.className = 'ptog'+(tool.on?' on':'');
-        b.style.cssText = 'border-color:'+color+';color:'+color+';background:#0a0c12;';
+        b.className = 'ptog'+(isOn?' on':'');
+        b.style.cssText = 'border-color:'+(isOn?color:'#3a4a68')+';color:'+(isOn?color:'#3a4a68')+';background:#0a0c12;opacity:'+(isOn?1:0.5)+';';
         b.dataset.toolid = tool.id;
         b.dataset.panel = pi;
         b.textContent = name.toUpperCase().slice(0,10);

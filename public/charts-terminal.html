@@ -1322,9 +1322,17 @@ var CloudStore = {
   userId: null,
   _saving: null,
   _debounce: null,
+  // API base — auto-detect: same origin if on traderra app, else use traderra-lime
+  get apiBase(){
+    if(window._cloudApiBase) return window._cloudApiBase;
+    // If hosted on the traderra Next.js app, use same origin
+    if(location.hostname.indexOf('traderra-lime') !== -1 || location.hostname.indexOf('traderra-maikus') !== -1) return '';
+    // Otherwise point to the traderra app
+    return 'https://traderra-lime.vercel.app';
+  },
 
   init: function(){
-    fetch('/api/chart-data/session').then(function(r){return r.json();}).then(function(d){
+    fetch(CloudStore.apiBase+'/api/chart-data/session').then(function(r){return r.json();}).then(function(d){
       if(d.authenticated && d.dbAvailable){
         CloudStore.userId = d.userId;
         CloudStore.loadAll();
@@ -1345,24 +1353,24 @@ var CloudStore = {
       btn.innerHTML = '<span style="font-size:10px">✓ SYNCED</span>';
       btn.style.borderColor = '#22c55e';
       btn.style.color = '#22c55e';
-      btn.onclick = function(){ window.location.href='/sign-out'; };
+      btn.onclick = function(){ window.location.href=CloudStore.apiBase+'/sign-out'; };
     } else if(state==='signed-in'){
       btn.innerHTML = '<span style="font-size:10px">✓ SIGNED IN</span>';
       btn.style.borderColor = '#D4AF37';
       btn.style.color = '#D4AF37';
-      btn.onclick = function(){ window.location.href='/sign-out'; };
+      btn.onclick = function(){ window.location.href=CloudStore.apiBase+'/sign-out'; };
     } else {
       btn.innerHTML = '<span style="font-size:10px">SIGN IN</span>';
       btn.style.borderColor = '#5a6a88';
       btn.style.color = '#5a6a88';
-      btn.onclick = function(){ window.location.href='/sign-in'; };
+      btn.onclick = function(){ window.location.href=CloudStore.apiBase+'/sign-in'; };
     }
   },
 
   loadAll: function(){
     if(!CloudStore.userId) return;
     // Load layout (tools + preset + settings)
-    fetch('/api/chart-data/layout').then(function(r){return r.json();}).then(function(d){
+    fetch(CloudStore.apiBase+'/api/chart-data/layout').then(function(r){return r.json();}).then(function(d){
       if(!d.layout) return;
       var l = d.layout;
       if(l.tools && l.tools.length) {
@@ -1392,7 +1400,7 @@ var CloudStore = {
 
   _flushSave: function(what, data){
     if(what === 'tools' || what === 'layout'){
-      fetch('/api/chart-data/layout', {
+      fetch(CloudStore.apiBase+'/api/chart-data/layout', {
         method: 'PUT',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({
@@ -1404,7 +1412,7 @@ var CloudStore = {
     } else if(what === 'annotations'){
       if(!symbol) return;
       var annData = JSON.parse(localStorage.getItem('traderra-annotations-'+symbol)||'[]');
-      fetch('/api/chart-data/annotations?symbol='+symbol, {
+      fetch(CloudStore.apiBase+'/api/chart-data/annotations?symbol='+symbol, {
         method: 'PUT',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ data: annData })
@@ -1415,7 +1423,7 @@ var CloudStore = {
       try{ s.theme = localStorage.getItem('traderra-theme')||'dark'; }catch(e){}
       try{ s.themeColors = JSON.parse(localStorage.getItem('traderra-theme-colors')||'{}'); }catch(e){}
       try{ s.trackpadSettings = JSON.parse(localStorage.getItem('traderra-trackpad')||'{}'); }catch(e){}
-      fetch('/api/chart-data/settings', {
+      fetch(CloudStore.apiBase+'/api/chart-data/settings', {
         method: 'PUT',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify(s)

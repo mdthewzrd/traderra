@@ -7,7 +7,7 @@ export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET || 'traderra-dev-secret-change-in-prod',
   baseURL: process.env.BETTER_AUTH_URL || 'http://localhost:6565',
   database: prismaAdapter(prisma, {
-    provider: "sqlite",
+    provider: "postgres",
   }),
   emailAndPassword: {
     enabled: true,

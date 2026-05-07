@@ -1,65 +1,42 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-// Public routes that don't require authentication
-const publicRoutes = [
-  '/',
-  '/sign-in(.*)',
-  '/sign-up(.*)',
-  '/api/auth(.*)',
-  '/api/chart-data(.*)',
-  '/api/webhook(.*)',
-  '/api/health(.*)',
-  '/api/test(.*)',
-  '/api/chart-settings(.*)',
-  '/api/market-data(.*)',
-  '/api/indicators(.*)',
-  '/api/scanner(.*)',
-  '/api/research(.*)',
-  '/api/renata(.*)',
-  '/api/copilotkit(.*)',
-  '/api/agui(.*)',
-  '/api/agui-chat(.*)',
-  '/api/agents(.*)',
-  '/api/trades(.*)',
-  '/api/debug(.*)',
-  '/api/fix-user-id(.*)',
-  '/api/get-current-user-id(.*)',
-  '/api/openrouter-key(.*)',
-  '/api/admin(.*)',
-  '/api/ai(.*)',
-  '/api/risk-management(.*)',
-  '/api/settings(.*)',
-  '/api/workflows(.*)',
-  '/api/trading-agents(.*)',
-  // Pages
-  '/charts(.*)',
-  '/scanner(.*)',
-  '/backtest(.*)',
-  '/research(.*)',
-  '/dashboard(.*)',
-  '/journal(.*)',
-  '/statistics(.*)',
-  '/analytics(.*)',
-  '/calendar(.*)',
-  '/trades(.*)',
-  '/settings(.*)',
-  '/daily-summary(.*)',
+const ALLOWED_ORIGINS = [
+  'https://traderra-charts-staging.vercel.app',
+  'https://traderra-charts.vercel.app',
+  'http://localhost:6565',
+  'http://localhost:3000',
 ]
 
-function isPublic(pathname: string): boolean {
-  return publicRoutes.some(pattern => {
-    if (pattern.includes('(.*)')) {
-      const prefix = pattern.replace('(.*)', '')
-      return pathname.startsWith(prefix)
-    }
-    return pathname === pattern
-  })
+function corsHeaders(req: NextRequest) {
+  const origin = req.headers.get('origin') || ''
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
+  return {
+    'Access-Control-Allow-Origin': allowed,
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Cookie',
+    'Access-Control-Expose-Headers': 'Set-Cookie',
+  }
 }
 
 export function middleware(request: NextRequest) {
-  // All routes are public for now — auth is optional
-  return NextResponse.next()
+  // Handle CORS preflight
+  if (request.method === 'OPTIONS') {
+    return new NextResponse(null, { status: 204, headers: corsHeaders(request) })
+  }
+
+  const response = NextResponse.next()
+  // Add CORS headers to all /api/ responses
+  if (request.nextUrl.pathname.startsWith('/api/')) {
+    const origin = request.headers.get('origin')
+    if (origin && ALLOWED_ORIGINS.includes(origin)) {
+      const h = corsHeaders(request)
+      Object.entries(h).forEach(([k, v]) => response.headers.set(k, v))
+    }
+  }
+
+  return response
 }
 
 export const config = {

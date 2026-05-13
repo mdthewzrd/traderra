@@ -1,42 +1,30 @@
-import { auth } from "@/lib/auth";
-import { redirect } from "next/navigation";
-
-// Charts login: started from staging/production charts page.
-// This page runs on the API domain (same-origin as better-auth) so cookies work.
-// 1. Starts the OAuth flow (same-origin POST → cookies are set properly)
-// 2. After OAuth, better-auth redirects to /auth-callback/{base64-dest}
-// 3. /auth-callback reads the session and redirects to charts with token
+// This is an HTML page, not a route handler.
+// The browser loads this page on the API domain, then JS does the OAuth POST
+// same-origin so better-auth's state cookie lands in the browser.
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const provider = url.searchParams.get("provider") || "github";
   const destEncoded = url.searchParams.get("dest") || btoa("https://traderra-charts-staging.vercel.app/");
 
-  const callbackURL = `${url.origin}/auth-callback/${destEncoded}`;
+  const html = `<!DOCTYPE html>
+<html><head><title>Signing in...</title>
+<style>body{background:#0c0e14;color:#dde3f0;font-family:Inter,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}
+.spinner{width:24px;height:24px;border:3px solid #2a3050;border-top-color:#D4AF37;border-radius:50%;animation:spin .8s linear infinite;margin-right:12px;}
+@keyframes spin{to{transform:rotate(360deg)}}</style>
+</head><body><div class="spinner"></div>Redirecting to ${provider}...</div>
+<script>
+fetch('/api/auth/sign-in/social',{
+  method:'POST',
+  headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({provider:'${provider}',callbackURL:location.origin+'/auth-callback/${destEncoded}'})
+}).then(r=>r.json()).then(d=>{
+  if(d.url) location.href=d.url;
+  else { document.body.innerText='Sign-in failed. Close this tab and try again.'; }
+}).catch(e=>{ document.body.innerText='Error: '+e.message; });
+</script></body></html>`;
 
-  // Start OAuth same-origin (cookies will be set on this domain)
-  try {
-    const baseURL = process.env.NEXT_PUBLIC_BETTER_AUTH_URL || url.origin;
-    const res = await fetch(`${baseURL}/api/auth/sign-in/social`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        cookie: request.headers.get("cookie") || "",
-      },
-      body: JSON.stringify({ provider, callbackURL }),
-    });
-
-    const data = await res.json();
-    if (data.url) {
-      redirect(data.url);
-    }
-  } catch {}
-
-  // Fallback: redirect to charts
-  try {
-    const dest = atob(destEncoded);
-    redirect(dest);
-  } catch {
-    redirect("https://traderra-charts-staging.vercel.app/");
-  }
+  return new Response(html, {
+    headers: { "Content-Type": "text/html" },
+  });
 }

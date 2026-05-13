@@ -79,8 +79,11 @@ body.light #ind-btn-popup select,body.light #ind-btn-popup input{background:#fff
 .tpl-item:hover{background:#252a3a;color:#dde3f0;}
 .tpl-item.active-tpl{color:#D4AF37;}
 .tpl-item .tpl-del{color:#4a6080;font-size:11px;cursor:pointer;opacity:0;transition:opacity .15s;}
+.tpl-item .tpl-share{color:#4a6080;font-size:11px;cursor:pointer;opacity:0;transition:opacity .15s;}
 .tpl-item:hover .tpl-del{opacity:1;}
+.tpl-item:hover .tpl-share{opacity:1;}
 .tpl-item:hover .tpl-del:hover{color:#ff3d57;}
+.tpl-item:hover .tpl-share:hover{color:#3b82f6;}
 body.light .tpl-item{color:#555!important;}
 body.light .tpl-item:hover{background:#e0dfdb!important;color:#333!important;}
 .lt-fo-label{font-size:8px;color:#3a4a68;letter-spacing:.5px;padding:3px 10px;text-transform:uppercase;}
@@ -9018,6 +9021,7 @@ const ScanManager = {
         '<span style="font-size:15px;">' + icon + '</span>' +
         '<span class="scan-name" data-nameid="' + s.id + '">' + escHtml(s.name) + '</span>' +
         '<span class="scan-meta">' + count + ' sig' + (cacheStr ? ' · ' + cacheStr : '') + '</span>' +
+        '<button class="scan-share" data-shareid="' + s.id + '" title="Share" style="background:none;border:none;color:#4a6080;font-size:11px;cursor:pointer;padding:0 1px;line-height:1;opacity:0.5;" onmouseover="this.style.color=\'#3b82f6\'" onmouseout="this.style.color=\'#4a6080\'">🔗</button>' +
         editBtn + delBtn +
         '</div>';
 
@@ -9049,7 +9053,7 @@ const ScanManager = {
     // Bind click events on scan items
     listEl.querySelectorAll('.scan-list-item').forEach(el => {
       el.addEventListener('click', (e) => {
-        if (e.target.classList.contains('scan-del') || e.target.classList.contains('scan-edit') || e.target.classList.contains('scan-expand')) return;
+        if (e.target.classList.contains('scan-del') || e.target.classList.contains('scan-edit') || e.target.classList.contains('scan-expand') || e.target.classList.contains('scan-share')) return;
         ScanManager.select(el.dataset.scanid);
       });
     });
@@ -9059,6 +9063,14 @@ const ScanManager = {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         ScanManager.toggleRuns(btn.dataset.expandid);
+      });
+    });
+
+    // Bind share buttons
+    listEl.querySelectorAll('.scan-share').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        shareScan(btn.dataset.shareid);
       });
     });
 
@@ -13433,7 +13445,7 @@ function renderTemplateList(){
   templates.forEach(function(tpl,idx){
     var d=document.createElement('div');
     d.className='tpl-item';
-    d.innerHTML='<span>📂 '+tpl.name+'</span><span class="tpl-del" onmousedown="event.stopPropagation();deleteTemplate('+idx+')">✕</span>';
+    d.innerHTML='<span>📂 '+tpl.name+'</span><span style="margin-left:auto;display:flex;gap:4px;align-items:center;"><span class="tpl-share" onmousedown="event.stopPropagation();shareTemplate('+idx+')" title="Share" style="color:#4a6080;font-size:11px;cursor:pointer;opacity:0;transition:opacity .15s;">🔗</span><span class="tpl-del" onmousedown="event.stopPropagation();deleteTemplate('+idx+')">✕</span></span>';
     d.onmousedown=function(){applyTemplate(idx);};
     list.appendChild(d);
   });
@@ -13541,6 +13553,63 @@ function deleteTemplate(idx){
   renderTemplateList();
   toast('Template "'+name+'" deleted');
 }
+
+// ── COMMUNITY SHARING ──
+function shareTemplate(idx){
+  var tpl=templates[idx];if(!tpl)return;
+  toast('Creating share link...');
+  fetch('/api/shared',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'template',sourceId:tpl.id||tpl.name,name:tpl.name})})
+    .then(function(r){return r.json()})
+    .then(function(d){
+      if(d.error){toast('Share failed: '+d.error);return;}
+      var url='https://traderra-lime.vercel.app/shared/'+d.slug;
+      navigator.clipboard.writeText(url).then(function(){toast('Link copied! '+url);}).catch(function(){toast('Share link: '+url);});
+    })
+    .catch(function(e){toast('Share failed: '+e.message);});
+}
+
+function shareScan(scanId){
+  var scan=ScanManager.scans.find(function(s){return s.id===scanId});
+  if(!scan){toast('Scan not found');return;}
+  toast('Creating share link...');
+  fetch('/api/shared',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'scan',sourceId:scan.id,name:scan.name})})
+    .then(function(r){return r.json()})
+    .then(function(d){
+      if(d.error){toast('Share failed: '+d.error);return;}
+      var url='https://traderra-lime.vercel.app/shared/'+d.slug;
+      navigator.clipboard.writeText(url).then(function(){toast('Link copied! '+url);}).catch(function(){toast('Share link: '+url);});
+    })
+    .catch(function(e){toast('Share failed: '+e.message);});
+}
+
+function importSharedItem(slug){
+  fetch('/api/shared/'+slug).then(function(r){return r.json()}).then(function(d){
+    if(d.error){toast('Import failed: '+d.error);return;}
+    if(d.type==='template'){
+      var p=panels[0];if(!p){toast('No chart panel');return;}
+      if(d.data&&d.data.tools){p.tools=JSON.parse(JSON.stringify(d.data.tools));p.inds=deriveInds(p.tools);}
+      buildIndicatorRow(0);renderIndButtons();renderHotButtons();renderAll();
+      toast('Imported template: '+d.name);
+    } else if(d.type==='scan'){
+      // Save as a new scan in user's account
+      var scanData={name:'Imported: '+d.name,type:d.data.type||'imported',strategy:d.data.strategy||'custom',code:d.data.code||null,dateRange:d.data.dateRange?JSON.stringify(d.data.dateRange):null,filterMode:d.data.filterMode||'3',tags:d.data.tags?JSON.stringify(d.data.tags):'[]',results:'[]'};
+      fetch('/api/scans',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(scanData)}).then(function(r){return r.json()}).then(function(res){
+        if(res.scan){ScanManager.load();toast('Imported scan: '+d.name);}
+        else toast('Import scan failed');
+      }).catch(function(){toast('Import scan failed');});
+    } else {
+      toast('Unknown shared type: '+d.type);
+    }
+    // Clean URL
+    if(history.replaceState) history.replaceState(null,'',location.pathname);
+  }).catch(function(e){toast('Import failed: '+e.message);});
+}
+
+// Auto-import on page load if ?importShared=slug
+(function(){
+  var m=location.search.match(/[?&]importShared=([a-zA-Z0-9_-]+)/);
+  if(m) setTimeout(function(){importSharedItem(m[1])},1500);
+})();
 
 renderTemplateList();
 

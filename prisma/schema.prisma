@@ -25,6 +25,8 @@ model User {
   annotations ChartAnnotation[]
   watchlists  ChartWatchlist[]
   templates   ChartTemplate[]
+  sharedItems  SharedItem[]
+  sharedItemLikes SharedItemLike[]
   chartUserSettings ChartUserSettings?
   sessions    Session[]
   accounts    Account[]
@@ -245,6 +247,44 @@ model Verification {
   expiresAt  DateTime
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+}
+
+// ── Community Sharing ──
+
+model SharedItem {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String   // "template" | "scan" | "layout"
+  sourceId    String   // ID of the source template/scan/layout
+  slug        String   @unique  // short URL-safe slug (nanoid 8 chars)
+  name        String   // display name at time of sharing
+  description String?  // optional user description
+  data        String   @default("{}")  // JSON snapshot of the shared item
+  viewCount   Int      @default(0)
+  likeCount   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  likes       SharedItemLike[]
+
+  @@index([slug])
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([likeCount])
+}
+
+model SharedItemLike {
+  id           String     @id @default(cuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sharedItemId String
+  sharedItem   SharedItem @relation(fields: [sharedItemId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@unique([userId, sharedItemId])
+  @@index([sharedItemId])
 }
 
 // ── Saved Scans ──

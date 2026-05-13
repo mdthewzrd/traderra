@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { getAuthUserId } from '@/lib/auth-helpers'
 import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
 // GET /api/chart-settings — load saved chart settings
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth()
+    const userId = await getAuthUserId(request)
 
     // No auth? Return empty — chart will use localStorage
     if (!userId) {
@@ -38,7 +38,7 @@ export async function GET() {
 // POST /api/chart-settings — save chart settings
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await auth()
+    const userId = await getAuthUserId(request)
 
     if (!userId) {
       return NextResponse.json({ error: 'Not authenticated — settings saved to browser only' }, { status: 401 })

@@ -246,3 +246,163 @@ model Verification {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
+
+// ── Saved Scans ──
+
+model SavedScan {
+  id            String       @id @default(cuid())
+  userId        String?
+  name          String
+  type          String       @default("imported")  // "builtin" | "code" | "imported"
+  strategy      String       @default("custom")     // e.g. "inside_day_long", "backside_b"
+  code          String?                             // uploaded JS/Python source
+  dateRange     String?                             // JSON { from, to } — last run range
+  filterMode    String       @default("3")
+  results       String       @default("[]")         // JSON — latest run results (backward compat)
+  resultCount   Int          @default(0)            // signals in latest run
+  cachedCount   Int          @default(0)            // total accumulated signals
+  cachedFrom    String?                             // earliest cached signal date
+  cachedTo      String?                             // latest cached signal date
+  tags          String       @default("[]")         // JSON array of tag strings
+  notes         String?
+  isFavorite    Boolean      @default(false)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  signals       ScanSignal[]
+  scannedDates  ScannedDate[]
+  runs          ScanRun[]
+  customColumns ScanCustomColumn[]
+
+  @@index([userId])
+  @@index([strategy])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// Individual cached signals — accumulates over time across runs
+model ScanRun {
+  id          String    @id @default(cuid())
+  scanId      String
+  scan        SavedScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  label       String    // e.g. "Apr 10 – May 08" or "Full Q1 2025"
+  dateFrom    String    // "2026-04-10"
+  dateTo      String    // "2026-05-08"
+  signalCount Int       @default(0)
+  status      String    @default("completed") // "running" | "completed" | "failed"
+  params      String?   // JSON snapshot of params used for this run
+  createdAt   DateTime  @default(now())
+
+  signals     ScanSignal[]
+
+  @@index([scanId])
+  @@index([scanId, createdAt])
+  @@index([dateFrom, dateTo])
+}
+
+model ScanSignal {
+  id          String    @id @default(cuid())
+  scanId      String
+  runId       String?   // nullable for backward compat with pre-run signals
+  run         ScanRun?  @relation(fields: [runId], references: [id], onDelete: SetNull)
+  scan        SavedScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  ticker      String
+  signalDate  String                              // "2026-04-13" — normalized date
+  data        String                              // JSON of all signal fields
+  createdAt   DateTime  @default(now())
+
+  @@unique([scanId, ticker, signalDate])
+  @@index([scanId, signalDate])
+  @@index([scanId, ticker])
+  @@index([signalDate])
+  @@index([runId])
+}
+
+// Dates that have been scanned (even if 0 signals found)
+model ScannedDate {
+  id        String    @id @default(cuid())
+  scanId    String
+  scan      SavedScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  date      String    // "2026-04-13" — trading date that was scanned
+  createdAt DateTime  @default(now())
+
+  @@unique([scanId, date])
+  @@index([scanId])
+  @@index([date])
+}
+
+// Custom computed columns per scan
+model ScanCustomColumn {
+  id        String    @id @default(cuid())
+  scanId    String
+  scan      SavedScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  name      String    // display name, e.g. "Risk/Reward"
+  key       String    // column key, e.g. "risk_reward"
+  formula   String    // JS expression, e.g. "(row.target_price - row.entry_price) / (row.entry_price - row.stop_price)"
+  format    String?   // "percent" | "money" | "number" | "ratio"
+  colorExpr String?   // JS expression for color, e.g. "val > 2 ? '#4ade80' : val > 1 ? '#fbbf24' : '#f87171'"
+  order     Int       @default(0) // sort order in column list
+  isDefault Boolean   @default(false) // shown on new scans by default?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([scanId, key])
+  @@index([scanId])
+}
+
+// ── Strategy Lab ──
+
+model StrategyProject {
+  id            String          @id @default(cuid())
+  userId        String?
+  name          String
+  description   String?
+  type          String          @default("setup")   // "scan" | "setup" | "strategy"
+  status        String          @default("idea")     // "idea" | "developing" | "testing" | "validated" | "retired"
+  tags          String          @default("[]")       // JSON array of tag strings
+  linkedScanId  String?                               // link to a SavedScan
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  phases        ProjectPhase[]
+  entries       ProjectEntry[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model ProjectPhase {
+  id        String         @id @default(cuid())
+  projectId String
+  project   StrategyProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  phase     String                              // "scan" | "setup" | "entry" | "exit" | "backtest"
+  label     String?                             // override label e.g. "Gap Fade" instead of "Entry"
+  order     Int            @default(0)
+  entries   ProjectEntry[]
+
+  @@unique([projectId, phase])
+  @@index([projectId])
+}
+
+model ProjectEntry {
+  id        String         @id @default(cuid())
+  projectId String
+  project   StrategyProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  phaseId   String?
+  phase     ProjectPhase?  @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  parentId  String?                              // for threaded comments / nested entries
+  type      String                              // "screenshot" | "note" | "idea" | "comment" | "scan_result" | "backtest_result"
+  title     String?
+  body      String?                              // markdown text / note content
+  imageData String?                             // base64 data URL of chart screenshot
+  meta      String?                             // JSON: ticker, date, annotations config, etc.
+  order     Int            @default(0)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([projectId])
+  @@index([phaseId])
+  @@index([parentId])
+  @@index([type])
+  @@index([createdAt])
+}

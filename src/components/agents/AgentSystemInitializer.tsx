@@ -19,7 +19,7 @@ import { useEffect, useState } from 'react'
 import { Loader2, CheckCircle2, XCircle } from 'lucide-react'
 import { initializeAgentSystem, getAgentSystemStatus } from '@/agents/service'
 import toast from 'react-hot-toast'
-import { useAuth } from '@clerk/nextjs'
+import { useAuth } from '@/lib/auth-client'
 import { usePathname } from 'next/navigation'
 
 export function AgentSystemInitializer() {

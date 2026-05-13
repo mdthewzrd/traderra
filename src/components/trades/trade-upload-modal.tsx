@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useCallback } from 'react'
-import { useAuth } from '@clerk/nextjs'
+import { useAuth } from '@/lib/auth-client'
 import { Upload, X, FileText, CheckCircle, AlertCircle, Loader2, FileInput, Clipboard } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useChatContext } from '@/contexts/TraderraContext'

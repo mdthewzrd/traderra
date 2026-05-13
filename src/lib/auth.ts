@@ -5,9 +5,9 @@ import { prisma } from "./prisma";
 
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET || 'traderra-dev-secret-change-in-prod',
-  baseURL: process.env.BETTER_AUTH_URL || 'http://localhost:6565',
+  baseURL: process.env.NEXT_PUBLIC_BETTER_AUTH_URL || 'http://localhost:3199',
   database: prismaAdapter(prisma, {
-    provider: "postgres",
+    provider: "sqlite",
   }),
   emailAndPassword: {
     enabled: true,
@@ -36,6 +36,7 @@ export const auth = betterAuth({
       'https://traderra-charts.vercel.app',
       'http://localhost:6565',
       'http://localhost:3000',
+      'http://localhost:3199',
     ],
     credentials: true,
   },

@@ -6,7 +6,7 @@ import { CalendarRow } from './calendar-row'
 import { MetricsWithToggles } from './metric-toggles'
 import { useChatContext } from '@/contexts/TraderraContext'
 import { useComponentRegistry, type ScrollBehavior } from '@/lib/ag-ui/component-registry'
-import { useUser } from '@clerk/nextjs'
+import { useAuth } from '@/lib/auth-client'
 import { useGuestMode } from '@/contexts/GuestModeContext'
 import { TabbedWidget } from './tabbed-widget'
 import { StandaloneRenataChat } from '@/components/chat/standalone-renata-chat'
@@ -97,7 +97,7 @@ export function MainDashboard() {
   const { isSidebarOpen: aiSidebarOpen, setIsSidebarOpen: setAiSidebarOpen } = useChatContext()
 
   // Get authentication and guest mode state
-  const { isSignedIn } = useUser()
+  const { isSignedIn } = useAuth()
   const { isGuestMode, setGuestMode } = useGuestMode()
 
   // Register dashboard components with AG-UI registry

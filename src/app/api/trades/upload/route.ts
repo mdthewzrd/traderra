@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/lib/auth'
 import { PrismaClient } from '@prisma/client'
 import { randomUUID } from 'crypto'
 import { detectBrokerFormat, parseCSV, convertTraderVueToTraderra, parseDASCSV, convertDASToTraderra, type TraderraTrade } from '@/utils/csv-parser'

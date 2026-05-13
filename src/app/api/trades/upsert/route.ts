@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/lib/auth'
 import { createHash } from 'crypto'
 import { PrismaClient } from '@prisma/client'
 
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     // Try to get userId from Clerk auth first
     let userId
     try {
-      const authData = await auth()
+      const authData = await getAuthUserId(request)
       userId = authData?.userId
     } catch {
       // Auth failed, will use userId from request body

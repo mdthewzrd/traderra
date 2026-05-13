@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
 export async function GET() {
   try {
-    const { userId } = auth()
+    const { userId } = getAuthUserId(request)
 
     // Get trade counts for this user
     const tradeCount = userId ? await prisma.trade.count({

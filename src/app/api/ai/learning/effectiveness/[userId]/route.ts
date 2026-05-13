@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/lib/auth'
 import { prisma } from '../../../../../../lib/prisma'
 
 // Learning effectiveness API for tracking user-specific learning metrics
@@ -8,7 +8,7 @@ export async function GET(
   { params }: { params: { userId: string } }
 ) {
   try {
-    const { userId: authUserId } = auth()
+    const { userId: authUserId } = getAuthUserId(request)
 
     if (!authUserId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -96,7 +96,7 @@ export async function PATCH(
   { params }: { params: { userId: string } }
 ) {
   try {
-    const { userId: authUserId } = auth()
+    const { userId: authUserId } = getAuthUserId(request)
 
     if (!authUserId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

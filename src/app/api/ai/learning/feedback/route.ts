@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth } from '@/lib/auth'
 import { prisma } from '../../../../../lib/prisma'
 
 // Learning feedback API for user corrections and improvements
 export async function POST(request: Request) {
   try {
-    const { userId } = auth()
+    const { userId } = getAuthUserId(request)
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -100,7 +100,7 @@ export async function POST(request: Request) {
 // GET endpoint to retrieve learning feedback history
 export async function GET(request: Request) {
   try {
-    const { userId } = auth()
+    const { userId } = getAuthUserId(request)
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

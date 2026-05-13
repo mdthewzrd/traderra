@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useUser } from '@clerk/nextjs'
+import { useAuth } from '@/lib/auth-client'
 import { TraderraTrade } from '@/utils/csv-parser'
 import { useGuestMode } from '@/contexts/GuestModeContext'
 
@@ -7,7 +7,7 @@ export function useTrades() {
   const [trades, setTrades] = useState<TraderraTrade[] | undefined>(undefined)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const { isLoaded, isSignedIn } = useUser()
+  const { isLoaded, isSignedIn } = useAuth()
   const { isGuestMode, guestTrades, hasGuestData, setGuestMode } = useGuestMode()
 
   // PERFORMANCE: Use ref to prevent duplicate API calls on mount

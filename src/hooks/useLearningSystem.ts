@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useUser } from '@clerk/nextjs'
+import { useAuth } from '@/lib/auth-client'
 
 interface LearningMetrics {
   learning_active: boolean
@@ -31,7 +31,7 @@ interface LearningFeedback {
 }
 
 export function useLearningSystem() {
-  const { user, isLoaded } = useUser()
+  const { userId, isLoaded } = useAuth()
   const [metrics, setMetrics] = useState<LearningMetrics>({
     learning_active: false,
     understanding_accuracy: 0.8,
@@ -54,7 +54,7 @@ export function useLearningSystem() {
       setIsLoading(true)
       setError(null)
 
-      const response = await fetch(`/api/ai/learning/effectiveness/${user.id}`)
+      const response = await fetch(`/api/ai/learning/effectiveness/${userId}`)
 
       if (response.ok) {
         const data = await response.json()

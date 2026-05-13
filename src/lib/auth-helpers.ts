@@ -12,9 +12,9 @@ export async function getAuthUserId(request: Request): Promise<string | null> {
   // Try bearer token — look up session in DB
   const authHeader = request.headers.get('authorization')
   if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.slice(7).split('.')[0] // token is before the dot
+    const token = authHeader.slice(7).trim()
     try {
-      const session = await prisma.session.findUnique({ where: { token } })
+      const session = await prisma.session.findFirst({ where: { token } })
       if (session && new Date(session.expiresAt) > new Date()) {
         return session.userId
       }

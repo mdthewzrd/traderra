@@ -1,12 +1,42 @@
 'use client'
 
-import { UserButton, useUser, SignInButton } from '@clerk/nextjs'
-import { User, Settings, TrendingUp, Calendar } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { User, Settings, TrendingUp, Calendar, LogOut } from 'lucide-react'
+
+interface UserData {
+  id: string
+  email: string
+  name: string | null
+  image: string | null
+  createdAt: string
+}
 
 export function UserProfile() {
-  const { user, isLoaded } = useUser()
+  const [user, setUser] = useState<UserData | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  if (!isLoaded) {
+  useEffect(() => {
+    fetch('/api/get-current-user-id')
+      .then(res => res.json())
+      .then(data => {
+        if (data.userId) {
+          setUser({
+            id: data.userId,
+            email: data.email || '',
+            name: data.name || null,
+            image: data.image || null,
+            createdAt: data.createdAt || new Date().toISOString(),
+          })
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [])
+
+  const displayName = user?.name || user?.email?.split('@')[0] || 'User'
+
+  if (loading) {
     return (
       <div className="flex items-center space-x-3">
         <div className="w-8 h-8 rounded-full bg-muted animate-pulse"></div>
@@ -20,39 +50,37 @@ export function UserProfile() {
 
   if (!user) {
     return (
-      <SignInButton mode="modal">
-        <button className="flex items-center space-x-3 cursor-pointer hover:opacity-80 transition-opacity">
-          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-            <User className="w-4 h-4 text-primary-foreground" />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-medium studio-text truncate max-w-32">
-              Sign In
-            </span>
-            <span className="text-xs studio-muted">
-              Click to sign in
-            </span>
-          </div>
-        </button>
-      </SignInButton>
+      <Link href="/sign-in" className="flex items-center space-x-3 cursor-pointer hover:opacity-80 transition-opacity">
+        <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
+          <User className="w-4 h-4 text-primary-foreground" />
+        </div>
+        <div className="flex flex-col">
+          <span className="text-sm font-medium studio-text truncate max-w-32">
+            Sign In
+          </span>
+          <span className="text-xs studio-muted">
+            Click to sign in
+          </span>
+        </div>
+      </Link>
     )
   }
 
   return (
     <div className="flex items-center space-x-3">
-      <UserButton
-        appearance={{
-          elements: {
-            avatarBox: "w-8 h-8",
-          }
-        }}
-      />
+      {user.image ? (
+        <img src={user.image} alt={displayName} className="w-8 h-8 rounded-full" />
+      ) : (
+        <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
+          <User className="w-4 h-4 text-primary-foreground" />
+        </div>
+      )}
       <div className="flex flex-col">
         <span className="text-sm font-medium studio-text truncate max-w-32">
-          {user.firstName || user.emailAddresses[0].emailAddress}
+          {displayName}
         </span>
-        <span className="text-xs studio-muted">
-          {user.emailAddresses[0].emailAddress}
+        <span className="text-xs studio-muted truncate max-w-32">
+          {user.email}
         </span>
       </div>
     </div>
@@ -60,9 +88,35 @@ export function UserProfile() {
 }
 
 export function UserProfileCard() {
-  const { user, isLoaded } = useUser()
+  const [user, setUser] = useState<UserData | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  if (!isLoaded) {
+  useEffect(() => {
+    fetch('/api/get-current-user-id')
+      .then(res => res.json())
+      .then(data => {
+        if (data.userId) {
+          setUser({
+            id: data.userId,
+            email: data.email || '',
+            name: data.name || null,
+            image: data.image || null,
+            createdAt: data.createdAt || new Date().toISOString(),
+          })
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [])
+
+  const displayName = user?.name || user?.email?.split('@')[0] || 'User'
+
+  const handleSignOut = async () => {
+    await fetch('/api/auth/sign-out', { method: 'POST' })
+    window.location.href = '/'
+  }
+
+  if (loading) {
     return (
       <div className="studio-surface rounded-lg p-6">
         <div className="flex items-center space-x-4 mb-6">
@@ -103,11 +157,9 @@ export function UserProfileCard() {
               Authentication required
             </p>
           </div>
-          <SignInButton mode="modal">
-            <button className="btn-primary">
-              Sign In
-            </button>
-          </SignInButton>
+          <Link href="/sign-in" className="btn-primary">
+            Sign In
+          </Link>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -137,22 +189,27 @@ export function UserProfileCard() {
     <div className="studio-surface rounded-lg p-6">
       <div className="flex items-center space-x-4 mb-6">
         <div className="relative">
-          <img
-            src={user.imageUrl}
-            alt={user.firstName || 'User'}
-            className="w-16 h-16 rounded-full"
-          />
+          <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center">
+            <User className="w-8 h-8 text-primary-foreground" />
+          </div>
         </div>
-        <div>
+        <div className="flex-1">
           <h3 className="text-lg font-semibold studio-text">
-            {user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'User'}
+            {displayName}
           </h3>
-          <p className="studio-muted text-sm">{user.emailAddresses[0].emailAddress}</p>
+          <p className="studio-muted text-sm">{user.email}</p>
           <p className="studio-muted text-xs flex items-center mt-1">
             <Calendar className="w-3 h-3 mr-1" />
             Joined {joinedDate}
           </p>
         </div>
+        <button
+          onClick={handleSignOut}
+          className="btn-ghost flex items-center space-x-2"
+          title="Sign Out"
+        >
+          <LogOut className="w-4 h-4" />
+        </button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

@@ -3,7 +3,7 @@
 import React from 'react'
 import { StandaloneRenataChat } from '../chat/standalone-renata-chat'
 import { useChatContext } from '@/contexts/TraderraContext'
-import { useAuth } from '@clerk/nextjs'
+import { useAuth } from '@/lib/auth-client'
 import { usePathname } from 'next/navigation'
 import { useGuestMode } from '@/contexts/GuestModeContext'
 

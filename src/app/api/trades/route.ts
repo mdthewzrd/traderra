@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { getAuthUserId } from '@/lib/auth-helpers'
 import { PrismaClient } from '@prisma/client'
 import { TraderraTrade } from '@/utils/csv-parser'
 
@@ -159,7 +159,7 @@ export async function GET(request: Request) {
   try {
     console.log('🔍 API /trades called - NODE_ENV:', process.env.NODE_ENV)
 
-    const { userId } = auth()
+    const { userId } = getAuthUserId(request)
     console.log('🔐 Auth check - userId:', userId ? `authenticated (${userId})` : 'not authenticated')
 
     // Parse URL for query parameters
@@ -195,7 +195,7 @@ export async function GET(request: Request) {
 // POST /api/trades - Save multiple trades for the authenticated user
 export async function POST(request: Request) {
   try {
-    const { userId } = auth()
+    const { userId } = getAuthUserId(request)
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -263,7 +263,7 @@ export async function POST(request: Request) {
 export async function DELETE() {
   try {
     console.log('🗑️ DELETE /api/trades called')
-    const { userId } = auth()
+    const { userId } = getAuthUserId(request)
     console.log('🔐 Auth userId:', userId)
 
     if (!userId) {

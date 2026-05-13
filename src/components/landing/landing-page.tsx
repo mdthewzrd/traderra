@@ -1,6 +1,7 @@
 'use client'
 
-import { SignInButton, SignUpButton, useAuth } from '@clerk/nextjs'
+import Link from 'next/link'
+import { useAuth } from '@/lib/auth-client'
 import { Brain, TrendingUp, Shield, Zap } from 'lucide-react'
 
 export function LandingPage() {
@@ -17,24 +18,17 @@ export function LandingPage() {
           </div>
           <div className="flex items-center space-x-4">
             {isSignedIn ? (
-              <button
-                className="btn-primary"
-                onClick={() => window.location.href = '/dashboard'}
-              >
+              <Link href="/dashboard" className="btn-primary">
                 Go to Dashboard
-              </button>
+              </Link>
             ) : (
               <>
-                <SignInButton mode="modal">
-                  <button className="btn-ghost">
-                    Sign In
-                  </button>
-                </SignInButton>
-                <SignUpButton mode="modal">
-                  <button className="btn-primary">
-                    Get Started
-                  </button>
-                </SignUpButton>
+                <Link href="/sign-in" className="btn-ghost">
+                  Sign In
+                </Link>
+                <Link href="/sign-up" className="btn-primary">
+                  Get Started
+                </Link>
               </>
             )}
           </div>
@@ -54,23 +48,13 @@ export function LandingPage() {
           </p>
           <div className="mt-10 flex items-center justify-center gap-6">
             {isSignedIn ? (
-              <button
-                className="btn-primary px-8 py-3 text-lg"
-                onClick={() => window.location.href = '/dashboard'}
-              >
-                Go to Dashboard
-              </button>
+              <Link href="/dashboard" className="btn-primary px-8 py-3 text-lg">
+                Start Trading
+              </Link>
             ) : (
-              <>
-                <SignUpButton mode="modal">
-                  <button className="btn-primary px-8 py-3 text-lg">
-                    Start Your Analysis
-                  </button>
-                </SignUpButton>
-                <button className="btn-ghost px-8 py-3 text-lg">
-                  Learn More
-                </button>
-              </>
+              <Link href="/sign-up" className="btn-primary px-8 py-3 text-lg">
+                Get Started Free
+              </Link>
             )}
           </div>
         </div>
@@ -167,18 +151,13 @@ export function LandingPage() {
             Join professional traders who trust Traderra for objective, AI-powered performance insights.
           </p>
           {isSignedIn ? (
-            <button
-              className="btn-primary px-8 py-3 text-lg"
-              onClick={() => window.location.href = '/dashboard'}
-            >
+            <Link href="/dashboard" className="btn-primary px-8 py-3 text-lg">
               Go to Dashboard
-            </button>
+            </Link>
           ) : (
-            <SignUpButton mode="modal">
-              <button className="btn-primary px-8 py-3 text-lg">
-                Start Free Analysis
-              </button>
-            </SignUpButton>
+            <Link href="/sign-up" className="btn-primary px-8 py-3 text-lg">
+              Start Free Analysis
+            </Link>
           )}
         </div>
       </section>

@@ -9,6 +9,19 @@ import { useUIStore } from '@/stores/charts'
  */
 
 export function TopBar() {
+  // Zustand-driven state
+  const liveMode = useUIStore((s) => s.liveMode)
+  const setLiveMode = useUIStore((s) => s.setLiveMode)
+  const showPriceLine = useUIStore((s) => s.showPriceLine)
+  const setShowPriceLine = useUIStore((s) => s.setShowPriceLine)
+  const useAdjusted = useUIStore((s) => s.useAdjusted)
+  const setUseAdjusted = useUIStore((s) => s.setUseAdjusted)
+  const cleanPrints = useUIStore((s) => s.cleanPrints)
+  const setCleanPrints = useUIStore((s) => s.setCleanPrints)
+  const activeLayout = useUIStore((s) => s.activeLayout)
+  const setActiveLayout = useUIStore((s) => s.setActiveLayout)
+  const setSidebarTab = useUIStore((s) => s.setSidebarTab)
+
   return (
     <div id="topbar">
       <span id="logo">TRADERRA</span>
@@ -16,7 +29,7 @@ export function TopBar() {
       <SidebarToggleButton />
       <input id="symbol-input" type="text" defaultValue="AAPL" placeholder="TICKER" />
       <button className="tbtn" id="load-btn">▶ LOAD</button>
-      <button className="tbtn" id="live-btn">⬤ LIVE</button>
+      <button className={`tbtn${liveMode ? ' active' : ''}`} id="live-btn" onClick={() => setLiveMode(!liveMode)}>⬤ LIVE</button>
       <div id="live-indicator">
         <div id="live-dot" />
         <span id="live-label">LIVE</span>
@@ -31,19 +44,19 @@ export function TopBar() {
       <div className="sep" />
 
       <div className="tbtn-row">
-        <button className="tbtn" id="toggle-bars-btn">≡ BARS</button>
-        <button className="tbtn" id="price-line-btn" style={{ borderColor: '#26a69a', color: '#26a69a' }}>— LINE</button>
-        <button className="tbtn" id="adj-btn" style={{ borderColor: '#f59e0b', color: '#f59e0b' }}>ADJ</button>
-        <button className="tbtn on" id="clean-btn" style={{ borderColor: '#e879f9', color: '#e879f9', textDecoration: 'none' }}>CLN</button>
-        <button className="tbtn active" id="ly1" style={{ fontWeight: 900 }}>1</button>
-        <button className="tbtn" id="ly2" style={{ fontWeight: 900 }}>2</button>
-        <button className="tbtn" id="ly4" style={{ fontWeight: 900 }}>4</button>
+        <button className="tbtn" id="toggle-bars-btn" onClick={() => useUIStore.getState().setBarsVisible(!useUIStore.getState().barsVisible)}>≡ BARS</button>
+        <button className={`tbtn${showPriceLine ? '' : ' off'}`} id="price-line-btn" style={{ borderColor: showPriceLine ? '#26a69a' : '#4a5580', color: showPriceLine ? '#26a69a' : '#4a5580', textDecoration: showPriceLine ? 'none' : 'line-through' }} onClick={() => setShowPriceLine(!showPriceLine)}>— LINE</button>
+        <button className={`tbtn${useAdjusted ? '' : ' unadj'}`} id="adj-btn" style={{ borderColor: useAdjusted ? '#f59e0b' : '#4a5580', color: useAdjusted ? '#f59e0b' : '#4a5580', textDecoration: useAdjusted ? 'none' : 'line-through' }} onClick={() => setUseAdjusted(!useAdjusted)}>ADJ</button>
+        <button className={`tbtn${cleanPrints ? ' on' : ''}`} id="clean-btn" style={{ borderColor: '#e879f9', color: '#e879f9', textDecoration: cleanPrints ? 'none' : 'line-through' }} onClick={() => setCleanPrints(!cleanPrints)}>CLN</button>
+        {[1, 2, 4].map(n => (
+          <button key={n} className={`tbtn${activeLayout === n ? ' active' : ''}`} id={`ly${n}`} style={{ fontWeight: 900 }} onClick={() => setActiveLayout(n)}>{n}</button>
+        ))}
         <button className="tbtn" id="bt-btn" style={{ borderColor: '#f59e0b!important', color: '#f59e0b!important' }}>⏱ BT</button>
-        <button className="tbtn" id="scan-btn" style={{ borderColor: '#4ade80!important', color: '#4ade80!important' }}>📡 SCAN</button>
-        <button className="tbtn" id="vault-btn" style={{ borderColor: '#a78bfa!important', color: '#a78bfa!important' }}>📦 VAULT</button>
-        <button className="tbtn" id="settings-btn" style={{ borderColor: '#D4AF37!important', color: '#D4AF37!important' }}>⚙ LOOK</button>
-        <button className="tbtn" id="tools-btn" style={{ borderColor: '#D4AF37!important', color: '#D4AF37!important' }} onClick={() => (window as any).sbOpen?.('tools')}>🔧 TOOLS</button>
-        <button className="tbtn" id="input-settings-btn" style={{ borderColor: '#22d3ee!important', color: '#22d3ee!important' }}>⚙ SET</button>
+        <button className="tbtn" id="scan-btn" style={{ borderColor: '#4ade80!important', color: '#4ade80!important' }} onClick={() => setSidebarTab('scan')}>📡 SCAN</button>
+        <button className="tbtn" id="vault-btn" style={{ borderColor: '#a78bfa!important', color: '#a78bfa!important' }} onClick={() => setSidebarTab('vault')}>📦 VAULT</button>
+        <button className="tbtn" id="settings-btn" style={{ borderColor: '#D4AF37!important', color: '#D4AF37!important' }} onClick={() => setSidebarTab('look')}>⚙ LOOK</button>
+        <button className="tbtn" id="tools-btn" style={{ borderColor: '#D4AF37!important', color: '#D4AF37!important' }} onClick={() => setSidebarTab('tools')}>🔧 TOOLS</button>
+        <button className="tbtn" id="input-settings-btn" style={{ borderColor: '#22d3ee!important', color: '#22d3ee!important' }} onClick={() => setSidebarTab('settings')}>⚙ SET</button>
         <div id="ind-btns-container" style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }} />
         <div id="hot-btns-container" style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }} />
         <button

@@ -7,3 +7,6 @@ __pycache__/
 .env
 .vercel/
 .vercel
+.next/
+prisma/*.db
+prisma/prisma/

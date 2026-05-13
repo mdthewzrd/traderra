@@ -2,6 +2,12 @@
 
 import { useEffect, useRef } from 'react'
 import '../../styles/charts-terminal.css'
+import { TopBar } from '@/components/charts/TopBar/TopBar'
+import { LeftToolbar } from '@/components/charts/LeftToolbar/LeftToolbar'
+import { AnnotationToolbar } from '@/components/charts/AnnotationToolbar/AnnotationToolbar'
+import { MainArea } from '@/components/charts/MainArea/MainArea'
+import { Sidebar } from '@/components/charts/Sidebar/Sidebar'
+import { Overlays } from '@/components/charts/Overlays/Overlays'
 
 interface ChartsTerminalProps {
   userId: string
@@ -9,40 +15,28 @@ interface ChartsTerminalProps {
   userImage: string
 }
 
-// Phase 1+2: React shell that loads the existing charts app.
-// HTML structure + JS are loaded from the static file.
-// Future phases will extract pieces into proper React components.
+/**
+ * Phase 2: React component shell for the charts app.
+ * HTML structure is now React components. JS logic still loaded from static file.
+ * Future phases will extract JS into Zustand stores + React hooks.
+ */
 export default function ChartsTerminal({ userId, userName, userImage }: ChartsTerminalProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
+  const scriptsLoaded = useRef(false)
 
   useEffect(() => {
     // Inject user context
     ;(window as any).__CHARTS_USER = { id: userId, name: userName, image: userImage }
 
-    // Load the charts HTML+JS into the container
-    const loadCharts = async () => {
+    if (scriptsLoaded.current) return
+    scriptsLoaded.current = true
+
+    // Load the JS logic from the static file
+    const loadScripts = async () => {
       try {
         const resp = await fetch('/charts-terminal.html')
         const html = await resp.text()
         const parser = new DOMParser()
         const doc = parser.parseFromString(html, 'text/html')
-
-        const container = containerRef.current
-        if (!container) return
-
-        // Move body children into our container
-        while (doc.body.firstChild) {
-          container.appendChild(doc.body.firstChild)
-        }
-
-        // Move style into head (if not already there)
-        const existingStyles = doc.querySelectorAll('style')
-        existingStyles.forEach(style => {
-          if (!document.querySelector('style[data-charts-style]')) {
-            style.setAttribute('data-charts-style', '1')
-            document.head.appendChild(style)
-          }
-        })
 
         // Load vault.js
         if (!document.querySelector('script[src="/indicators/vault.js"]')) {
@@ -52,15 +46,12 @@ export default function ChartsTerminal({ userId, userName, userImage }: ChartsTe
         }
 
         // Extract and execute inline scripts in order
-        const scripts = container.querySelectorAll('script')
+        const scripts = doc.querySelectorAll('script')
         scripts.forEach(oldScript => {
+          if (oldScript.src) return // already handled vault.js
           const newScript = document.createElement('script')
-          if (oldScript.src) {
-            newScript.src = oldScript.src
-          } else {
-            newScript.textContent = oldScript.textContent
-          }
-          oldScript.parentNode?.replaceChild(newScript, oldScript)
+          newScript.textContent = oldScript.textContent || ''
+          document.body.appendChild(newScript)
         })
 
         // Fire user-ready event
@@ -68,32 +59,30 @@ export default function ChartsTerminal({ userId, userName, userImage }: ChartsTe
           detail: (window as any).__CHARTS_USER,
         }))
       } catch (err) {
-        console.error('Failed to load charts:', err)
+        console.error('Failed to load charts scripts:', err)
       }
     }
 
-    loadCharts()
-
-    // Cleanup on unmount
-    return () => {
-      const container = containerRef.current
-      if (container) container.innerHTML = ''
-    }
+    loadScripts()
   }, [userId, userName, userImage])
 
   return (
-    <div
-      ref={containerRef}
-      id="charts-root"
-      style={{
-        width: '100vw',
-        height: '100vh',
-        overflow: 'hidden',
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        background: '#0b0d12',
-      }}
-    />
+    <>
+      {/* Profile icon */}
+      <div id="profile-icon" style={{
+        position: 'fixed', top: 6, right: 12, zIndex: 9999, cursor: 'pointer',
+        width: 28, height: 28, borderRadius: '50%', background: '#2a3050',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 13, color: '#6a7a98', border: '1px solid #3a4a68',
+        transition: 'all .15s',
+      }} title="Sign in to sync your data">👤</div>
+
+      <TopBar />
+      <LeftToolbar />
+      <AnnotationToolbar />
+      <MainArea />
+      <Sidebar />
+      <Overlays />
+    </>
   )
 }

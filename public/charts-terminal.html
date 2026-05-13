@@ -4739,13 +4739,15 @@ function renderAdvancedAnnotation(ctx,ann,p,chartW,priceH,cw,ch,annTimeToX,pToY)
     } else if(ann.type==='gann_box'){
       const borderCol=ann.borderColor||baseCol, gridCol=ann.gridColor||colorWithAlpha(baseCol,0.5);
       ctx.strokeStyle=borderCol; ctx.strokeRect(left,top,w,h);
-      ctx.strokeStyle=gridCol; ctx.lineWidth=1; ctx.setLineDash([3,3]);
-      GANN_BOX_RATIOS.forEach(function(ratio){
-        const gx=left+w*ratio, gy=top+h*ratio;
-        ctx.beginPath(); ctx.moveTo(gx,top); ctx.lineTo(gx,top+h); ctx.moveTo(left,gy); ctx.lineTo(left+w,gy); ctx.stroke();
-        ctx.fillStyle=gridCol; ctx.font='10px Inter'; ctx.textAlign='left'; ctx.fillText((ratio*8).toFixed(0)+'/8',gx+2,top+10);
-      });
-      ctx.setLineDash([]);
+      if(ann.showGrid!==false){
+        ctx.strokeStyle=gridCol; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+        GANN_BOX_RATIOS.forEach(function(ratio){
+          const gx=left+w*ratio, gy=top+h*ratio;
+          ctx.beginPath(); ctx.moveTo(gx,top); ctx.lineTo(gx,top+h); ctx.moveTo(left,gy); ctx.lineTo(left+w,gy); ctx.stroke();
+          if(ann.showLabels!==false){ctx.fillStyle=gridCol; ctx.font='10px Inter'; ctx.textAlign='left'; ctx.fillText((ratio*8).toFixed(0)+'/8',gx+2,top+10);}
+        });
+        ctx.setLineDash([]);
+      }
     }
     ctx.setLineDash([]);
     return true;
@@ -5222,30 +5224,98 @@ function annShowSettings(){
   if(!selectedAnn) return;
   annCloseDropdowns();
   var ann=selectedAnn;
+  var S='width:100px;background:#10131a;border:1px solid #2a3050;border-radius:3px;color:#dde3f0;padding:3px 5px;font-size:11px;';
   var body='<div style="display:flex;flex-direction:column;gap:8px;padding:4px;">';
-  body+='<label style="color:#8aa0c0;font-size:11px;display:flex;justify-content:space-between;">Price 1<input type="number" id="ann-set-y1" value="'+ann.y1.toFixed(4)+'" step="0.01" style="width:100px;background:#10131a;border:1px solid #2a3050;border-radius:3px;color:#dde3f0;padding:3px 5px;font-size:11px;"/></label>';
+  // Price inputs
+  body+='<label style="color:#8aa0c0;font-size:11px;display:flex;justify-content:space-between;">Price 1<input type="number" id="ann-set-y1" value="'+ann.y1.toFixed(4)+'" step="0.01" style="'+S+'"/></label>';
   if(ann.x2!=null&&ann.type!=='hline'&&ann.type!=='vline'){
-    body+='<label style="color:#8aa0c0;font-size:11px;display:flex;justify-content:space-between;">Price 2<input type="number" id="ann-set-y2" value="'+ann.y2.toFixed(4)+'" step="0.01" style="width:100px;background:#10131a;border:1px solid #2a3050;border-radius:3px;color:#dde3f0;padding:3px 5px;font-size:11px;"/></label>';
+    body+='<label style="color:#8aa0c0;font-size:11px;display:flex;justify-content:space-between;">Price 2<input type="number" id="ann-set-y2" value="'+ann.y2.toFixed(4)+'" step="0.01" style="'+S+'"/></label>';
   }
+  // Text / label inputs
   if(ann.type.startsWith('text_')){
-    body+='<label style="color:#8aa0c0;font-size:11px;display:flex;justify-content:space-between;">Text<input type="text" id="ann-set-text" value="'+(ann.text||'')+'" style="width:100px;background:#10131a;border:1px solid #2a3050;border-radius:3px;color:#dde3f0;padding:3px 5px;font-size:11px;"/></label>';
+    body+='<label style="color:#8aa0c0;font-size:11px;display:flex;justify-content:space-between;">Text<input type="text" id="ann-set-text" value="'+(ann.text||'')+'" style="'+S+'"/></label>';
   }
   if(ann.label!=null){
-    body+='<label style="color:#8aa0c0;font-size:11px;display:flex;justify-content:space-between;">Label<input type="text" id="ann-set-label" value="'+(ann.label||'')+'" style="width:100px;background:#10131a;border:1px solid #2a3050;border-radius:3px;color:#dde3f0;padding:3px 5px;font-size:11px;"/></label>';
+    body+='<label style="color:#8aa0c0;font-size:11px;display:flex;justify-content:space-between;">Label<input type="text" id="ann-set-label" value="'+(ann.label||'')+'" style="'+S+'"/></label>';
   }
+  // ── FIB RETRACEMENT LEVELS ──
+  if(ann.type==='fib_ret'){
+    ensureFibSettings(ann);
+    body+='<div style="height:1px;background:#2a3050;margin:4px 0;"></div>';
+    body+='<div style="color:#a78bfa;font-size:11px;font-weight:700;letter-spacing:.5px;margin-bottom:2px;">FIBONACCI LEVELS</div>';
+    ann.fibLevels.forEach(function(level,i){
+      var pct=parseFloat(level.value||0);
+      var checked=level.enabled!==false?'checked':'';
+      body+='<div style="display:flex;align-items:center;gap:6px;">';
+      body+='<input type="checkbox" id="fib-en-'+i+'" '+checked+' style="accent-color:#a78bfa;cursor:pointer;"/>';
+      body+='<input type="number" id="fib-val-'+i+'" value="'+pct.toFixed(1)+'" step="0.1" min="0" max="100" style="'+S+'width:64px;"/>';
+      body+='<span style="color:#8aa0c0;font-size:10px;">%</span>';
+      var price=Math.max(ann.y1,ann.y2)-Math.abs(ann.y2-ann.y1)*(pct/100);
+      body+='<span style="color:#5a6a88;font-size:10px;margin-left:auto;">'+price.toFixed(2)+'</span>';
+      body+='</div>';
+    });
+    body+='<div style="display:flex;gap:4px;margin-top:4px;">';
+    body+='<button onclick="fibAddLevel()" style="background:#10131a;border:1px solid #2a3050;color:#a78bfa;border-radius:3px;padding:2px 8px;font-size:10px;cursor:pointer;">+ Add Level</button>';
+    body+='<button onclick="fibResetLevels()" style="background:#10131a;border:1px solid #2a3050;color:#8aa0c0;border-radius:3px;padding:2px 8px;font-size:10px;cursor:pointer;">Reset Defaults</button>';
+    body+='</div>';
+  }
+  // ── GANN BOX SETTINGS ──
+  if(ann.type==='gann_box'){
+    body+='<div style="height:1px;background:#2a3050;margin:4px 0;"></div>';
+    body+='<div style="color:#f59e0b;font-size:11px;font-weight:700;letter-spacing:.5px;margin-bottom:2px;">GANN BOX</div>';
+    body+='<label style="color:#8aa0c0;font-size:11px;display:flex;justify-content:space-between;">Grid Lines<input type="checkbox" id="gann-grid" '+(ann.showGrid!==false?'checked':'')+' style="accent-color:#f59e0b;cursor:pointer;"/></label>';
+    body+='<label style="color:#8aa0c0;font-size:11px;display:flex;justify-content:space-between;">Labels<input type="checkbox" id="gann-labels" '+(ann.showLabels!==false?'checked':'')+' style="accent-color:#f59e0b;cursor:pointer;"/></label>';
+    body+='<label style="color:#8aa0c0;font-size:11px;display:flex;justify-content:space-between;">Grid Color<input type="color" id="gann-color" value="'+(ann.gridColor||'#f59e0b')+'" style="width:40px;height:22px;border:1px solid #2a3050;border-radius:3px;cursor:pointer;"/></label>';
+  }
+  // ── POSITION TOOL SETTINGS ──
+  if(ann.type==='long_pos'||ann.type==='short_pos'){
+    ensurePositionSettings(ann);
+    body+='<div style="height:1px;background:#2a3050;margin:4px 0;"></div>';
+    body+='<div style="color:#D4AF37;font-size:11px;font-weight:700;letter-spacing:.5px;margin-bottom:2px;">POSITION</div>';
+    if(ann.y3!=null) body+='<label style="color:#8aa0c0;font-size:11px;display:flex;justify-content:space-between;">Stop Price<input type="number" id="ann-set-y3" value="'+ann.y3.toFixed(4)+'" step="0.01" style="'+S+'"/></label>';
+  }
+  // Opacity
   body+='<label style="color:#8aa0c0;font-size:11px;display:flex;justify-content:space-between;">Opacity<input type="range" id="ann-set-opacity" min="0" max="1" step="0.05" value="'+(ann.opacity!=null?ann.opacity:1)+'" style="width:100px;accent-color:#7b61ff;"/></label>';
   body+='</div>';
   modalOpen('⚙ Annotation Settings',body,[
     {text:'Apply',cls:'mbtn primary',action:function(){
       var y1i=document.getElementById('ann-set-y1');if(y1i) ann.y1=parseFloat(y1i.value)||ann.y1;
       var y2i=document.getElementById('ann-set-y2');if(y2i) ann.y2=parseFloat(y2i.value)||ann.y2;
+      var y3i=document.getElementById('ann-set-y3');if(y3i) ann.y3=parseFloat(y3i.value)||ann.y3;
       var txti=document.getElementById('ann-set-text');if(txti) ann.text=txti.value;
       var lbli=document.getElementById('ann-set-label');if(lbli) ann.label=lbli.value;
       var opi=document.getElementById('ann-set-opacity');if(opi) ann.opacity=parseFloat(opi.value);
+      // Apply fib levels
+      if(ann.type==='fib_ret'&&ann.fibLevels){
+        ann.fibLevels.forEach(function(level,i){
+          var en=document.getElementById('fib-en-'+i);
+          var val=document.getElementById('fib-val-'+i);
+          if(en) level.enabled=en.checked;
+          if(val) level.value=parseFloat(val.value)||0;
+        });
+      }
+      // Apply gann box
+      if(ann.type==='gann_box'){
+        var gg=document.getElementById('gann-grid'); if(gg) ann.showGrid=gg.checked;
+        var gl=document.getElementById('gann-labels'); if(gl) ann.showLabels=gl.checked;
+        var gc=document.getElementById('gann-color'); if(gc) ann.gridColor=gc.value;
+      }
       modalClose(); renderAll();
     }},
     {text:'Cancel',cls:'mbtn',action:modalClose}
   ]);
+}
+// Fib level helpers
+function fibAddLevel(){
+  if(!selectedAnn||selectedAnn.type!=='fib_ret') return;
+  ensureFibSettings(selectedAnn);
+  selectedAnn.fibLevels.push({value:0,enabled:true});
+  annShowSettings(); // refresh modal
+}
+function fibResetLevels(){
+  if(!selectedAnn||selectedAnn.type!=='fib_ret') return;
+  selectedAnn.fibLevels=cloneFibLevels();
+  annShowSettings(); // refresh modal
 }
 // Z-order
 function annBringToFront(){

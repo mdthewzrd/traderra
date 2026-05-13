@@ -1656,10 +1656,11 @@ var CloudStore = {
   },
 
   _socialSignIn: function(provider){
-    // First tell better-auth to redirect to OUR callback page (on same domain as API)
-    // Our callback page will read the session cookie and redirect to staging with the token
+    // Use path-segment encoding to avoid query-param state_mismatch issues in better-auth
     var finalDest = window.location.origin + window.location.pathname;
-    var callbackURL = CloudStore.apiBase + '/auth-callback?callbackURL=' + encodeURIComponent(finalDest);
+    // Encode destination as base64 in the path so better-auth doesn't mangle it
+    var encoded = btoa(finalDest);
+    var callbackURL = CloudStore.apiBase + '/auth-callback/' + encoded;
     fetch(CloudStore.apiBase + '/api/auth/sign-in/social', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},

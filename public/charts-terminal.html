@@ -3812,15 +3812,15 @@ function renderPanel(p){
   if(p.showTL||p.showAnn){
     for(const ann of annotations){
       const isTL=ann.type==='trendline'||ann.type==='ray', isBox=ann.type.startsWith('box_'), isTxt=ann.type.startsWith('text_'), isHl=ann.type.startsWith('hl_');
+      const isCallout=ann.type==='callout', isNote=ann.type==='note', isPriceLbl=ann.type==='price_label', isFlag=ann.type==='flag';
       const isExecAnn=ann.type==='entry_arrow'||ann.type==='exit_arrow'||ann.type==='short_arrow'||ann.type==='cover_arrow'||ann.type==='stop_line'||ann.type==='trail_stop';
       const isFib=ann.type==='fib_ret';
       const isHLine=ann.type==='hline', isVLine=ann.type==='vline';
+      const isPos=ann.type==='long_pos'||ann.type==='short_pos';
       if(isTL&&!p.showTL) continue;
       if((isBox||isTxt||isHl||isCallout||isNote||isPriceLbl||isFlag)&&!p.showAnn) continue;
       if(isExecAnn&&!p.showExec) continue;
       if(!p.showOtherAnn && ann.panelIdx!=null && ann.panelIdx!==p.idx) continue;
-      const isPos=ann.type==='long_pos'||ann.type==='short_pos';
-      const isCallout=ann.type==='callout', isNote=ann.type==='note', isPriceLbl=ann.type==='price_label', isFlag=ann.type==='flag';
       if(!isTL&&!isBox&&!isTxt&&!isHl&&!isExecAnn&&!isFib&&!isHLine&&!isVLine&&!isPos&&!isCallout&&!isNote&&!isPriceLbl&&!isFlag) continue;
       if(ann.hidden) continue;
       // Apply annotation opacity
@@ -5465,6 +5465,7 @@ function buildPanels(){
 
     wrap.addEventListener('mousedown',evt=>{
       if(evt.button!==0) return;
+      if(activeTool) return; // Don't start axis drag when a drawing tool is active
       const r=wrap.getBoundingClientRect();
       const mx=evt.clientX-r.left, my=evt.clientY-r.top;
       const chartW=p.W-p.PRICE_W;
@@ -5536,6 +5537,7 @@ function buildPanels(){
     // Mouse down — trendline endpoint drag, chart drag, or tooltip hold
     wrap.addEventListener('mousedown',evt=>{
       if(evt.button!==0) return;
+      if(activeTool) return; // Don't start chart pan when a drawing tool is active
       const r=wrap.getBoundingClientRect();
       const mx=evt.clientX-r.left, my=evt.clientY-r.top;
       const chartW=p.W-p.PRICE_W;

@@ -1656,22 +1656,12 @@ var CloudStore = {
   },
 
   _socialSignIn: function(provider){
-    // Use path-segment encoding to avoid query-param state_mismatch issues in better-auth
+    // Must navigate browser to the API domain so better-auth cookies are set properly.
+    // Cross-origin fetch doesn't preserve cookies for the OAuth state check.
     var finalDest = window.location.origin + window.location.pathname;
-    // Encode destination as base64 in the path so better-auth doesn't mangle it
     var encoded = btoa(finalDest);
-    var callbackURL = CloudStore.apiBase + '/auth-callback/' + encoded;
-    fetch(CloudStore.apiBase + '/api/auth/sign-in/social', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({provider: provider, callbackURL: callbackURL})
-    }).then(function(r){ return r.json(); }).then(function(d){
-      if(d.url) {
-        window.location.href = d.url;
-      } else {
-        CloudStore._authErr('OAuth failed — try again');
-      }
-    }).catch(function(e){ CloudStore._authErr('OAuth failed: '+e.message); });
+    var dest = CloudStore.apiBase + '/charts-login?provider=' + provider + '&dest=' + encodeURIComponent(encoded);
+    window.location.href = dest;
   },
 
   signOut: function(){

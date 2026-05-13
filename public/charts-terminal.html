@@ -3830,7 +3830,7 @@ function renderPanel(p){
       // Apply annotation opacity
       const annAlpha=ann.opacity!=null?ann.opacity:1;
       if(annAlpha<1) ctx.globalAlpha=annAlpha;
-      if(renderAdvancedAnnotation(ctx,ann,p,chartW,priceH,cw,ch,annTimeToX,pToY)){
+      if(renderAdvancedAnnotation(ctx,ann,p,chartW,priceH,chartW,priceH,annTimeToX,pToY)){
         ctx.globalAlpha=1;
         if((activeTool==='del'||activeTool==='edit')&&cx>=0&&cy>=0&&isAnnNear(ann,cx,cy,p,annTimeToX,pToY)){
           const hlCol=activeTool==='edit'?'rgba(251,191,36,0.7)':'rgba(255,61,87,0.7)';

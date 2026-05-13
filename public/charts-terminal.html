@@ -4206,7 +4206,7 @@ function renderPanel(p){
       const sx2=annTimeToX(ann.x2);if(sx2!=null){
         const sy2=pToY(ann.y2);
         if(ann.type==='hray'){ctx.beginPath();ctx.moveTo(sx1,sy1);ctx.lineTo(chartW,sy1);ctx.stroke();}
-        else if(ann.type==='ray'){const end=getRayRightPoint(sx1,sy1,sx2,sy2,cw);ctx.beginPath();ctx.moveTo(sx1,sy1);ctx.lineTo(end.x,end.y);ctx.stroke();}
+        else if(ann.type==='ray'){const end=getRayRightPoint(sx1,sy1,sx2,sy2,chartW);ctx.beginPath();ctx.moveTo(sx1,sy1);ctx.lineTo(end.x,end.y);ctx.stroke();}
         else {ctx.beginPath();ctx.moveTo(sx1,sy1);ctx.lineTo(sx2,sy2);ctx.stroke();}
         drawHandle(ctx,sx1,sy1,SEL_COL);drawHandle(ctx,sx2,sy2,SEL_COL);
       }

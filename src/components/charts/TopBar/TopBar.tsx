@@ -1,9 +1,11 @@
 'use client'
 
+import { useUIStore } from '@/stores/charts'
+
 /**
  * TopBar — the main toolbar at the top of the charts app.
  * Extracted from charts-terminal.html lines 651-736.
- * Event handlers still call global functions (to be replaced with Zustand in Phase 3).
+ * Phase 3: Theme toggle uses Zustand. Other buttons still call global functions.
  */
 
 export function TopBar() {
@@ -11,21 +13,7 @@ export function TopBar() {
     <div id="topbar">
       <span id="logo">TRADERRA</span>
       <div className="sep" />
-      <button
-        className="tbtn"
-        id="wl-toggle"
-        style={{ borderColor: '#6878a8!important', color: '#6878a8!important' }}
-        onClick={() => {
-          const sb = document.getElementById('sidebar')
-          if (sb && sb.classList.contains('open')) {
-            ;(window as any).sbClose?.()
-          } else {
-            ;(window as any).sbOpen?.()
-          }
-        }}
-      >
-        📋
-      </button>
+      <SidebarToggleButton />
       <input id="symbol-input" type="text" defaultValue="AAPL" placeholder="TICKER" />
       <button className="tbtn" id="load-btn">▶ LOAD</button>
       <button className="tbtn" id="live-btn">⬤ LIVE</button>
@@ -68,7 +56,7 @@ export function TopBar() {
           ＋
         </button>
         <TemplateDropdown />
-        <button className="tbtn" id="theme-toggle-btn" style={{ borderColor: '#5a6a88', color: '#5a6a88' }}>🌙</button>
+        <ThemeToggleButton />
         <button
           className="tbtn"
           id="reload-chart-btn"
@@ -149,5 +137,35 @@ function TemplateDropdown() {
         <div className="tool-btn" style={{ color: '#D4AF37' }}>💾 Save Current as Template</div>
       </div>
     </div>
+  )
+}
+
+function ThemeToggleButton() {
+  const theme = useUIStore((s) => s.theme)
+  const toggleTheme = useUIStore((s) => s.toggleTheme)
+  return (
+    <button
+      className="tbtn"
+      id="theme-toggle-btn"
+      style={{ borderColor: '#5a6a88', color: '#5a6a88' }}
+      onClick={toggleTheme}
+    >
+      {theme === 'dark' ? '🌙' : '☀'}
+    </button>
+  )
+}
+
+function SidebarToggleButton() {
+  const sidebarOpen = useUIStore((s) => s.sidebarOpen)
+  const setSidebarOpen = useUIStore((s) => s.setSidebarOpen)
+  return (
+    <button
+      className="tbtn"
+      id="wl-toggle"
+      style={{ borderColor: '#6878a8!important', color: '#6878a8!important' }}
+      onClick={() => setSidebarOpen(!sidebarOpen)}
+    >
+      📋
+    </button>
   )
 }

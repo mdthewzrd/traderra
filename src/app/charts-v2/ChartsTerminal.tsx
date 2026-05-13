@@ -8,6 +8,7 @@ import { AnnotationToolbar } from '@/components/charts/AnnotationToolbar/Annotat
 import { MainArea } from '@/components/charts/MainArea/MainArea'
 import { Sidebar } from '@/components/charts/Sidebar/Sidebar'
 import { Overlays } from '@/components/charts/Overlays/Overlays'
+import { useLegacyBridge } from '@/hooks/useLegacyBridge'
 
 interface ChartsTerminalProps {
   userId: string
@@ -22,6 +23,9 @@ interface ChartsTerminalProps {
  */
 export default function ChartsTerminal({ userId, userName, userImage }: ChartsTerminalProps) {
   const scriptsLoaded = useRef(false)
+
+  // Bridge Zustand → legacy JS globals
+  useLegacyBridge()
 
   useEffect(() => {
     // Inject user context

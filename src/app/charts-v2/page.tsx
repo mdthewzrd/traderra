@@ -1,6 +1,6 @@
 import { getServerSession } from '@/lib/auth-server'
 import { redirect } from 'next/navigation'
-import { ChartsShell } from '@/components/charts/ChartsShell'
+import ChartsTerminal from './ChartsTerminal'
 
 export const metadata = {
   title: 'Traderra Charts',
@@ -12,5 +12,11 @@ export default async function ChartsV2Page() {
     redirect('/sign-in?callbackUrl=/charts-v2')
   }
 
-  return <ChartsShell userId={session.user.id} userName={session.user.name || ''} userImage={session.user.image || ''} />
+  return (
+    <ChartsTerminal
+      userId={session.user.id}
+      userName={session.user.name || ''}
+      userImage={session.user.image || ''}
+    />
+  )
 }

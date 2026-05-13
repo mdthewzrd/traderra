@@ -1056,6 +1056,7 @@ body.light .lt-sep{background:#d0d0d0!important;}
       <span style="color:#6a80a0;font-size:11px;">LAST EXIT</span><span id="btsim-exit" style="font-weight:800;color:#dde3f0;font-size:12px;">—</span>
       <span style="color:#6a80a0;font-size:11px;">SIM PNL</span><span id="btsim-pnl" style="font-weight:800;font-size:13px;">—</span>
       <span style="color:#6a80a0;font-size:11px;">SIM R</span><span id="btsim-r" style="font-weight:800;font-size:12px;">—</span>
+      <span style="color:#6a80a0;font-size:11px;">SIM %</span><span id="btsim-pct" style="font-weight:800;font-size:12px;" title="PnL as % of account equity">—</span>
       <span style="color:#6a80a0;font-size:11px;">R MATH</span><span id="btsim-rmath" style="font-weight:600;color:#4a6080;font-size:11px;">—</span>
       <span style="color:#6a80a0;font-size:11px;">STATUS</span><span id="btsim-status" style="font-weight:800;font-size:11px;">—</span>
       <span style="color:#6a80a0;font-size:11px;">POS VALUE</span><span id="btsim-posval" style="font-weight:800;color:#dde3f0;font-size:12px;">—</span>
@@ -7709,6 +7710,7 @@ function updateSimPnl(){
     pnlEl.textContent='—'; pnlEl.style.color='#4a6080';
     rEl.textContent='—'; rEl.style.color='#4a6080';
     document.getElementById('btsim-rmath').textContent='—';
+    document.getElementById('btsim-pct').textContent='—'; document.getElementById('btsim-pct').style.color='#4a6080';
     document.getElementById('btsim-status').textContent='—';
     document.getElementById('btsim-status').style.color='#4a6080';
     document.getElementById('btsim-posval').textContent='—';
@@ -7941,10 +7943,23 @@ function updateSimPnl(){
     // R math breakdown
     rmathEl.textContent='$'+(closedPnl>=0?'+':'')+closedPnl.toFixed(0)+' / $'+RISK.toFixed(0)+' = '+(r>=0?'+':'')+r.toFixed(2)+'R';
     rmathEl.style.color=r>=0?'#26a69a80':'#ef535080';
+    // SIM % — PnL as percentage of account equity
+    const pctEl=document.getElementById('btsim-pct');
+    const eqForPct=getEquity();
+    if(pctEl){
+      if(eqForPct&&eqForPct>0){
+        const pct=(closedPnl/eqForPct)*100;
+        pctEl.textContent=(pct>=0?'+':'')+pct.toFixed(2)+'%';
+        pctEl.style.color=pct>=0?'#26a69a':'#ef5350';
+      } else {
+        pctEl.textContent='(set EQ$)'; pctEl.style.color='#4a6080';
+      }
+    }
   } else {
     pnlEl.textContent='(place exit)'; pnlEl.style.color='#4a6080';
     rEl.textContent='—'; rEl.style.color='#4a6080';
     rmathEl.textContent='—'; rmathEl.style.color='#4a6080';
+    const pctEl2=document.getElementById('btsim-pct'); if(pctEl2){pctEl2.textContent='—'; pctEl2.style.color='#4a6080';}
   }
   // Status
   if(isClosed){

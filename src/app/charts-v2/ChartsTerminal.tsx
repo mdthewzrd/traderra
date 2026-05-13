@@ -9,6 +9,7 @@ import { MainArea } from '@/components/charts/MainArea/MainArea'
 import { Sidebar } from '@/components/charts/Sidebar/Sidebar'
 import { Overlays } from '@/components/charts/Overlays/Overlays'
 import { useLegacyBridge } from '@/hooks/useLegacyBridge'
+import { shareTemplate, shareScan, importSharedItem, checkAutoImport } from '@/lib/charts/sharing'
 
 interface ChartsTerminalProps {
   userId: string
@@ -33,6 +34,14 @@ export default function ChartsTerminal({ userId, userName, userImage }: ChartsTe
 
     if (scriptsLoaded.current) return
     scriptsLoaded.current = true
+
+    // Expose sharing functions as globals (bridge for inline scripts)
+    ;(window as any).shareTemplate = shareTemplate
+    ;(window as any).shareScan = shareScan
+    ;(window as any).importSharedItem = importSharedItem
+
+    // Check for auto-import from URL
+    checkAutoImport()
 
     // Load the JS logic from the static file
     const loadScripts = async () => {

@@ -1,16 +1,37 @@
 'use client'
 
+import { useDrawingStore } from '@/stores/charts'
+
 /**
  * LeftToolbar — the vertical drawing tools toolbar on the left side.
  * Extracted from charts-terminal.html lines 739-851.
  * Tool categories with flyout menus: Trend, Fib/Gann, Shapes, Annotations, Trade, Measure.
+ * Phase 3: Drawing tool selection uses Zustand. Flyout toggles still use global functions.
  */
 
 export function LeftToolbar() {
+  const activeTool = useDrawingStore((s) => s.activeTool)
+  const setActiveTool = useDrawingStore((s) => s.setActiveTool)
+  const magnetSnap = useDrawingStore((s) => s.magnetSnap)
+  const setMagnetSnap = useDrawingStore((s) => s.setMagnetSnap)
+  const stayDraw = useDrawingStore((s) => s.stayDraw)
+  const setStayDraw = useDrawingStore((s) => s.setStayDraw)
+  const lockAll = useDrawingStore((s) => s.lockAll)
+  const setLockAll = useDrawingStore((s) => s.setLockAll)
+  const hideAll = useDrawingStore((s) => s.hideAll)
+  const setHideAll = useDrawingStore((s) => s.setHideAll)
+
+  const handleToolSelect = (tool: string | null) => {
+    setActiveTool(tool)
+    // Also call legacy function for canvas event handling
+    ;(window as any).setActiveTool?.(tool)
+    ;(window as any).ltCloseAll?.()
+  }
+
   return (
     <div id="left-toolbar">
       {/* Cursor */}
-      <button className="lt-btn active" data-tool="" onClick={() => { (window as any).setActiveTool?.(null); (window as any).ltCloseAll?.() }} title="Cursor">
+      <button className={`lt-btn ${activeTool === null ? 'active' : ''}`} data-tool="" onClick={() => handleToolSelect(null)} title="Cursor">
         <svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 1l10 7-5 1-2 5z" fill="currentColor" /></svg>
       </button>
       <div className="lt-sep" />
@@ -121,16 +142,16 @@ export function LeftToolbar() {
 
       {/* Bottom actions */}
       <div className="lt-bottom">
-        <button className="lt-btn" id="magnet-btn" title="Magnet Snap" onClick={(e) => { e.currentTarget.classList.toggle('active'); (window as any)._magnetSnap = e.currentTarget.classList.contains('active') }}>
+        <button className={`lt-btn ${magnetSnap ? 'active' : ''}`} id="magnet-btn" title="Magnet Snap" onClick={() => { setMagnetSnap(!magnetSnap); (window as any)._magnetSnap = !magnetSnap }}>
           <svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 7a4 4 0 018 0v4h-2V7a2 2 0 00-4 0v4H4z" fill="none" stroke="currentColor" strokeWidth="1.2" /><rect x="3" y="1" width="3" height="3" fill="#ff3d57" rx="0.5" /><rect x="10" y="1" width="3" height="3" fill="#3d85ff" rx="0.5" /></svg>
         </button>
-        <button className="lt-btn" id="stay-draw-btn" title="Stay in Drawing Mode" onClick={(e) => { e.currentTarget.classList.toggle('active-bottom'); (window as any)._stayDraw = e.currentTarget.classList.contains('active-bottom') }}>
+        <button className={`lt-btn ${stayDraw ? 'active-bottom' : ''}`} id="stay-draw-btn" title="Stay in Drawing Mode" onClick={() => { setStayDraw(!stayDraw); (window as any)._stayDraw = !stayDraw }}>
           <svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeWidth="1" /><circle cx="8" cy="8" r="3" fill="none" stroke="#D4AF37" strokeWidth="1" /></svg>
         </button>
-        <button className="lt-btn" id="lock-all-btn" title="Lock All Drawings" onClick={(e) => { e.currentTarget.classList.toggle('active-bottom'); (window as any)._lockAll = e.currentTarget.classList.contains('active-bottom') }}>
+        <button className={`lt-btn ${lockAll ? 'active-bottom' : ''}`} id="lock-all-btn" title="Lock All Drawings" onClick={() => { setLockAll(!lockAll); (window as any)._lockAll = !lockAll }}>
           <svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 7V5a4 4 0 018 0v2" fill="none" stroke="currentColor" strokeWidth="1.2" /><rect x="3" y="7" width="10" height="7" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.2" /></svg>
         </button>
-        <button className="lt-btn" id="hide-all-btn" title="Hide All Drawings" onClick={(e) => { e.currentTarget.classList.toggle('active-bottom'); (window as any)._hideAll = e.currentTarget.classList.contains('active-bottom'); (window as any).renderAll?.() }}>
+        <button className={`lt-btn ${hideAll ? 'active-bottom' : ''}`} id="hide-all-btn" title="Hide All Drawings" onClick={() => { setHideAll(!hideAll); (window as any)._hideAll = !hideAll; (window as any).renderAll?.() }}>
           <svg width="16" height="16" viewBox="0 0 16 16"><path d="M1 8s3-5 7-5 7 5 7 5-3 5-7 5-7-5-7-5z" fill="none" stroke="currentColor" strokeWidth="1.2" /><line x1="2" y1="2" x2="14" y2="14" stroke="currentColor" strokeWidth="1.5" /></svg>
         </button>
       </div>
@@ -139,12 +160,18 @@ export function LeftToolbar() {
 }
 
 function FlyoutItem({ tool, label, color, svg }: { tool: string; label: string; color?: string; svg: React.ReactNode }) {
+  const activeTool = useDrawingStore((s) => s.activeTool)
+  const setActiveTool = useDrawingStore((s) => s.setActiveTool)
+  const isActive = activeTool === tool
   return (
     <div
-      className="lt-fo-item"
+      className={`lt-fo-item${isActive ? ' active' : ''}`}
       data-tool={tool}
       style={color ? { color } : undefined}
-      onMouseDown={() => (window as any).ltPick?.(document.querySelector(`[data-tool="${tool}"].lt-fo-item`))}
+      onMouseDown={() => {
+        setActiveTool(tool)
+        ;(window as any).ltPick?.(document.querySelector(`[data-tool="${tool}"].lt-fo-item`))
+      }}
     >
       {svg}
       {label}

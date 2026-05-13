@@ -1,14 +1,20 @@
 'use client'
 
+import { useUIStore } from '@/stores/charts'
+
 /**
  * Sidebar — the right-side panel with watchlist, tabs, and settings.
  * Extracted from charts-terminal.html lines 1091-1280.
- * Tab content panels are mostly empty divs populated by JS at runtime.
+ * Phase 3: Tab switching uses Zustand. Watchlist actions still use global functions.
  */
 
 export function Sidebar() {
+  const sidebarOpen = useUIStore((s) => s.sidebarOpen)
+  const sidebarTab = useUIStore((s) => s.sidebarTab)
+  const setSidebarOpen = useUIStore((s) => s.setSidebarOpen)
+  const setSidebarTab = useUIStore((s) => s.setSidebarTab)
   return (
-    <div id="sidebar" className="open">
+    <div id="sidebar" className={sidebarOpen ? 'open' : ''}>
       {/* Watchlist */}
       <div id="wl-section">
         <div id="wl-head" onClick={() => (window as any).wlToggleCollapse?.()}>
@@ -34,15 +40,18 @@ export function Sidebar() {
 
       {/* Tab Bar */}
       <div id="sidebar-tabs">
-        <div className="sb-tab" data-tab="look" onClick={() => (window as any).sbTab?.('look')}>LOOK</div>
-        <div className="sb-tab" data-tab="tools" onClick={() => (window as any).sbTab?.('tools')}>TOOLS</div>
-        <div className="sb-tab" data-tab="settings" onClick={() => (window as any).sbTab?.('settings')}>SET</div>
-        <div className="sb-tab" data-tab="vault" onClick={() => (window as any).sbTab?.('vault')}>VAULT</div>
-        <div className="sb-tab" data-tab="scan" onClick={() => (window as any).sbTab?.('scan')}>SCAN</div>
-        <div className="sb-tab" data-tab="bt" onClick={() => (window as any).sbTab?.('bt')}>BT</div>
-        <div className="sb-tab" data-tab="lab" onClick={() => (window as any).sbTab?.('lab')}>LAB</div>
+        {['look', 'tools', 'settings', 'vault', 'scan', 'bt', 'lab'].map(tab => (
+          <div
+            key={tab}
+            className={`sb-tab${sidebarTab === tab ? ' active' : ''}`}
+            data-tab={tab}
+            onClick={() => { setSidebarTab(tab); (window as any).sbTab?.(tab) }}
+          >
+            {tab.toUpperCase()}
+          </div>
+        ))}
         <div style={{ flex: 1 }} />
-        <div className="sb-tab" onClick={() => (window as any).sbClose?.()} style={{ color: '#4a5580', paddingRight: 10 }}>✕</div>
+        <div className="sb-tab" onClick={() => setSidebarOpen(false)} style={{ color: '#4a5580', paddingRight: 10 }}>✕</div>
       </div>
 
       {/* Tab Content */}

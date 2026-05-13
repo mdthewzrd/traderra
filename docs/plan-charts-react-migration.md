@@ -1,158 +1,137 @@
 # Plan: Migrate charts-terminal.html → Next.js React App
 
-**Created:** 2026-05-13  
-**Scope:** Convert 13,916-line static HTML file into proper React/Next.js app  
-**Branch:** `feature/charts-react-migration` (from `feature/tool-instance-system`)
+**Created:** 2026-05-13 · **Updated:** 2026-05-13  
+**Branch:** `feature/tool-instance-system`  
+**Commits:** 8 (91a0335 → 8e37005)
 
 ---
 
-## Current State
+## Progress Tracker
 
-| Metric | Value |
-|--------|-------|
-| Total lines | 13,916 |
-| Functions | ~361 |
-| Global vars (`var/let/const` at top level) | ~50+ |
-| `document.getElementById` calls | ~670 |
-| External deps | 1 (`/indicators/vault.js`, 165 lines) |
-| Canvas panels | 4 (5min, 15min, 60min, Daily) |
-| CSS | ~1,475 lines inline `<style>` |
+| Phase | Status | What's Done |
+|-------|--------|-------------|
+| 0 — Scaffold | ✅ Done | `/charts-v2` route, server-side auth gate, `auth-server.ts` |
+| 1 — CSS | ✅ Done | 638 lines extracted to `src/styles/charts-terminal.css` |
+| 2 — HTML Shell | ✅ Done | 821 lines → 6 React components (TopBar, LeftToolbar, AnnotationToolbar, MainArea, Sidebar, Overlays) |
+| 3 — State | 🔄 In Progress | 5 Zustand stores, bridge hook, 3 TS modules (sharing, templates, toast) |
+| 4 — Canvas | ⬜ Not Started | ~4,000 lines of render logic |
+| 5 — Cutover | ⬜ Not Started | Kill static HTML, rename routes |
 
-**Entry:** `/charts` → redirects to `/charts-terminal.html` (static file in `public/`)
+### Phase 3 Detail — What's Extracted vs Remaining
 
-**Key state systems:**
-- `panels[]` — 4 chart panels, each with canvas, tools, indicators, bars
-- `annotations[]` — drawing layer (trendlines, fibs, rectangles, etc.)
-- `CloudStore` — server sync for templates, layouts, settings
-- `ScanManager` — scan creation, running, results
-- `StrategyLab` — strategy project management
-- `BT_*` — backtest state
-- `IND_REGISTRY` / `IND_CATALOG` — indicator definitions
-- `PRESETS` / `TOOLS_KEY` — preset/tool persistence
+**Zustand Stores (defined & wired):**
+- `useUIStore` — theme, fullscreen, live mode, sidebar, layout, toggles ✅
+- `useDrawingStore` — active tool, annotations, drawing defaults ✅
+- `useChartStore` — panels, symbol, bars, crosshair ✅ (not yet wired)
+- `useBacktestStore` — trades, markers ✅ (not yet wired)
+- `useAuthStore` — user identity, token ✅ (not yet wired)
+
+**TypeScript Modules:**
+- `src/lib/charts/sharing.ts` — shareTemplate, shareScan, importSharedItem ✅
+- `src/lib/charts/templates.ts` — localStorage template CRUD ✅
+- `src/lib/charts/toast.ts` — toast notification utility ✅
+
+**Components wired to Zustand:**
+- TopBar: theme, live, priceLine, adj, clean, layout 1/2/4, sidebar tabs ✅
+- LeftToolbar: activeTool, flyout active state, bottom buttons ✅
+- Sidebar: tab switching, open/close, active tab highlight ✅
+- AnnotationToolbar: still uses `(window as any)` ⬜
+- MainArea: still uses static HTML ⬜
+
+**Remaining `(window as any)` calls:**
+- Annotation toolbar canvas interactions (annToggleDropdown, annSetWeight, etc.)
+- Template save/load from dropdown
+- Watchlist CRUD (wlAdd, wlToggleCollapse, etc.)
+- Scan management (ScanManager)
+- Render triggers (renderAll)
+- Indicator settings popup
+- Drawing tool canvas event handling
+
+**Legacy bridge (`useLegacyBridge`):**
+- Syncs theme → body.light class ✅
+- Syncs sidebar → #sidebar.open class ✅
+- Syncs all UI toggles to legacy globals ✅
+- Syncs layout → grid CSS ✅
+- Syncs activeTool → button states ✅
 
 ---
 
-## Migration Strategy: Incremental Slice-Out
+## File Map
 
-**NOT a big-bang rewrite.** Extract sections one at a time, each deployable independently.
-
-### Phase 0: Scaffold
-- Create `/src/app/charts-v2/` route (parallel to existing, no disruption)
-- Set up shared state context (React context or Zustand store)
-- Add middleware auth gate (currently unprotected — anyone can load the HTML)
-- **Verify:** `/charts-v2` renders identical to `/charts`
-
-### Phase 1: Extract CSS → Stylesheet
-- Move 1,475 lines of `<style>` to `/styles/charts.module.css` or CSS modules
-- Replace inline styles in DOM construction with className references
-- **Verify:** Visual regression check
-
-### Phase 2: Extract HTML Shell → React Components
-Break the 900-line `<body>` HTML into components:
+### New Files (React/TS)
 ```
-ChartsLayout
-├── TopBar
-│   ├── TickerInfo
-│   ├── ToolbarButtons (TOOLS, VAULT, SET, indicators, TPL dropdown)
-│   └── ThemeToggle / Reload
-├── Sidebar
-│   ├── SidebarTabs (vault, scan, settings, tools, bt, lab)
-│   ├── VaultPanel
-│   ├── ScanPanel
-│   ├── SettingsPanel
-│   ├── ToolsPanel
-│   ├── BacktestPanel
-│   └── LabPanel
-├── ChartArea
-│   ├── ChartPanel[] (4 panels with canvas)
-│   └── PanelDivider
-├── AnnotationToolbar (floating)
-└── Modals
-    ├── ModalGeneric
-    ├── ScanAddModal
-    └── ToolSettingsPopup
+src/app/charts-v2/
+  page.tsx              — Server component, auth gate
+  ChartsTerminal.tsx    — Client shell, loads scripts, exposes globals
+
+src/components/charts/
+  TopBar/TopBar.tsx     — Main toolbar (170 lines)
+  LeftToolbar/LeftToolbar.tsx — Drawing tools sidebar (260 lines)
+  AnnotationToolbar/AnnotationToolbar.tsx — Floating annotation editor (180 lines)
+  MainArea/MainArea.tsx — Grid + backtest sidebar (70 lines)
+  Sidebar/Sidebar.tsx  — Watchlist + 7 tab panels (250 lines)
+  Overlays/Overlays.tsx — Modals, toasts, popups (100 lines)
+
+src/stores/charts/
+  index.ts             — Re-exports
+  uiStore.ts           — UI state (theme, sidebar, toggles)
+  drawingStore.ts      — Drawing tools, annotations
+  chartStore.ts        — Panels, symbol, bars
+  backtestStore.ts     — Trade history
+  authStore.ts         — User identity
+
+src/hooks/
+  useLegacyBridge.ts   — Zustand → legacy DOM sync
+
+src/lib/charts/
+  sharing.ts           — Community sharing API client
+  templates.ts         — Template CRUD (localStorage)
+  toast.ts             — Toast notification utility
+
+src/lib/
+  auth-server.ts       — Server-side session helper
 ```
 
-### Phase 3: Extract JS Modules → Hooks & Stores
-Migrate global state to Zustand (lightweight, no boilerplate):
+### Original File (unchanged)
+```
+public/charts-terminal.html  — 13,916 lines, still the source of truth for JS logic
+```
 
-| Current Global | → Zustand Store |
-|---------------|-----------------|
-| `panels[]`, `symbol`, `annotations[]` | `useChartStore` |
-| `CloudStore` object | `useCloudStore` (server sync) |
-| `ScanManager` | `useScanStore` |
-| `StrategyLab` | `useStrategyStore` |
-| `BT_*` vars | `useBacktestStore` |
-| `IND_REGISTRY`, `PRESETS` | Static imports (already const) |
-| `drawDefaults`, `toolStep`, `toolAnchor` | `useDrawingStore` |
-| `fullscreenPanel`, `liveMode`, `showPriceLine` | `useUIStore` |
+---
 
-**Hooks to extract:**
-| Hook | Purpose |
-|------|---------|
-| `usePolygonData(symbol, tf)` | Bar fetching + caching (replaces BAR_CACHE) |
-| `useCanvas(panelIdx)` | Canvas rendering loop |
-| `useAnnotations(panelIdx)` | Drawing tools |
-| `useCrosshair(panels)` | Synchronized crosshair |
-| `useBacktest(trades)` | Backtest overlay |
-| `useKeyboardShortcuts()` | Global hotkeys |
+## Architecture Diagram
+
+```
+/charts-v2 (Next.js page)
+  └── ChartsTerminal (client component)
+        ├── useLegacyBridge() ← Zustand → DOM sync
+        ├── TopBar ← useUIStore
+        ├── LeftToolbar ← useDrawingStore
+        ├── AnnotationToolbar ← (window as any) [TODO]
+        ├── MainArea ← static HTML [TODO]
+        ├── Sidebar ← useUIStore
+        ├── Overlays ← static HTML [TODO]
+        └── <script> loads charts-terminal.html JS
+              └── reads DOM classes set by useLegacyBridge
+```
+
+---
+
+## Original Plan (for reference)
 
 ### Phase 4: Canvas Engine (hardest part)
 - The 4 canvas panels are the core (~4,000 lines of render logic)
-- Options:
-  - **A) Keep raw canvas in React refs** — wrap existing render functions, call from `useEffect`. Minimal risk, incremental.
-  - **B) Migrate to lightweight charting lib** (lightweight-charts, visx) — cleaner but huge effort
-- **Recommend: Option A** — keep canvas logic, just organize it into modules called from React
+- **Recommend: Option A** — keep raw canvas in React refs, organize into modules
 
 ### Phase 5: Kill Static HTML
 - Remove `public/charts-terminal.html`
 - Remove `/charts/page.tsx` redirect
 - Make `/charts-v2` → `/charts`
-- Remove `traderra-charts` staging project (no longer needed)
 
----
+### Estimated Remaining Effort
 
-## Dependency Order (what to do first)
-
-```
-Phase 0 (scaffold)  ← start here
-  ↓
-Phase 1 (CSS) + Phase 2 (HTML shell)  ← can parallel
-  ↓
-Phase 3 (state extraction)  ← depends on component structure
-  ↓
-Phase 4 (canvas)  ← depends on state stores
-  ↓
-Phase 5 (cutover)  ← everything must be migrated
-```
-
-## Estimated Effort
-
-| Phase | Scope | Time |
-|-------|-------|------|
-| 0 — Scaffold | Routing, auth, shell | 1 session |
-| 1 — CSS | 1,475 lines → modules | 1 session |
-| 2 — HTML shell | ~900 lines → 15 components | 2 sessions |
-| 3 — State | ~50 globals → 6 stores + hooks | 2-3 sessions |
-| 4 — Canvas | ~4,000 lines into modules | 2-3 sessions |
-| 5 — Cutover | Switch over, cleanup | 1 session |
-| **Total** | | **~10 sessions** |
-
-## Risks
-
-| Risk | Mitigation |
-|------|------------|
-| Canvas rendering breaks during refactor | Phase 0 keeps existing code working; diff screenshots |
-| Global state interdependencies | Zustand stores can reference each other; extract in dependency order |
-| 670 getElementById calls | Replace gradually during component extraction |
-| `vault.js` external script | Inline into React component in Phase 2 |
-| Feature drift during migration | Freeze features on old HTML; new features go into React only |
-
-## Tech Choices
-
-| Choice | Decision | Why |
-|--------|----------|-----|
-| State management | **Zustand** | No boilerplate, works outside React, easy migration from globals |
-| Canvas approach | **Keep raw canvas in refs** | Lowest risk, proven working code |
-| CSS | **CSS Modules** | Scoped, no runtime cost, Next.js native |
-| Auth gate | **Next.js middleware** | Server-side, no client redirect hack |
+| Phase | Scope | Sessions Left |
+|-------|-------|---------------|
+| 3 — State (continued) | Wire remaining stores, extract more JS | 1-2 |
+| 4 — Canvas | ~4,000 lines into modules | 2-3 |
+| 5 — Cutover | Switch over, cleanup | 1 |

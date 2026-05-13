@@ -10,6 +10,7 @@ import { Sidebar } from '@/components/charts/Sidebar/Sidebar'
 import { Overlays } from '@/components/charts/Overlays/Overlays'
 import { useLegacyBridge } from '@/hooks/useLegacyBridge'
 import { shareTemplate, shareScan, importSharedItem, checkAutoImport } from '@/lib/charts/sharing'
+import { useWatchlistStore } from '@/stores/charts'
 
 interface ChartsTerminalProps {
   userId: string
@@ -39,6 +40,20 @@ export default function ChartsTerminal({ userId, userName, userImage }: ChartsTe
     ;(window as any).shareTemplate = shareTemplate
     ;(window as any).shareScan = shareScan
     ;(window as any).importSharedItem = importSharedItem
+
+    // Expose watchlist store as legacy globals
+    const wl = useWatchlistStore.getState
+    ;(window as any).wlGet = () => useWatchlistStore.getState().getSymbols()
+    ;(window as any).wlAdd = () => {
+      const inp = document.getElementById('wl-add-input') as HTMLInputElement
+      if (inp?.value.trim()) { useWatchlistStore.getState().addSymbol(inp.value); inp.value = '' }
+    }
+    ;(window as any).wlRemove = (sym: string) => useWatchlistStore.getState().removeSymbol(sym)
+    ;(window as any).wlSwitchList = (idx: string) => useWatchlistStore.getState().switchList(parseInt(idx))
+    ;(window as any).wlGetData = () => ({ lists: useWatchlistStore.getState().lists, active: useWatchlistStore.getState().activeIdx })
+
+    // Load watchlist from localStorage
+    useWatchlistStore.getState().load()
 
     // Check for auto-import from URL
     checkAutoImport()

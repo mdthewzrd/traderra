@@ -764,13 +764,8 @@ body.light .lt-sep{background:#d0d0d0!important;}
   <div class="lt-flyout" id="fo-fib">
     <div class="lt-fo-label">Fibonacci</div>
     <div class="lt-fo-item" data-tool="fib_ret" onmousedown="ltPick(this)" style="color:#a78bfa"><svg width="16" height="16" viewBox="0 0 16 16"><line x1="2" y1="2" x2="14" y2="14" stroke="currentColor" stroke-width="1"/><line x1="2" y1="2" x2="8" y2="2" stroke="currentColor" stroke-width="1" stroke-dasharray="1,1"/><line x1="5" y1="5" x2="14" y2="5" stroke="currentColor" stroke-width="1" stroke-dasharray="1,1"/></svg> Fib Retracement</div>
-    <div class="lt-fo-item" data-tool="fib_ext" onmousedown="ltPick(this)" style="color:#a78bfa"><svg width="16" height="16" viewBox="0 0 16 16"><line x1="2" y1="8" x2="14" y2="14" stroke="currentColor" stroke-width="1"/><line x1="14" y1="14" x2="14" y2="2" stroke="currentColor" stroke-width="1" stroke-dasharray="1,1"/></svg> Fib Extension</div>
-    <div class="lt-fo-item" data-tool="fib_fan" onmousedown="ltPick(this)" style="color:#a78bfa"><svg width="16" height="16" viewBox="0 0 16 16"><line x1="2" y1="14" x2="14" y2="2" stroke="currentColor" stroke-width="1"/><line x1="2" y1="14" x2="14" y2="6" stroke="currentColor" stroke-width="1" stroke-dasharray="1,1"/><line x1="2" y1="14" x2="14" y2="10" stroke="currentColor" stroke-width="1" stroke-dasharray="1,1"/></svg> Fib Speed Fan</div>
-    <div class="lt-fo-item" data-tool="fib_time" onmousedown="ltPick(this)" style="color:#a78bfa"><svg width="16" height="16" viewBox="0 0 16 16"><line x1="3" y1="2" x2="3" y2="14" stroke="currentColor" stroke-width="1" stroke-dasharray="2,1"/><line x1="8" y1="2" x2="8" y2="14" stroke="currentColor" stroke-width="1" stroke-dasharray="2,1"/><line x1="13" y1="2" x2="13" y2="14" stroke="currentColor" stroke-width="1" stroke-dasharray="2,1"/></svg> Fib Time Zone</div>
-    <div class="lt-fo-item" data-tool="fib_wedge" onmousedown="ltPick(this)" style="color:#a78bfa"><svg width="16" height="16" viewBox="0 0 16 16"><line x1="8" y1="14" x2="14" y2="2" stroke="currentColor" stroke-width="1"/><line x1="8" y1="14" x2="2" y2="2" stroke="currentColor" stroke-width="1"/><line x1="8" y1="14" x2="14" y2="6" stroke="currentColor" stroke-width="1" stroke-dasharray="1,1"/></svg> Fib Wedge</div>
     <div class="lt-fo-sep"></div>
     <div class="lt-fo-label">Gann</div>
-    <div class="lt-fo-item" data-tool="gann_fan" onmousedown="ltPick(this)" style="color:#f59e0b"><svg width="16" height="16" viewBox="0 0 16 16"><line x1="2" y1="14" x2="14" y2="2" stroke="currentColor" stroke-width="1"/><line x1="2" y1="14" x2="14" y2="14" stroke="currentColor" stroke-width="1" stroke-dasharray="1,1"/><line x1="2" y1="14" x2="2" y2="2" stroke="currentColor" stroke-width="1" stroke-dasharray="1,1"/><line x1="2" y1="14" x2="14" y2="8" stroke="currentColor" stroke-width="1" stroke-dasharray="1,1"/></svg> Gann Fan</div>
     <div class="lt-fo-item" data-tool="gann_box" onmousedown="ltPick(this)" style="color:#f59e0b"><svg width="16" height="16" viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1"/><line x1="2" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width=".5" stroke-dasharray="1,1"/><line x1="8" y1="2" x2="8" y2="14" stroke="currentColor" stroke-width=".5" stroke-dasharray="1,1"/></svg> Gann Box</div>
   </div>
 
@@ -828,38 +823,6 @@ body.light .lt-sep{background:#d0d0d0!important;}
     <div class="lt-fo-item" data-tool="forecast" onmousedown="ltPick(this)" style="color:#7b61ff"><svg width="16" height="16" viewBox="0 0 16 16"><polyline points="2,12 6,8 10,10 14,3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3,2"/></svg> Forecast</div>
   </div>
 
-  <!-- Patterns -->
-  <button class="lt-cat" data-cat="pattern" onmousedown="ltToggle('pattern')" title="Patterns">
-    <svg width="16" height="16" viewBox="0 0 16 16"><polygon points="8,2 14,8 8,14 2,8" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
-    <span class="cat-arrow">▸</span>
-  </button>
-  <div class="lt-flyout" id="fo-pattern">
-    <div class="lt-fo-label">Harmonic</div>
-    <div class="lt-fo-item" data-tool="abcd" onmousedown="ltPick(this)" style="color:#7b61ff"><svg width="16" height="16" viewBox="0 0 16 16"><polyline points="2,10 5,4 10,12 14,3" fill="none" stroke="currentColor" stroke-width="1.2"/></svg> ABCD Pattern</div>
-    <div class="lt-fo-item" data-tool="xabcd" onmousedown="ltPick(this)" style="color:#7b61ff"><svg width="16" height="16" viewBox="0 0 16 16"><polyline points="2,8 5,3 8,12 11,2 14,9" fill="none" stroke="currentColor" stroke-width="1.2"/></svg> XABCD Pattern</div>
-    <div class="lt-fo-item" data-tool="cypher" onmousedown="ltPick(this)" style="color:#7b61ff"><svg width="16" height="16" viewBox="0 0 16 16"><polyline points="2,10 5,3 9,11 13,5" fill="none" stroke="currentColor" stroke-width="1.2"/></svg> Cypher</div>
-    <div class="lt-fo-sep"></div>
-    <div class="lt-fo-label">Classic</div>
-    <div class="lt-fo-item" data-tool="hs_pattern" onmousedown="ltPick(this)" style="color:#22d3ee"><svg width="16" height="16" viewBox="0 0 16 16"><polyline points="1,10 4,6 7,9 10,4 13,9 15,7" fill="none" stroke="currentColor" stroke-width="1.2"/></svg> Head & Shoulders</div>
-    <div class="lt-fo-item" data-tool="triangle_pat" onmousedown="ltPick(this)" style="color:#22d3ee"><svg width="16" height="16" viewBox="0 0 16 16"><line x1="2" y1="12" x2="14" y2="12" stroke="currentColor" stroke-width="1"/><line x1="2" y1="12" x2="14" y2="4" stroke="currentColor" stroke-width="1"/></svg> Triangle</div>
-    <div class="lt-fo-sep"></div>
-    <div class="lt-fo-label">Elliott Waves</div>
-    <div class="lt-fo-item" data-tool="ew_impulse" onmousedown="ltPick(this)" style="color:#f59e0b"><svg width="16" height="16" viewBox="0 0 16 16"><polyline points="1,12 3,6 5,9 8,3 10,7 13,1" fill="none" stroke="currentColor" stroke-width="1.2"/></svg> Impulse (12345)</div>
-    <div class="lt-fo-item" data-tool="ew_correct" onmousedown="ltPick(this)" style="color:#f59e0b"><svg width="16" height="16" viewBox="0 0 16 16"><polyline points="1,4 5,10 8,6 12,12" fill="none" stroke="currentColor" stroke-width="1.2"/></svg> Correction (ABC)</div>
-  </div>
-
-  <!-- Pitchforks -->
-  <button class="lt-cat" data-cat="fork" onmousedown="ltToggle('fork')" title="Pitchforks">
-    <svg width="16" height="16" viewBox="0 0 16 16"><line x1="8" y1="2" x2="8" y2="14" stroke="currentColor" stroke-width="1.2"/><line x1="8" y1="8" x2="2" y2="14" stroke="currentColor" stroke-width="1"/><line x1="8" y1="8" x2="14" y2="14" stroke="currentColor" stroke-width="1"/></svg>
-    <span class="cat-arrow">▸</span>
-  </button>
-  <div class="lt-flyout" id="fo-fork">
-    <div class="lt-fo-label">Pitchforks</div>
-    <div class="lt-fo-item" data-tool="pitchfork" onmousedown="ltPick(this)" style="color:#26a69a"><svg width="16" height="16" viewBox="0 0 16 16"><line x1="8" y1="2" x2="8" y2="14" stroke="currentColor" stroke-width="1.2"/><line x1="8" y1="8" x2="2" y2="14" stroke="currentColor" stroke-width="1"/><line x1="8" y1="8" x2="14" y2="14" stroke="currentColor" stroke-width="1"/></svg> Andrews Pitchfork</div>
-    <div class="lt-fo-item" data-tool="schiff" onmousedown="ltPick(this)" style="color:#26a69a"><svg width="16" height="16" viewBox="0 0 16 16"><line x1="8" y1="4" x2="8" y2="14" stroke="currentColor" stroke-width="1.2"/><line x1="8" y1="9" x2="3" y2="14" stroke="currentColor" stroke-width="1"/><line x1="8" y1="9" x2="13" y2="14" stroke="currentColor" stroke-width="1"/></svg> Schiff Pitchfork</div>
-    <div class="lt-fo-item" data-tool="mod_schiff" onmousedown="ltPick(this)" style="color:#26a69a"><svg width="16" height="16" viewBox="0 0 16 16"><line x1="8" y1="5" x2="8" y2="14" stroke="currentColor" stroke-width="1.2"/><line x1="8" y1="10" x2="3" y2="14" stroke="currentColor" stroke-width="1"/><line x1="8" y1="10" x2="13" y2="14" stroke="currentColor" stroke-width="1"/></svg> Modified Schiff</div>
-  </div>
-
   <!-- Measure -->
   <button class="lt-cat" data-cat="measure" onmousedown="ltToggle('measure')" title="Measure & Zoom">
     <svg width="16" height="16" viewBox="0 0 16 16"><line x1="2" y1="2" x2="14" y2="14" stroke="currentColor" stroke-width="1" stroke-dasharray="2,1"/><circle cx="2" cy="2" r="1.5" fill="currentColor"/><circle cx="14" cy="14" r="1.5" fill="currentColor"/></svg>
@@ -877,7 +840,7 @@ body.light .lt-sep{background:#d0d0d0!important;}
 
   <!-- Bottom actions -->
   <div class="lt-bottom">
-    <button class="lt-btn" id="magnet-btn" title="Magnet Snap" onclick="this.classList.toggle('active')"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 7a4 4 0 018 0v4h-2V7a2 2 0 00-4 0v4H4z" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="3" y="1" width="3" height="3" fill="#ff3d57" rx="0.5"/><rect x="10" y="1" width="3" height="3" fill="#3d85ff" rx="0.5"/></svg></button>
+    <button class="lt-btn" id="magnet-btn" title="Magnet Snap" onclick="this.classList.toggle('active');_magnetSnap=this.classList.contains('active')"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 7a4 4 0 018 0v4h-2V7a2 2 0 00-4 0v4H4z" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="3" y="1" width="3" height="3" fill="#ff3d57" rx="0.5"/><rect x="10" y="1" width="3" height="3" fill="#3d85ff" rx="0.5"/></svg></button>
     <button class="lt-btn" id="stay-draw-btn" title="Stay in Drawing Mode" onclick="this.classList.toggle('active-bottom');_stayDraw=this.classList.contains('active-bottom')"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1"/><circle cx="8" cy="8" r="3" fill="none" stroke="#D4AF37" stroke-width="1"/></svg></button>
     <button class="lt-btn" id="lock-all-btn" title="Lock All Drawings" onclick="this.classList.toggle('active-bottom');_lockAll=this.classList.contains('active-bottom')"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 7V5a4 4 0 018 0v2" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="3" y="7" width="10" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/></svg></button>
     <button class="lt-btn" id="hide-all-btn" title="Hide All Drawings" onclick="this.classList.toggle('active-bottom');_hideAll=this.classList.contains('active-bottom');renderAll()"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M1 8s3-5 7-5 7 5 7 5-3 5-7 5-7-5-7-5z" fill="none" stroke="currentColor" stroke-width="1.2"/><line x1="2" y1="2" x2="14" y2="14" stroke="currentColor" stroke-width="1.5"/></svg></button>
@@ -2404,14 +2367,51 @@ function setSymbol(s){symbol=s;try{localStorage.setItem('traderra-symbol',s);}ca
 let selectedAnn=null, draggingAnn=null, dragOffset={dx:0,dy:0};
 // Drawing defaults — persist across annotations, saved to localStorage
 var drawDefaults=(function(){try{var d=JSON.parse(localStorage.getItem('traderra-draw-defaults'));if(d)return d;}catch(e){}return{color:'#dde3f0',lineWidth:2,dashed:false,opacity:1};})();
+const FIB_DEFAULT_LEVELS=[
+  {value:0,enabled:true},{value:23.6,enabled:true},{value:38.2,enabled:true},
+  {value:50,enabled:true},{value:61.8,enabled:true},{value:78.6,enabled:true},{value:100,enabled:true},
+];
+const GANN_BOX_RATIOS=[1/8,1/4,3/8,1/2,5/8,3/4,7/8];
+function cloneFibLevels(levels){
+  const src=Array.isArray(levels)&&levels.length?levels:FIB_DEFAULT_LEVELS;
+  return src.map(function(l){
+    var value=l&&l.value!=null?parseFloat(l.value):parseFloat(l&&l.pct!=null?l.pct*100:0);
+    return {value:isFinite(value)?value:0,enabled:l&&l.enabled!==false};
+  });
+}
+function ensureFibSettings(ann){
+  if(!ann.fibLevels) ann.fibLevels=cloneFibLevels();
+  if(!ann.levelColor) ann.levelColor=ann.color||'#a78bfa';
+  if(ann.lineStyle==null) ann.lineStyle=ann.dashed||false;
+}
+function ensurePositionSettings(ann){
+  if(ann.type==='long_pos'){
+    if(!ann.entryColor) ann.entryColor='#26a69a';
+    if(!ann.tpColor) ann.tpColor='#4ade80';
+    if(!ann.stopColor) ann.stopColor='#ef5350';
+    if(!ann.fillColor) ann.fillColor='rgba(38,166,154,0.12)';
+  } else if(ann.type==='short_pos'){
+    if(!ann.entryColor) ann.entryColor='#ef5350';
+    if(!ann.tpColor) ann.tpColor='#f97316';
+    if(!ann.stopColor) ann.stopColor='#26a69a';
+    if(!ann.fillColor) ann.fillColor='rgba(239,83,80,0.12)';
+  }
+}
 function saveDrawDefaults(){try{localStorage.setItem('traderra-draw-defaults',JSON.stringify(drawDefaults));}catch(e){} if(typeof CloudStore!=='undefined') CloudStore.save('settings');}
 function applyDrawDefaults(ann){
-  ann.color=drawDefaults.color||'#dde3f0';
-  if(drawDefaults.lineWidth)ann.lineWidth=drawDefaults.lineWidth;
-  ann.dashed=drawDefaults.dashed||false;
-  if(drawDefaults.opacity!=null&&drawDefaults.opacity!==1)ann.opacity=drawDefaults.opacity;
+  ann.color=ann.color||drawDefaults.color||'#dde3f0';
+  if(drawDefaults.lineWidth&&ann.lineWidth==null)ann.lineWidth=drawDefaults.lineWidth;
+  if(ann.dashed==null)ann.dashed=drawDefaults.dashed||false;
+  if(drawDefaults.opacity!=null&&drawDefaults.opacity!==1&&ann.opacity==null)ann.opacity=drawDefaults.opacity;
+  if(ann.type==='fib_ret') ensureFibSettings(ann);
+  if(ann.type==='long_pos'||ann.type==='short_pos') ensurePositionSettings(ann);
+  if(ann.type==='brush'&&ann.lineWidth==null) ann.lineWidth=3;
+  if(ann.type.startsWith('hl_')&&Array.isArray(ann.points)){
+    if(ann.opacity==null) ann.opacity=Math.min(drawDefaults.opacity!=null?drawDefaults.opacity:0.22,0.35);
+    if(ann.lineWidth==null) ann.lineWidth=18;
+  }
 }
-let fullscreenPanel=null, pendingText=null, pendingExec=null;
+let fullscreenPanel=null, pendingText=null, pendingExec=null, freehandState=null;
 let annotations=[], nextId=1;
 // Load persisted annotations for current symbol
 function annStorageKey(){return 'traderra-annotations-'+symbol;}
@@ -3811,12 +3811,14 @@ function renderPanel(p){
 
   if(p.showTL||p.showAnn){
     for(const ann of annotations){
-      const isTL=ann.type==='trendline'||ann.type==='ray', isBox=ann.type.startsWith('box_'), isTxt=ann.type.startsWith('text_'), isHl=ann.type.startsWith('hl_');
+      const isTL=ann.type==='trendline'||ann.type==='ray'||ann.type==='hray'||ann.type==='parallel'||ann.type==='disjoint'||ann.type==='xline', isBox=ann.type.startsWith('box_')||ann.type==='circle'||ann.type==='ellipse'||ann.type==='triangle'||ann.type==='gann_box';
+      const isTxt=ann.type.startsWith('text_'), isHl=ann.type.startsWith('hl_')||ann.type==='brush'||ann.type==='path';
       const isCallout=ann.type==='callout', isNote=ann.type==='note', isPriceLbl=ann.type==='price_label', isFlag=ann.type==='flag';
       const isExecAnn=ann.type==='entry_arrow'||ann.type==='exit_arrow'||ann.type==='short_arrow'||ann.type==='cover_arrow'||ann.type==='stop_line'||ann.type==='trail_stop';
       const isFib=ann.type==='fib_ret';
       const isHLine=ann.type==='hline', isVLine=ann.type==='vline';
       const isPos=ann.type==='long_pos'||ann.type==='short_pos';
+      if(_hideAll) continue;
       if(isTL&&!p.showTL) continue;
       if((isBox||isTxt||isHl||isCallout||isNote||isPriceLbl||isFlag)&&!p.showAnn) continue;
       if(isExecAnn&&!p.showExec) continue;
@@ -3826,6 +3828,22 @@ function renderPanel(p){
       // Apply annotation opacity
       const annAlpha=ann.opacity!=null?ann.opacity:1;
       if(annAlpha<1) ctx.globalAlpha=annAlpha;
+      if(renderAdvancedAnnotation(ctx,ann,p,chartW,priceH,cw,ch,annTimeToX,pToY)){
+        ctx.globalAlpha=1;
+        if((activeTool==='del'||activeTool==='edit')&&cx>=0&&cy>=0&&isAnnNear(ann,cx,cy,p,annTimeToX,pToY)){
+          const hlCol=activeTool==='edit'?'rgba(251,191,36,0.7)':'rgba(255,61,87,0.7)';
+          ctx.strokeStyle=hlCol; ctx.lineWidth=2; ctx.setLineDash([4,3]);
+          if(isPointArrayAnn(ann)){
+            const pts=getScreenPointsFromAnn(ann,annTimeToX,pToY), bounds=getPointBounds(pts);
+            if(bounds) ctx.strokeRect(bounds.minX-4,bounds.minY-4,bounds.maxX-bounds.minX+8,bounds.maxY-bounds.minY+8);
+          } else {
+            const x1=annTimeToX(ann.x1), y1=pToY(ann.y1), x2=ann.x2!=null?annTimeToX(ann.x2):x1, y2=ann.y2!=null?pToY(ann.y2):y1;
+            if(x1!=null) ctx.strokeRect(Math.min(x1,x2)-4,Math.min(y1,y2)-4,Math.abs((x2??x1)-x1)+8,Math.abs((y2??y1)-y1)+8);
+          }
+          ctx.setLineDash([]);
+        }
+        continue;
+      }
       if(isFib){
         const fibHigh=Math.max(ann.y1,ann.y2);
         const fibLow =Math.min(ann.y1,ann.y2);
@@ -4182,18 +4200,27 @@ function renderPanel(p){
     const SEL_COL='rgba(251,191,36,0.8)'; // gold
     const SEL_DASH=[5,3];
     ctx.save(); ctx.strokeStyle=SEL_COL; ctx.lineWidth=1.5; ctx.setLineDash(SEL_DASH);
-    if(ann.type==='trendline'||ann.type==='ray'){
+    if(ann.type==='trendline'||ann.type==='ray'||ann.type==='hray'||ann.type==='fib_ret'){
       const sx2=annTimeToX(ann.x2);if(sx2!=null){
         const sy2=pToY(ann.y2);
-        ctx.beginPath();ctx.moveTo(sx1,sy1);ctx.lineTo(sx2,sy2);ctx.stroke();
-        // Handles
+        if(ann.type==='hray'){ctx.beginPath();ctx.moveTo(sx1,sy1);ctx.lineTo(cw,sy1);ctx.stroke();}
+        else if(ann.type==='ray'){const end=getRayRightPoint(sx1,sy1,sx2,sy2,cw);ctx.beginPath();ctx.moveTo(sx1,sy1);ctx.lineTo(end.x,end.y);ctx.stroke();}
+        else {ctx.beginPath();ctx.moveTo(sx1,sy1);ctx.lineTo(sx2,sy2);ctx.stroke();}
         drawHandle(ctx,sx1,sy1,SEL_COL);drawHandle(ctx,sx2,sy2,SEL_COL);
+      }
+    } else if(ann.type==='parallel'||ann.type==='disjoint'){
+      const sx2=annTimeToX(ann.x2), sx3=annTimeToX(ann.x3); if(sx2!=null&&sx3!=null){
+        const sy2=pToY(ann.y2), sy3=pToY(ann.y3), dx=sx2-sx1, dy=sy2-sy1;
+        ctx.beginPath();ctx.moveTo(sx1,sy1);ctx.lineTo(sx2,sy2);ctx.moveTo(sx3,sy3);ctx.lineTo(sx3+dx,sy3+dy);ctx.stroke();
+        drawHandle(ctx,sx1,sy1,SEL_COL);drawHandle(ctx,sx2,sy2,SEL_COL);drawHandle(ctx,sx3,sy3,SEL_COL);
       }
     } else if(ann.type==='hline'){
       ctx.beginPath();ctx.moveTo(0,sy1);ctx.lineTo(cw,sy1);ctx.stroke();drawHandle(ctx,sx1,sy1,SEL_COL);
     } else if(ann.type==='vline'){
       ctx.beginPath();ctx.moveTo(sx1,0);ctx.lineTo(sx1,ch);ctx.stroke();drawHandle(ctx,sx1,sy1,SEL_COL);
-    } else if(ann.type.startsWith('box_')||ann.type.startsWith('hl_')){
+    } else if(ann.type==='xline'){
+      ctx.beginPath();ctx.moveTo(0,sy1);ctx.lineTo(cw,sy1);ctx.moveTo(sx1,0);ctx.lineTo(sx1,ch);ctx.stroke();drawHandle(ctx,sx1,sy1,SEL_COL);
+    } else if(ann.type.startsWith('box_')||ann.type==='circle'||ann.type==='ellipse'||ann.type==='triangle'||ann.type==='gann_box'||(ann.type.startsWith('hl_')&&!isPointArrayAnn(ann))){
       const sx2=annTimeToX(ann.x2);if(sx2!=null){
         const sy2=pToY(ann.y2);
         const bx=Math.min(sx1,sx2),by=Math.min(sy1,sy2),bw=Math.abs(sx2-sx1),bh=Math.abs(sy2-sy1);
@@ -4201,6 +4228,9 @@ function renderPanel(p){
         drawHandle(ctx,bx,by,SEL_COL);drawHandle(ctx,bx+bw,by,SEL_COL);
         drawHandle(ctx,bx,by+bh,SEL_COL);drawHandle(ctx,bx+bw,by+bh,SEL_COL);
       }
+    } else if(isPointArrayAnn(ann)){
+      const pts=getScreenPointsFromAnn(ann,annTimeToX,pToY), bounds=getPointBounds(pts);
+      if(bounds){ctx.strokeRect(bounds.minX-4,bounds.minY-4,bounds.maxX-bounds.minX+8,bounds.maxY-bounds.minY+8);}
     } else if(ann.type.startsWith('text_')){
       const tw=ctx.measureText(ann.text||'T').width+22;
       ctx.strokeRect(sx1-6,sy1-(ann.fontSize||F.o)-8,tw,(ann.fontSize||F.o)+16);
@@ -4216,27 +4246,21 @@ function renderPanel(p){
       const nw=ann.noteWidth||120;
       ctx.strokeRect(sx1,sy1,nw,60);
       drawHandle(ctx,sx1,sy1,SEL_COL); drawHandle(ctx,sx1+nw,sy1+60,SEL_COL);
-    } else if(ann.type==='price_label'){
+    } else if(ann.type==='price_label'||ann.type==='flag'||ann.type==='entry_arrow'||ann.type==='exit_arrow'||ann.type==='short_arrow'||ann.type==='cover_arrow'||ann.type==='stop_line'||ann.type==='trail_stop'){
       ctx.beginPath();ctx.arc(sx1,sy1,14,0,Math.PI*2);ctx.stroke();drawHandle(ctx,sx1,sy1,SEL_COL);
-    } else if(ann.type==='flag'){
-      ctx.beginPath();ctx.arc(sx1,sy1,14,0,Math.PI*2);ctx.stroke();drawHandle(ctx,sx1,sy1,SEL_COL);
-    } else if(ann.type==='fib_ret'){
-      const sx2=annTimeToX(ann.x2);if(sx2!=null){
-        const sy2=pToY(ann.y2);
-        ctx.beginPath();ctx.moveTo(sx1,sy1);ctx.lineTo(sx2,sy2);ctx.stroke();
-        drawHandle(ctx,sx1,sy1,SEL_COL);drawHandle(ctx,sx2,sy2,SEL_COL);
-      }
-    } else if(ann.type==='entry_arrow'||ann.type==='exit_arrow'||ann.type==='short_arrow'||ann.type==='cover_arrow'){
-      ctx.beginPath();ctx.arc(sx1,sy1,14,0,Math.PI*2);ctx.stroke();drawHandle(ctx,sx1,sy1,SEL_COL);
-    } else if(ann.type==='stop_line'||ann.type==='trail_stop'){
-      ctx.beginPath();ctx.arc(sx1,sy1,14,0,Math.PI*2);ctx.stroke();drawHandle(ctx,sx1,sy1,SEL_COL);
+    } else if(ann.type==='long_pos'||ann.type==='short_pos'){
+      ctx.beginPath();ctx.moveTo(sx1,sy1);ctx.lineTo(cw,sy1);ctx.moveTo(sx1,pToY(ann.y2));ctx.lineTo(cw,pToY(ann.y2));ctx.moveTo(sx1,pToY(ann.y3||ann.y1));ctx.lineTo(cw,pToY(ann.y3||ann.y1));ctx.stroke();
+      drawHandle(ctx,sx1,sy1,SEL_COL);drawHandle(ctx,sx1,pToY(ann.y2),SEL_COL);drawHandle(ctx,sx1,pToY(ann.y3||ann.y1),SEL_COL);
     }
     ctx.restore();
     }
   }
 
   // ── ANNOTATION PREVIEW ──
-  if(activeTool&&toolStep==='second'&&toolAnchor?.panelIdx===p.idx&&cx>=0&&cy>=0){
+  if((activeTool&&toolAnchor?.panelIdx===p.idx&&cx>=0&&cy>=0)||freehandState?.panelIdx===p.idx){
+    if(renderAdvancedPreview(ctx,p,chartW,priceH,annTimeToX,pToY,cx,cy)){
+      // handled by advanced preview renderer
+    } else if(activeTool&&toolStep==='second'&&toolAnchor?.panelIdx===p.idx&&cx>=0&&cy>=0){
     const ax=annTimeToX(toolAnchor.time)||toolAnchor.rawX, ay=pToY(toolAnchor.price);
     const col=activeTool==='trendline'?C.trendline:C[activeTool]||(activeTool==='box_orange'?C.box_orange:C.box_yellow);
     if(activeTool==='trendline'||activeTool==='ray'){
@@ -4484,7 +4508,7 @@ function renderPanel(p){
 
 
 // Check if annotation is near mouse (for delete highlight)
-// Find if (mx,my) is near a trendline endpoint — returns {ann, endpoint:'1'|'2'} or null
+// Returns {ann, endpoint:'1'|'2'|'3'} for draggable handles on supported annotations.
 function findTLEndpoint(mx,my,p,chartW,priceH){
   const HIT=20;
   const vs=Math.max(0,Math.min(p.viewStart,Math.max(0,p.data.length-p.viewBars)));
@@ -4504,18 +4528,31 @@ function findTLEndpoint(mx,my,p,chartW,priceH){
   const {min,max}=getMinMax(p);
   const toY=v=>Math.max(0,Math.min(priceH, priceH-((v-min)/(max-min))*priceH));
   let bestHit=null, bestDist=Infinity;
+  function testHandle(ann,key,hx,hy){
+    if(hx==null||hy==null) return;
+    const dist=Math.hypot(mx-hx,my-hy);
+    if(dist<HIT&&dist<bestDist){bestDist=dist; bestHit={ann:endAnnHidden(ann)?null:ann,endpoint:key};}
+  }
+  function endAnnHidden(ann){ return !ann||ann.hidden||_hideAll||ann.panelIdx!=null&&ann.panelIdx!==p.idx; }
   for(const ann of annotations){
-    if(ann.type!=='trendline') continue;
+    if(endAnnHidden(ann)) continue;
     const x1=toX(ann.x1); if(x1==null) continue;
     const y1=toY(ann.y1);
-    const x2=toX(ann.x2); if(x2==null) continue;
-    const y2=toY(ann.y2);
-    const d1=Math.hypot(mx-x1,my-y1);
-    const d2=Math.hypot(mx-x2,my-y2);
-    if(d1<HIT && d1<bestDist){bestDist=d1; bestHit={ann,endpoint:'1'};}
-    if(d2<HIT && d2<bestDist){bestDist=d2; bestHit={ann,endpoint:'2'};}
+    if(ann.type==='hline'||ann.type==='vline'||ann.type==='xline'){ testHandle(ann,'1',x1,y1); continue; }
+    if(ann.type==='long_pos'||ann.type==='short_pos'){
+      testHandle(ann,'1',x1,toY(ann.y1)); testHandle(ann,'2',x1,toY(ann.y2)); testHandle(ann,'3',x1,toY(ann.y3||ann.y1)); continue;
+    }
+    if(ann.type==='parallel'||ann.type==='disjoint'){
+      const x2=toX(ann.x2), x3=toX(ann.x3); if(x2==null||x3==null) continue;
+      testHandle(ann,'1',x1,y1); testHandle(ann,'2',x2,toY(ann.y2)); testHandle(ann,'3',x3,toY(ann.y3));
+      continue;
+    }
+    if(ann.type==='trendline'||ann.type==='ray'||ann.type==='hray'||ann.type==='fib_ret'||ann.type==='circle'||ann.type==='ellipse'||ann.type==='triangle'||ann.type==='gann_box'||ann.type.startsWith('box_')){
+      const x2=toX(ann.x2); if(x2==null) continue;
+      testHandle(ann,'1',x1,y1); testHandle(ann,'2',x2,toY(ann.y2));
+    }
   }
-  return bestHit;
+  return bestHit&&bestHit.ann?bestHit:null;
 }
 
 function annLineDash(ann){
@@ -4533,61 +4570,380 @@ function drawHandle(ctx,x,y,col){
 }
 
 function wrapText(ctx,text,maxW){const words=text.split(' ');const lines=[];let cur='';for(const w of words){const test=cur?cur+' '+w:w;if(ctx.measureText(test).width>maxW&&cur){lines.push(cur);cur=w;}else cur=test;}if(cur)lines.push(cur);return lines;}
+function hexToRgb(col){
+  if(!col||typeof col!=='string'||col[0]!=='#') return null;
+  var hex=col.slice(1); if(hex.length===3) hex=hex.split('').map(function(c){return c+c;}).join('');
+  if(hex.length!==6) return null;
+  return {r:parseInt(hex.slice(0,2),16),g:parseInt(hex.slice(2,4),16),b:parseInt(hex.slice(4,6),16)};
+}
+function colorWithAlpha(col,alpha){
+  if(col&&col.startsWith('rgba(')) return col.replace(/rgba\(([^)]+),[^,]+\)$/,'rgba($1,'+alpha+')');
+  var rgb=hexToRgb(col||'#dde3f0');
+  return rgb?('rgba('+rgb.r+','+rgb.g+','+rgb.b+','+alpha+')'):(col||'#dde3f0');
+}
+function pointToSegmentDistance(px,py,x1,y1,x2,y2){
+  var dx=x2-x1, dy=y2-y1;
+  if(!dx&&!dy) return Math.hypot(px-x1,py-y1);
+  var t=((px-x1)*dx+(py-y1)*dy)/(dx*dx+dy*dy);
+  t=Math.max(0,Math.min(1,t));
+  var sx=x1+t*dx, sy=y1+t*dy;
+  return Math.hypot(px-sx,py-sy);
+}
+function distanceToPolyline(px,py,pts,closed){
+  if(!Array.isArray(pts)||pts.length<2) return Infinity;
+  var best=Infinity;
+  for(var i=1;i<pts.length;i++) best=Math.min(best,pointToSegmentDistance(px,py,pts[i-1].x,pts[i-1].y,pts[i].x,pts[i].y));
+  if(closed&&pts.length>2) best=Math.min(best,pointToSegmentDistance(px,py,pts[pts.length-1].x,pts[pts.length-1].y,pts[0].x,pts[0].y));
+  return best;
+}
+function renderPolylinePath(ctx,pts,closed){
+  if(!Array.isArray(pts)||!pts.length) return;
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x,pts[0].y);
+  for(var i=1;i<pts.length;i++) ctx.lineTo(pts[i].x,pts[i].y);
+  if(closed&&pts.length>2) ctx.closePath();
+}
+function isPointArrayAnn(ann){return !!(ann&&Array.isArray(ann.points)&&ann.points.length>0);}
+function getRayRightPoint(x1,y1,x2,y2,targetX){
+  if(x2==null||y2==null) return {x:targetX,y:y1};
+  if(Math.abs(x2-x1)<0.0001) return {x:x1,y:y2};
+  var slope=(y2-y1)/(x2-x1);
+  return {x:targetX,y:y1+slope*(targetX-x1)};
+}
+function getScreenPointsFromAnn(ann,annTimeToX,pToY){
+  if(!isPointArrayAnn(ann)) return [];
+  var pts=[];
+  for(var i=0;i<ann.points.length;i++){
+    var sx=annTimeToX(ann.points[i].x);
+    if(sx==null) continue;
+    pts.push({x:sx,y:pToY(ann.points[i].y)});
+  }
+  return pts;
+}
+function getPointBounds(pts){
+  if(!pts.length) return null;
+  var minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  pts.forEach(function(pt){if(pt.x<minX)minX=pt.x;if(pt.x>maxX)maxX=pt.x;if(pt.y<minY)minY=pt.y;if(pt.y>maxY)maxY=pt.y;});
+  return {minX,minY,maxX,maxY};
+}
+function snapPriceToMagnet(p,time,price){
+  if(!_magnetSnap||!p||!p.data||!p.data.length||!isFinite(price)) return price;
+  var bestBar=p.data[0], bestDt=Infinity;
+  for(var i=0;i<p.data.length;i++){
+    var dt=Math.abs(toUnix(p.data[i].time)-time);
+    if(dt<bestDt){bestDt=dt;bestBar=p.data[i];}
+  }
+  var vals=[bestBar.open,bestBar.high,bestBar.low,bestBar.close].filter(function(v){return isFinite(v);});
+  var bestPrice=price, bestDiff=Infinity;
+  vals.forEach(function(v){var d=Math.abs(v-price); if(d<bestDiff){bestDiff=d; bestPrice=v;}});
+  return bestPrice;
+}
+function snapDrawPoint(p,time,price){return {time:time,price:snapPriceToMagnet(p,time,price)};}
+function finishPathAnnotation(){
+  if(activeTool!=='path'||!toolAnchor||!Array.isArray(toolAnchor.points)||toolAnchor.points.length<2) return false;
+  var pts=toolAnchor.points.map(function(pt){return {x:pt.x,y:pt.y};});
+  var ann={id:nextId++,type:'path',panelIdx:toolAnchor.panelIdx,points:pts,x1:pts[0].x,y1:pts[0].y,x2:pts[pts.length-1].x,y2:pts[pts.length-1].y};
+  applyDrawDefaults(ann);
+  annotations.push(ann);
+  toolStep='first'; toolAnchor=null;
+  renderAll(); toast('✓ path placed');
+  if(!_stayDraw) setActiveTool(null); else updateHint('PATH: click to add points, double-click or Enter to finish');
+  return true;
+}
+function finishFreehandAnnotation(){
+  if(!freehandState||!Array.isArray(freehandState.points)||freehandState.points.length<2) return false;
+  var pts=freehandState.points.map(function(pt){return {x:pt.x,y:pt.y};});
+  var ann={id:nextId++,type:freehandState.type,panelIdx:freehandState.panelIdx,points:pts,x1:pts[0].x,y1:pts[0].y,x2:pts[pts.length-1].x,y2:pts[pts.length-1].y,color:freehandState.color,lineWidth:freehandState.lineWidth,opacity:freehandState.opacity};
+  applyDrawDefaults(ann);
+  annotations.push(ann);
+  freehandState=null;
+  renderAll(); toast('✓ '+(ann.type==='brush'?'brush':'highlight')+' placed');
+  if(!_stayDraw) setActiveTool(null);
+  return true;
+}
+function applyAnnHandleMove(hit,time,price){
+  if(!hit||!hit.ann) return false;
+  var ann=hit.ann, key=hit.endpoint;
+  if(ann.type==='hline'){ann.y1=price;ann.y2=price;return true;}
+  if(ann.type==='vline'){ann.x1=time;ann.x2=time;return true;}
+  if(ann.type==='xline'){ann.x1=time;ann.x2=time;ann.y1=price;ann.y2=price;return true;}
+  if(ann.type==='long_pos'||ann.type==='short_pos'){
+    if(key==='1') ann.y1=price; else if(key==='2') ann.y2=price; else if(key==='3') ann.y3=price;
+    return true;
+  }
+  if(ann.type==='parallel'||ann.type==='disjoint'){
+    if(key==='1'){ann.x1=time;ann.y1=price;} else if(key==='2'){ann.x2=time;ann.y2=price;} else if(key==='3'){ann.x3=time;ann.y3=price;}
+    return true;
+  }
+  if(key==='1'){ann.x1=time;ann.y1=price;return true;}
+  if(key==='2'){ann.x2=time;ann.y2=price;return true;}
+  return false;
+}
+function renderAdvancedAnnotation(ctx,ann,p,chartW,priceH,cw,ch,annTimeToX,pToY){
+  const baseCol=ann.color||'#dde3f0';
+  if(ann.type==='ray'){
+    const x1=annTimeToX(ann.x1), x2=annTimeToX(ann.x2); if(x1==null||x2==null) return true;
+    const y1=pToY(ann.y1), y2=pToY(ann.y2), end=getRayRightPoint(x1,y1,x2,y2,chartW);
+    ctx.strokeStyle=baseCol; ctx.lineWidth=annLineWidth(ann); ctx.setLineDash(annLineDash(ann));
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(end.x,end.y); ctx.stroke(); ctx.setLineDash([]);
+    return true;
+  }
+  if(ann.type==='hray'){
+    const x1=annTimeToX(ann.x1); if(x1==null) return true;
+    const y1=pToY(ann.y1);
+    ctx.strokeStyle=baseCol; ctx.lineWidth=annLineWidth(ann); ctx.setLineDash(annLineDash(ann));
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(chartW,y1); ctx.stroke(); ctx.setLineDash([]);
+    return true;
+  }
+  if(ann.type==='xline'){
+    const x1=annTimeToX(ann.x1); if(x1==null) return true;
+    const y1=pToY(ann.y1);
+    ctx.strokeStyle=baseCol; ctx.lineWidth=annLineWidth(ann); ctx.setLineDash(annLineDash(ann));
+    ctx.beginPath(); ctx.moveTo(0,y1); ctx.lineTo(chartW,y1); ctx.moveTo(x1,0); ctx.lineTo(x1,priceH); ctx.stroke(); ctx.setLineDash([]);
+    return true;
+  }
+  if(ann.type==='parallel'||ann.type==='disjoint'){
+    const x1=annTimeToX(ann.x1), x2=annTimeToX(ann.x2), x3=annTimeToX(ann.x3);
+    if(x1==null||x2==null||x3==null) return true;
+    const y1=pToY(ann.y1), y2=pToY(ann.y2), y3=pToY(ann.y3), dx=x2-x1, dy=y2-y1;
+    ctx.strokeStyle=baseCol; ctx.lineWidth=annLineWidth(ann); ctx.setLineDash(annLineDash(ann));
+    if(ann.type==='parallel'){
+      ctx.fillStyle=colorWithAlpha(baseCol,0.08);
+      renderPolylinePath(ctx,[{x:x1,y:y1},{x:x2,y:y2},{x:x3+dx,y:y3+dy},{x:x3,y:y3}],true); ctx.fill();
+    }
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.moveTo(x3,y3); ctx.lineTo(x3+dx,y3+dy); ctx.stroke(); ctx.setLineDash([]);
+    return true;
+  }
+  if(ann.type==='circle'||ann.type==='ellipse'||ann.type==='triangle'||ann.type==='gann_box'){
+    const x1=annTimeToX(ann.x1), x2=annTimeToX(ann.x2); if(x1==null||x2==null) return true;
+    const y1=pToY(ann.y1), y2=pToY(ann.y2);
+    const left=Math.min(x1,x2), top=Math.min(y1,y2), w=Math.abs(x2-x1), h=Math.abs(y2-y1), cx=left+w/2, cy=top+h/2;
+    ctx.strokeStyle=baseCol; ctx.lineWidth=annLineWidth(ann); ctx.setLineDash(annLineDash(ann));
+    if(ann.type==='circle'){
+      const r=Math.min(w,h)/2;
+      ctx.fillStyle=colorWithAlpha(baseCol,0.07);
+      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke();
+    } else if(ann.type==='ellipse'){
+      ctx.fillStyle=colorWithAlpha(baseCol,0.07);
+      ctx.beginPath(); ctx.ellipse(cx,cy,Math.max(1,w/2),Math.max(1,h/2),0,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(cx,cy,Math.max(1,w/2),Math.max(1,h/2),0,0,Math.PI*2); ctx.stroke();
+    } else if(ann.type==='triangle'){
+      const pts=[{x:cx,y:top},{x:left,y:top+h},{x:left+w,y:top+h}];
+      ctx.fillStyle=colorWithAlpha(baseCol,0.07);
+      renderPolylinePath(ctx,pts,true); ctx.fill();
+      renderPolylinePath(ctx,pts,true); ctx.stroke();
+    } else if(ann.type==='gann_box'){
+      const borderCol=ann.borderColor||baseCol, gridCol=ann.gridColor||colorWithAlpha(baseCol,0.5);
+      ctx.strokeStyle=borderCol; ctx.strokeRect(left,top,w,h);
+      ctx.strokeStyle=gridCol; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+      GANN_BOX_RATIOS.forEach(function(ratio){
+        const gx=left+w*ratio, gy=top+h*ratio;
+        ctx.beginPath(); ctx.moveTo(gx,top); ctx.lineTo(gx,top+h); ctx.moveTo(left,gy); ctx.lineTo(left+w,gy); ctx.stroke();
+        ctx.fillStyle=gridCol; ctx.font='10px Inter'; ctx.textAlign='left'; ctx.fillText((ratio*8).toFixed(0)+'/8',gx+2,top+10);
+      });
+      ctx.setLineDash([]);
+    }
+    ctx.setLineDash([]);
+    return true;
+  }
+  if(isPointArrayAnn(ann)){
+    const pts=getScreenPointsFromAnn(ann,annTimeToX,pToY); if(pts.length<2) return true;
+    if(ann.type==='brush'){
+      ctx.strokeStyle=baseCol; ctx.lineWidth=Math.max(1,ann.lineWidth||3); ctx.lineCap='round'; ctx.lineJoin='round';
+      renderPolylinePath(ctx,pts,false); ctx.stroke();
+    } else if(ann.type.startsWith('hl_')){
+      ctx.strokeStyle=colorWithAlpha(baseCol,Math.min(ann.opacity!=null?ann.opacity:0.22,0.35));
+      ctx.lineWidth=Math.max(10,ann.lineWidth||18); ctx.lineCap='round'; ctx.lineJoin='round';
+      renderPolylinePath(ctx,pts,false); ctx.stroke();
+    } else if(ann.type==='path'){
+      ctx.strokeStyle=baseCol; ctx.lineWidth=annLineWidth(ann); ctx.setLineDash(annLineDash(ann));
+      ctx.lineCap='round'; ctx.lineJoin='round'; renderPolylinePath(ctx,pts,false); ctx.stroke(); ctx.setLineDash([]);
+    }
+    return true;
+  }
+  if(ann.type==='fib_ret'){
+    ensureFibSettings(ann);
+    const x1=annTimeToX(ann.x1), x2=annTimeToX(ann.x2); if(x1==null||x2==null) return true;
+    const y1=pToY(ann.y1), y2=pToY(ann.y2), left=Math.min(x1,x2), right=Math.max(x1,x2);
+    const fibHigh=Math.max(ann.y1,ann.y2), fibLow=Math.min(ann.y1,ann.y2), swing=fibHigh-fibLow;
+    if(swing<=0) return true;
+    ctx.strokeStyle=baseCol; ctx.lineWidth=annLineWidth(ann); ctx.setLineDash(annLineDash({dashed:ann.lineStyle!=null?ann.lineStyle:ann.dashed}));
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); ctx.setLineDash([]);
+    ctx.font=`bold ${F.p}px Inter`;
+    ann.fibLevels.forEach(function(level){
+      if(level.enabled===false) return;
+      var pct=parseFloat(level.value); if(!isFinite(pct)) return;
+      var price=fibHigh-swing*(pct/100), y=pToY(price), lblPct=(Math.round(pct*10)/10).toString().replace(/\.0$/,'')+'%';
+      ctx.strokeStyle=ann.levelColor||baseCol; ctx.lineWidth=1.2; ctx.setLineDash(annLineDash({dashed:ann.lineStyle!=null?ann.lineStyle:ann.dashed}));
+      ctx.beginPath(); ctx.moveTo(left,y); ctx.lineTo(right,y); ctx.stroke(); ctx.setLineDash([]);
+      var rightTxt=fmtPrice(price), leftW=ctx.measureText(lblPct).width, rightW=ctx.measureText(rightTxt).width;
+      ctx.fillStyle='rgba(10,12,20,0.78)';
+      ctx.fillRect(left+2,y-10,leftW+6,12); ctx.fillRect(right-rightW-8,y-10,rightW+6,12);
+      ctx.fillStyle=ann.levelColor||baseCol; ctx.textAlign='left'; ctx.fillText(lblPct,left+5,y-1); ctx.textAlign='right'; ctx.fillText(rightTxt,right-5,y-1);
+    });
+    ctx.textAlign='left';
+    return true;
+  }
+  if(ann.type==='long_pos'||ann.type==='short_pos'){
+    ensurePositionSettings(ann);
+    const x=annTimeToX(ann.x1); if(x==null) return true;
+    const entry=ann.y1, tp=ann.y2, stop=ann.y3||0; if(!stop) return true;
+    const ey=pToY(entry), tpy=pToY(tp), sty=pToY(stop);
+    ctx.fillStyle=ann.fillColor||colorWithAlpha(baseCol,0.12); ctx.fillRect(x-20,Math.min(ey,tpy),chartW-x+20,Math.abs(tpy-ey));
+    ctx.fillStyle=colorWithAlpha(ann.stopColor||'#ef5350',0.08); ctx.fillRect(x-20,Math.min(ey,sty),chartW-x+20,Math.abs(sty-ey));
+    ctx.setLineDash([4,3]);ctx.lineWidth=1;
+    ctx.strokeStyle=ann.tpColor||'#4ade80'; ctx.beginPath();ctx.moveTo(x-20,tpy);ctx.lineTo(chartW,tpy);ctx.stroke();
+    ctx.strokeStyle=ann.entryColor||baseCol; ctx.beginPath();ctx.moveTo(x-20,ey);ctx.lineTo(chartW,ey);ctx.stroke();
+    ctx.strokeStyle=ann.stopColor||'#ef5350'; ctx.beginPath();ctx.moveTo(x-20,sty);ctx.lineTo(chartW,sty);ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.textAlign='right';ctx.font='bold 10px Inter';
+    var tpPct=((Math.abs(tp-entry)/entry)*100).toFixed(1), stPct=((Math.abs(stop-entry)/entry)*100).toFixed(1);
+    ctx.fillStyle='rgba(10,12,20,.8)';ctx.fillRect(chartW-88,tpy-10,86,14);ctx.fillRect(chartW-88,ey-10,86,14);ctx.fillRect(chartW-88,sty-10,86,14);
+    ctx.fillStyle=ann.tpColor||'#4ade80';ctx.fillText('TP '+fmtPrice(tp)+' +'+tpPct+'%',chartW-4,tpy+2);
+    ctx.fillStyle=ann.entryColor||'#dde3f0';ctx.fillText('E '+fmtPrice(entry),chartW-4,ey+2);
+    ctx.fillStyle=ann.stopColor||'#ef5350';ctx.fillText('SL '+fmtPrice(stop)+' -'+stPct+'%',chartW-4,sty+2);
+    return true;
+  }
+  return false;
+}
+function renderAdvancedPreview(ctx,p,chartW,priceH,annTimeToX,pToY,cx,cy){
+  if(freehandState&&freehandState.panelIdx===p.idx&&Array.isArray(freehandState.points)&&freehandState.points.length){
+    const pts=getScreenPointsFromAnn({points:freehandState.points},annTimeToX,pToY); if(pts.length){
+      ctx.save();
+      ctx.strokeStyle=freehandState.type.startsWith('hl_')?colorWithAlpha(freehandState.color||'#22d3ee',Math.min(freehandState.opacity!=null?freehandState.opacity:0.22,0.35)):(freehandState.color||'#94a3b8');
+      ctx.lineWidth=freehandState.lineWidth||3; ctx.lineCap='round'; ctx.lineJoin='round';
+      renderPolylinePath(ctx,pts,false); ctx.stroke(); ctx.restore();
+    }
+    return true;
+  }
+  if(activeTool==='path'&&toolAnchor&&toolAnchor.panelIdx===p.idx&&Array.isArray(toolAnchor.points)&&toolAnchor.points.length){
+    const pts=toolAnchor.points.map(function(pt){var sx=annTimeToX(pt.x); return sx==null?null:{x:sx,y:pToY(pt.y)};}).filter(Boolean);
+    if(pts.length){
+      ctx.strokeStyle=drawDefaults.color||'#dde3f0'; ctx.lineWidth=drawDefaults.lineWidth||2; ctx.setLineDash([4,3]);
+      renderPolylinePath(ctx,pts,false); if(cx>=0&&cy>=0){ctx.lineTo(cx,cy);} ctx.stroke(); ctx.setLineDash([]);
+    }
+    return true;
+  }
+  if(!toolAnchor||toolAnchor.panelIdx!==p.idx) return false;
+  const ax=annTimeToX(toolAnchor.time)||toolAnchor.rawX, ay=pToY(toolAnchor.price), col=drawDefaults.color||'#dde3f0';
+  if(activeTool==='hray'){
+    ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.setLineDash([4,3]); ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(chartW,ay); ctx.stroke(); ctx.setLineDash([]); return true;
+  }
+  if(activeTool==='xline'){
+    ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.setLineDash([4,3]); ctx.beginPath(); ctx.moveTo(0,ay); ctx.lineTo(chartW,ay); ctx.moveTo(ax,0); ctx.lineTo(ax,priceH); ctx.stroke(); ctx.setLineDash([]); return true;
+  }
+  if(activeTool==='parallel'||activeTool==='disjoint'){
+    ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.setLineDash([4,3]);
+    if(toolStep==='second'){
+      ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(cx,cy); ctx.stroke();
+    } else if(toolStep==='third'&&toolAnchor.x2!=null){
+      const bx=annTimeToX(toolAnchor.x2)||cx, by=pToY(toolAnchor.y2), dx=bx-ax, dy=by-ay;
+      if(activeTool==='parallel'){
+        ctx.fillStyle=colorWithAlpha(col,0.08);
+        renderPolylinePath(ctx,[{x:ax,y:ay},{x:bx,y:by},{x:cx+dx,y:cy+dy},{x:cx,y:cy}],true); ctx.fill();
+      }
+      ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.moveTo(cx,cy); ctx.lineTo(cx+dx,cy+dy); ctx.stroke();
+    }
+    ctx.setLineDash([]); return true;
+  }
+  if(activeTool==='circle'||activeTool==='ellipse'||activeTool==='triangle'||activeTool==='gann_box'){
+    const left=Math.min(ax,cx), top=Math.min(ay,cy), w=Math.abs(cx-ax), h=Math.abs(cy-ay), midX=left+w/2, midY=top+h/2;
+    ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.setLineDash([4,3]);
+    if(activeTool==='circle'){
+      const r=Math.min(w,h)/2; ctx.beginPath(); ctx.arc(midX,midY,r,0,Math.PI*2); ctx.stroke();
+    } else if(activeTool==='ellipse'){
+      ctx.beginPath(); ctx.ellipse(midX,midY,Math.max(1,w/2),Math.max(1,h/2),0,0,Math.PI*2); ctx.stroke();
+    } else if(activeTool==='triangle'){
+      renderPolylinePath(ctx,[{x:midX,y:top},{x:left,y:top+h},{x:left+w,y:top+h}],true); ctx.stroke();
+    } else {
+      ctx.strokeRect(left,top,w,h);
+      GANN_BOX_RATIOS.forEach(function(ratio){var gx=left+w*ratio, gy=top+h*ratio; ctx.beginPath(); ctx.moveTo(gx,top); ctx.lineTo(gx,top+h); ctx.moveTo(left,gy); ctx.lineTo(left+w,gy); ctx.stroke();});
+    }
+    ctx.setLineDash([]); return true;
+  }
+  if(activeTool==='fib_ret'){
+    const left=Math.min(ax,cx), right=Math.max(ax,cx);
+    ctx.strokeStyle='#a78bfa'; ctx.lineWidth=1.5; ctx.setLineDash([4,3]); ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(cx,cy); ctx.stroke();
+    const high=Math.max(toolAnchor.price, pToY===undefined?toolAnchor.price:toolAnchor.price), low=Math.min(toolAnchor.price,toolAnchor.price);
+    const topPrice=Math.max(toolAnchor.price, pixelToTimePrice(cx,cy,p).price), botPrice=Math.min(toolAnchor.price, pixelToTimePrice(cx,cy,p).price), swing=topPrice-botPrice;
+    if(swing>0){
+      cloneFibLevels().forEach(function(level){var price=topPrice-swing*(level.value/100), y=pToY(price); ctx.beginPath(); ctx.moveTo(left,y); ctx.lineTo(right,y); ctx.stroke();});
+    }
+    ctx.setLineDash([]); return true;
+  }
+  return false;
+}
 
 function isAnnNear(ann,mx,my,p,annTimeToX,pToY){
+  if(!ann||ann.hidden||_hideAll) return false;
   const x1=annTimeToX(ann.x1); if(x1==null) return false;
   const y1=pToY(ann.y1);
   const HIT=18;
+  if(isPointArrayAnn(ann)){
+    const pts=getScreenPointsFromAnn(ann,annTimeToX,pToY);
+    const tol=(ann.type.startsWith('hl_')?Math.max(18,(ann.lineWidth||18)/2):Math.max(HIT,(ann.lineWidth||2)+8));
+    return distanceToPolyline(mx,my,pts,false)<=tol;
+  }
   if(ann.type==='trendline'){
     const x2=annTimeToX(ann.x2); if(x2==null) return false;
     const y2=pToY(ann.y2);
-    // Point-to-line distance
     const dx=x2-x1,dy=y2-y1,len=Math.sqrt(dx*dx+dy*dy)||1;
     const d=Math.abs((my-y1)*dx-(mx-x1)*dy)/len;
     const t=((mx-x1)*dx+(my-y1)*dy)/(len*len);
     return d<HIT&&t>=0&&t<=1;
-  } else if(ann.type.startsWith('box_')||ann.type.startsWith('hl_')){
-    const x2=annTimeToX(ann.x2); if(x2==null) return false;
-    const y2=pToY(ann.y2);
-    const bX=Math.min(x1,x2)-HIT,bY=Math.min(y1,y2)-HIT;
-    const bW=Math.abs(x2-x1)+HIT*2,bH=Math.abs(y2-y1)+HIT*2;
-    return mx>=bX&&mx<=bX+bW&&my>=bY&&my<=bY+bH;
-  } else if(ann.type.startsWith('text_')){
-    return Math.abs(mx-x1)<60&&Math.abs(my-y1)<20;
-  } else if(ann.type==='callout'){
-    const x2=annTimeToX(ann.x2); if(x2==null) return false;
-    const y2=pToY(ann.y2);
-    return Math.hypot(mx-x2,my-y2)<30 || Math.hypot(mx-x1,my-y1)<10;
-  } else if(ann.type==='note'){
-    const nw=ann.noteWidth||120;
-    return mx>=x1&&mx<=x1+nw&&my>=y1&&my<=y1+60;
-  } else if(ann.type==='price_label'){
-    return Math.abs(mx-(p.W-p.PRICE_W))<40&&Math.abs(my-y1)<14;
-  } else if(ann.type==='flag'){
-    return Math.hypot(mx-x1,my-(y1-20))<16;
-  } else if(ann.type==='entry_arrow'||ann.type==='exit_arrow'||ann.type==='short_arrow'||ann.type==='cover_arrow'||ann.type==='stop_line'||ann.type==='trail_stop'){
-    return Math.hypot(mx-x1,my-y1)<22;
-  } else if(ann.type==='hline'){
-    return Math.abs(my-y1)<HIT;
-  } else if(ann.type==='vline'){
-    return Math.abs(mx-x1)<HIT;
-  } else if(ann.type==='ray'){
+  }
+  if(ann.type==='ray'){
     const x2=annTimeToX(ann.x2); if(x2==null) return false;
     const y2=pToY(ann.y2);
     const dx=x2-x1,dy=y2-y1,len=Math.sqrt(dx*dx+dy*dy)||1;
     const d=Math.abs((my-y1)*dx-(mx-x1)*dy)/len;
     const t=((mx-x1)*dx+(my-y1)*dy)/(len*len);
     return d<HIT&&t>=0;
-  } else if(ann.type==='long_pos'||ann.type==='short_pos'){
+  }
+  if(ann.type==='hray') return mx>=x1-HIT&&Math.abs(my-y1)<HIT;
+  if(ann.type==='xline') return Math.abs(my-y1)<HIT||Math.abs(mx-x1)<HIT;
+  if(ann.type==='parallel'||ann.type==='disjoint'){
+    const x2=annTimeToX(ann.x2), x3=annTimeToX(ann.x3); if(x2==null||x3==null) return false;
+    const y2=pToY(ann.y2), y3=pToY(ann.y3), dx=x2-x1, dy=y2-y1;
+    return pointToSegmentDistance(mx,my,x1,y1,x2,y2)<HIT || pointToSegmentDistance(mx,my,x3,y3,x3+dx,y3+dy)<HIT;
+  }
+  if(ann.type.startsWith('box_')||(ann.type.startsWith('hl_')&&!isPointArrayAnn(ann))||ann.type==='circle'||ann.type==='ellipse'||ann.type==='triangle'||ann.type==='gann_box'){
+    const x2=annTimeToX(ann.x2); if(x2==null) return false;
+    const y2=pToY(ann.y2);
+    const bX=Math.min(x1,x2)-HIT,bY=Math.min(y1,y2)-HIT;
+    const bW=Math.abs(x2-x1)+HIT*2,bH=Math.abs(y2-y1)+HIT*2;
+    return mx>=bX&&mx<=bX+bW&&my>=bY&&my<=bY+bH;
+  }
+  if(ann.type.startsWith('text_')) return Math.abs(mx-x1)<60&&Math.abs(my-y1)<20;
+  if(ann.type==='callout'){
+    const x2=annTimeToX(ann.x2); if(x2==null) return false;
+    const y2=pToY(ann.y2);
+    return Math.hypot(mx-x2,my-y2)<30 || Math.hypot(mx-x1,my-y1)<10;
+  }
+  if(ann.type==='note'){
+    const nw=ann.noteWidth||120;
+    return mx>=x1&&mx<=x1+nw&&my>=y1&&my<=y1+60;
+  }
+  if(ann.type==='price_label') return Math.abs(mx-(p.W-p.PRICE_W))<40&&Math.abs(my-y1)<14;
+  if(ann.type==='flag') return Math.hypot(mx-x1,my-(y1-20))<16;
+  if(ann.type==='entry_arrow'||ann.type==='exit_arrow'||ann.type==='short_arrow'||ann.type==='cover_arrow'||ann.type==='stop_line'||ann.type==='trail_stop') return Math.hypot(mx-x1,my-y1)<22;
+  if(ann.type==='hline') return Math.abs(my-y1)<HIT;
+  if(ann.type==='vline') return Math.abs(mx-x1)<HIT;
+  if(ann.type==='long_pos'||ann.type==='short_pos'){
     const ey=pToY(ann.y1), tpy=pToY(ann.y2), sty=pToY(ann.y3||0);
     return Math.abs(my-ey)<HIT||Math.abs(my-tpy)<HIT||Math.abs(my-sty)<HIT;
-  } else if(ann.type==='fib_ret'){
-    const fibHigh=Math.max(ann.y1,ann.y2);
-    const fibLow =Math.min(ann.y1,ann.y2);
-    const swing  =fibHigh-fibLow;
-    if(swing<=0) return false;
-    for(const pct of [0.30,0.40,0.50,0.60,0.70]){
-      const ly=pToY(fibHigh-swing*pct);
+  }
+  if(ann.type==='fib_ret'){
+    ensureFibSettings(ann);
+    const x2=annTimeToX(ann.x2); if(x2==null) return false;
+    const y2=pToY(ann.y2), left=Math.min(x1,x2), right=Math.max(x1,x2);
+    if(pointToSegmentDistance(mx,my,x1,y1,x2,y2)<HIT) return true;
+    const fibHigh=Math.max(ann.y1,ann.y2), fibLow=Math.min(ann.y1,ann.y2), swing=fibHigh-fibLow;
+    if(swing<=0||mx<left-HIT||mx>right+HIT) return false;
+    for(const level of ann.fibLevels){
+      if(level.enabled===false) continue;
+      const ly=pToY(fibHigh-swing*(parseFloat(level.value||0)/100));
       if(Math.abs(my-ly)<HIT) return true;
     }
     return false;
@@ -5018,9 +5374,11 @@ function startAnnDrag(ann,mx,my,p){
   draggingAnn=ann;
   draggingAnn._panel=p;
   draggingAnn._origX1=ann.x1; draggingAnn._origY1=ann.y1;
-  draggingAnn._origX2=ann.x2; draggingAnn._origY2=ann.y2;
+  draggingAnn._origX2=ann.x2; draggingAnn._origY2=ann.y2; draggingAnn._origY3=ann.y3;
+  if(Array.isArray(ann.points)) draggingAnn._origPoints=ann.points.map(function(pt){return {x:pt.x,y:pt.y};});
   // Convert click position to time/price to compute initial delta
   var conv=pixelToTimePrice(mx,my,p);
+  conv.price=snapPriceToMagnet(p,conv.time,conv.price);
   draggingAnn._dt = conv.time - ann.x1;
   draggingAnn._dp = conv.price - ann.y1;
 }
@@ -5054,15 +5412,17 @@ function moveAnnDrag(mx,my){
   if(!draggingAnn) return;
   var p=draggingAnn._panel;
   var conv=pixelToTimePrice(mx,my,p);
+  conv.price=snapPriceToMagnet(p,conv.time,conv.price);
   // Remove the initial click-to-anchor offset
   var newTime=conv.time - draggingAnn._dt;
   var newPrice=conv.price - draggingAnn._dp;
-  
 
   if(draggingAnn.type==='hline'){
     draggingAnn.y1=newPrice; draggingAnn.y2=newPrice;
   } else if(draggingAnn.type==='vline'){
     draggingAnn.x1=newTime; draggingAnn.x2=newTime;
+  } else if(draggingAnn.type==='xline'){
+    draggingAnn.x1=newTime; draggingAnn.x2=newTime; draggingAnn.y1=newPrice; draggingAnn.y2=newPrice;
   } else {
     var dt=newTime-draggingAnn._origX1;
     var dp=newPrice-draggingAnn._origY1;
@@ -5070,6 +5430,8 @@ function moveAnnDrag(mx,my){
     draggingAnn.y1=draggingAnn._origY1+dp;
     if(draggingAnn._origX2!=null) draggingAnn.x2=draggingAnn._origX2+dt;
     if(draggingAnn._origY2!=null) draggingAnn.y2=draggingAnn._origY2+dp;
+    if(Array.isArray(draggingAnn._origPoints)) draggingAnn.points=draggingAnn._origPoints.map(function(pt){return {x:pt.x+dt,y:pt.y+dp};});
+    if(draggingAnn.y3!=null&&draggingAnn._origY3!=null) draggingAnn.y3=draggingAnn._origY3+dp;
   }
   renderAll();
 }
@@ -5078,7 +5440,7 @@ function endAnnDrag(){
   delete draggingAnn._panel;
   delete draggingAnn._dt; delete draggingAnn._dp;
   delete draggingAnn._origX1; delete draggingAnn._origY1;
-  delete draggingAnn._origX2; delete draggingAnn._origY2;
+  delete draggingAnn._origX2; delete draggingAnn._origY2; delete draggingAnn._origPoints; delete draggingAnn._origY3;
   draggingAnn=null;
 }
 
@@ -5265,6 +5627,20 @@ function buildPanels(){
     wrap.addEventListener('mousemove',evt=>{
       const r=wrap.getBoundingClientRect();
       p.cx=evt.clientX-r.left; p.cy=evt.clientY-r.top;
+      // Freehand drawing (brush / highlight)
+      if(freehandState&&freehandState.panelIdx===p.idx){
+        const chartW2=p.W-p.PRICE_W;
+        const vs2=Math.max(0,Math.min(p.viewStart,p.data.length-p.viewBars));
+        const bw2=chartW2/Math.max(Math.min(p.viewBars,p.data.length-vs2)+6,1);
+        const bi2=Math.max(0,Math.min(p.data.length-vs2-1,Math.round(p.cx/bw2)));
+        const di2=Math.max(0,Math.min(p.data.length-1,vs2+bi2));
+        const{min,max}=getMinMax(p);
+        const priceH2=p.H-p.TIME_H-(p.inds.vol?Math.round(p.H*(p.volFrac||VOL_FRAC_DEFAULT)):0);
+        var fTime=toUnix(p.data[di2].time), fPrice=max+(max-min)*0.15-((max-min)*1.3)*(p.cy/priceH2);
+        fPrice=snapPriceToMagnet(p,fTime,fPrice);
+        freehandState.points.push({x:fTime,y:fPrice});
+        renderPanel(p); return;
+      }
       // Update OHLCV tooltip to follow mouse when holding
       if(p._showingOHLCV && p.data.length){
         const chartW2=p.W-p.PRICE_W;
@@ -5320,7 +5696,12 @@ function buildPanels(){
     wrap.addEventListener('dblclick',evt=>{
       evt.preventDefault(); evt.stopPropagation();
       if(!p.data||!p.data.length) return;
-      
+
+      // Finish path annotation on double-click
+      if(activeTool==='path'&&toolAnchor&&Array.isArray(toolAnchor.points)&&toolAnchor.panelIdx===p.idx){
+        finishPathAnnotation(); return;
+      }
+
       // If this is a DAILY/WEEKLY panel, switch to 5m intraday for that candle's date
       if(p.tf==='D'||p.tf==='W'){
         const r=wrap.getBoundingClientRect();
@@ -5568,24 +5949,29 @@ function buildPanels(){
     });
 
     window.addEventListener('mousemove',evt=>{
-      // Trendline endpoint drag
+      // Trendline/annotation endpoint drag
       if(p.tlDrag){
+        if(p.tlDrag.ann&&p.tlDrag.ann.locked){p.tlDrag=null;return;}
         const r=wrap.getBoundingClientRect();
         const mx=evt.clientX-r.left, my=evt.clientY-r.top;
         const chartW=p.W-p.PRICE_W;
         const volH=p.inds.vol?Math.round(p.H*(p.volFrac||VOL_FRAC_DEFAULT)):0;
         const priceH=p.H-p.TIME_H-volH;
         const {min,max}=getMinMax(p);
-        const price=max-Math.max(0,Math.min(my,priceH))/priceH*(max-min);
+        var price=max-Math.max(0,Math.min(my,priceH))/priceH*(max-min);
         const vs=Math.max(0,Math.min(p.viewStart,Math.max(0,p.data.length-p.viewBars)));
         const ve2=Math.min(vs+p.viewBars,p.data.length);
         const vlen=ve2-vs;
-        const barW=chartW/Math.max(vlen+(window.RIGHT_PAD||6),1); // must match renderPanel RIGHT_PAD=6
+        const barW=chartW/Math.max(vlen+(window.RIGHT_PAD||6),1);
         const bi=Math.max(0,Math.min(vlen-1,Math.floor(mx/barW)));
         const di=Math.max(0,Math.min(p.data.length-1,vs+bi));
-        const time=toUnix(p.data[di].time);
-        if(p.tlDrag.endpoint==='1'){p.tlDrag.ann.x1=time; p.tlDrag.ann.y1=price;}
-        else                        {p.tlDrag.ann.x2=time; p.tlDrag.ann.y2=price;}
+        var time=toUnix(p.data[di].time);
+        price=snapPriceToMagnet(p,time,price);
+        if(!applyAnnHandleMove(p.tlDrag,time,price)){
+          // Fallback to simple endpoint logic
+          if(p.tlDrag.endpoint==='1'){p.tlDrag.ann.x1=time; p.tlDrag.ann.y1=price;}
+          else if(p.tlDrag.endpoint==='2'){p.tlDrag.ann.x2=time; p.tlDrag.ann.y2=price;}
+        }
         renderPanel(p); return;
       }
       // Left-click drag to pan (starts after 3px movement)
@@ -5607,6 +5993,7 @@ function buildPanels(){
     window.addEventListener('mouseup',()=>{
       if(p.tlDrag){p.tlDrag=null; wrap.style.cursor=''; renderAll(); return;}
       if(draggingAnn){endAnnDrag();wrap.style.cursor='';return;}
+      if(freehandState&&freehandState.panelIdx===p.idx){finishFreehandAnnotation();return;}
       p._dragReady=false;
       if(p.dragging){p.dragging=false;wrap.style.cursor='';}
       else{wrap.style.cursor='';}
@@ -5665,7 +6052,7 @@ function buildPanels(){
       const priceH2=p.H-p.TIME_H-volH2;
       if(my>priceH2) return;
       var hit=findAnnAt(mx,my,p);
-      if(hit && !hit.locked){
+      if(hit && !hit.locked && !_lockAll){
         // Select it + start dragging immediately
         selectedAnn=hit;
         startAnnDrag(hit,mx,my,p);
@@ -5675,6 +6062,11 @@ function buildPanels(){
         // Block chart pan
         evt.preventDefault();
         evt.stopPropagation();
+      } else if(hit && (hit.locked || _lockAll)){
+        // Locked — select but don't drag
+        selectedAnn=hit;
+        showAnnToolbar(hit,evt.clientX,evt.clientY,p);
+        renderAll();
       } else if(!hit && selectedAnn){
         // Clicked empty space — deselect
         selectedAnn=null;
@@ -5758,106 +6150,114 @@ function handleAnnotationClick(panelIdx,mx,my,chartW,priceH,p){
   const bi=Math.floor(mx/barW);
   const di=Math.max(0,Math.min(p.data.length-1,vs+bi));
   const{min,max}=getMinMax(p);
-  const price=min+(max-min)*(1-my/priceH);
+  var price=min+(max-min)*(1-my/priceH);
   const time=toUnix(p.data[di].time);
+  // Snap price to nearest OHLC when magnet is active
+  price=snapPriceToMagnet(p,time,price);
 
-  if(activeTool==='trendline'||activeTool==='ray'||activeTool.startsWith('box_')||activeTool.startsWith('hl_')||activeTool==='fib_ret'||activeTool==='hline'||activeTool==='vline'||activeTool==='measure'||activeTool==='callout'){
-    if(!toolStep||toolStep==='first'){
-      if(activeTool==='hline'||activeTool==='vline'||activeTool==='measure'){
-        // Single-click tools
-        if(activeTool==='hline'){var _a={id:nextId++,type:'hline',panelIdx,x1:time,y1:price,x2:time,y2:price};applyDrawDefaults(_a);annotations.push(_a);renderAll();toast('✓ Horizontal line placed');}
-        else if(activeTool==='vline'){var _b={id:nextId++,type:'vline',panelIdx,x1:time,y1:price,x2:time,y2:price};applyDrawDefaults(_b);annotations.push(_b);renderAll();toast('✓ Vertical line placed');}
-        else if(activeTool==='measure'){toolAnchor={panelIdx,time,price,rawX:mx,rawY:my};toolStep='second';updateHint('Click END to measure');}
-        return;
-      }
-      toolAnchor={panelIdx,time,price,rawX:mx,rawY:my};
-      toolStep='second';
-      updateHint(activeTool==='fib_ret'?'FIB: click LOW point':activeTool==='ray'?'RAY: click direction':'Click END point');
+  // ── FREEHAND TOOLS (brush / highlight) ──
+  if(activeTool==='brush'||(activeTool.startsWith('hl_')&&activeTool!=='hl_cyan')){
+    // Start freehand on mousedown (handled by separate mousemove/mouseup)
+    if(activeTool==='brush'){
+      freehandState={type:'brush',panelIdx,color:drawDefaults.color||'#94a3b8',lineWidth:drawDefaults.lineWidth||3,opacity:drawDefaults.opacity!=null?drawDefaults.opacity:1,points:[{x:time,y:price}]};
     } else {
-      if(activeTool==='measure'){toast('Δ '+Math.abs(time-toolAnchor.time).toFixed(0)+' bars, $'+Math.abs(price-toolAnchor.price).toFixed(2));toolStep='first';toolAnchor=null;return;}
+      const hlCol=C[activeTool]||'#22d3ee';
+      freehandState={type:activeTool,panelIdx,color:hlCol,lineWidth:18,opacity:(parseInt(document.getElementById('hl-opacity').value)||15)/100,points:[{x:time,y:price}]};
+    }
+    renderAll(); return;
+  }
+  // Legacy hl_cyan still uses rectangle mode
+  if(activeTool==='hl_cyan'){
+    if(!toolStep||toolStep==='first'){toolAnchor={panelIdx,time,price,rawX:mx,rawY:my};toolStep='second';updateHint('HIGHLIGHT: click END corner');return;}
+    var _hlA={id:nextId++,type:activeTool,panelIdx:toolAnchor.panelIdx,x1:toolAnchor.time,y1:toolAnchor.price,x2:time,y2:price};
+    applyDrawDefaults(_hlA); _hlA.opacity=(parseInt(document.getElementById('hl-opacity').value)||15)/100;
+    annotations.push(_hlA);toolStep='first';toolAnchor=null;renderAll();toast('✓ Highlight placed');return;
+  }
+
+  // ── PATH TOOL (multi-click) ──
+  if(activeTool==='path'){
+    if(!toolAnchor||!Array.isArray(toolAnchor.points)){
+      toolAnchor={panelIdx,time,price,rawX:mx,rawY:my,points:[{x:time,y:price}]};
+      toolStep='second';
+      updateHint('PATH: click to add points, double-click or Enter to finish');
+    } else if(toolAnchor.panelIdx===panelIdx){
+      toolAnchor.points.push({x:time,y:price});
+      renderAll();
+      updateHint('PATH: '+toolAnchor.points.length+' points — double-click or Enter to finish');
+    }
+    return;
+  }
+
+  // ── SINGLE-CLICK TOOLS ──
+  if(activeTool==='hline'){var _a={id:nextId++,type:'hline',panelIdx,x1:time,y1:price,x2:time,y2:price};applyDrawDefaults(_a);annotations.push(_a);renderAll();toast('✓ Horizontal line placed');return;}
+  if(activeTool==='vline'){var _b={id:nextId++,type:'vline',panelIdx,x1:time,y1:price,x2:time,y2:price};applyDrawDefaults(_b);annotations.push(_b);renderAll();toast('✓ Vertical line placed');return;}
+  if(activeTool==='xline'){var _c={id:nextId++,type:'xline',panelIdx,x1:time,y1:price,x2:time,y2:price};applyDrawDefaults(_c);annotations.push(_c);renderAll();toast('✓ Cross line placed');return;}
+  if(activeTool==='measure'){if(!toolStep||toolStep==='first'){toolAnchor={panelIdx,time,price,rawX:mx,rawY:my};toolStep='second';updateHint('Click END to measure');return;}
+    toast('Δ '+Math.abs(time-toolAnchor.time).toFixed(0)+' bars, $'+Math.abs(price-toolAnchor.price).toFixed(2));toolStep='first';toolAnchor=null;return;}
+
+  // ── TWO-CLICK TOOLS (trendline, ray, hray, fib, boxes, shapes, gann_box) ──
+  const twoClickTools=['trendline','ray','hray','fib_ret','box_orange','box_yellow','circle','ellipse','triangle','gann_box'];
+  if(twoClickTools.includes(activeTool)){
+    if(!toolStep||toolStep==='first'){
+      toolAnchor={panelIdx,time,price,rawX:mx,rawY:my};toolStep='second';
+      var hints={trendline:'LINE: click END point',ray:'RAY: click DIRECTION point',hray:'H-RAY: click where to start',fib_ret:'FIB: click LOW point','box_orange':'BOX: click opposite corner','box_yellow':'BOX: click opposite corner',circle:'CIRCLE: click opposite side',ellipse:'ELLIPSE: click opposite corner',triangle:'TRIANGLE: click opposite corner',gann_box:'GANN BOX: click opposite corner'};
+      updateHint(hints[activeTool]||'Click END point');
+    } else {
       const annObj={id:nextId++,type:activeTool,panelIdx:toolAnchor.panelIdx,x1:toolAnchor.time,y1:toolAnchor.price,x2:time,y2:price};
       applyDrawDefaults(annObj);
       if(activeTool.startsWith('hl_')) annObj.opacity=(parseInt(document.getElementById('hl-opacity').value)||15)/100;
+      if(activeTool==='fib_ret') ensureFibSettings(annObj);
       annotations.push(annObj);
       toolStep='first'; toolAnchor=null;
-      updateHint(activeTool==='fib_ret'?'FIB: click HIGH point → click LOW point':'Click START point');
+      updateHint('Click START point');
       renderAll(); toast(`✓ ${activeTool} placed`);
     }
-  } else if(activeTool==='long_pos'){
-    if(!toolStep||toolStep==='first'){
-      toolAnchor={panelIdx,time,price};
-      toolStep='second';
-      updateHint('LONG POS: click TAKE PROFIT level');
-    } else {
-      var _entry=toolAnchor.price, _tp=price;
-      var _stop=_entry-(_tp-_entry);
-      var _a={id:nextId++,type:'long_pos',panelIdx:toolAnchor.panelIdx,x1:toolAnchor.time,y1:_entry,y2:_tp,y3:_stop};
-      applyDrawDefaults(_a); annotations.push(_a);
-      toolStep=null;toolAnchor=null;
-      if(!_stayDraw)setActiveTool(null); else{toolStep='first';updateHint('LONG POS: click ENTRY price level');}
-      renderAll();toast('✓ Long position — R:R '+(Math.abs(_tp-_entry)/Math.abs(_entry-_stop)).toFixed(2));
-    }
-  } else if(activeTool==='short_pos'){
-    if(!toolStep||toolStep==='first'){
-      toolAnchor={panelIdx,time,price};
-      toolStep='second';
-      updateHint('SHORT POS: click TAKE PROFIT level (below entry)');
-    } else {
-      var _entry=toolAnchor.price, _tp=price;
-      var _stop=_entry+(_entry-_tp);
-      var _a={id:nextId++,type:'short_pos',panelIdx:toolAnchor.panelIdx,x1:toolAnchor.time,y1:_entry,y2:_tp,y3:_stop};
-      applyDrawDefaults(_a); annotations.push(_a);
-      toolStep=null;toolAnchor=null;
-      if(!_stayDraw)setActiveTool(null); else{toolStep='first';updateHint('SHORT POS: click ENTRY price level');}
-      renderAll();toast('✓ Short position — R:R '+(Math.abs(_entry-_tp)/Math.abs(_stop-_entry)).toFixed(2));
-    }
-  } else if(activeTool.startsWith('text_')){
-    pendingText={panelIdx,time,price,color:activeTool};
-    const wrap=document.getElementById(`cw-${panelIdx}`);
-    const wr=wrap.getBoundingClientRect();
-    showTextPopup(wr.left+mx,wr.top+my-60);
-  } else if(activeTool==='callout'){
-    if(toolStep!=='second'){
-      toolAnchor={panelIdx,time,price,rawX:mx,rawY:my};
-      toolStep='second';
-      updateHint('CALLOUT: click where to place text box');
-    } else {
-      // Place callout: anchor=target, x2/y2=box position
-      pendingText={panelIdx,time,price,color:'callout',targetTime:toolAnchor.time,targetPrice:toolAnchor.price};
-      const wrap=document.getElementById(`cw-${panelIdx}`);
-      const wr=wrap.getBoundingClientRect();
-      showTextPopup(wr.left+mx,wr.top+my-60);
-      toolStep='first'; toolAnchor=null;
-    }
-  } else if(activeTool==='note'){
-    pendingText={panelIdx,time,price,color:'note'};
-    const wrap=document.getElementById(`cw-${panelIdx}`);
-    const wr=wrap.getBoundingClientRect();
-    showTextPopup(wr.left+mx,wr.top+my-60);
-  } else if(activeTool==='price_label'){
-    annotations.push({id:nextId++,type:'price_label',panelIdx,x1:time,y1:price,text:price.toFixed(2),color:drawDefaults.color||'#26a69a'});
-    applyDrawDefaults(annotations[annotations.length-1]);
-    renderAll(); toast('Price label placed');
-  } else if(activeTool==='flag'){
-    pendingText={panelIdx,time,price,color:'flag'};
-    const wrap=document.getElementById(`cw-${panelIdx}`);
-    const wr=wrap.getBoundingClientRect();
-    showTextPopup(wr.left+mx,wr.top+my-60);
-  } else if(activeTool==='entry_arrow'||activeTool==='exit_arrow'||activeTool==='short_arrow'||activeTool==='cover_arrow'||activeTool==='stop_line'||activeTool==='trail_stop'){
-    if(activeTool==='entry_arrow'||activeTool==='exit_arrow'||activeTool==='short_arrow'||activeTool==='cover_arrow'){
-      // Show % popup for entries and exits
-      pendingExec={type:activeTool,panelIdx,time,price};
-      const wrap=document.getElementById(`cw-${panelIdx}`);
-      const wr=wrap.getBoundingClientRect();
-      showPctPopup(wr.left+mx, wr.top+my-80, activeTool);
-    } else {
-      // Stops placed immediately, no % needed
-      var _e={id:nextId++,type:activeTool,panelIdx,x1:time,y1:price,label:price.toFixed(2),pct:100};applyDrawDefaults(_e);annotations.push(_e);
-      updateSimPnl(); renderAll();
-      const lbl=activeTool==='trail_stop'?'Trail Stop':'Stop';
-      toast(`✓ ${lbl} placed @ ${price.toFixed(2)}`);
-    }
+    return;
   }
+
+  // ── THREE-CLICK TOOLS (parallel, disjoint) ──
+  if(activeTool==='parallel'||activeTool==='disjoint'){
+    if(!toolStep||toolStep==='first'){
+      toolAnchor={panelIdx,time,price,rawX:mx,rawY:my};toolStep='second';
+      updateHint(activeTool.toUpperCase()+': click END of first line');
+    } else if(toolStep==='second'){
+      toolAnchor.x2=time; toolAnchor.y2=price; toolStep='third';
+      updateHint(activeTool.toUpperCase()+': click start of second line');
+    } else if(toolStep==='third'){
+      var _ch={id:nextId++,type:activeTool,panelIdx:toolAnchor.panelIdx,x1:toolAnchor.time,y1:toolAnchor.price,x2:toolAnchor.x2,y2:toolAnchor.y2,x3:time,y3:price};
+      applyDrawDefaults(_ch); annotations.push(_ch);
+      toolStep='first'; toolAnchor=null;
+      renderAll(); toast(`✓ ${activeTool} placed`);
+    }
+    return;
+  }
+
+  // ── TEXT / CALLOUT / NOTE ──
+  if(activeTool==='callout'){
+    if(toolStep!=='second'){toolAnchor={panelIdx,time,price,rawX:mx,rawY:my};toolStep='second';updateHint('CALLOUT: click where to place text box');
+    } else {pendingText={panelIdx,time,price,color:'callout',targetTime:toolAnchor.time,targetPrice:toolAnchor.price};const wrap=document.getElementById(`cw-${panelIdx}`);const wr=wrap.getBoundingClientRect();showTextPopup(wr.left+mx,wr.top+my-60);toolStep='first';toolAnchor=null;}
+    return;
+  }
+  if(activeTool.startsWith('text_')){pendingText={panelIdx,time,price,color:activeTool};const wrap=document.getElementById(`cw-${panelIdx}`);const wr=wrap.getBoundingClientRect();showTextPopup(wr.left+mx,wr.top+my-60);return;}
+  if(activeTool==='note'){pendingText={panelIdx,time,price,color:'note'};const wrap=document.getElementById(`cw-${panelIdx}`);const wr=wrap.getBoundingClientRect();showTextPopup(wr.left+mx,wr.top+my-60);return;}
+  if(activeTool==='price_label'){annotations.push({id:nextId++,type:'price_label',panelIdx,x1:time,y1:price,text:price.toFixed(2),color:drawDefaults.color||'#26a69a'});applyDrawDefaults(annotations[annotations.length-1]);renderAll();toast('Price label placed');return;}
+  if(activeTool==='flag'){pendingText={panelIdx,time,price,color:'flag'};const wrap=document.getElementById(`cw-${panelIdx}`);const wr=wrap.getBoundingClientRect();showTextPopup(wr.left+mx,wr.top+my-60);return;}
+
+  // ── POSITION TOOLS ──
+  if(activeTool==='long_pos'){
+    if(!toolStep||toolStep==='first'){toolAnchor={panelIdx,time,price};toolStep='second';updateHint('LONG POS: click TAKE PROFIT level');
+    } else {var _entry=toolAnchor.price,_tp=price,_stop=_entry-(_tp-_entry);var _a2={id:nextId++,type:'long_pos',panelIdx:toolAnchor.panelIdx,x1:toolAnchor.time,y1:_entry,y2:_tp,y3:_stop};applyDrawDefaults(_a2);annotations.push(_a2);toolStep=null;toolAnchor=null;if(!_stayDraw)setActiveTool(null);else{toolStep='first';updateHint('LONG POS: click ENTRY price level');}renderAll();toast('✓ Long position — R:R '+(Math.abs(_tp-_entry)/Math.abs(_entry-_stop)).toFixed(2));}
+    return;
+  }
+  if(activeTool==='short_pos'){
+    if(!toolStep||toolStep==='first'){toolAnchor={panelIdx,time,price};toolStep='second';updateHint('SHORT POS: click TAKE PROFIT level');
+    } else {var _entry2=toolAnchor.price,_tp2=price,_stop2=_entry2+(_entry2-_tp2);var _a3={id:nextId++,type:'short_pos',panelIdx:toolAnchor.panelIdx,x1:toolAnchor.time,y1:_entry2,y2:_tp2,y3:_stop2};applyDrawDefaults(_a3);annotations.push(_a3);toolStep=null;toolAnchor=null;if(!_stayDraw)setActiveTool(null);else{toolStep='first';updateHint('SHORT POS: click ENTRY price level');}renderAll();toast('✓ Short position — R:R '+(Math.abs(_entry2-_tp2)/Math.abs(_stop2-_entry2)).toFixed(2));}
+    return;
+  }
+
+  // ── EXEC ARROWS / STOPS ──
+  if(activeTool==='entry_arrow'||activeTool==='exit_arrow'||activeTool==='short_arrow'||activeTool==='cover_arrow'){pendingExec={type:activeTool,panelIdx,time,price};const wrap=document.getElementById(`cw-${panelIdx}`);const wr=wrap.getBoundingClientRect();showPctPopup(wr.left+mx,wr.top+my-80,activeTool);return;}
+  if(activeTool==='stop_line'||activeTool==='trail_stop'){var _e={id:nextId++,type:activeTool,panelIdx,x1:time,y1:price,label:price.toFixed(2),pct:100};applyDrawDefaults(_e);annotations.push(_e);updateSimPnl();renderAll();toast(`✓ ${activeTool==='trail_stop'?'Trail Stop':'Stop'} placed @ ${price.toFixed(2)}`);return;}
 }
 
 function handleDelete(mx,my,p){
@@ -6837,7 +7237,7 @@ document.getElementById('live-btn').addEventListener('click',()=>setLiveMode(!li
 
 // ══════════════════════════════════════════════════════════
 function setActiveTool(tool){
-  activeTool=tool; toolStep=tool?'first':null; toolAnchor=null;
+  activeTool=tool; toolStep=tool?'first':null; toolAnchor=null; freehandState=null;
   if(tool){selectedAnn=null;hideAnnToolbar();}
   document.querySelectorAll('.tool-btn').forEach(b=>b.classList.toggle('active',b.dataset.tool===tool));
   var cursorBtn=document.querySelector('#left-toolbar .lt-btn[data-tool=""]');
@@ -6846,33 +7246,43 @@ function setActiveTool(tool){
   if(tool){
     const labels={
       trendline:'LINE: click START → click END',
-      box_orange:'BOX ORG: click corner 1 → corner 2',
-      box_yellow:'BOX YLW: click corner 1 → corner 2',
+      ray:'RAY: click START → click DIRECTION',
+      hray:'H-RAY: click to place horizontal ray',
+      hline:'HORIZ LINE: click to place',
+      vline:'VERT LINE: click to place',
+      xline:'CROSS LINE: click to place',
+      parallel:'PARALLEL: click START → END → offset line',
+      disjoint:'DISJOINT: click START → END → second line',
+      box_orange:'BOX: click corner 1 → corner 2',
+      box_yellow:'BOX: click corner 1 → corner 2',
+      circle:'CIRCLE: click to drag bounding box',
+      ellipse:'ELLIPSE: click to drag bounding box',
+      triangle:'TRIANGLE: click to drag bounding box',
+      gann_box:'GANN BOX: click to drag bounding box',
+      path:'PATH: click to add points, double-click to finish',
+      brush:'BRUSH: click + drag to draw freehand',
+      fib_ret:'FIB: click HIGH → click LOW',
       text_orange:'TEXT: click to place',
       text_yellow:'TEXT: click to place',
-      callout:'CALLOUT: click target point',
+      callout:'CALLOUT: click target → click text position',
       note:'NOTE: click to place',
       price_label:'PRICE LABEL: click to place',
       flag:'FLAG: click to place',
       del:'DELETE: click on any annotation to remove it',
       edit:'EDIT: click on any entry/exit/stop to modify it',
-      entry_arrow:'LONG: click chart to place long entry + price',
-      exit_arrow:'SELL: click chart to place sell/exit + price',
-      short_arrow:'SHORT: click chart to place short entry + price',
-      cover_arrow:'COVER: click chart to place cover (close short) + price',
-      stop_line:'STOP: click chart to place stop level line + price',
-      trail_stop:'TRAIL STOP: click chart to place trailing stop (blue)',
-      hl_cyan:'HIGHLIGHT CYN: click corner 1 → corner 2',
-      hl_magenta:'HIGHLIGHT MAG: click corner 1 → corner 2',
-      hl_green:'HIGHLIGHT GRN: click corner 1 → corner 2',
-      hl_white:'HIGHLIGHT WHT: click corner 1 → corner 2',
-      fib_ret:'FIB: click HIGH point → click LOW point',
-      hline:'HORIZ LINE: click to place',
-      vline:'VERT LINE: click to place',
-      ray:'RAY: click START → click DIRECTION',
+      entry_arrow:'LONG: click chart to place long entry',
+      exit_arrow:'SELL: click chart to place sell/exit',
+      short_arrow:'SHORT: click chart to place short entry',
+      cover_arrow:'COVER: click chart to place cover',
+      stop_line:'STOP: click chart to place stop level',
+      trail_stop:'TRAIL STOP: click chart to place trailing stop',
+      hl_cyan:'HIGHLIGHT: click corner 1 → corner 2',
+      hl_magenta:'HIGHLIGHT: click corner 1 → corner 2',
+      hl_green:'HIGHLIGHT: click corner 1 → corner 2',
+      hl_white:'HIGHLIGHT: click corner 1 → corner 2',
       measure:'MEASURE: click START → click END',
-      long_pos:'LONG POS: click ENTRY price level',
-      short_pos:'SHORT POS: click ENTRY price level',
+      long_pos:'LONG POS: click ENTRY → click TAKE PROFIT',
+      short_pos:'SHORT POS: click ENTRY → click TAKE PROFIT',
     };
     updateHint(labels[tool]||'Click to place');
   } else {
@@ -7158,6 +7568,10 @@ document.addEventListener('keydown',e=>{
     if(toolActive){ setActiveTool(null); e.preventDefault(); return; }
     // Priority 3: exit fullscreen (only if nothing else to close)
     if(fullscreenPanel!==null) toggleFullscreen(fullscreenPanel);
+  }
+  // Enter key finishes path annotation
+  if(e.key==='Enter'&&activeTool==='path'&&toolAnchor&&Array.isArray(toolAnchor.points)&&toolAnchor.points.length>=2){
+    finishPathAnnotation(); e.preventDefault(); return;
   }
   // Ctrl+S / Cmd+S = save review
   if((e.ctrlKey||e.metaKey)&&e.key==='s'){
@@ -12663,7 +13077,7 @@ function buildIndicatorRow(panelIdx){
 annSetupColorPickerEvents();
 
 // ── LEFT TOOLBAR FLYOUT SYSTEM ──
-var _stayDraw=false, _lockAll=false, _hideAll=false;
+var _stayDraw=false, _lockAll=false, _hideAll=false, _magnetSnap=false;
 var _activeCat=null;
 
 function ltToggle(cat){
@@ -12691,17 +13105,19 @@ function ltCloseAll(){
 function ltPick(el){
   var tool=el.dataset.tool;
   if(!tool) return;
+  // Save cat BEFORE ltCloseAll clears it
+  var savedCat=_activeCat;
   ltCloseAll();
   setActiveTool(tool);
   // Update category icon to show last-used tool
-  if(_activeCat){
+  if(savedCat){
     var svg=el.querySelector('svg');
-    var catBtn=document.querySelector('.lt-cat[data-cat="'+_activeCat+'"]');
+    var catBtn=document.querySelector('.lt-cat[data-cat="'+savedCat+'"]');
     if(svg&&catBtn){
-      var arrow=catBtn.querySelector('.cat-arrow');
+      var arrow=document.createElement('span');arrow.className='cat-arrow';arrow.textContent='▸';
       catBtn.innerHTML='';
       catBtn.appendChild(svg.cloneNode(true));
-      if(arrow) catBtn.appendChild(arrow);
+      catBtn.appendChild(arrow);
     }
   }
 }

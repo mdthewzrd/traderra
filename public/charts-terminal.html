@@ -2410,7 +2410,7 @@ function applyDrawDefaults(ann){
   if(ann.type==='brush'&&ann.lineWidth==null) ann.lineWidth=3;
   if(ann.type.startsWith('hl_')&&Array.isArray(ann.points)){
     if(ann.opacity==null) ann.opacity=Math.min(drawDefaults.opacity!=null?drawDefaults.opacity:0.22,0.35);
-    if(ann.lineWidth==null) ann.lineWidth=18;
+    if(ann.lineWidth==null) ann.lineWidth=28;
   }
 }
 let fullscreenPanel=null, pendingText=null, pendingExec=null, freehandState=null;
@@ -4758,9 +4758,17 @@ function renderAdvancedAnnotation(ctx,ann,p,chartW,priceH,cw,ch,annTimeToX,pToY)
       ctx.strokeStyle=baseCol; ctx.lineWidth=Math.max(1,ann.lineWidth||3); ctx.lineCap='round'; ctx.lineJoin='round';
       renderPolylinePath(ctx,pts,false); ctx.stroke();
     } else if(ann.type.startsWith('hl_')){
-      ctx.strokeStyle=colorWithAlpha(baseCol,Math.min(ann.opacity!=null?ann.opacity:0.22,0.35));
-      ctx.lineWidth=Math.max(10,ann.lineWidth||18); ctx.lineCap='round'; ctx.lineJoin='round';
+      const hlOp=ann.opacity!=null?ann.opacity:0.22;
+      // Highlighter: thick, flat cap, semi-transparent with subtle border
+      ctx.lineCap='butt'; ctx.lineJoin='round';
+      ctx.strokeStyle=colorWithAlpha(baseCol,Math.min(hlOp,0.4));
+      ctx.lineWidth=Math.max(16,ann.lineWidth||28);
       renderPolylinePath(ctx,pts,false); ctx.stroke();
+      // Thin bright edge for definition
+      ctx.strokeStyle=colorWithAlpha(baseCol,Math.min(hlOp+0.12,0.5));
+      ctx.lineWidth=1;
+      renderPolylinePath(ctx,pts,false); ctx.stroke();
+      ctx.lineCap='round';
     } else if(ann.type==='path'){
       ctx.strokeStyle=baseCol; ctx.lineWidth=annLineWidth(ann); ctx.setLineDash(annLineDash(ann));
       ctx.lineCap='round'; ctx.lineJoin='round'; renderPolylinePath(ctx,pts,false); ctx.stroke(); ctx.setLineDash([]);
@@ -6229,22 +6237,16 @@ function handleAnnotationClick(panelIdx,mx,my,chartW,priceH,p){
   price=snapPriceToMagnet(p,time,price);
 
   // ── FREEHAND TOOLS (brush / highlight) ──
-  if(activeTool==='brush'||(activeTool.startsWith('hl_')&&activeTool!=='hl_cyan')){
+  if(activeTool==='brush'||activeTool.startsWith('hl_')){
     // Start freehand on mousedown (handled by separate mousemove/mouseup)
     if(activeTool==='brush'){
       freehandState={type:'brush',panelIdx,color:drawDefaults.color||'#94a3b8',lineWidth:drawDefaults.lineWidth||3,opacity:drawDefaults.opacity!=null?drawDefaults.opacity:1,points:[{x:time,y:price}]};
     } else {
       const hlCol=C[activeTool]||'#22d3ee';
-      freehandState={type:activeTool,panelIdx,color:hlCol,lineWidth:18,opacity:(parseInt(document.getElementById('hl-opacity').value)||15)/100,points:[{x:time,y:price}]};
+      const hlOp=(parseInt(document.getElementById('hl-opacity').value)||15)/100;
+      freehandState={type:activeTool,panelIdx,color:hlCol,lineWidth:28,opacity:hlOp,points:[{x:time,y:price}]};
     }
     renderAll(); return;
-  }
-  // Legacy hl_cyan still uses rectangle mode
-  if(activeTool==='hl_cyan'){
-    if(!toolStep||toolStep==='first'){toolAnchor={panelIdx,time,price,rawX:mx,rawY:my};toolStep='second';updateHint('HIGHLIGHT: click END corner');return;}
-    var _hlA={id:nextId++,type:activeTool,panelIdx:toolAnchor.panelIdx,x1:toolAnchor.time,y1:toolAnchor.price,x2:time,y2:price};
-    applyDrawDefaults(_hlA); _hlA.opacity=(parseInt(document.getElementById('hl-opacity').value)||15)/100;
-    annotations.push(_hlA);toolStep='first';toolAnchor=null;renderAll();toast('✓ Highlight placed');return;
   }
 
   // ── PATH TOOL (multi-click) ──

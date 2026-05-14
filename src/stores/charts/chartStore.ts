@@ -24,6 +24,7 @@ interface ChartState {
   panels: Panel[]
   setPanels: (p: Panel[]) => void
   updatePanel: (idx: number, updates: Partial<Panel>) => void
+  setPanelTf: (idx: number, tf: string) => void
 
   // Active tool ID counter
   toolId: number
@@ -55,6 +56,9 @@ export const useChartStore = create<ChartState>((set, get) => ({
   setPanels: (p) => set({ panels: p }),
   updatePanel: (idx, updates) => set((s) => ({
     panels: s.panels.map((p, i) => i === idx ? { ...p, ...updates } : p),
+  })),
+  setPanelTf: (idx: number, tf: string) => set((s) => ({
+    panels: s.panels.map((p, i) => i === idx ? { ...p, tf } : p),
   })),
 
   toolId: Date.now(),

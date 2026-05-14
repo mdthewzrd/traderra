@@ -1,10 +1,5 @@
 {
   "installCommand": "npm install --legacy-peer-deps && npx prisma generate",
   "buildCommand": "npx prisma db push --skip-generate && next build",
-  "outputDirectory": ".next",
-  "rewrites": [
-    { "source": "/api/calc(/.*)?", "destination": "/pyapi/calc/index.py" },
-    { "source": "/api/health", "destination": "/pyapi/health.py" },
-    { "source": "/api/indicators", "destination": "/pyapi/indicators.py" }
-  ]
+  "outputDirectory": ".next"
 }

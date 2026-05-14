@@ -1695,6 +1695,7 @@ function renderPanel(p){
   }
 
   // ── BT DATE HIGHLIGHTS ──
+  if(!window.__tsOverrideSession){
   if(btHighlightDates && btSelected){
     const tradeDates=new Set([btSelected.date]);
     ctx.save();
@@ -1852,7 +1853,9 @@ function renderPanel(p){
     }
   }
 
+  } // end inline session (TS override)
   // ── VOLUME ──
+  if(!window.__tsOverrideVolume){
   if(volH>0){
     const maxVol=Math.max(...visible.map(b=>b.volume||0))||1;
     for(let i=0;i<visible.length;i++){
@@ -1895,6 +1898,7 @@ function renderPanel(p){
     ctx.fillRect(chartW, priceH-1, PRICE_W, 3);
   }
 
+  } // end inline volume (TS override)
   // ── INDICATORS ──
   // Pre-compute EMAs/ATRs based on active tool deps (deduped)
   const calcCache = {};

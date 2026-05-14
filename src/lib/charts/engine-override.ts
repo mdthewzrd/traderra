@@ -18,6 +18,8 @@ import { renderAnnotationPreview } from './render-preview'
 import { renderCrosshair } from './render-crosshair'
 import { renderBtMarkers } from './render-bt-markers'
 import { renderLivePriceLine } from './render-price-line'
+import { renderBtHighlights, renderSessionShading } from './render-session'
+import { renderVolume } from './render-volume'
 import { fmtPrice, fmtVol, fmtTimeAxis, fmtTimeCross, getNY, nyMins, isIntraday } from './format'
 import { calcEMA, calcSMA, calcBollinger, calcVolSMA, calcVWAP, calcATR, calcATRSMA } from './indicators'
 import { C, F } from './theme'
@@ -30,6 +32,8 @@ const FLAGS = {
   useTsCrosshair: true,
   useTsBtMarkers: true,
   useTsPriceLine: true,
+  useTsSession: true,      // BT highlights + session shading + PDC
+  useTsVolume: true,       // volume bars + separator
   useTsFormat: true,
   useTsCalcFunctions: true,
   useTsTheme: true,
@@ -59,6 +63,19 @@ export function overrideRenderPanel() {
 
     // 3. Overlay our TS modules on top of what the inline code drew
     //    These redraw sections that we've fully extracted
+
+    // Session shading + BT highlights (drawn after grid, before candles)
+    if (FLAGS.useTsSession) {
+      try {
+        renderBtHighlights(rc)
+        renderSessionShading(rc)
+      } catch (e) { console.warn('[TS] Session failed:', e) }
+    }
+
+    // Volume
+    if (FLAGS.useTsVolume) {
+      try { renderVolume(rc) } catch (e) { console.warn('[TS] Volume failed:', e) }
+    }
 
     if (FLAGS.useTsAnnotations) {
       try { renderAnnotations(rc) } catch (e) { console.warn('[TS] Annotations failed:', e) }
@@ -113,6 +130,8 @@ export function overrideRenderPanel() {
 
   // Signal to inline code that we're overriding these sections
   ;(window as any).__tsOverride = true
+  ;(window as any).__tsOverrideSession = FLAGS.useTsSession
+  ;(window as any).__tsOverrideVolume = FLAGS.useTsVolume
 
   console.log('[Charts] TypeScript engine overrides active (overlay mode)')
 }

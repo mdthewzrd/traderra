@@ -34,6 +34,20 @@ export default function ChartsTerminal({ userId, userName, userImage }: ChartsTe
     // Inject user context
     ;(window as any).__CHARTS_USER = { id: userId, name: userName, image: userImage }
 
+    // Inject session token for CloudStore (uses localStorage 'traderra-auth-token')
+    // The server session uses cookies, but inline JS expects localStorage Bearer token
+    try {
+      const resp = await fetch('/api/auth/token')
+      if (resp.ok) {
+        const data = await resp.json()
+        if (data.token) {
+          localStorage.setItem('traderra-auth-token', data.token)
+        }
+      }
+    } catch (e) {
+      console.warn('[Charts] Failed to get auth token:', e)
+    }
+
     if (scriptsLoaded.current) return
     scriptsLoaded.current = true
 

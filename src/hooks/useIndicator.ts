@@ -29,7 +29,7 @@ export function useIndicator(
 
     setLoading(true)
 
-    fetch('/api/calc', {
+    fetch('/api/py/calc', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -81,7 +81,7 @@ export function useIndicators(
 
     Promise.all(
       indicators.map(ind =>
-        fetch('/api/calc', {
+        fetch('/api/py/calc', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

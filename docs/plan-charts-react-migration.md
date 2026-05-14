@@ -14,7 +14,7 @@
 | 1 — CSS | ✅ Done | 638 lines extracted to `src/styles/charts-terminal.css` |
 | 2 — HTML Shell | ✅ Done | 821 lines → 6 React components (TopBar, LeftToolbar, AnnotationToolbar, MainArea, Sidebar, Overlays) |
 | 3 — State | 🔄 In Progress | 5 Zustand stores, bridge hook, 3 TS modules (sharing, templates, toast) |
-| 4 — Canvas | ⬜ Not Started | ~4,000 lines of render logic |
+| 4 — Canvas | 🔄 In Progress | 5 TS modules extracted (596 lines): format, indicators, theme, registry, canvas-utils |
 | 5 — Cutover | ⬜ Not Started | Kill static HTML, rename routes |
 
 ### Phase 3 Detail — What's Extracted vs Remaining
@@ -38,14 +38,20 @@
 - AnnotationToolbar: still uses `(window as any)` ⬜
 - MainArea: still uses static HTML ⬜
 
-**Remaining `(window as any)` calls:**
-- Annotation toolbar canvas interactions (annToggleDropdown, annSetWeight, etc.)
-- Template save/load from dropdown
-- Watchlist CRUD (wlAdd, wlToggleCollapse, etc.)
-- Scan management (ScanManager)
-- Render triggers (renderAll)
-- Indicator settings popup
-- Drawing tool canvas event handling
+**Phase 4 — Canvas modules extracted:**
+- `src/lib/charts/format.ts` — fmtPrice, fmtVol, getNY, fmtTimeAxis, etc. ✅
+- `src/lib/charts/indicators.ts` — calcEMA, calcSMA, calcBollinger, calcVWAP, calcATR ✅
+- `src/lib/charts/theme.ts` — color constants C{}, font sizes F{} ✅
+- `src/lib/charts/indicators-registry.ts` — IND_REGISTRY with full type definitions ✅
+- `src/lib/charts/canvas-utils.ts` — drawHandle, renderPolylinePath, colorWithAlpha ✅
+
+**Phase 4 — Remaining:**
+- `renderPanel()` (1469 lines) → modularize into sub-functions
+- `renderAdvancedAnnotation()` (300 lines) → import from module
+- `renderAdvancedPreview()` (100 lines) → import from module
+- Panel init/resize → React effect
+- renderAll() → store action
+- Mouse event handlers → React event handlers on canvas refs
 
 **Legacy bridge (`useLegacyBridge`):**
 - Syncs theme → body.light class ✅
@@ -119,9 +125,12 @@ public/charts-terminal.html  — 13,916 lines, still the source of truth for JS 
 
 ## Original Plan (for reference)
 
-### Phase 4: Canvas Engine (hardest part)
-- The 4 canvas panels are the core (~4,000 lines of render logic)
-- **Recommend: Option A** — keep raw canvas in React refs, organize into modules
+### Phase 4: Canvas Engine (in progress)
+- 5 pure-function modules extracted (596 lines)
+- `renderPanel()` (1469 lines) still inline — next target
+- Annotation renderers (400 lines) still inline
+- Canvas mouse handlers still inline
+- **Approach: Option A** — keep raw canvas in React refs, organize into modules
 
 ### Phase 5: Kill Static HTML
 - Remove `public/charts-terminal.html`

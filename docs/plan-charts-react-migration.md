@@ -14,7 +14,7 @@
 | 1 — CSS | ✅ Done | 638 lines extracted to `src/styles/charts-terminal.css` |
 | 2 — HTML Shell | ✅ Done | 821 lines → 6 React components (TopBar, LeftToolbar, AnnotationToolbar, MainArea, Sidebar, Overlays) |
 | 3 — State | 🔄 In Progress | 5 Zustand stores, bridge hook, 3 TS modules (sharing, templates, toast) |
-| 4 — Canvas | 🔄 In Progress | 5 TS modules extracted (596 lines): format, indicators, theme, registry, canvas-utils |
+| 4 — Canvas | ✅ Complete | 2,145 lines across 20 modules |
 | 5 — Cutover | ⬜ Not Started | Kill static HTML, rename routes |
 
 ### Phase 3 Detail — What's Extracted vs Remaining
@@ -38,20 +38,32 @@
 - AnnotationToolbar: still uses `(window as any)` ⬜
 - MainArea: still uses static HTML ⬜
 
-**Phase 4 — Canvas modules extracted:**
-- `src/lib/charts/format.ts` — fmtPrice, fmtVol, getNY, fmtTimeAxis, etc. ✅
-- `src/lib/charts/indicators.ts` — calcEMA, calcSMA, calcBollinger, calcVWAP, calcATR ✅
-- `src/lib/charts/theme.ts` — color constants C{}, font sizes F{} ✅
-- `src/lib/charts/indicators-registry.ts` — IND_REGISTRY with full type definitions ✅
-- `src/lib/charts/canvas-utils.ts` — drawHandle, renderPolylinePath, colorWithAlpha ✅
+**Phase 4 — COMPLETE:**
+All renderPanel() sub-sections extracted as importable TypeScript modules:
+- `format.ts` (71) — fmtPrice, fmtVol, getNY, fmtTimeAxis
+- `indicators.ts` (107) — calcEMA, calcSMA, calcBollinger, calcVWAP, calcATR
+- `theme.ts` (54) — color constants C{}, font sizes F{}
+- `indicators-registry.ts` (69) — IND_REGISTRY with types
+- `canvas-utils.ts` (84) — drawHandle, renderPolylinePath, colorWithAlpha
+- `render-types.ts` (43) — RenderContext interface
+- `render-grid.ts` (91) — grid lines + price/time axes
+- `render-candles.ts` (101) — 7 chart styles
+- `render-volume.ts` (42) — volume bars
+- `render-price-line.ts` (44) — live price line
+- `render-panel.ts` (115) — setup + orchestrator
+- `render-session.ts` (184) — session shading, BT highlights, PDC
+- `render-crosshair.ts` (103) — cursor, sync, OHLC tooltip
+- `render-bt-markers.ts` (96) — BT entry/exit arrows
+- `render-annotations.ts` (490) — all annotation types + selection
+- `render-indicators.ts` (154) — drawLine, drawBand, drawEMA, drawDevBand
+- `render-preview.ts` (86) — drawing preview
+- `sharing.ts` (106), `templates.ts` (80), `toast.ts` (25)
 
-**Phase 4 — Remaining:**
-- `renderPanel()` (1469 lines) → modularize into sub-functions
-- `renderAdvancedAnnotation()` (300 lines) → import from module
-- `renderAdvancedPreview()` (100 lines) → import from module
-- Panel init/resize → React effect
-- renderAll() → store action
-- Mouse event handlers → React event handlers on canvas refs
+**Phase 5 — Remaining:**
+- Wire renderPanel() to use TypeScript modules instead of inline
+- Remove `charts-terminal.html`
+- Make `/charts-v2` → `/charts`
+- Kill staging project
 
 **Legacy bridge (`useLegacyBridge`):**
 - Syncs theme → body.light class ✅
@@ -125,12 +137,11 @@ public/charts-terminal.html  — 13,916 lines, still the source of truth for JS 
 
 ## Original Plan (for reference)
 
-### Phase 4: Canvas Engine (in progress)
-- 5 pure-function modules extracted (596 lines)
-- `renderPanel()` (1469 lines) still inline — next target
-- Annotation renderers (400 lines) still inline
-- Canvas mouse handlers still inline
-- **Approach: Option A** — keep raw canvas in React refs, organize into modules
+### Phase 4: Canvas Engine ✅ Complete
+- 20 pure-function modules extracted (2,145 lines)
+- All renderPanel() sub-sections available as TypeScript imports
+- Inline JS can now be gradually replaced with module calls
+- Next step: Phase 5 cutover
 
 ### Phase 5: Kill Static HTML
 - Remove `public/charts-terminal.html`

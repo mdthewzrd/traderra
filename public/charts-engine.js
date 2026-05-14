@@ -10799,21 +10799,27 @@ function settingsSync(){
   if(m&&mv)mv.textContent=parseFloat(m.value).toFixed(1);
 }
 
-buildPanels();
-requestAnimationFrame(()=>requestAnimationFrame(()=>{
-  // Watchlist toggle - removed (now in sidebar)
-  // Sync symbol input with restored symbol
-  var _si=document.getElementById('symbol-input');if(_si)_si.value=symbol;
-  var _ti=document.getElementById('ti-sym');if(_ti)_ti.textContent=symbol;
-  wlRender();
-  panels.forEach(p=>resizePanel(p));
-  if(activePreset==='Mike'&&panels[0]&&panels[0].tf==='5'){
-    panels[0].tf='15';
-    var el0=document.getElementById('panel-0');
-    if(el0) el0.querySelectorAll('.tf-btn').forEach(function(b){b.classList.toggle('active',b.dataset.tf==='15');});
-  }
-  setLayout(activePreset==='Sam'?4:1);
-  initS();
+// buildPanels deferred — waits for React to mount #grid
+(function waitForGrid(){
+  var grid=document.getElementById('grid');
+  if(!grid){setTimeout(waitForGrid,50);return;}
+  buildPanels();
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    var _si=document.getElementById('symbol-input');if(_si)_si.value=symbol;
+    var _ti=document.getElementById('ti-sym');if(_ti)_ti.textContent=symbol;
+    if(typeof wlRender==='function') wlRender();
+    panels.forEach(p=>resizePanel(p));
+    if(activePreset==='Mike'&&panels[0]&&panels[0].tf==='5'){
+      panels[0].tf='15';
+      var el0=document.getElementById('panel-0');
+      if(el0) el0.querySelectorAll('.tf-btn').forEach(function(b){b.classList.toggle('active',b.dataset.tf==='15');});
+    }
+    setLayout(activePreset==='Sam'?4:1);
+    if(typeof initS==='function') initS();
+    if(typeof loadAll==='function') loadAll();
+    setTimeout(function(){ if(typeof CloudStore!=='undefined') CloudStore.init(); }, 2000);
+  }));
+})();
   loadAll();
   // Init cloud sync after everything loaded
   setTimeout(function(){ if(typeof CloudStore!=='undefined') CloudStore.init(); }, 2000);

@@ -2,11 +2,6 @@
   "installCommand": "npm install --legacy-peer-deps && npx prisma generate",
   "buildCommand": "npx prisma db push --skip-generate && next build",
   "outputDirectory": ".next",
-  "functions": {
-    "pyapi/calc/index.py": { "runtime": "python3.12" },
-    "pyapi/health.py": { "runtime": "python3.12" },
-    "pyapi/indicators.py": { "runtime": "python3.12" }
-  },
   "rewrites": [
     { "source": "/api/calc(/.*)?", "destination": "/pyapi/calc/index.py" },
     { "source": "/api/health", "destination": "/pyapi/health.py" },

@@ -12195,3 +12195,5 @@ document.addEventListener('keydown',function(e){
   }
   if(e.key==='Escape'){
     if(selectedAnn){selectedAnn=null;hideAnnToolbar();renderAll();}
+  }
+});

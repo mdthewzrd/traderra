@@ -11,6 +11,7 @@ import { Overlays } from '@/components/charts/Overlays/Overlays'
 import { useLegacyBridge } from '@/hooks/useLegacyBridge'
 import { shareTemplate, shareScan, importSharedItem, checkAutoImport } from '@/lib/charts/sharing'
 import { useWatchlistStore } from '@/stores/charts'
+import { overrideRenderPanel } from '@/lib/charts/engine-override'
 
 interface ChartsTerminalProps {
   userId: string
@@ -58,29 +59,25 @@ export default function ChartsTerminal({ userId, userName, userImage }: ChartsTe
     // Check for auto-import from URL
     checkAutoImport()
 
-    // Load the JS logic from the static file
+    // Load external chart engine scripts
     const loadScripts = async () => {
       try {
-        const resp = await fetch('/charts-terminal.html')
-        const html = await resp.text()
-        const parser = new DOMParser()
-        const doc = parser.parseFromString(html, 'text/html')
-
-        // Load vault.js
-        if (!document.querySelector('script[src="/indicators/vault.js"]')) {
-          const vaultScript = document.createElement('script')
-          vaultScript.src = '/indicators/vault.js'
-          document.body.appendChild(vaultScript)
-        }
-
-        // Extract and execute inline scripts in order
-        const scripts = doc.querySelectorAll('script')
-        scripts.forEach(oldScript => {
-          if (oldScript.src) return // already handled vault.js
-          const newScript = document.createElement('script')
-          newScript.textContent = oldScript.textContent || ''
-          document.body.appendChild(newScript)
+        // Load scripts in order: vault.js → engine → footer
+        const loadScript = (src: string) => new Promise<void>((resolve, reject) => {
+          if (document.querySelector(`script[src="${src}"]`)) { resolve(); return }
+          const s = document.createElement('script')
+          s.src = src
+          s.onload = () => resolve()
+          s.onerror = () => reject(new Error(`Failed to load ${src}`))
+          document.body.appendChild(s)
         })
+
+        await loadScript('/indicators/vault.js')
+        await loadScript('/charts-engine.js')
+        await loadScript('/charts-engine-footer.js')
+
+        // Override renderPanel with our TypeScript version
+        overrideRenderPanel()
 
         // Fire user-ready event
         window.dispatchEvent(new CustomEvent('charts-user-ready', {

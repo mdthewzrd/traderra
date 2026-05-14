@@ -2330,6 +2330,7 @@ function renderPanel(p){
 
 
   // ── ANNOTATIONS (clipped to chart area) ──
+  if(!window.__tsOverride){
   ctx.save();
   ctx.beginPath(); ctx.rect(0,0,chartW,priceH); ctx.clip();
 
@@ -2845,8 +2846,10 @@ function renderPanel(p){
     } // close else-if wrapper
   }
   ctx.restore();
+  } // end inline annotations (TS override)
 
   // ── BACKTEST MARKERS ──
+  if(!window.__tsOverride){
   if(btMarkers.length && p.showBtExec){
     ctx.save();
     ctx.beginPath(); ctx.rect(0,0,chartW,priceH); ctx.clip();
@@ -3034,6 +3037,7 @@ function renderPanel(p){
 
 // Check if annotation is near mouse (for delete highlight)
 // Returns {ann, endpoint:'1'|'2'|'3'} for draggable handles on supported annotations.
+  } // end inline BT/crosshair/price (TS override)
 function findTLEndpoint(mx,my,p,chartW,priceH){
   const HIT=20;
   const vs=Math.max(0,Math.min(p.viewStart,Math.max(0,p.data.length-p.viewBars)));

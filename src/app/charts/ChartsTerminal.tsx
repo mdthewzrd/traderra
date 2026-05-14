@@ -73,8 +73,11 @@ export default function ChartsTerminal({ userId, userName, userImage }: ChartsTe
         })
 
         await loadScript('/indicators/vault.js')
+        console.log('[Charts] vault.js loaded')
         await loadScript('/charts-engine.js')
+        console.log('[Charts] charts-engine.js loaded')
         await loadScript('/charts-engine-footer.js')
+        console.log('[Charts] charts-engine-footer.js loaded')
 
         // Override renderPanel with our TypeScript version
         overrideRenderPanel()

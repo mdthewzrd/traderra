@@ -1,16 +1,12 @@
 /**
- * Charts layout — full-screen, no footer, no Renata sidebar.
- * The charts app is a single-page canvas app that needs the full viewport.
+ * Charts layout — no footer, no Renata sidebar.
+ * Body already has display:flex;flex-direction:column from charts-terminal.css.
+ * Just pass children through — don't wrap in any extra div.
  */
-
 export default function ChartsLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  return (
-    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden' }}>
-      {children}
-    </div>
-  )
+  return <>{children}</>
 }

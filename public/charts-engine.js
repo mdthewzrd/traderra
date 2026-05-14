@@ -10800,6 +10800,7 @@ function settingsSync(){
 }
 
 // buildPanels deferred — waits for React to mount #grid
+  console.log("[Charts] Waiting for #grid...");
 (function waitForGrid(){
   var grid=document.getElementById('grid');
   if(!grid){setTimeout(waitForGrid,50);return;}

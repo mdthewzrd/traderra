@@ -10821,11 +10821,6 @@ function settingsSync(){
     setTimeout(function(){ if(typeof CloudStore!=='undefined') CloudStore.init(); }, 2000);
   }));
 })();
-  loadAll();
-  // Init cloud sync after everything loaded
-  setTimeout(function(){ if(typeof CloudStore!=='undefined') CloudStore.init(); }, 2000);
-}));
-
 // ── Sidebar drag divider ──
 (function(){
   const divider = document.getElementById('bt-divider');

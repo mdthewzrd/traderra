@@ -1629,6 +1629,7 @@ function renderPanel(p){
   }
 
   // ── GRID ──
+  if(!window.__tsOverrideGrid){
   ctx.strokeStyle=C.grid; ctx.lineWidth=1;
   // Horizontal grid: snap to nice round price levels
   const priceSteps=6;
@@ -1694,6 +1695,7 @@ function renderPanel(p){
     ctx.fillText(label,Math.round(x),H-TIME_H+13);
   }
 
+  } // end inline grid+axes (TS override)
   // ── BT DATE HIGHLIGHTS ──
   if(!window.__tsOverrideSession){
   if(btHighlightDates && btSelected){
@@ -2130,6 +2132,7 @@ function renderPanel(p){
   if(!_toolOwned.has('db_72_89') && pi.db_72_89){const [u,d]=devMults('db_72_89','db_72_89');drawDevBand(e72,atr72,e89,atr89,u,d, getIndColor('db_72_89',0)||'rgba(239,68,68,.15)',getIndColor('db_72_89',1)||'rgba(239,68,68,.40)', getIndColor('db_72_89',2)||'rgba(34,197,94,.15)',getIndColor('db_72_89',3)||'rgba(34,197,94,.40)');}
 
   // ── CANDLES (drawn after band fills, before indicator lines) ──
+  if(!window.__tsOverrideCandles){
   ctx.save();
   ctx.beginPath(); ctx.rect(0,0,chartW,priceH+volH); ctx.clip();
   for(let i=0;i<visible.length;i++){
@@ -2333,6 +2336,7 @@ function renderPanel(p){
 
 
 
+  } // end inline candles (TS override)
   // ── ANNOTATIONS (clipped to chart area) ──
   if(!window.__tsOverride){
   ctx.save();

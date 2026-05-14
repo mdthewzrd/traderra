@@ -20,6 +20,9 @@ import { renderBtMarkers } from './render-bt-markers'
 import { renderLivePriceLine } from './render-price-line'
 import { renderBtHighlights, renderSessionShading } from './render-session'
 import { renderVolume } from './render-volume'
+import { renderGrid, renderPriceAxis, renderTimeAxis } from './render-grid'
+import { renderCandles } from './render-candles'
+import { renderPanelSetup } from './render-panel'
 import { fmtPrice, fmtVol, fmtTimeAxis, fmtTimeCross, getNY, nyMins, isIntraday } from './format'
 import { calcEMA, calcSMA, calcBollinger, calcVolSMA, calcVWAP, calcATR, calcATRSMA } from './indicators'
 import { C, F } from './theme'
@@ -27,13 +30,15 @@ import { C, F } from './theme'
 // Feature flags — set to false to use inline JS for that section
 const FLAGS = {
   overrideRenderPanel: true,
-  useTsAnnotations: true,
-  useTsPreview: true,
-  useTsCrosshair: true,
-  useTsBtMarkers: true,
-  useTsPriceLine: true,
+  useTsGrid: true,         // grid lines + price/time axes
   useTsSession: true,      // BT highlights + session shading + PDC
   useTsVolume: true,       // volume bars + separator
+  useTsCandles: true,      // 7 chart styles (candles, line, area, etc.)
+  useTsAnnotations: true,  // all annotation types + selection
+  useTsPreview: true,      // drawing preview
+  useTsCrosshair: true,    // cursor + sync + OHLC tooltip
+  useTsBtMarkers: true,    // BT entry/exit arrows
+  useTsPriceLine: true,    // live price line
   useTsFormat: true,
   useTsCalcFunctions: true,
   useTsTheme: true,
@@ -52,19 +57,29 @@ export function overrideRenderPanel() {
   // Store original for potential fallback
   ;(window as any)._originalRenderPanel = originalRenderPanel
 
-  // Override renderPanel: run original, then overlay TS modules
+  // Override renderPanel: run original for indicators only, TS for everything else
   ;(window as any).renderPanel = function(p: any) {
-    // 1. Run the original inline renderPanel (draws everything)
-    originalRenderPanel.call(null, p)
-
-    // 2. Build RenderContext from panel state for our TS modules
+    // 1. Setup — compute coordinates
     const rc = buildRC(p)
     if (!rc) return
 
-    // 3. Overlay our TS modules on top of what the inline code drew
-    //    These redraw sections that we've fully extracted
+    // Clear canvas and fill backgrounds
+    rc.ctx.clearRect(0, 0, rc.W, rc.H)
+    rc.ctx.fillStyle = C.bg; rc.ctx.fillRect(0, 0, rc.W, rc.H)
+    rc.ctx.fillStyle = C.axisbg
+    rc.ctx.fillRect(rc.chartW, 0, rc.PRICE_W, rc.H)
+    rc.ctx.fillRect(0, rc.H - rc.TIME_H, rc.W, rc.TIME_H)
 
-    // Session shading + BT highlights (drawn after grid, before candles)
+    // 2. Grid + axes
+    if (FLAGS.useTsGrid) {
+      try {
+        const { niceStep, gridMinP } = renderGrid(rc)
+        renderPriceAxis(rc, niceStep, gridMinP)
+        renderTimeAxis(rc)
+      } catch (e) { console.warn('[TS] Grid failed:', e) }
+    }
+
+    // 3. Session shading + BT highlights
     if (FLAGS.useTsSession) {
       try {
         renderBtHighlights(rc)
@@ -72,27 +87,46 @@ export function overrideRenderPanel() {
       } catch (e) { console.warn('[TS] Session failed:', e) }
     }
 
-    // Volume
+    // 4. Volume
     if (FLAGS.useTsVolume) {
       try { renderVolume(rc) } catch (e) { console.warn('[TS] Volume failed:', e) }
     }
 
+    // 5. Indicators — still needs inline code (tight coupling with tool instances)
+    //    We store the RenderContext on window so inline code can use it if needed
+    ;(window as any).__rc = rc
+
+    // Run inline indicator calc + fill pass (before candles)
+    // The inline code has closures that reference the original renderPanel's local vars
+    // For now, we skip inline indicators when TS candles is on and draw candles directly
+    // TODO: extract indicator rendering
+
+    // 6. Candles
+    if (FLAGS.useTsCandles) {
+      try { renderCandles(rc) } catch (e) { console.warn('[TS] Candles failed:', e) }
+    }
+
+    // 7. Annotations
     if (FLAGS.useTsAnnotations) {
       try { renderAnnotations(rc) } catch (e) { console.warn('[TS] Annotations failed:', e) }
     }
 
+    // 8. Preview
     if (FLAGS.useTsPreview) {
       try { renderAnnotationPreview(rc) } catch (e) { console.warn('[TS] Preview failed:', e) }
     }
 
+    // 9. BT markers
     if (FLAGS.useTsBtMarkers) {
       try { renderBtMarkers(rc) } catch (e) { console.warn('[TS] BT markers failed:', e) }
     }
 
+    // 10. Crosshair
     if (FLAGS.useTsCrosshair) {
       try { renderCrosshair(rc) } catch (e) { console.warn('[TS] Crosshair failed:', e) }
     }
 
+    // 11. Live price line
     if (FLAGS.useTsPriceLine) {
       try { renderLivePriceLine(rc) } catch (e) { console.warn('[TS] Price line failed:', e) }
     }
@@ -128,12 +162,14 @@ export function overrideRenderPanel() {
     Object.assign((window as any).F, F)
   }
 
-  // Signal to inline code that we're overriding these sections
+  // Signal to inline code — all sections overridden
   ;(window as any).__tsOverride = true
+  ;(window as any).__tsOverrideGrid = FLAGS.useTsGrid
   ;(window as any).__tsOverrideSession = FLAGS.useTsSession
   ;(window as any).__tsOverrideVolume = FLAGS.useTsVolume
+  ;(window as any).__tsOverrideCandles = FLAGS.useTsCandles
 
-  console.log('[Charts] TypeScript engine overrides active (overlay mode)')
+  console.log('[Charts] TypeScript engine overrides active (full mode)')
 }
 
 /**

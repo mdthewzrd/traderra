@@ -1,73 +1,120 @@
 'use client'
 
-import { useEffect } from 'react'
-import { useUIStore, useDrawingStore } from '@/stores/charts'
+import { useEffect, useCallback, useRef } from 'react'
+import { useChartStore, useDrawingStore, useUIStore } from '@/stores/charts'
 
 /**
- * Bridge hook that syncs Zustand stores to the legacy JS globals.
- * This is the integration layer between React state and the old inline scripts.
- * As we extract more JS into stores, this bridge shrinks.
+ * Bridge hook that syncs Zustand stores ↔ charts-engine.js global state.
+ *
+ * During the migration, charts-engine.js reads/writes global variables like:
+ *   (window).symbol, (window)._magnetSnap, (window)._stayDraw, etc.
+ *
+ * This hook:
+ * 1. Exposes store state to the window object so charts-engine.js can read it
+ * 2. Listens for legacy mutation events and syncs back to Zustand
+ * 3. Provides bridge functions that both update Zustand AND call legacy handlers
+ *
+ * Once charts-engine.js is fully replaced, this hook becomes unnecessary.
  */
 export function useLegacyBridge() {
+  const chartSymbol = useChartStore((s) => s.symbol)
+  const setChartSymbol = useChartStore((s) => s.setSymbol)
+  const activeTool = useDrawingStore((s) => s.activeTool)
+  const setActiveTool = useDrawingStore((s) => s.setActiveTool)
+  const magnetSnap = useDrawingStore((s) => s.magnetSnap)
+  const setMagnetSnap = useDrawingStore((s) => s.setMagnetSnap)
+  const stayDraw = useDrawingStore((s) => s.stayDraw)
+  const setStayDraw = useDrawingStore((s) => s.setStayDraw)
+  const lockAll = useDrawingStore((s) => s.lockAll)
+  const setLockAll = useDrawingStore((s) => s.setLockAll)
+  const hideAll = useDrawingStore((s) => s.hideAll)
+  const setHideAll = useDrawingStore((s) => s.setHideAll)
   const theme = useUIStore((s) => s.theme)
   const sidebarOpen = useUIStore((s) => s.sidebarOpen)
-  const liveMode = useUIStore((s) => s.liveMode)
-  const showPriceLine = useUIStore((s) => s.showPriceLine)
-  const useAdjusted = useUIStore((s) => s.useAdjusted)
-  const cleanPrints = useUIStore((s) => s.cleanPrints)
-  const barsVisible = useUIStore((s) => s.barsVisible)
-  const activeLayout = useUIStore((s) => s.activeLayout)
-  const activeTool = useDrawingStore((s) => s.activeTool)
+  const sidebarTab = useUIStore((s) => s.sidebarTab)
 
-  // Sync theme → body.light class
+  const w = useRef(typeof window !== 'undefined' ? (window as any) : null)
+
+  // ── Zustand → Window (one-way sync) ──
   useEffect(() => {
-    if (theme === 'light') {
-      document.body.classList.add('light')
-    } else {
-      document.body.classList.remove('light')
-    }
-  }, [theme])
+    if (!w.current) return
+    const win = w.current
 
-  // Sync sidebar open state → #sidebar class
+    // Expose current Zustand values on window for charts-engine.js to read
+    win.__zustand_symbol = chartSymbol
+    win.__zustand_activeTool = activeTool
+    win.__zustand_magnetSnap = magnetSnap
+    win.__zustand_stayDraw = stayDraw
+    win.__zustand_lockAll = lockAll
+    win.__zustand_hideAll = hideAll
+    win.__zustand_theme = theme
+    win.__zustand_sidebarOpen = sidebarOpen
+    win.__zustand_sidebarTab = sidebarTab
+  }, [chartSymbol, activeTool, magnetSnap, stayDraw, lockAll, hideAll, theme, sidebarOpen, sidebarTab])
+
+  // ── Symbol input bridge ──
   useEffect(() => {
-    const sb = document.getElementById('sidebar')
-    if (sb) {
-      if (sidebarOpen) {
-        sb.classList.add('open')
-      } else {
-        sb.classList.remove('open')
-      }
-    }
-  }, [sidebarOpen])
-
-  // Sync UI toggles → legacy globals
-  useEffect(() => { (window as any).liveMode = liveMode }, [liveMode])
-  useEffect(() => { (window as any).showPriceLine = showPriceLine }, [showPriceLine])
-  useEffect(() => { (window as any).useAdjusted = useAdjusted }, [useAdjusted])
-  useEffect(() => { (window as any).cleanPrints = cleanPrints }, [cleanPrints])
-  useEffect(() => { (window as any).barsVisible = barsVisible }, [barsVisible])
-
-  // Sync layout → update grid CSS
-  useEffect(() => {
-    const grid = document.getElementById('grid')
-    if (!grid) return
-    if (activeLayout === 1) {
-      grid.style.gridTemplateColumns = '1fr'
-      grid.style.gridTemplateRows = '1fr'
-    } else if (activeLayout === 2) {
-      grid.style.gridTemplateColumns = '1fr 1fr'
-      grid.style.gridTemplateRows = '1fr'
-    } else {
-      grid.style.gridTemplateColumns = '1fr 1fr'
-      grid.style.gridTemplateRows = '1fr 1fr'
-    }
-  }, [activeLayout])
-
-  // Sync active tool → update left toolbar button states
-  useEffect(() => {
-    document.querySelectorAll('#left-toolbar .lt-btn, #left-toolbar .lt-fo-item').forEach((el) => {
-      const elTool = el.getAttribute('data-tool')
-      el.classList.toggle('active', elTool === activeTool || (!activeTool && elTool === ''))
+    if (!w.current) return
+    const win = w.current
+    // When charts-engine.js sets window.symbol, sync to Zustand
+    const origSet = Object.getOwnPropertyDescriptor(win, 'symbol')?.set
+    let _symbol = chartSymbol
+    Object.defineProperty(win, 'symbol', {
+      get() { return _symbol },
+      set(v: string) {
+        _symbol = v
+        if (v && v !== chartSymbol) setChartSymbol(v)
+        origSet?.call(win, v)
+      },
+      configurable: true,
     })
-  }, [activeTool])
+    return () => {
+      // Cleanup - restore normal property
+      delete win.symbol
+      win.symbol = _symbol
+    }
+  }, [chartSymbol, setChartSymbol])
+
+  // ── Tool selection bridge ──
+  // Override window.setActiveTool to also update Zustand
+  useEffect(() => {
+    if (!w.current) return
+    const win = w.current
+    const origFn = win.setActiveTool
+    win.setActiveTool = (tool: string | null) => {
+      setActiveTool(tool)
+      origFn?.(tool)
+    }
+    return () => { win.setActiveTool = origFn }
+  }, [setActiveTool])
+
+  // ── Magnet/stay/lock/hide bridge ──
+  useEffect(() => {
+    if (!w.current) return
+    const win = w.current
+    win._magnetSnap = magnetSnap
+    win._stayDraw = stayDraw
+    win._lockAll = lockAll
+    win._hideAll = hideAll
+  }, [magnetSnap, stayDraw, lockAll, hideAll])
+
+  // ── Expose helper functions for React components to call legacy code ──
+  const bridgeLoadSymbol = useCallback((sym: string) => {
+    setChartSymbol(sym)
+    if (w.current) {
+      w.current.symbol = sym
+      w.current.loadChart?.(sym)
+    }
+  }, [setChartSymbol])
+
+  const bridgeToggleTool = useCallback((tool: string) => {
+    setActiveTool(tool)
+    if (w.current) w.current.setActiveTool?.(tool)
+  }, [setActiveTool])
+
+  const bridgeRenderAll = useCallback(() => {
+    if (w.current) w.current.renderAll?.()
+  }, [])
+
+  return { bridgeLoadSymbol, bridgeToggleTool, bridgeRenderAll }
 }

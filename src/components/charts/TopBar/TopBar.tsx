@@ -1,6 +1,7 @@
 'use client'
 
-import { useUIStore } from '@/stores/charts'
+import { useState, useCallback } from 'react'
+import { useUIStore, useChartStore, useDrawingStore } from '@/stores/charts'
 
 /**
  * TopBar — the main toolbar at the top of the charts app.
@@ -9,7 +10,13 @@ import { useUIStore } from '@/stores/charts'
  */
 
 export function TopBar() {
+  const [symInput, setSymInput] = useState('AAPL')
+
   // Zustand-driven state
+  const chartSymbol = useChartStore((s) => s.symbol)
+  const setChartSymbol = useChartStore((s) => s.setSymbol)
+  const activeTool = useDrawingStore((s) => s.activeTool)
+  const setActiveTool = useDrawingStore((s) => s.setActiveTool)
   const liveMode = useUIStore((s) => s.liveMode)
   const setLiveMode = useUIStore((s) => s.setLiveMode)
   const showPriceLine = useUIStore((s) => s.showPriceLine)
@@ -22,13 +29,29 @@ export function TopBar() {
   const setActiveLayout = useUIStore((s) => s.setActiveLayout)
   const setSidebarTab = useUIStore((s) => s.setSidebarTab)
 
+  const handleLoadSymbol = useCallback(() => {
+    const sym = symInput.trim().toUpperCase()
+    if (!sym) return
+    setChartSymbol(sym)
+    // Bridge to legacy engine
+    ;(window as any).symbol = sym
+    ;(window as any).loadChart?.(sym)
+  }, [symInput, setChartSymbol])
+
   return (
     <div id="topbar">
       <span id="logo">TRADERRA</span>
       <div className="sep" />
       <SidebarToggleButton />
-      <input id="symbol-input" type="text" defaultValue="AAPL" placeholder="TICKER" />
-      <button className="tbtn" id="load-btn">▶ LOAD</button>
+      <input
+        id="symbol-input"
+        type="text"
+        value={symInput}
+        placeholder="TICKER"
+        onChange={(e) => setSymInput(e.target.value.toUpperCase())}
+        onKeyDown={(e) => e.key === 'Enter' && handleLoadSymbol()}
+      />
+      <button className="tbtn" id="load-btn" onClick={handleLoadSymbol}>▶ LOAD</button>
       <button className={`tbtn${liveMode ? ' active' : ''}`} id="live-btn" onClick={() => setLiveMode(!liveMode)}>⬤ LIVE</button>
       <div id="live-indicator">
         <div id="live-dot" />
@@ -51,7 +74,7 @@ export function TopBar() {
         {[1, 2, 4].map(n => (
           <button key={n} className={`tbtn${activeLayout === n ? ' active' : ''}`} id={`ly${n}`} style={{ fontWeight: 900 }} onClick={() => setActiveLayout(n)}>{n}</button>
         ))}
-        <button className="tbtn" id="bt-btn" style={{ borderColor: '#f59e0b!important', color: '#f59e0b!important' }}>⏱ BT</button>
+        <button className="tbtn" id="bt-btn" style={{ borderColor: '#f59e0b!important', color: '#f59e0b!important' }} onClick={() => setSidebarTab('bt')}>⏱ BT</button>
         <button className="tbtn" id="scan-btn" style={{ borderColor: '#4ade80!important', color: '#4ade80!important' }} onClick={() => setSidebarTab('scan')}>📡 SCAN</button>
         <button className="tbtn" id="vault-btn" style={{ borderColor: '#a78bfa!important', color: '#a78bfa!important' }} onClick={() => setSidebarTab('vault')}>📦 VAULT</button>
         <button className="tbtn" id="settings-btn" style={{ borderColor: '#D4AF37!important', color: '#D4AF37!important' }} onClick={() => setSidebarTab('look')}>⚙ LOOK</button>
@@ -90,30 +113,35 @@ export function TopBar() {
 }
 
 function DrawMenu() {
+  const setActiveTool = useDrawingStore((s) => s.setActiveTool)
+  const bridgeTool = (tool: string) => {
+    setActiveTool(tool)
+    ;(window as any).setActiveTool?.(tool)
+  }
   return (
     <div className="dropdown-group">
       <button className="tbtn dropdown-trigger" id="draw-menu-btn">✏ DRAW ▾</button>
       <div className="dropdown-content" id="draw-menu">
-        <button className="tool-btn" data-tool="trendline">✏ Line</button>
-        <button className="tool-btn" data-tool="fib_ret" style={{ borderColor: '#a78bfa', color: '#a78bfa' }}>〰 Fib Retracement</button>
-        <button className="tool-btn" data-tool="box_orange">▣ Orange Box</button>
-        <button className="tool-btn" data-tool="box_yellow">▣ Yellow Box</button>
-        <button className="tool-btn" data-tool="text_orange">T Orange Text</button>
-        <button className="tool-btn" data-tool="text_yellow">T Yellow Text</button>
+        <button className="tool-btn" data-tool="trendline" onClick={() => bridgeTool('trendline')}>✏ Line</button>
+        <button className="tool-btn" data-tool="fib_ret" style={{ borderColor: '#a78bfa', color: '#a78bfa' }} onClick={() => bridgeTool('fib_ret')}>〰 Fib Retracement</button>
+        <button className="tool-btn" data-tool="box_orange" onClick={() => bridgeTool('box_orange')}>▣ Orange Box</button>
+        <button className="tool-btn" data-tool="box_yellow" onClick={() => bridgeTool('box_yellow')}>▣ Yellow Box</button>
+        <button className="tool-btn" data-tool="text_orange" onClick={() => bridgeTool('text_orange')}>T Orange Text</button>
+        <button className="tool-btn" data-tool="text_yellow" onClick={() => bridgeTool('text_yellow')}>T Yellow Text</button>
         <hr style={{ border: 'none', borderTop: '1px solid #2a3050', margin: '2px 0' }} />
         <span style={{ fontSize: 8, color: '#3a4560', padding: '2px 6px' }}>HIGHLIGHT:</span>
-        <button className="tool-btn" data-tool="hl_cyan" style={{ borderColor: '#22d3ee', color: '#22d3ee' }}>■ Cyan</button>
-        <button className="tool-btn" data-tool="hl_magenta" style={{ borderColor: '#e879f9', color: '#e879f9' }}>■ Magenta</button>
-        <button className="tool-btn" data-tool="hl_green" style={{ borderColor: '#4ade80', color: '#4ade80' }}>■ Green</button>
-        <button className="tool-btn" data-tool="hl_white" style={{ borderColor: '#cbd5e1', color: '#cbd5e1' }}>■ White</button>
+        <button className="tool-btn" data-tool="hl_cyan" style={{ borderColor: '#22d3ee', color: '#22d3ee' }} onClick={() => bridgeTool('hl_cyan')}>■ Cyan</button>
+        <button className="tool-btn" data-tool="hl_magenta" style={{ borderColor: '#e879f9', color: '#e879f9' }} onClick={() => bridgeTool('hl_magenta')}>■ Magenta</button>
+        <button className="tool-btn" data-tool="hl_green" style={{ borderColor: '#4ade80', color: '#4ade80' }} onClick={() => bridgeTool('hl_green')}>■ Green</button>
+        <button className="tool-btn" data-tool="hl_white" style={{ borderColor: '#cbd5e1', color: '#cbd5e1' }} onClick={() => bridgeTool('hl_white')}>■ White</button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 6px' }}>
           <span style={{ fontSize: 8, color: '#3a4560' }}>OP:</span>
           <input id="hl-opacity" type="range" min={5} max={80} defaultValue={35} style={{ width: 60, height: 14, accentColor: '#22d3ee', cursor: 'pointer' }} />
           <span id="hl-opacity-val" style={{ fontSize: 11, color: '#4a6080' }}>15%</span>
         </div>
         <hr style={{ border: 'none', borderTop: '1px solid #2a3050', margin: '2px 0' }} />
-        <button className="tool-btn" data-tool="edit" style={{ borderColor: '#fbbf24', color: '#fbbf24' }}>✎ Edit</button>
-        <button className="tool-btn" data-tool="del" style={{ borderColor: '#ff3d57', color: '#ff3d57' }}>🗑 Delete</button>
+        <button className="tool-btn" data-tool="edit" style={{ borderColor: '#fbbf24', color: '#fbbf24' }} onClick={() => bridgeTool('edit')}>✎ Edit</button>
+        <button className="tool-btn" data-tool="del" style={{ borderColor: '#ff3d57', color: '#ff3d57' }} onClick={() => bridgeTool('del')}>🗑 Delete</button>
         <button className="tbtn" id="clr-btn" style={{ margin: '2px 4px' }}>✕ Clear All</button>
       </div>
     </div>
@@ -121,18 +149,23 @@ function DrawMenu() {
 }
 
 function TradeMenu() {
+  const setActiveTool = useDrawingStore((s) => s.setActiveTool)
+  const bridgeTool = (tool: string) => {
+    setActiveTool(tool)
+    ;(window as any).setActiveTool?.(tool)
+  }
   return (
     <div className="dropdown-group">
       <button className="tbtn dropdown-trigger" id="trade-menu-btn" style={{ borderColor: '#ff9800', color: '#ff9800' }}>⇅ TRADE ▾</button>
       <div className="dropdown-content" id="trade-menu">
-        <button className="tool-btn" data-tool="entry_arrow" style={{ borderColor: '#ff9800', color: '#ff9800' }}>▲ Long Entry</button>
-        <button className="tool-btn" data-tool="exit_arrow" style={{ borderColor: '#40c4ff', color: '#40c4ff' }}>▼ Long Exit</button>
+        <button className="tool-btn" data-tool="entry_arrow" style={{ borderColor: '#ff9800', color: '#ff9800' }} onClick={() => bridgeTool('entry_arrow')}>▲ Long Entry</button>
+        <button className="tool-btn" data-tool="exit_arrow" style={{ borderColor: '#40c4ff', color: '#40c4ff' }} onClick={() => bridgeTool('exit_arrow')}>▼ Long Exit</button>
         <hr style={{ border: 'none', borderTop: '1px solid #2a3050', margin: '2px 0' }} />
-        <button className="tool-btn" data-tool="short_arrow" style={{ borderColor: '#ff5252', color: '#ff5252' }}>▼ Short Entry</button>
-        <button className="tool-btn" data-tool="cover_arrow" style={{ borderColor: '#00e676', color: '#00e676' }}>▲ Cover</button>
+        <button className="tool-btn" data-tool="short_arrow" style={{ borderColor: '#ff5252', color: '#ff5252' }} onClick={() => bridgeTool('short_arrow')}>▼ Short Entry</button>
+        <button className="tool-btn" data-tool="cover_arrow" style={{ borderColor: '#00e676', color: '#00e676' }} onClick={() => bridgeTool('cover_arrow')}>▲ Cover</button>
         <hr style={{ border: 'none', borderTop: '1px solid #2a3050', margin: '2px 0' }} />
-        <button className="tool-btn" data-tool="stop_line" style={{ borderColor: '#facc15', color: '#facc15' }}>— Stop</button>
-        <button className="tool-btn" data-tool="trail_stop" style={{ borderColor: '#38bdf8', color: '#38bdf8' }}>— Trail Stop</button>
+        <button className="tool-btn" data-tool="stop_line" style={{ borderColor: '#facc15', color: '#facc15' }} onClick={() => bridgeTool('stop_line')}>— Stop</button>
+        <button className="tool-btn" data-tool="trail_stop" style={{ borderColor: '#38bdf8', color: '#38bdf8' }} onClick={() => bridgeTool('trail_stop')}>— Trail Stop</button>
       </div>
     </div>
   )

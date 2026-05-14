@@ -61,7 +61,7 @@ export default function ChartsTerminal({ userId, userName, userImage }: {
   }, [userId, userName, userImage])
 
   return (
-    <div ref={bodyRef} dangerouslySetInnerHTML={{ __html: html }} />
+    <div ref={bodyRef} dangerouslySetInnerHTML={{ __html: html }} style={{ display: 'contents' }} />
   )
 }
 

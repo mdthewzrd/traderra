@@ -15,7 +15,7 @@
 | 2 — HTML Shell | ✅ Done | 821 lines → 6 React components (TopBar, LeftToolbar, AnnotationToolbar, MainArea, Sidebar, Overlays) |
 | 3 — State | 🔄 In Progress | 5 Zustand stores, bridge hook, 3 TS modules (sharing, templates, toast) |
 | 4 — Canvas | ✅ Complete | 2,145 lines across 20 modules |
-| 5 — Cutover | ⬜ Not Started | Kill static HTML, rename routes |
+| 5 — Cutover | ✅ Complete | /charts serves React + TS engine overrides |
 
 ### Phase 3 Detail — What's Extracted vs Remaining
 
@@ -59,11 +59,17 @@ All renderPanel() sub-sections extracted as importable TypeScript modules:
 - `render-preview.ts` (86) — drawing preview
 - `sharing.ts` (106), `templates.ts` (80), `toast.ts` (25)
 
-**Phase 5 — Remaining:**
-- Wire renderPanel() to use TypeScript modules instead of inline
-- Remove `charts-terminal.html`
-- Make `/charts-v2` → `/charts`
-- Kill staging project
+**Phase 5 — COMPLETE:**
+- `/charts` → React ChartsTerminal + TypeScript engine overrides
+- `/charts-legacy` → redirect to original static HTML (fallback)
+- `/charts-terminal.html` still served directly as static file
+- `engine-override.ts` patches renderPanel at runtime:
+  - Annotations, preview, BT markers, crosshair, price line: TS modules
+  - Grid, session, volume, candles, indicators: still inline (guarded)
+  - Format/calc/theme functions: TS overrides globally
+  - Feature flags per section for easy toggling
+- `charts-engine.js` has `if(!window.__tsOverride)` guards
+- Backup: `docs/charts-terminal-backup.html`
 
 **Legacy bridge (`useLegacyBridge`):**
 - Syncs theme → body.light class ✅

@@ -5,12 +5,9 @@ import '../styles/button-fix.css'
 import { QueryProvider } from '@/components/providers/query-provider'
 import { ToastProvider } from '@/components/providers/toast-provider'
 import { StudioTheme } from '@/components/providers/studio-theme'
-import { Footer } from '@/components/layout/footer'
 import { TraderraProvider } from '@/contexts/TraderraContext'
 import { GlobalTraderraProvider } from '@/components/global/GlobalTraderraProvider'
-import { RenataSidebar } from '@/components/layout/renata-sidebar'
 import { GuestModeProvider } from '@/contexts/GuestModeContext'
-import { AgentSystemInitializer } from '@/components/agents/AgentSystemInitializer'
 import { TradeUploadProvider } from '@/components/providers/trade-upload-provider'
 
 const inter = Inter({
@@ -85,13 +82,8 @@ export default function RootLayout({
               <GuestModeProvider>
                 <QueryProvider>
                   <TradeUploadProvider>
-                    <AgentSystemInitializer />
-                    <div className="relative flex min-h-screen flex-col">
-                      {children}
-                      <Footer />
-                    </div>
                     <ToastProvider />
-                    <RenataSidebar />
+                    {children}
                   </TradeUploadProvider>
                 </QueryProvider>
               </GuestModeProvider>

@@ -36,7 +36,6 @@ const DEFAULT_INDS = {
  */
 export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
   const animRef = useRef<number>(0)
 
   // Store state
@@ -65,9 +64,10 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
     [bars, tf]
   )
 
-  // ResizeObserver
+  // ResizeObserver — watch the canvas wrapper, not the outer container
+  const canvasWrapRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    const el = containerRef.current
+    const el = canvasWrapRef.current
     if (!el) return
     const ro = new ResizeObserver(entries => {
       const { width, height } = entries[0].contentRect
@@ -276,7 +276,6 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
 
   return (
     <div
-      ref={containerRef}
       style={{
         flex: 1,
         position: 'relative',
@@ -314,10 +313,11 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
           {indCache.vwap && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.vwap }} title="VWAP" />}
         </div>
         <span style={{ marginLeft: 'auto', color: '#26a69a', fontSize: 10, fontWeight: 800, letterSpacing: 1 }}>⚛ REACT</span>
+        <span style={{ color: '#4a6080', fontSize: 9, marginLeft: 8 }}>{bars.length} bars | {viewBars} vis</span>
       </div>
 
       {/* Canvas */}
-      <div style={{ flex: 1, position: 'relative' }}>
+      <div ref={canvasWrapRef} style={{ flex: 1, position: 'relative' }}>
         <canvas
           ref={canvasRef}
           style={{

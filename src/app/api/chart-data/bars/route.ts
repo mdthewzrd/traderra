@@ -48,9 +48,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: data.error }, { status: 500 })
     }
 
-    // Normalize bars
+    // Normalize bars — convert Polygon ms timestamps to seconds for intraday,
+    // or to date strings for daily+ (matching charts-engine.js convention)
     const bars = (data.results || []).map((r: any) => ({
-      time: r.t,
+      time: timespan === 'day' || timespan === 'week' || timespan === 'month'
+        ? new Date(r.t).toISOString().slice(0, 10)
+        : Math.floor(r.t / 1000),
       open: r.o,
       high: r.h,
       low: r.l,

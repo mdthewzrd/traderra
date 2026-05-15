@@ -304,7 +304,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       }
       console.error('[ReactChartPanel] render error:', err)
     }
-  }, [bars, viewStart, viewBars, mouse, size, chartStyle, tf, symbol, loading, indCache])
+  }, [bars, viewStart, viewBars, mouse, size, chartStyle, tf, symbol, loading])
 
   // Animation loop
   useEffect(() => {

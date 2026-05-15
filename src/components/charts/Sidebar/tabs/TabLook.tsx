@@ -41,12 +41,12 @@ export function TabLook() {
           <div className="sst">SESSIONS</div>
           <SettingRow label="Pre-Mkt">
             <ColorInput id="sc-pre" defaultValue="#787878" />
-            <SliderInput id="sc-preo" min={1} max={40} defaultValue={7} />
+            <SliderInput id="sc-preo" min={1} max={40} defaultValue={7} showPercent />
             <span className="srv" id="sc-preo-v">7%</span>
           </SettingRow>
           <SettingRow label="After-Hrs">
             <ColorInput id="sc-aft" defaultValue="#3c3c3c" />
-            <SliderInput id="sc-afto" min={1} max={40} defaultValue={9} />
+            <SliderInput id="sc-afto" min={1} max={40} defaultValue={9} showPercent />
             <span className="srv" id="sc-afto-v">9%</span>
           </SettingRow>
         </div>
@@ -56,7 +56,7 @@ export function TabLook() {
           <div className="sst">CROSSHAIR</div>
           <SettingRow label="Color">
             <ColorInput id="sc-cr" defaultValue="#8ca0c8" />
-            <SliderInput id="sc-cro" min={10} max={100} defaultValue={50} />
+            <SliderInput id="sc-cro" min={10} max={100} defaultValue={50} showPercent />
             <span className="srv" id="sc-cro-v">50%</span>
           </SettingRow>
         </div>
@@ -112,12 +112,26 @@ function SettingRow({ label, children }: { label: string; children?: React.React
   return <div className="sr"><label>{label}</label>{children}</div>
 }
 
-/** Color picker input preserving legacy ID */
+/** Color picker — bridges to charts-engine.js liveS() on change */
 function ColorInput({ id, defaultValue }: { id: string; defaultValue: string }) {
-  return <input type="color" id={id} defaultValue={defaultValue} />
+  return <input type="color" id={id} defaultValue={defaultValue} onInput={() => (window as any).liveS?.()} />
 }
 
-/** Range slider preserving legacy ID */
-function SliderInput({ id, min, max, defaultValue, step }: { id: string; min: number; max: number; defaultValue: number; step?: number }) {
-  return <input type="range" id={id} min={min} max={max} step={step || 1} defaultValue={defaultValue} style={{ flex: 1 }} />
+/** Range slider — bridges to charts-engine.js liveS() + updates value display */
+function SliderInput({ id, min, max, defaultValue, step, showPercent }: { id: string; min: number; max: number; defaultValue: number; step?: number; showPercent?: boolean }) {
+  return <input 
+    type="range" 
+    id={id} 
+    min={min} 
+    max={max} 
+    step={step || 1} 
+    defaultValue={defaultValue} 
+    style={{ flex: 1 }} 
+    onInput={() => {
+      const el = document.getElementById(id) as HTMLInputElement
+      const vEl = document.getElementById(id + '-v')
+      if (el && vEl) vEl.textContent = showPercent ? el.value + '%' : el.value
+      ;(window as any).liveS?.()
+    }} 
+  />
 }

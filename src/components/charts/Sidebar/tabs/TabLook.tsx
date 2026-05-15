@@ -2,8 +2,10 @@
 
 /**
  * TabLook — Theme customization: candle colors, background, sessions, crosshair, font sizes.
- * All element IDs preserved for charts-engine.js initS() interop.
+ * Color changes mutate the shared theme C object directly — ReactChartPanel reads it each frame.
  */
+
+import { C, F } from '@/lib/charts/theme'
 
 export function TabLook() {
   return (
@@ -112,12 +114,37 @@ function SettingRow({ label, children }: { label: string; children?: React.React
   return <div className="sr"><label>{label}</label>{children}</div>
 }
 
-/** Color picker — bridges to charts-engine.js liveS() on change */
-function ColorInput({ id, defaultValue }: { id: string; defaultValue: string }) {
-  return <input type="color" id={id} defaultValue={defaultValue} onInput={() => (window as any).liveS?.()} />
+/** Read color/slider inputs → update theme C object so ReactChartPanel picks it up */
+function syncThemeFromInputs() {
+  const g = (id: string) => (document.getElementById(id) as HTMLInputElement)?.value
+  const c_up = g('sc-up'), c_dn = g('sc-dn')
+  const c_bg = g('sc-bg'), c_ax = g('sc-ax'), c_gr = g('sc-gr')
+  const c_vu = g('sc-vu'), c_vd = g('sc-vd')
+  const c_cr = g('sc-cr')
+  const c_pre = g('sc-pre'), c_aft = g('sc-aft')
+  const c_preo = g('sc-preo'), c_afto = g('sc-afto'), c_cro = g('sc-cro')
+  const sf_p = g('sf-p'), sf_t = g('sf-t')
+
+  if (c_up)  { C.up = c_up; C.vol_up = `rgba(${parseInt(c_up.slice(1,3),16)},${parseInt(c_up.slice(3,5),16)},${parseInt(c_up.slice(5,7),16)},.5)` }
+  if (c_dn)  { C.dn = c_dn; C.vol_dn = `rgba(${parseInt(c_dn.slice(1,3),16)},${parseInt(c_dn.slice(3,5),16)},${parseInt(c_dn.slice(5,7),16)},.5)` }
+  if (c_bg)  C.bg = c_bg
+  if (c_ax)  C.axisbg = c_ax
+  if (c_gr)  C.grid = c_gr
+  if (c_vu)  C.vol_up = `rgba(${parseInt(c_vu.slice(1,3),16)},${parseInt(c_vu.slice(3,5),16)},${parseInt(c_vu.slice(5,7),16)},.5)`
+  if (c_vd)  C.vol_dn = `rgba(${parseInt(c_vd.slice(1,3),16)},${parseInt(c_vd.slice(3,5),16)},${parseInt(c_vd.slice(5,7),16)},.5)`
+  if (c_cr)  C.cross = `rgba(${parseInt(c_cr.slice(1,3),16)},${parseInt(c_cr.slice(3,5),16)},${parseInt(c_cr.slice(5,7),16)},${(+(c_cro || 50)) / 100})`
+  if (c_pre)  C.pre = `rgba(${parseInt(c_pre.slice(1,3),16)},${parseInt(c_pre.slice(3,5),16)},${parseInt(c_pre.slice(5,7),16)},.${(+(c_preo || 7)).toString().padStart(2,'0')})`
+  if (c_aft)  C.after = `rgba(${parseInt(c_aft.slice(1,3),16)},${parseInt(c_aft.slice(3,5),16)},${parseInt(c_aft.slice(5,7),16)},.${(+(c_afto || 9)).toString().padStart(2,'0')})`
+  if (sf_p) F.p = +sf_p
+  if (sf_t) F.t = +sf_t
 }
 
-/** Range slider — bridges to charts-engine.js liveS() + updates value display */
+/** Color picker — syncs to theme on change */
+function ColorInput({ id, defaultValue }: { id: string; defaultValue: string }) {
+  return <input type="color" id={id} defaultValue={defaultValue} onInput={syncThemeFromInputs} />
+}
+
+/** Range slider — syncs to theme + updates value display */
 function SliderInput({ id, min, max, defaultValue, step, showPercent }: { id: string; min: number; max: number; defaultValue: number; step?: number; showPercent?: boolean }) {
   return <input 
     type="range" 
@@ -131,7 +158,7 @@ function SliderInput({ id, min, max, defaultValue, step, showPercent }: { id: st
       const el = document.getElementById(id) as HTMLInputElement
       const vEl = document.getElementById(id + '-v')
       if (el && vEl) vEl.textContent = showPercent ? el.value + '%' : el.value
-      ;(window as any).liveS?.()
+      syncThemeFromInputs()
     }} 
   />
 }

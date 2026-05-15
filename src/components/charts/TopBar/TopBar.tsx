@@ -1,8 +1,7 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback } from 'react'
 import { useUIStore, useChartStore, useDrawingStore } from '@/stores/charts'
-import { ReactChartPanel } from '@/components/charts/ChartCanvas/ReactChartPanel'
 
 /**
  * TopBar — the main toolbar at the top of the charts app.
@@ -98,12 +97,11 @@ export function TopBar() {
           className="tbtn"
           id="reload-chart-btn"
           style={{ borderColor: '#22d3ee', color: '#22d3ee' }}
-          onClick={() => (window as any).renderAll?.()}
+          onClick={() => window.location.reload()}
           title="Reload chart"
         >
           ⟳ RELOAD
         </button>
-        <ReactPanelToggle />
       </div>
       <div id="ticker-info">
         <span id="ti-sym" style={{ color: '#dde3f0', fontWeight: 700, fontSize: 14 }} />
@@ -215,61 +213,5 @@ function SidebarToggleButton() {
     >
       📋
     </button>
-  )
-}
-
-function ReactPanelToggle() {
-  const reactPanel = useUIStore((s) => s.reactPanel)
-  const setReactPanel = useUIStore((s) => s.setReactPanel)
-  return (
-    <>
-      <button
-        className="tbtn"
-        id="react-panel-btn"
-        style={{
-          borderColor: reactPanel ? '#26a69a' : '#3a4a68',
-          color: reactPanel ? '#26a69a' : '#3a4a68',
-          fontWeight: 900,
-          textShadow: reactPanel ? '0 0 8px #26a69a' : 'none',
-        }}
-        onClick={() => setReactPanel(!reactPanel)}
-        title="Toggle React canvas panel (Phase 3)"
-      >
-        ⚛ REACT
-      </button>
-      {reactPanel && <ReactPanelOverlay />}
-    </>
-  )
-}
-
-function ReactPanelOverlay() {
-  // Fixed-position overlay matching the main chart area dimensions
-  // This covers the legacy #grid area with a React-rendered panel
-  const [mounted, setMounted] = useState(false)
-  const sidebarOpen = useUIStore((s) => s.sidebarOpen)
-
-  useEffect(() => {
-    const timer = setTimeout(() => setMounted(true), 500)
-    return () => clearTimeout(timer)
-  }, [])
-
-  if (!mounted) return null
-
-  return (
-    <div
-      id="react-panel-overlay"
-      style={{
-        position: 'fixed',
-        top: 50,        // topbar height
-        left: 38,       // left toolbar width
-        right: sidebarOpen ? 350 : 0,
-        bottom: 0,
-        zIndex: 50,
-        display: 'flex',
-        background: '#0c0e14',
-      }}
-    >
-      <ReactChartPanel panelIdx={0} />
-    </div>
   )
 }

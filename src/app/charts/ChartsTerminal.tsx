@@ -9,21 +9,14 @@ import { AnnotationToolbar } from '@/components/charts/AnnotationToolbar/Annotat
 import { MainArea } from '@/components/charts/MainArea/MainArea'
 import { Sidebar } from '@/components/charts/Sidebar/Sidebar'
 import { Overlays } from '@/components/charts/Overlays/Overlays'
-import { useLegacyBridge } from '@/hooks/useLegacyBridge'
-import { useUIStore } from '@/stores/charts/uiStore'
 
 /**
- * ChartsTerminal — React component composition with charts-engine.js interop.
+ * ChartsTerminal — Pure React charts terminal.
  *
- * Phase 1 complete: HTML is now real React components, not dangerouslySetInnerHTML.
- * charts-engine.js is still loaded for canvas rendering, events, and state.
- * Elements preserve the same IDs so charts-engine.js can find them via getElementById.
+ * Legacy charts-engine.js is no longer loaded. React renders everything:
+ * canvas (ReactChartPanel), layout, sidebar, overlays.
  *
- * Gradual migration path:
- * - Phase 2: Wire state to components (replace DOM manipulation with Zustand)
- * - Phase 3: Canvas engine → React (ChartCanvas component + TS render modules)
- * - Phase 4: Indicators → Python API
- * - Phase 5: Kill charts-engine.js entirely
+ * charts-engine.js is kept in public/ as reference only.
  */
 export default function ChartsTerminal({ userId, userName, userImage }: {
   userId: string
@@ -32,60 +25,25 @@ export default function ChartsTerminal({ userId, userName, userImage }: {
 }) {
   const loaded = useRef(false)
 
-  // Bridge Zustand ↔ charts-engine.js global state
-  useLegacyBridge()
-
   useEffect(() => {
     if (loaded.current) return
     loaded.current = true
 
-    // Set user context for charts-engine.js
+    // Set user context
     ;(window as any).__CHARTS_USER = { id: userId, name: userName, image: userImage }
 
-    // Inject auth token for CloudStore
+    // Inject auth token
     fetch('/api/auth/token')
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data?.token) localStorage.setItem('traderra-auth-token', data.token)
       })
       .catch(() => {})
-      .then(() => {
-        // Load scripts in order — same as the original HTML
-        const load = (src: string) => new Promise<void>((resolve, reject) => {
-          const s = document.createElement('script')
-          s.src = src
-          s.onload = () => resolve()
-          s.onerror = () => reject(new Error('Failed: ' + src))
-          document.body.appendChild(s)
-        })
-        return load('/indicators/vault.js')
-          .then(() => load('/charts-engine.js'))
-          .then(() => load('/charts-engine-footer.js'))
-      })
-      .then(() => {
-        console.log('[Charts] loaded')
-        window.dispatchEvent(new CustomEvent('charts-user-ready', {
-          detail: (window as any).__CHARTS_USER,
-        }))
-        // After engine loads, trigger active tab content population
-        // (vaultRender, openSingleIndSettings, ScanManager, etc.)
-        // Also re-init settings listeners since React mounts tab content after initS() runs
-        setTimeout(() => {
-          const activeTab = useUIStore.getState().sidebarTab
-          ;(window as any).sbTab?.(activeTab)
-          if (typeof (window as any).initS === 'function') (window as any).initS()
-          if (typeof (window as any).settingsSync === 'function') (window as any).settingsSync()
-        }, 200)
-      })
-      .catch(err => console.error('[Charts] script load failed:', err))
   }, [userId, userName, userImage])
 
   return (
     <div style={{ display: 'contents' }}>
-      {/* Profile icon — fixed top right */}
       <ProfileIcon />
-
-      {/* Structured layout components — preserve IDs for charts-engine.js interop */}
       <TopBar />
       <LeftToolbar />
       <AnnotationToolbar />

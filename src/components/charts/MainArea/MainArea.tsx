@@ -1,11 +1,10 @@
 'use client'
 
 /**
- * MainArea — the main content area containing the grid and backtest sidebar.
- * Uses the original HTML for the BT sidebar via dangerouslySetInnerHTML
- * because charts-engine.js has top-level getElementById calls for many BT elements.
- * Will be extracted to proper React components in Phase 3.
+ * MainArea — the main content area containing the React chart panel and backtest sidebar.
  */
+
+import { ReactChartPanel } from '@/components/charts/ChartCanvas/ReactChartPanel'
 
 const BT_SIDEBAR_HTML = `
 <div id="bt-sidebar">
@@ -108,7 +107,7 @@ const BT_SIDEBAR_HTML = `
 export function MainArea() {
   return (
     <div id="main-area" style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden', transition: 'margin-right 0.15s ease', marginRight: 350, marginLeft: 38 }}>
-      <div id="grid" />
+      <ReactChartPanel panelIdx={0} />
       <div dangerouslySetInnerHTML={{ __html: BT_SIDEBAR_HTML }} />
     </div>
   )

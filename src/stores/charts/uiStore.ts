@@ -54,10 +54,6 @@ interface UIState {
   // Active layout
   activeLayout: number
   setActiveLayout: (v: number) => void
-
-  // React panel toggle (Phase 3)
-  reactPanel: boolean
-  setReactPanel: (v: boolean) => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -98,7 +94,4 @@ export const useUIStore = create<UIState>((set) => ({
 
   activeLayout: 1,
   setActiveLayout: (v) => set({ activeLayout: v }),
-
-  reactPanel: false,
-  setReactPanel: (v) => set({ reactPanel: v }),
 }))

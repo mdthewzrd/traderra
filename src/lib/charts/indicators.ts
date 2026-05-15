@@ -1,10 +1,10 @@
 /**
- * Technical indicator calculation functions.
- * Extracted from inline JS (lines 2624-2850).
- * Pure functions — no DOM or state dependencies.
+ * Indicator calculations — pure functions on bar arrays.
+ * Extracted from charts-engine.js lines 1151-1230.
+ * No global state, no DOM dependencies.
  */
 
-export interface Bar {
+export interface CalcBar {
   time: number
   open: number
   high: number
@@ -13,7 +13,8 @@ export interface Bar {
   volume: number
 }
 
-export function calcEMA(data: Bar[], period: number): (number | null)[] {
+/** Exponential Moving Average */
+export function calcEMA(data: CalcBar[], period: number): (number | null)[] {
   const k = 2 / (period + 1)
   let ema: number | null = null
   const out: (number | null)[] = []
@@ -24,7 +25,8 @@ export function calcEMA(data: Bar[], period: number): (number | null)[] {
   return out
 }
 
-export function calcSMA(data: Bar[], period: number): (number | null)[] {
+/** Simple Moving Average (on close) */
+export function calcSMA(data: CalcBar[], period: number): (number | null)[] {
   const out: (number | null)[] = []
   let sum = 0
   for (let i = 0; i < data.length; i++) {
@@ -35,14 +37,46 @@ export function calcSMA(data: Bar[], period: number): (number | null)[] {
   return out
 }
 
-export function calcBollinger(data: Bar[], period: number, mult: number) {
+/** Average True Range */
+export function calcATR(data: CalcBar[], period: number): (number | null)[] {
+  const out: (number | null)[] = []
+  if (data.length === 0) return out
+  out.push(null)
+  let sum = 0
+  for (let i = 1; i < data.length; i++) {
+    const tr = Math.max(
+      data[i].high - data[i].low,
+      Math.abs(data[i].high - data[i - 1].close),
+      Math.abs(data[i].low - data[i - 1].close)
+    )
+    sum += tr
+    if (i < period) {
+      out.push(null)
+    } else if (i === period) {
+      out.push(sum / period)
+    } else {
+      const prev = out[i - 1]!
+      out.push((prev * (period - 1) + tr) / period)
+    }
+  }
+  return out
+}
+
+/** Bollinger Bands */
+export function calcBollinger(
+  data: CalcBar[],
+  period: number,
+  mult: number
+): { upper: (number | null)[]; middle: (number | null)[]; lower: (number | null)[] } {
   const sma = calcSMA(data, period)
   const upper: (number | null)[] = []
   const lower: (number | null)[] = []
   for (let i = 0; i < data.length; i++) {
     if (sma[i] === null) { upper.push(null); lower.push(null); continue }
     let sumSq = 0
-    for (let j = i - period + 1; j <= i; j++) sumSq += (data[j].close - sma[i]!) * (data[j].close - sma[i]!)
+    for (let j = i - period + 1; j <= i; j++) {
+      sumSq += (data[j].close - sma[i]!) * (data[j].close - sma[i]!)
+    }
     const std = Math.sqrt(sumSq / period)
     upper.push(sma[i]! + std * mult)
     lower.push(sma[i]! - std * mult)
@@ -50,7 +84,8 @@ export function calcBollinger(data: Bar[], period: number, mult: number) {
   return { upper, middle: sma, lower }
 }
 
-export function calcVolSMA(data: Bar[], period: number): (number | null)[] {
+/** Volume SMA */
+export function calcVolSMA(data: CalcBar[], period: number): (number | null)[] {
   const out: (number | null)[] = []
   let sum = 0
   for (let i = 0; i < data.length; i++) {
@@ -61,8 +96,9 @@ export function calcVolSMA(data: Bar[], period: number): (number | null)[] {
   return out
 }
 
-export function calcVWAP(data: Bar[], intraday: boolean): number[] {
-  const out: number[] = []
+/** VWAP — resets daily for intraday, cumulative for daily+ */
+export function calcVWAP(data: CalcBar[], intraday: boolean): (number | null)[] {
+  const out: (number | null)[] = []
   let cumPV = 0, cumV = 0, lastDay: string | null = null
   for (let i = 0; i < data.length; i++) {
     const b = data[i]
@@ -76,32 +112,70 @@ export function calcVWAP(data: Bar[], intraday: boolean): number[] {
   return out
 }
 
-export function calcATR(data: Bar[], period = 14): number[] {
-  let atr: number | null = null
-  const out: number[] = []
-  for (let i = 0; i < data.length; i++) {
-    const hi = data[i].high, lo = data[i].low
-    const pc = i > 0 ? data[i - 1].close : data[i].open
-    const tr = Math.max(hi - lo, Math.abs(hi - pc), Math.abs(lo - pc))
-    atr = atr === null ? tr : (atr * (period - 1) + tr) / period
-    out.push(atr)
-  }
-  return out
+/**
+ * Cached indicator computation.
+ * Call computeIndicators() once per frame — returns cached results.
+ */
+export interface IndicatorCache {
+  ema: Record<number, (number | null)[]>
+  atr: Record<number, (number | null)[]>
+  sma: Record<number, (number | null)[]>
+  vwap: (number | null)[] | null
+  bollinger: { upper: (number | null)[]; middle: (number | null)[]; lower: (number | null)[] } | null
+  volSma: (number | null)[] | null
 }
 
-export function calcATRSMA(data: Bar[], period = 14): (number | null)[] {
-  const trs: number[] = []
-  for (let i = 0; i < data.length; i++) {
-    const hi = data[i].high, lo = data[i].low
-    const pc = i > 0 ? data[i - 1].close : data[i].open
-    trs.push(Math.max(hi - lo, Math.abs(hi - pc), Math.abs(lo - pc)))
+/**
+ * Compute all needed indicators for a panel.
+ * `inds` is the panel's indicator toggle state (e.g. {ema9: true, ema20: true, vwap: false}).
+ */
+export function computeIndicators(
+  data: CalcBar[],
+  inds: Record<string, boolean>,
+  tf: string
+): IndicatorCache {
+  const cache: IndicatorCache = { ema: {}, atr: {}, sma: {}, vwap: null, bollinger: null, volSma: null }
+
+  const ensureEMA = (period: number) => {
+    if (!cache.ema[period]) cache.ema[period] = calcEMA(data, period)
   }
-  const out: (number | null)[] = []
-  for (let i = 0; i < trs.length; i++) {
-    if (i < period - 1) { out.push(null); continue }
-    let sum = 0
-    for (let j = i - period + 1; j <= i; j++) sum += trs[j]
-    out.push(sum / period)
+  const ensureATR = (period: number) => {
+    if (!cache.atr[period]) cache.atr[period] = calcATR(data, period)
   }
-  return out
+
+  // Resolve EMA deps
+  if (inds.ema9 || inds.db_upper || inds.band_9_20 || inds.dev_s_9_20) ensureEMA(9)
+  if (inds.ema20 || inds.db_low2 || inds.band_9_20 || inds.dev_s_9_20) ensureEMA(20)
+  if (inds.ema50) ensureEMA(50)
+  if (inds.ema150) ensureEMA(150)
+  if (inds.ema200) ensureEMA(200)
+  if (inds.ema40_60) { ensureEMA(40); ensureEMA(60) }
+
+  // ATR deps
+  if (inds.db_upper || inds.dev_s_9_20) ensureATR(9)
+  if (inds.db_low1 || inds.db_low2 || inds.dev_s_9_20) ensureATR(20)
+
+  // VWAP
+  if (inds.vwap) {
+    const isIntra = ['1m', '2m', '5m', '10m', '15m', '30m', '60m', '240'].includes(tf)
+    cache.vwap = calcVWAP(data, isIntra)
+  }
+
+  // Bollinger
+  if (inds.bollinger) {
+    cache.bollinger = calcBollinger(data, 20, 2)
+  }
+
+  // SMA
+  if (inds.sma) {
+    const period = 20
+    cache.sma[period] = calcSMA(data, period)
+  }
+
+  // Volume SMA
+  if (inds.sma_vol) {
+    cache.volSma = calcVolSMA(data, 20)
+  }
+
+  return cache
 }

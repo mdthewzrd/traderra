@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useUIStore, useChartStore, useDrawingStore } from '@/stores/charts'
+import { ReactChartPanel } from '@/components/charts/ChartCanvas/ReactChartPanel'
 
 /**
  * TopBar — the main toolbar at the top of the charts app.
@@ -102,6 +103,7 @@ export function TopBar() {
         >
           ⟳ RELOAD
         </button>
+        <ReactPanelToggle />
       </div>
       <div id="ticker-info">
         <span id="ti-sym" style={{ color: '#dde3f0', fontWeight: 700, fontSize: 14 }} />
@@ -213,5 +215,60 @@ function SidebarToggleButton() {
     >
       📋
     </button>
+  )
+}
+
+function ReactPanelToggle() {
+  const reactPanel = useUIStore((s) => s.reactPanel)
+  const setReactPanel = useUIStore((s) => s.setReactPanel)
+  return (
+    <>
+      <button
+        className="tbtn"
+        id="react-panel-btn"
+        style={{
+          borderColor: reactPanel ? '#26a69a' : '#3a4a68',
+          color: reactPanel ? '#26a69a' : '#3a4a68',
+          fontWeight: 900,
+          textShadow: reactPanel ? '0 0 8px #26a69a' : 'none',
+        }}
+        onClick={() => setReactPanel(!reactPanel)}
+        title="Toggle React canvas panel (Phase 3)"
+      >
+        ⚛ REACT
+      </button>
+      {reactPanel && <ReactPanelOverlay />}
+    </>
+  )
+}
+
+function ReactPanelOverlay() {
+  // Portal the ReactChartPanel on top of #panel-0's canvas wrapper
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    // Wait for legacy panels to mount
+    const timer = setTimeout(() => setMounted(true), 500)
+    return () => clearTimeout(timer)
+  }, [])
+
+  if (!mounted) return null
+
+  return (
+    <div
+      id="react-panel-overlay"
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 38,  // left toolbar width
+        right: 350, // sidebar width
+        bottom: 0,
+        zIndex: 50,
+        display: 'flex',
+        pointerEvents: 'auto',
+      }}
+    >
+      <ReactChartPanel panelIdx={0} />
+    </div>
   )
 }

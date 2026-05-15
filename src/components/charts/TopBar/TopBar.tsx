@@ -243,11 +243,12 @@ function ReactPanelToggle() {
 }
 
 function ReactPanelOverlay() {
-  // Portal the ReactChartPanel on top of #panel-0's canvas wrapper
+  // Fixed-position overlay matching the main chart area dimensions
+  // This covers the legacy #grid area with a React-rendered panel
   const [mounted, setMounted] = useState(false)
+  const sidebarOpen = useUIStore((s) => s.sidebarOpen)
 
   useEffect(() => {
-    // Wait for legacy panels to mount
     const timer = setTimeout(() => setMounted(true), 500)
     return () => clearTimeout(timer)
   }, [])
@@ -258,14 +259,14 @@ function ReactPanelOverlay() {
     <div
       id="react-panel-overlay"
       style={{
-        position: 'absolute',
-        top: 0,
-        left: 38,  // left toolbar width
-        right: 350, // sidebar width
+        position: 'fixed',
+        top: 50,        // topbar height
+        left: 38,       // left toolbar width
+        right: sidebarOpen ? 350 : 0,
         bottom: 0,
         zIndex: 50,
         display: 'flex',
-        pointerEvents: 'auto',
+        background: '#0c0e14',
       }}
     >
       <ReactChartPanel panelIdx={0} />

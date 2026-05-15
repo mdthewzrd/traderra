@@ -179,41 +179,41 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
           C.ema40_60_fill, C.ema40_60_fill, C.ema40_60_line, C.ema40_60_line)
       }
 
-      // EMA 9/20 band
+      // EMA 9/20 band — green bull / red bear
       if (inds.band_9_20 && ic.ema[9] && ic.ema[20]) {
         drawEMABand(rc, ic.ema[9], ic.ema[20],
-          'rgba(100,180,255,0.08)', 'rgba(255,100,100,0.08)',
-          'rgba(100,180,255,0.4)', 'rgba(255,100,100,0.4)')
+          'rgba(34,197,94,.15)', 'rgba(239,68,68,.15)',
+          'rgba(34,197,94,.50)', 'rgba(239,68,68,.50)')
       }
 
-      // EMA 72/89 band
+      // EMA 72/89 band — green bull / red bear
       if (inds.band_72_89 && ic.ema[72] && ic.ema[89]) {
         drawEMABand(rc, ic.ema[72], ic.ema[89],
-          'rgba(160,120,255,0.06)', 'rgba(255,160,60,0.06)',
-          'rgba(160,120,255,0.35)', 'rgba(255,160,60,0.35)')
+          'rgba(34,197,94,.15)', 'rgba(239,68,68,.15)',
+          'rgba(34,197,94,.50)', 'rgba(239,68,68,.50)')
       }
 
-      // Deviation band short (9/20)
+      // Deviation band short (9/20) — red upper, green lower
       if (inds.dev_s_9_20 && ic.ema[9] && ic.atr[9] && ic.ema[20] && ic.atr[20]) {
         const d = MIKE_DEV.s_9_20
         drawDevBand(rc,
           ic.ema[d.fast], ic.atr[d.fast],
           ic.ema[d.slow], ic.atr[d.slow],
           d.up, d.dn,
-          C.db_upper_fill, C.db_upper_line,
-          C.db_low1_fill, C.db_low1_line,
+          'rgba(239,68,68,.15)', 'rgba(239,68,68,.40)',
+          'rgba(34,197,94,.15)', 'rgba(34,197,94,.40)',
         )
       }
 
-      // Deviation band 72/89
+      // Deviation band 72/89 — red upper, green lower
       if (inds.db_72_89 && ic.ema[72] && ic.atr[72] && ic.ema[89] && ic.atr[89]) {
         const d = MIKE_DEV.db_72_89
         drawDevBand(rc,
           ic.ema[d.fast], ic.atr[d.fast],
           ic.ema[d.slow], ic.atr[d.slow],
           d.up, d.dn,
-          C.db_upper_fill, C.db_upper_line,
-          C.db_low1_fill, C.db_low1_line,
+          'rgba(239,68,68,.15)', 'rgba(239,68,68,.40)',
+          'rgba(34,197,94,.15)', 'rgba(34,197,94,.40)',
         )
       }
 
@@ -224,26 +224,26 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
         drawLine(rc, ic.bollinger.middle, C.bb_upper, 1)
       }
 
-      // DB upper (EMA9 + ATR9 band above price)
+      // DB upper (EMA9 + ATR9 band above price) — orange
       if (inds.db_upper && ic.ema[9] && ic.atr[9]) {
-        const upper = ic.ema[9].map((v, i) => v != null && ic.atr[9]![i] != null ? v + ic.atr[9]![i]! * 2.4 : null)
-        const lower = ic.ema[9].map((v, i) => v != null && ic.atr[9]![i] != null ? v - ic.atr[9]![i]! * 0.5 : null)
+        const upper = ic.ema[9].map((v, i) => v != null && ic.atr[9]![i] != null ? v + (ic.atr[9]![i] || 0) : null)
+        const lower = ic.ema[9].map((v, i) => v != null && ic.atr[9]![i] != null ? v + (ic.atr[9]![i] || 0) * 0.5 : null)
         drawBandFill(rc, upper, lower, C.db_upper_fill)
         drawBandLines(rc, upper, lower, C.db_upper_line)
       }
 
-      // DB low1 (EMA20 + ATR20)
+      // DB low1 (EMA20 + ATR20) — yellow
       if (inds.db_low1 && ic.ema[20] && ic.atr[20]) {
-        const upper = ic.ema[20].map((v, i) => v != null && ic.atr[20]![i] != null ? v + ic.atr[20]![i]! * 1 : null)
-        const lower = ic.ema[20].map((v, i) => v != null && ic.atr[20]![i] != null ? v - ic.atr[20]![i]! * 2 : null)
+        const upper = ic.ema[20].map((v, i) => v != null && ic.atr[20]![i] != null ? v - (ic.atr[20]![i] || 0) * 0.5 : null)
+        const lower = ic.ema[20].map((v, i) => v != null && ic.atr[20]![i] != null ? v - (ic.atr[20]![i] || 0) : null)
         drawBandFill(rc, upper, lower, C.db_low1_fill)
         drawBandLines(rc, upper, lower, C.db_low1_line)
       }
 
-      // DB low2 (EMA20 + ATR20 wider)
+      // DB low2 (EMA20 + ATR20 wider) — blue
       if (inds.db_low2 && ic.ema[20] && ic.atr[20]) {
-        const upper = ic.ema[20].map((v, i) => v != null && ic.atr[20]![i] != null ? v + ic.atr[20]![i]! * 2.4 : null)
-        const lower = ic.ema[20].map((v, i) => v != null && ic.atr[20]![i] != null ? v - ic.atr[20]![i]! * 2.4 : null)
+        const upper = ic.ema[20].map((v, i) => v != null && ic.atr[20]![i] != null ? v - (ic.atr[20]![i] || 0) * 2 : null)
+        const lower = ic.ema[20].map((v, i) => v != null && ic.atr[20]![i] != null ? v - (ic.atr[20]![i] || 0) * 2.5 : null)
         drawBandFill(rc, upper, lower, C.db_low2_fill)
         drawBandLines(rc, upper, lower, C.db_low2_line)
       }

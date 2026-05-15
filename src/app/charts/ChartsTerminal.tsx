@@ -10,6 +10,7 @@ import { MainArea } from '@/components/charts/MainArea/MainArea'
 import { Sidebar } from '@/components/charts/Sidebar/Sidebar'
 import { Overlays } from '@/components/charts/Overlays/Overlays'
 import { useLegacyBridge } from '@/hooks/useLegacyBridge'
+import { useUIStore } from '@/stores/charts/uiStore'
 
 /**
  * ChartsTerminal — React component composition with charts-engine.js interop.
@@ -66,6 +67,12 @@ export default function ChartsTerminal({ userId, userName, userImage }: {
         window.dispatchEvent(new CustomEvent('charts-user-ready', {
           detail: (window as any).__CHARTS_USER,
         }))
+        // After engine loads, trigger active tab content population
+        // (vaultRender, openSingleIndSettings, ScanManager, etc.)
+        setTimeout(() => {
+          const activeTab = useUIStore.getState().sidebarTab
+          ;(window as any).sbTab?.(activeTab)
+        }, 200)
       })
       .catch(err => console.error('[Charts] script load failed:', err))
   }, [userId, userName, userImage])

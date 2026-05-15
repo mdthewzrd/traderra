@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
+import { useRef, useEffect, useState, useCallback } from 'react'
 import { useBars } from '@/hooks/useBars'
 import { useChartStore } from '@/stores/charts/chartStore'
 import { useUIStore } from '@/stores/charts/uiStore'
@@ -15,16 +15,28 @@ import { computeIndicators } from '@/lib/charts/indicators'
 import { C } from '@/lib/charts/theme'
 import type { RenderContext } from '@/lib/charts/render-types'
 
-// Default indicator config matching Mike's preset
-const DEFAULT_INDS = {
-  ema9: true, ema20: true, ema50: true, ema200: true,
-  vol: true, vwap: true,
-  ema40_60: false, ema150: false,
-  band_9_20: false, band_72_89: false,
-  dev_s_9_20: false, dev_l_9_20: false,
-  db_upper: false, db_low1: false, db_low2: false,
-  bollinger: false, sma: false, sma_vol: false,
-  pzones: false,
+// Read live indicator state from legacy engine panels[0].inds
+// Falls back to Mike's preset defaults if engine hasn't loaded yet
+function getLiveInds(): Record<string, boolean> {
+  const p = (window as any).panels?.[0]
+  if (p?.inds) return { ...p.inds }
+  // Mike preset fallback (intraday)
+  return {
+    ema9: false, ema20: false, ema50: false, ema200: false,
+    db_upper: false, db_low1: false, db_low2: false,
+    vol: true, vwap: true,
+    ema40_60: false, ema150: false,
+    band_9_20: true, band_72_89: true,
+    dev_s_9_20: true, dev_l_9_20: false,
+    db_72_89: true, pzones: true,
+    bollinger: false, sma: false, sma_vol: false,
+  }
+}
+
+// Mike's deviation band parameters
+const MIKE_DEV = {
+  s_9_20: { fast: 9, slow: 20, up: [0.5, 1], dn: [2, 2.4] },
+  db_72_89: { fast: 72, slow: 89, up: [6.9, 9.6], dn: [6.9, 9.6] },
 }
 
 /**
@@ -58,11 +70,19 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
   // Fetch bars
   const { bars, loading } = useBars(symbol, tf)
 
-  // Compute indicators when bars change
-  const indCache = useMemo(
-    () => computeIndicators(bars, DEFAULT_INDS, tf),
-    [bars, tf]
-  )
+  // Live indicator state from legacy engine (read each render, store for JSX)
+  const liveIndsRef = useRef(getLiveInds())
+  useEffect(() => {
+    const interval = setInterval(() => {
+      liveIndsRef.current = getLiveInds()
+    }, 500)
+    return () => clearInterval(interval)
+  }, [])
+  const [liveInds, setLiveInds] = useState(getLiveInds())
+  useEffect(() => {
+    const interval = setInterval(() => setLiveInds(getLiveInds()), 500)
+    return () => clearInterval(interval)
+  }, [])
 
   // ResizeObserver — watch the canvas wrapper, not the outer container
   const canvasWrapRef = useRef<HTMLDivElement>(null)
@@ -107,6 +127,9 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       const dpr = window.devicePixelRatio || 1
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
+      // Read live indicator state from legacy engine
+      const inds = liveIndsRef.current
+
       const rc = renderPanelSetup({
         canvas, ctx,
         data: bars,
@@ -119,7 +142,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
         cx: mouse.x,
         cy: mouse.y,
         tf,
-        inds: { vol: true },
+        inds,
         volFrac: 0.20,
         priceScale: 1,
       })
@@ -132,6 +155,9 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       ;(window as any).globalCrossTime = 0
       ;(window as any).globalCrossPrice = 0
 
+      // Compute all indicators for this frame
+      const ic = computeIndicators(bars, inds, tf)
+
       // ── Grid + Axes ──
       const { niceStep, gridMinP } = renderGrid(rc)
       renderPriceAxis(rc, niceStep, gridMinP)
@@ -141,48 +167,104 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       renderVolume(rc)
 
       // ── Volume SMA ──
-      if (indCache.volSma) {
-        drawLine(rc, indCache.volSma, C.vol_sma_color, 1.5)
+      if (inds.sma_vol && ic.volSma) {
+        drawLine(rc, ic.volSma, C.vol_sma_color, 1.5)
       }
 
-      // ── Indicators (before candles so bands are behind) ──
-
-      // EMA lines
-      if (indCache.ema[9])  drawLine(rc, indCache.ema[9],  C.ema9, 1.4)
-      if (indCache.ema[20]) drawLine(rc, indCache.ema[20], C.ema20, 1.4)
-      if (indCache.ema[50]) drawLine(rc, indCache.ema[50], C.ema50, 1.4)
-      if (indCache.ema[150]) drawLine(rc, indCache.ema[150], C.ema150, 1.0)
-      if (indCache.ema[200]) drawLine(rc, indCache.ema[200], C.ema200, 1.0)
+      // ── Indicators (bands first, then lines, so lines draw on top) ──
 
       // EMA 40/60 band
-      if (indCache.ema[40] && indCache.ema[60]) {
-        drawEMABand(rc,
-          indCache.ema[40], indCache.ema[60],
-          C.ema40_60_fill, C.ema40_60_fill,
-          C.ema40_60_line, C.ema40_60_line,
-        )
-      }
-
-      // VWAP
-      if (indCache.vwap) {
-        drawLine(rc, indCache.vwap, C.vwap, 1.6)
-      }
-
-      // Bollinger Bands
-      if (indCache.bollinger) {
-        drawBandFill(rc, indCache.bollinger.upper, indCache.bollinger.lower, C.bb_fill)
-        drawBandLines(rc, indCache.bollinger.upper, indCache.bollinger.lower, C.bb_upper)
-        drawLine(rc, indCache.bollinger.middle, C.bb_upper, 1)
-      }
-
-      // SMA
-      if (indCache.sma[20]) {
-        drawLine(rc, indCache.sma[20], C.sma_color, 1.4)
+      if (inds.ema40_60 && ic.ema[40] && ic.ema[60]) {
+        drawEMABand(rc, ic.ema[40], ic.ema[60],
+          C.ema40_60_fill, C.ema40_60_fill, C.ema40_60_line, C.ema40_60_line)
       }
 
       // EMA 9/20 band
-      if (indCache.ema[9] && indCache.ema[20]) {
-        drawBandFill(rc, indCache.ema[9], indCache.ema[20], 'rgba(100,140,220,0.04)')
+      if (inds.band_9_20 && ic.ema[9] && ic.ema[20]) {
+        drawEMABand(rc, ic.ema[9], ic.ema[20],
+          'rgba(100,180,255,0.08)', 'rgba(255,100,100,0.08)',
+          'rgba(100,180,255,0.4)', 'rgba(255,100,100,0.4)')
+      }
+
+      // EMA 72/89 band
+      if (inds.band_72_89 && ic.ema[72] && ic.ema[89]) {
+        drawEMABand(rc, ic.ema[72], ic.ema[89],
+          'rgba(160,120,255,0.06)', 'rgba(255,160,60,0.06)',
+          'rgba(160,120,255,0.35)', 'rgba(255,160,60,0.35)')
+      }
+
+      // Deviation band short (9/20)
+      if (inds.dev_s_9_20 && ic.ema[9] && ic.atr[9] && ic.ema[20] && ic.atr[20]) {
+        const d = MIKE_DEV.s_9_20
+        drawDevBand(rc,
+          ic.ema[d.fast], ic.atr[d.fast],
+          ic.ema[d.slow], ic.atr[d.slow],
+          d.up, d.dn,
+          C.db_upper_fill, C.db_upper_line,
+          C.db_low1_fill, C.db_low1_line,
+        )
+      }
+
+      // Deviation band 72/89
+      if (inds.db_72_89 && ic.ema[72] && ic.atr[72] && ic.ema[89] && ic.atr[89]) {
+        const d = MIKE_DEV.db_72_89
+        drawDevBand(rc,
+          ic.ema[d.fast], ic.atr[d.fast],
+          ic.ema[d.slow], ic.atr[d.slow],
+          d.up, d.dn,
+          C.db_upper_fill, C.db_upper_line,
+          C.db_low1_fill, C.db_low1_line,
+        )
+      }
+
+      // Bollinger Bands
+      if (inds.bollinger && ic.bollinger) {
+        drawBandFill(rc, ic.bollinger.upper, ic.bollinger.lower, C.bb_fill)
+        drawBandLines(rc, ic.bollinger.upper, ic.bollinger.lower, C.bb_upper)
+        drawLine(rc, ic.bollinger.middle, C.bb_upper, 1)
+      }
+
+      // DB upper (EMA9 + ATR9 band above price)
+      if (inds.db_upper && ic.ema[9] && ic.atr[9]) {
+        const upper = ic.ema[9].map((v, i) => v != null && ic.atr[9]![i] != null ? v + ic.atr[9]![i]! * 2.4 : null)
+        const lower = ic.ema[9].map((v, i) => v != null && ic.atr[9]![i] != null ? v - ic.atr[9]![i]! * 0.5 : null)
+        drawBandFill(rc, upper, lower, C.db_upper_fill)
+        drawBandLines(rc, upper, lower, C.db_upper_line)
+      }
+
+      // DB low1 (EMA20 + ATR20)
+      if (inds.db_low1 && ic.ema[20] && ic.atr[20]) {
+        const upper = ic.ema[20].map((v, i) => v != null && ic.atr[20]![i] != null ? v + ic.atr[20]![i]! * 1 : null)
+        const lower = ic.ema[20].map((v, i) => v != null && ic.atr[20]![i] != null ? v - ic.atr[20]![i]! * 2 : null)
+        drawBandFill(rc, upper, lower, C.db_low1_fill)
+        drawBandLines(rc, upper, lower, C.db_low1_line)
+      }
+
+      // DB low2 (EMA20 + ATR20 wider)
+      if (inds.db_low2 && ic.ema[20] && ic.atr[20]) {
+        const upper = ic.ema[20].map((v, i) => v != null && ic.atr[20]![i] != null ? v + ic.atr[20]![i]! * 2.4 : null)
+        const lower = ic.ema[20].map((v, i) => v != null && ic.atr[20]![i] != null ? v - ic.atr[20]![i]! * 2.4 : null)
+        drawBandFill(rc, upper, lower, C.db_low2_fill)
+        drawBandLines(rc, upper, lower, C.db_low2_line)
+      }
+
+      // ── Indicator lines (on top of bands) ──
+
+      // EMA lines
+      if (inds.ema9 && ic.ema[9])   drawLine(rc, ic.ema[9],  C.ema9, 1.4)
+      if (inds.ema20 && ic.ema[20]) drawLine(rc, ic.ema[20], C.ema20, 1.4)
+      if (inds.ema50 && ic.ema[50]) drawLine(rc, ic.ema[50], C.ema50, 1.4)
+      if (inds.ema150 && ic.ema[150]) drawLine(rc, ic.ema[150], C.ema150, 1.0)
+      if (inds.ema200 && ic.ema[200]) drawLine(rc, ic.ema[200], C.ema200, 1.0)
+
+      // VWAP
+      if (inds.vwap && ic.vwap) {
+        drawLine(rc, ic.vwap, C.vwap, 1.6)
+      }
+
+      // SMA
+      if (inds.sma && ic.sma[20]) {
+        drawLine(rc, ic.sma[20], C.sma_color, 1.4)
       }
 
       // ── Candles ──
@@ -306,11 +388,16 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
         <span style={{ color: '#8aa0c0' }}>{tfLabel}</span>
         {/* Active indicator dots */}
         <div style={{ display: 'flex', gap: 3, marginLeft: 8 }}>
-          {indCache.ema[9] && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.ema9 }} title="EMA 9" />}
-          {indCache.ema[20] && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.ema20 }} title="EMA 20" />}
-          {indCache.ema[50] && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.ema50 }} title="EMA 50" />}
-          {indCache.ema[200] && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.ema200 }} title="EMA 200" />}
-          {indCache.vwap && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.vwap }} title="VWAP" />}
+          {liveInds.ema9 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.ema9 }} title="EMA 9" />}
+          {liveInds.ema20 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.ema20 }} title="EMA 20" />}
+          {liveInds.ema50 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.ema50 }} title="EMA 50" />}
+          {liveInds.ema200 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.ema200 }} title="EMA 200" />}
+          {liveInds.vwap && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.vwap }} title="VWAP" />}
+          {liveInds.band_9_20 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#6ab4ff' }} title="Band 9/20" />}
+          {liveInds.band_72_89 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#a078ff' }} title="Band 72/89" />}
+          {liveInds.dev_s_9_20 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#dc8c1e' }} title="Dev S 9/20" />}
+          {liveInds.db_72_89 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#c87a14' }} title="DB 72/89" />}
+          {liveInds.pzones && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b' }} title="Pivot Zones" />}
         </div>
         <span style={{ marginLeft: 'auto', color: '#26a69a', fontSize: 10, fontWeight: 800, letterSpacing: 1 }}>⚛ REACT</span>
         <span style={{ color: '#4a6080', fontSize: 9, marginLeft: 8 }}>{bars.length} bars | {viewBars} vis</span>

@@ -144,16 +144,18 @@ export function computeIndicators(
   }
 
   // Resolve EMA deps
-  if (inds.ema9 || inds.db_upper || inds.band_9_20 || inds.dev_s_9_20) ensureEMA(9)
-  if (inds.ema20 || inds.db_low2 || inds.band_9_20 || inds.dev_s_9_20) ensureEMA(20)
+  if (inds.ema9 || inds.db_upper || inds.band_9_20 || inds.dev_s_9_20 || inds.dev_l_9_20) ensureEMA(9)
+  if (inds.ema20 || inds.db_low1 || inds.db_low2 || inds.band_9_20 || inds.dev_s_9_20 || inds.dev_l_9_20) ensureEMA(20)
   if (inds.ema50) ensureEMA(50)
   if (inds.ema150) ensureEMA(150)
   if (inds.ema200) ensureEMA(200)
   if (inds.ema40_60) { ensureEMA(40); ensureEMA(60) }
+  if (inds.band_72_89 || inds.db_72_89) { ensureEMA(72); ensureEMA(89) }
 
   // ATR deps
-  if (inds.db_upper || inds.dev_s_9_20) ensureATR(9)
-  if (inds.db_low1 || inds.db_low2 || inds.dev_s_9_20) ensureATR(20)
+  if (inds.db_upper || inds.dev_s_9_20 || inds.dev_l_9_20) ensureATR(9)
+  if (inds.db_low1 || inds.db_low2 || inds.dev_s_9_20 || inds.dev_l_9_20) ensureATR(20)
+  if (inds.db_72_89) { ensureATR(72); ensureATR(89) }
 
   // VWAP
   if (inds.vwap) {

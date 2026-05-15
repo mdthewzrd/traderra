@@ -69,9 +69,12 @@ export default function ChartsTerminal({ userId, userName, userImage }: {
         }))
         // After engine loads, trigger active tab content population
         // (vaultRender, openSingleIndSettings, ScanManager, etc.)
+        // Also re-init settings listeners since React mounts tab content after initS() runs
         setTimeout(() => {
           const activeTab = useUIStore.getState().sidebarTab
           ;(window as any).sbTab?.(activeTab)
+          if (typeof (window as any).initS === 'function') (window as any).initS()
+          if (typeof (window as any).settingsSync === 'function') (window as any).settingsSync()
         }, 200)
       })
       .catch(err => console.error('[Charts] script load failed:', err))

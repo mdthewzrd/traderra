@@ -102,7 +102,7 @@ export function calcVWAP(data: CalcBar[], intraday: boolean): (number | null)[] 
   let cumPV = 0, cumV = 0, lastDay: string | null = null
   for (let i = 0; i < data.length; i++) {
     const b = data[i]
-    const day = intraday ? new Date(b.time * 1000).toISOString().slice(0, 10) : null
+    const day = intraday ? new Date(Number(b.time) * 1000).toISOString().slice(0, 10) : null
     if (intraday && day !== lastDay) { cumPV = 0; cumV = 0; lastDay = day }
     const tp = (b.high + b.low + b.close) / 3
     cumPV += tp * (b.volume || 0)
@@ -159,7 +159,7 @@ export function computeIndicators(
 
   // VWAP
   if (inds.vwap) {
-    const isIntra = ['1m', '2m', '5m', '10m', '15m', '30m', '60m', '240'].includes(tf)
+    const isIntra = ['1','2','3','5','10','15','30','60','240','1m','2m','5m','10m','15m','30m','60m'].includes(tf)
     cache.vwap = calcVWAP(data, isIntra)
   }
 

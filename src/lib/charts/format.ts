@@ -49,7 +49,7 @@ export function nyMins(ts: number): number {
 }
 
 export function isIntraday(tf: string): boolean {
-  return ['1m','5m','15m','30m','60m'].includes(tf)
+  return ['1','2','3','5','10','15','30','60','1m','2m','5m','10m','15m','30m','60m','240'].includes(tf)
 }
 
 export function fmtTimeAxis(ts: number | string, tf: string): string {

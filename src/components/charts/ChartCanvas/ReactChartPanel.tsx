@@ -86,60 +86,81 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const dpr = window.devicePixelRatio || 1
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    try {
+      const dpr = window.devicePixelRatio || 1
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
-    // Build RenderContext using existing render-panel setup
-    const rc = renderPanelSetup({
-      canvas, ctx,
-      data: bars,
-      W: size.w,
-      H: size.h,
-      PRICE_W: 70,
-      TIME_H: 22,
-      viewStart,
-      viewBars,
-      cx: mouse.x,
-      cy: mouse.y,
-      tf,
-      inds: {},
-      volFrac: 0.20,
-      priceScale: 1,
-    })
+      // Build RenderContext using existing render-panel setup
+      const rc = renderPanelSetup({
+        canvas, ctx,
+        data: bars,
+        W: size.w,
+        H: size.h,
+        PRICE_W: 70,
+        TIME_H: 22,
+        viewStart,
+        viewBars,
+        cx: mouse.x,
+        cy: mouse.y,
+        tf,
+        inds: {},
+        volFrac: 0.20,
+        priceScale: 1,
+      })
 
-    if (!rc) return
+      if (!rc) return
 
-    // Bridge Zustand state to window globals that render modules read
-    ;(window as any)._chartStyle = chartStyle
-    ;(window as any).showPriceLine = true
-    ;(window as any).globalCrossTime = 0
-    ;(window as any).globalCrossPrice = 0
+      // Bridge Zustand state to window globals that render modules read
+      ;(window as any)._chartStyle = chartStyle
+      ;(window as any).showPriceLine = true
+      ;(window as any).globalCrossTime = 0
+      ;(window as any).globalCrossPrice = 0
 
-    // ── Grid + Axes ──
-    const { niceStep, gridMinP } = renderGrid(rc)
-    renderPriceAxis(rc, niceStep, gridMinP)
-    renderTimeAxis(rc)
+      // ── Grid + Axes ──
+      const { niceStep, gridMinP } = renderGrid(rc)
+      renderPriceAxis(rc, niceStep, gridMinP)
+      renderTimeAxis(rc)
 
-    // ── Volume ──
-    renderVolume(rc)
+      // ── Volume ──
+      renderVolume(rc)
 
-    // ── Candles ──
-    renderCandles(rc)
+      // ── Candles ──
+      renderCandles(rc)
 
-    // ── Live Price Line ──
-    renderLivePriceLine(rc)
+      // ── Live Price Line ──
+      renderLivePriceLine(rc)
 
-    // ── Crosshair + OHLC tooltip ──
-    renderCrosshair(rc)
+      // ── Crosshair + OHLC tooltip ──
+      renderCrosshair(rc)
 
-    // ── Loading overlay ──
-    if (loading) {
-      ctx.fillStyle = 'rgba(12,14,20,0.75)'
+      // ── Loading overlay ──
+      if (loading) {
+        ctx.fillStyle = 'rgba(12,14,20,0.75)'
+        ctx.fillRect(0, 0, size.w, size.h)
+        ctx.fillStyle = '#6a80a0'
+        ctx.font = `bold 14px Inter,system-ui`
+        ctx.textAlign = 'center'
+        ctx.fillText('LOADING…', size.w / 2, size.h / 2)
+      }
+    } catch (err: any) {
+      // Render error to canvas instead of crashing
+      cancelAnimationFrame(animRef.current)
+      const dpr = window.devicePixelRatio || 1
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      ctx.fillStyle = '#0c0e14'
       ctx.fillRect(0, 0, size.w, size.h)
-      ctx.fillStyle = '#6a80a0'
-      ctx.font = `bold 14px Inter,system-ui`
-      ctx.textAlign = 'center'
-      ctx.fillText('LOADING…', size.w / 2, size.h / 2)
+      ctx.fillStyle = '#ef5350'
+      ctx.font = '13px monospace'
+      ctx.textAlign = 'left'
+      ctx.fillText('React Panel Error:', 10, 30)
+      ctx.fillStyle = '#dde3f0'
+      const msg = err?.message || String(err)
+      ctx.fillText(msg, 10, 50)
+      if (err?.stack) {
+        const line = err.stack.split('\n').find((l: string) => l.includes('render-'))
+        if (line) ctx.fillText(line.trim(), 10, 70)
+      }
+      console.error('[ReactChartPanel] render error:', err)
     }
   }, [bars, viewStart, viewBars, mouse, size, chartStyle, theme, tf, symbol, loading])
 

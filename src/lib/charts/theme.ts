@@ -7,6 +7,7 @@
 export const C: Record<string, string> = {
   bg: '#0c0e14', axisbg: '#0d0f18', grid: '#141926',
   up: '#26a69a', dn: '#ef5350',
+  vol_up: 'rgba(38,166,154,0.45)', vol_dn: 'rgba(239,83,80,0.45)',
   axisLabel: '#6878a8', axisMuted: '#4a5580', axisHighlight: '#8090b0',
   crossLabelBg: '#141a2a', crossLabelBd: '#2a3050',
   ema9: '#e8d000', ema20: '#3a70e0', ema50: '#00c8e8', ema150: '#e0e0e0', ema200: '#e0e0e0', vwap: '#00e676',

@@ -1,6 +1,7 @@
 'use client'
 
 import { useToolStore, IND_CATALOG, type ToolInstance } from '@/stores/charts/toolStore'
+import { useUIStore } from '@/stores/charts/uiStore'
 import { C } from '@/lib/charts/theme'
 
 /**
@@ -10,6 +11,7 @@ import { C } from '@/lib/charts/theme'
 export function TabVault() {
   const tools = useToolStore((s) => s.tools)
   const selectTool = useToolStore((s) => s.selectTool)
+  const setSidebarTab = useUIStore(s => s.setSidebarTab)
   const activeTools = tools.filter(t => t.on)
 
   // Group by catalog group
@@ -36,7 +38,7 @@ export function TabVault() {
           <div key={group} className="vg">
             <div className="vg-title">{group.toUpperCase()}</div>
             {items.map(tool => (
-              <VaultRow key={tool.id} tool={tool} onOpen={() => selectTool(tool.id)} />
+              <VaultRow key={tool.id} tool={tool} onOpen={() => { selectTool(tool.id); setSidebarTab('tools') }} />
             ))}
           </div>
         ))}

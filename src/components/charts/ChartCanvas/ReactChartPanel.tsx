@@ -72,6 +72,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
   const [mouse, setMouse] = useState({ x: -1, y: -1 })
   const [dragging, setDragging] = useState(false)
   const dragStart = useRef({ x: 0, vs: 0 })
+  const drawingDragRef = useRef<{ startX: number; startTime: number; startPrice: number } | null>(null)
 
   // Fetch bars (with live polling when liveMode is on)
   const { bars, loading } = useLiveBars(symbol, tf)
@@ -392,6 +393,29 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       // ── Annotation preview (while drawing) ──
       if (activeTool && toolStep > 0) renderAnnotationPreview(rc)
 
+      // ── Highlight drag preview ──
+      const dd = drawingDragRef.current
+      if (dd && activeTool && rc.cx >= 0 && rc.cy >= 0 && rc.cy <= rc.priceH) {
+        const toolColorMap: Record<string, string> = {
+          hl_cyan: '#22d3ee', hl_magenta: '#e879f9', hl_green: '#4ade80', hl_white: '#cbd5e1',
+        }
+        const col = toolColorMap[activeTool]
+        if (col) {
+          const ax = rc.annTimeToX(dd.startTime)
+          const ay = rc.pToY(dd.startPrice)
+          if (ax != null) {
+            const r = parseInt(col.slice(1, 3), 16), g = parseInt(col.slice(3, 5), 16), b = parseInt(col.slice(5, 7), 16)
+            ctx.fillStyle = `rgba(${r},${g},${b},0.15)`
+            ctx.fillRect(Math.min(ax, rc.cx), Math.min(ay, rc.cy), Math.abs(rc.cx - ax), Math.abs(rc.cy - ay))
+            ctx.strokeStyle = `rgba(${r},${g},${b},0.4)`
+            ctx.lineWidth = 1
+            ctx.setLineDash([4, 3])
+            ctx.strokeRect(Math.min(ax, rc.cx), Math.min(ay, rc.cy), Math.abs(rc.cx - ax), Math.abs(rc.cy - ay))
+            ctx.setLineDash([])
+          }
+        }
+      }
+
       // ── Crosshair ──
       renderCrosshair(rc)
 
@@ -454,7 +478,15 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       if (time == null) return
 
       const TWO_CLICK = ['trendline','ray','hray','parallel','disjoint','xline','fib_ret','box_orange','box_yellow','long_pos','short_pos','circle','ellipse','triangle','callout']
+      const DRAG_TOOLS = ['hl_cyan','hl_magenta','hl_green','hl_white','brush','path']
       const isTwoClick = TWO_CLICK.includes(ds.activeTool)
+      const isDragTool = DRAG_TOOLS.includes(ds.activeTool)
+
+      // Drag-based tools (highlights, brush) — start drag
+      if (isDragTool) {
+        drawingDragRef.current = { startX: mx, startTime: time, startPrice: price }
+        return
+      }
 
       if (isTwoClick && ds.toolStep === 0) {
         ds.setToolAnchor({ x: time, y: price })
@@ -482,7 +514,8 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
         return
       }
 
-      if (!isTwoClick) {
+      // Single-click tools (text, arrow, hline, vline, stop_line, trail_stop, etc.)
+      if (!isTwoClick && !isDragTool) {
         ds.addAnnotation({
           id: ds.getNextId(),
           type: ds.activeTool,
@@ -533,7 +566,45 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
     }
   }, [dragging, viewBars, bars.length, size.w])
 
-  const onMouseUp = useCallback(() => setDragging(false), [])
+  const onMouseUp = useCallback(() => {
+    // Finalize drag-based annotation (highlights)
+    if (drawingDragRef.current && activeTool && rcRef.current) {
+      const rc = rcRef.current
+      const mx = mouseRef.current.x
+      const my = mouseRef.current.y
+      if (my >= 0 && my <= rc.priceH) {
+        const endPrice = rc.minP + rc.priceRange * (1 - my / rc.priceH)
+        const bi = Math.max(0, Math.min(rc.visible.length - 1, Math.round(mx / rc.barW - 0.5)))
+        const endTime = rc.visible[bi]?.time
+        const drag = drawingDragRef.current
+        if (endTime != null && drag) {
+          const ds = useDrawingStore.getState()
+          // Get the color from theme
+          const toolColorMap: Record<string, string> = {
+            hl_cyan: '#22d3ee', hl_magenta: '#e879f9', hl_green: '#4ade80', hl_white: '#cbd5e1',
+            brush: '#94a3b8', path: '#94a3b8',
+          }
+          ds.addAnnotation({
+            id: ds.getNextId(),
+            type: ds.activeTool,
+            x1: drag.startTime, y1: drag.startPrice,
+            x2: endTime, y2: endPrice,
+            color: toolColorMap[ds.activeTool] || ds.drawDefaults.color,
+            lineWidth: ds.drawDefaults.lineWidth,
+            opacity: 0.15,
+            panelIdx,
+            locked: false, visible: true, hidden: false,
+            points: [{ x: drag.startTime, y: drag.startPrice }, { x: endTime, y: endPrice }],
+            lineStyle: 'solid',
+          } as any)
+          if (!ds.stayDraw) ds.setActiveTool(null)
+        }
+      }
+      drawingDragRef.current = null
+      return
+    }
+    setDragging(false)
+  }, [activeTool, panelIdx])
 
   const onMouseLeave = useCallback(() => {
     setDragging(false)
@@ -631,6 +702,13 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
         </div>
         <span id={`ohlc-${panelIdx}`} style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 600, color: '#8aa0c0', letterSpacing: 0.5 }} />
         <span style={{ color: '#26a69a', fontSize: 10, fontWeight: 800, letterSpacing: 1, marginLeft: 8 }}>⚛ REACT</span>
+        {activeTool && (
+          <span style={{
+            background: '#D4AF37', color: '#000', fontSize: 9, fontWeight: 800,
+            padding: '1px 6px', borderRadius: 3, marginLeft: 4,
+            animation: 'pulse 1.5s infinite',
+          }} title="Click chart to draw. Escape to cancel.">✏ {activeTool.replace('_', ' ').toUpperCase()}</span>
+        )}
         <span style={{ color: '#4a6080', fontSize: 9, marginLeft: 8 }}>{bars.length} bars | {viewBars} vis</span>
         {/* Date range inputs */}
         <input
@@ -677,7 +755,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
           ref={canvasRef}
           style={{
             display: 'block',
-            cursor: dragging ? 'grabbing' : activeTool ? 'crosshair' : 'crosshair',
+            cursor: dragging ? 'grabbing' : activeTool ? 'cell' : 'crosshair',
           }}
           onMouseDown={onMouseDown}
           onMouseMove={onMouseMove}

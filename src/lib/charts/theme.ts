@@ -42,9 +42,10 @@ export const C: Record<string, string> = {
 }
 
 /** Font size constants */
-export const F = {
+export const F: Record<string, number> = {
   p: 11, // price axis
   t: 10, // time axis
+  o: 12, // ohlcv tip
 }
 
 /** Light theme overrides */

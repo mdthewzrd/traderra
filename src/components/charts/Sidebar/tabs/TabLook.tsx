@@ -1,13 +1,124 @@
 'use client'
 
+import { useEffect } from 'react'
+
 /**
  * TabLook — Theme customization: candle colors, background, sessions, crosshair, font sizes.
  * Color changes mutate the shared theme C object directly — ReactChartPanel reads it each frame.
+ * Save/Load uses localStorage key 'traderra-cfg' (same format as charts-engine.js).
  */
 
 import { C, F } from '@/lib/charts/theme'
 
+const CFG_KEY = 'traderra-cfg'
+
+// Presets — same as charts-engine.js PR object
+const PRESETS: Record<string, ThemeCfg> = {
+  default: { bg:'#0c0e14', ax:'#0d0f18', gr:'#141926', up:'#26a69a', dn:'#ef5350', pre:'#787878', po:8, aft:'#3c3c3c', ao:10, cr:'#8ca0c8', co:50, bd:'#1e2535', p:10, t:9, o:12 },
+  gold:    { bg:'#0a0a08', ax:'#0d0c0a', gr:'#1a1810', up:'#D4AF37', dn:'#ef5350', pre:'#787878', po:8, aft:'#3c3c3c', ao:10, cr:'#D4AF37', co:40, bd:'#2a2510', p:10, t:9, o:12 },
+  light:   { bg:'#f4f3f0', ax:'#f0efec', gr:'#dddcd8', up:'#26a69a', dn:'#ef5350', pre:'#ff9800', po:6, aft:'#2196f3', ao:5, cr:'#333333', co:60, bd:'#ccc8c0', p:10, t:9, o:12 },
+  nord:    { bg:'#2e3440', ax:'#3b4252', gr:'#434c5e', up:'#a3be8c', dn:'#bf616a', pre:'#d08770', po:10, aft:'#81a1c1', ao:8, cr:'#d8dee9', co:40, bd:'#4c566a', p:10, t:9, o:12 },
+}
+
+interface ThemeCfg {
+  bg?: string; ax?: string; gr?: string; up?: string; dn?: string
+  pre?: string; po?: number; aft?: string; ao?: number
+  cr?: string; co?: number; bd?: string
+  p?: number; t?: number; o?: number; ui?: number
+}
+
+// Hex → rgba helper
+function hexRgb(hex: string) {
+  const h = hex.replace('#', '')
+  return { r: parseInt(h.slice(0,2),16), g: parseInt(h.slice(2,4),16), b: parseInt(h.slice(4,6),16) }
+}
+function rga(hex: string, opacity: number) {
+  const {r,g,b} = hexRgb(hex)
+  return `rgba(${r},${g},${b},${(opacity||50)/100})`
+}
+
+/** Read current input values into a cfg snapshot */
+function readInputs(): ThemeCfg {
+  const g = (id: string) => (document.getElementById(id) as HTMLInputElement)?.value
+  return {
+    bg: g('sc-bg'), ax: g('sc-ax'), gr: g('sc-gr'),
+    up: g('sc-up'), dn: g('sc-dn'),
+    pre: g('sc-pre'), po: +(g('sc-preo')||7),
+    aft: g('sc-aft'), ao: +(g('sc-afto')||9),
+    cr: g('sc-cr'), co: +(g('sc-cro')||50),
+    bd: g('sc-bd'),
+    p: +(g('sf-p')||10), t: +(g('sf-t')||9), o: +(g('sf-o')||12),
+  }
+}
+
+/** Apply a cfg snapshot to the theme C object */
+function applyCfg(s: ThemeCfg) {
+  if (s.up) { C.up = s.up; C.vol_up = `rgba(${hexRgb(s.up).r},${hexRgb(s.up).g},${hexRgb(s.up).b},.5)` }
+  if (s.dn) { C.dn = s.dn; C.vol_dn = `rgba(${hexRgb(s.dn).r},${hexRgb(s.dn).g},${hexRgb(s.dn).b},.5)` }
+  if (s.bg) C.bg = s.bg
+  if (s.ax) C.axisbg = s.ax
+  if (s.gr) C.grid = s.gr
+  if (s.pre) C.pre = rga(s.pre, s.po || 7)
+  if (s.aft) C.after = rga(s.aft, s.ao || 9)
+  if (s.cr) C.cross = rga(s.cr, s.co || 50)
+  if (s.p) F.p = s.p
+  if (s.t) F.t = s.t
+  if (s.o) F.o = s.o
+}
+
+/** Push current C/F values back into the DOM inputs */
+function syncInputsFromTheme() {
+  const s = (id: string, v: string) => { const e = document.getElementById(id) as HTMLInputElement; if (e) e.value = v }
+  const sv = (id: string, v: number, vid: string, suffix?: string) => {
+    const e = document.getElementById(id) as HTMLInputElement; const ve = document.getElementById(vid)
+    if (e) e.value = v; if (ve) ve.textContent = v + (suffix || '')
+  }
+  s('sc-up', C.up); s('sc-dn', C.dn)
+  s('sc-bg', C.bg); s('sc-ax', C.axisbg); s('sc-gr', C.grid)
+  sv('sf-p', F.p, 'sf-p-v'); sv('sf-t', F.t, 'sf-t-v'); sv('sf-o', F.o, 'sf-o-v')
+}
+
 export function TabLook() {
+  // Load saved theme on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CFG_KEY)
+      if (raw) {
+        const cfg = JSON.parse(raw)
+        applyCfg(cfg)
+        syncInputsFromTheme()
+      }
+    } catch {}
+  }, [])
+
+  const handleSave = async () => {
+    const cfg = readInputs()
+    localStorage.setItem(CFG_KEY, JSON.stringify(cfg))
+    // Try cloud save
+    let cloudOk = false
+    try {
+      const r = await fetch('/api/chart-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg) })
+      const j = await r.json(); cloudOk = j.ok
+    } catch {}
+    const btn = document.getElementById('s-save')!
+    btn.textContent = cloudOk ? '✓ Saved to profile!' : '✓ Saved locally'
+    ;(btn as HTMLElement).style.background = cloudOk ? '#22c55e' : '#f59e0b'
+    setTimeout(() => { btn.textContent = '💾 Save as Default'; (btn as HTMLElement).style.background = '#D4AF37' }, 1500)
+  }
+
+  const handleReset = () => {
+    localStorage.removeItem(CFG_KEY)
+    applyCfg(PRESETS.default)
+    syncInputsFromTheme()
+  }
+
+  const handlePreset = (name: string) => {
+    const pr = PRESETS[name]
+    if (!pr) return
+    applyCfg(pr)
+    syncInputsFromTheme()
+  }
+
   return (
     <div id="tab-look">
       <div id="settings-panel-header" style={{ justifyContent: 'space-between' }}>
@@ -66,27 +177,9 @@ export function TabLook() {
         {/* Font Size */}
         <div className="ss">
           <div className="sst">FONT SIZE</div>
-          <div className="sr" style={{ marginBottom: 6 }}>
-            <label>Quick Scale</label>
-            <div style={{ display: 'flex', gap: 4, flex: 1, justifyContent: 'flex-end' }}>
-              {(['small', 'medium', 'large'] as const).map(s => (
-                <button
-                  key={s}
-                  className="tbtn"
-                  id={`fs-${s}`}
-                  onClick={() => (window as any).setFontScale?.(s)}
-                  style={{
-                    fontSize: 11, padding: '3px 8px', minWidth: 0,
-                    ...(s === 'medium' ? { borderColor: '#D4AF37!important', color: '#D4AF37!important' } : {}),
-                  }}
-                >{s[0].toUpperCase()}</button>
-              ))}
-            </div>
-          </div>
           <SettingRow label="Price Axis"><SliderInput id="sf-p" min={7} max={16} defaultValue={10} /><span className="srv" id="sf-p-v">10</span></SettingRow>
           <SettingRow label="Time Axis"><SliderInput id="sf-t" min={7} max={16} defaultValue={9} /><span className="srv" id="sf-t-v">9</span></SettingRow>
           <SettingRow label="OHLCV Tip"><SliderInput id="sf-o" min={9} max={18} defaultValue={12} /><span className="srv" id="sf-o-v">12</span></SettingRow>
-          <SettingRow label="UI Scale"><SliderInput id="sf-ui" min={9} max={18} defaultValue={13} /><span className="srv" id="sf-ui-v">13</span></SettingRow>
         </div>
 
         {/* Presets */}
@@ -94,15 +187,14 @@ export function TabLook() {
           <div className="sst">PRESETS</div>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {['default', 'gold', 'light', 'nord'].map(p => (
-              <button key={p} className="spb" data-pr={p}>{p[0].toUpperCase() + p.slice(1)}</button>
+              <button key={p} className="spb" data-pr={p} onClick={() => handlePreset(p)}>{p[0].toUpperCase() + p.slice(1)}</button>
             ))}
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
-          <button id="s-save" className="sab" style={{ background: '#D4AF37', color: '#000' }}>💾 Save as Default</button>
-          <span id="save-hint" style={{ fontSize: 8, color: '#4a6080', marginTop: 2, textAlign: 'center', display: 'block' }}>...</span>
-          <button id="s-reset" className="sab" style={{ borderColor: '#ef5350', color: '#ef5350' }}>↺ Factory Reset</button>
+        <div style={{ display: 'flex', gap: 4, marginTop: 8, alignItems: 'center' }}>
+          <button id="s-save" className="sab" style={{ background: '#D4AF37', color: '#000' }} onClick={handleSave}>💾 Save as Default</button>
+          <button id="s-reset" className="sab" style={{ borderColor: '#ef5350', color: '#ef5350' }} onClick={handleReset}>↺ Factory Reset</button>
         </div>
       </div>
     </div>
@@ -116,27 +208,7 @@ function SettingRow({ label, children }: { label: string; children?: React.React
 
 /** Read color/slider inputs → update theme C object so ReactChartPanel picks it up */
 function syncThemeFromInputs() {
-  const g = (id: string) => (document.getElementById(id) as HTMLInputElement)?.value
-  const c_up = g('sc-up'), c_dn = g('sc-dn')
-  const c_bg = g('sc-bg'), c_ax = g('sc-ax'), c_gr = g('sc-gr')
-  const c_vu = g('sc-vu'), c_vd = g('sc-vd')
-  const c_cr = g('sc-cr')
-  const c_pre = g('sc-pre'), c_aft = g('sc-aft')
-  const c_preo = g('sc-preo'), c_afto = g('sc-afto'), c_cro = g('sc-cro')
-  const sf_p = g('sf-p'), sf_t = g('sf-t')
-
-  if (c_up)  { C.up = c_up; C.vol_up = `rgba(${parseInt(c_up.slice(1,3),16)},${parseInt(c_up.slice(3,5),16)},${parseInt(c_up.slice(5,7),16)},.5)` }
-  if (c_dn)  { C.dn = c_dn; C.vol_dn = `rgba(${parseInt(c_dn.slice(1,3),16)},${parseInt(c_dn.slice(3,5),16)},${parseInt(c_dn.slice(5,7),16)},.5)` }
-  if (c_bg)  C.bg = c_bg
-  if (c_ax)  C.axisbg = c_ax
-  if (c_gr)  C.grid = c_gr
-  if (c_vu)  C.vol_up = `rgba(${parseInt(c_vu.slice(1,3),16)},${parseInt(c_vu.slice(3,5),16)},${parseInt(c_vu.slice(5,7),16)},.5)`
-  if (c_vd)  C.vol_dn = `rgba(${parseInt(c_vd.slice(1,3),16)},${parseInt(c_vd.slice(3,5),16)},${parseInt(c_vd.slice(5,7),16)},.5)`
-  if (c_cr)  C.cross = `rgba(${parseInt(c_cr.slice(1,3),16)},${parseInt(c_cr.slice(3,5),16)},${parseInt(c_cr.slice(5,7),16)},${(+(c_cro || 50)) / 100})`
-  if (c_pre)  C.pre = `rgba(${parseInt(c_pre.slice(1,3),16)},${parseInt(c_pre.slice(3,5),16)},${parseInt(c_pre.slice(5,7),16)},.${(+(c_preo || 7)).toString().padStart(2,'0')})`
-  if (c_aft)  C.after = `rgba(${parseInt(c_aft.slice(1,3),16)},${parseInt(c_aft.slice(3,5),16)},${parseInt(c_aft.slice(5,7),16)},.${(+(c_afto || 9)).toString().padStart(2,'0')})`
-  if (sf_p) F.p = +sf_p
-  if (sf_t) F.t = +sf_t
+  applyCfg(readInputs())
 }
 
 /** Color picker — syncs to theme on change */

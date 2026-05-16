@@ -11,6 +11,7 @@ export interface IndicatorState {
   inds: Record<string, boolean>
   toggle: (key: string) => void
   isOn: (key: string) => boolean
+  setInds: (inds: Record<string, boolean>) => void
 }
 
 export const useIndicatorStore = create<IndicatorState>((set, get) => ({
@@ -27,6 +28,7 @@ export const useIndicatorStore = create<IndicatorState>((set, get) => ({
     }
   },
   isOn: (key) => !!get().inds[key],
+  setInds: (inds) => set({ inds }),
 }))
 
 // Subscribe to toolStore changes and derive inds

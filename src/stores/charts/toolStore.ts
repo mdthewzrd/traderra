@@ -122,6 +122,7 @@ export interface ToolState {
   setToolHotLabel: (id: string, label: string) => void
   setToolHotColor: (id: string, color: string) => void
   selectTool: (id: string | null) => void
+  setTools: (tools: ToolInstance[]) => void
   toggleShowAddPopup: () => void
   closeAddPopup: () => void
 
@@ -202,6 +203,7 @@ export const useToolStore = create<ToolState>((set, get) => {
     })),
 
     selectTool: (id) => set({ selectedToolId: id }),
+    setTools: (tools) => set({ tools, inds: deriveInds(tools) }),
 
     toggleShowAddPopup: () => set(s => ({ showAddPopup: !s.showAddPopup })),
     closeAddPopup: () => set({ showAddPopup: false }),

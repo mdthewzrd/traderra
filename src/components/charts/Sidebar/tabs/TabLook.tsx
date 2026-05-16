@@ -9,6 +9,7 @@ import { useEffect } from 'react'
  */
 
 import { C, F } from '@/lib/charts/theme'
+import { useUIStore } from '@/stores/charts/uiStore'
 
 const CFG_KEY = 'traderra-cfg'
 
@@ -135,7 +136,7 @@ export function TabLook() {
           <SettingRow label="Vol Down"><ColorInput id="sc-vd" defaultValue="#ef5350" /></SettingRow>
           <div className="sr" style={{ marginTop: 4, paddingTop: 4, borderTop: '1px solid #1a1e2a' }}>
             <label>Filter Prints</label>
-            <button id="sc-clean" style={{ background: '#e879f918', border: '1px solid #e879f9', color: '#e879f9', fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 3, cursor: 'pointer' }}>ON</button>
+            <button id="sc-clean" style={{ background: useUIStore.getState().cleanPrints ? '#e879f918' : '#1a1e2a', border: '1px solid #e879f9', color: '#e879f9', fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 3, cursor: 'pointer' }} onClick={() => { const v = !useUIStore.getState().cleanPrints; useUIStore.getState().setCleanPrints(v); const btn = document.getElementById('sc-clean'); if (btn) { btn.textContent = v ? 'ON' : 'OFF'; btn.style.background = v ? '#e879f918' : '#1a1e2a' } }}>{useUIStore.getState().cleanPrints ? 'ON' : 'OFF'}</button>
             <span style={{ fontSize: 11, color: '#4a6080', marginLeft: 4 }}>Drop fake bars</span>
           </div>
         </div>
@@ -177,6 +178,15 @@ export function TabLook() {
         {/* Font Size */}
         <div className="ss">
           <div className="sst">FONT SIZE</div>
+          <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+            {[
+              { label: 'S', p: 8, t: 7, o: 10 },
+              { label: 'M', p: 10, t: 9, o: 12 },
+              { label: 'L', p: 13, t: 11, o: 15 },
+            ].map(({ label, p, t, o }) => (
+              <button key={label} className="spb" onClick={() => { F.p = p; F.t = t; F.o = o; syncInputsFromTheme() }}>{label}</button>
+            ))}
+          </div>
           <SettingRow label="Price Axis"><SliderInput id="sf-p" min={7} max={16} defaultValue={10} /><span className="srv" id="sf-p-v">10</span></SettingRow>
           <SettingRow label="Time Axis"><SliderInput id="sf-t" min={7} max={16} defaultValue={9} /><span className="srv" id="sf-t-v">9</span></SettingRow>
           <SettingRow label="OHLCV Tip"><SliderInput id="sf-o" min={9} max={18} defaultValue={12} /><span className="srv" id="sf-o-v">12</span></SettingRow>

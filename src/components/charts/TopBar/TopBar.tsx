@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useUIStore, useChartStore, useDrawingStore } from '@/stores/charts'
 import { useToolStore } from '@/stores/charts/toolStore'
 
@@ -173,15 +173,73 @@ function TradeMenu() {
 }
 
 function TemplateDropdown() {
+  const [templates, setTemplates] = useState<any[]>([])
+
+  useEffect(() => {
+    const { loadTemplatesFromStorage } = require('@/lib/charts/templates')
+    setTemplates(loadTemplatesFromStorage())
+  }, [])
+
+  const handleSave = () => {
+    const { saveTemplate } = require('@/lib/charts/templates')
+    const { useToolStore } = require('@/stores/charts/toolStore')
+    const name = prompt('Template name:')
+    if (!name) return
+    const tools = useToolStore.getState().tools
+    const chartStyle = useUIStore.getState().chartStyle
+    const theme = useUIStore.getState().theme
+    const inds = require('@/stores/charts/indicatorStore').useIndicatorStore.getState().inds
+    saveTemplate(name, tools, chartStyle, theme, inds)
+    const { loadTemplatesFromStorage } = require('@/lib/charts/templates')
+    setTemplates(loadTemplatesFromStorage())
+  }
+
+  const handleApply = (idx: number) => {
+    if (!templates[idx]) return
+    const tpl = templates[idx]
+    if (tpl.inds) {
+      const { useIndicatorStore } = require('@/stores/charts/indicatorStore')
+      useIndicatorStore.getState().setInds(tpl.inds)
+    }
+    if (tpl.chartStyle) {
+      useUIStore.getState().setChartStyle(tpl.chartStyle)
+    }
+    if (tpl.tools) {
+      const { useToolStore } = require('@/stores/charts/toolStore')
+      useToolStore.getState().setTools(tpl.tools)
+    }
+  }
+
+  const handleDelete = (idx: number) => {
+    const { deleteTemplate, loadTemplatesFromStorage } = require('@/lib/charts/templates')
+    deleteTemplate(idx)
+    setTemplates(loadTemplatesFromStorage())
+  }
+
   return (
     <div className="dropdown-group">
       <button className="tbtn dropdown-trigger" id="tpl-menu-btn" style={{ borderColor: '#D4AF37', color: '#D4AF37' }}>📋 TPL ▾</button>
-      <div className="dropdown-content" id="tpl-dropdown" style={{ minWidth: 180 }}>
+      <div className="dropdown-content" id="tpl-dropdown" style={{ minWidth: 200 }}>
         <div style={{ padding: '4px 10px', fontSize: 11, color: '#4a6080', fontWeight: 700 }}>CHART TEMPLATES</div>
-        <div id="tpl-list" />
+        {templates.length === 0 && (
+          <div style={{ padding: '6px 10px', fontSize: 11, color: '#4a6080' }}>No templates saved</div>
+        )}
+        {templates.map((tpl, i) => (
+          <div key={tpl.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 10px' }}>
+            <button
+              className="tool-btn"
+              style={{ flex: 1, textAlign: 'left', color: '#dde3f0', padding: '2px 4px' }}
+              onClick={() => handleApply(i)}
+            >{tpl.name}</button>
+            <button
+              style={{ background: 'none', border: 'none', color: '#ff3d57', cursor: 'pointer', fontSize: 10, padding: '0 2px' }}
+              onClick={() => handleDelete(i)}
+              title="Delete template"
+            >✕</button>
+          </div>
+        ))}
         <hr style={{ border: 'none', borderTop: '1px solid #2a3050', margin: '2px 0' }} />
-        <div className="tool-btn" id="tpl-update-btn" style={{ color: '#22d3ee', display: 'none' }}>🔄 Update Current Template</div>
-        <div className="tool-btn" style={{ color: '#D4AF37' }}>💾 Save Current as Template</div>
+        <div className="tool-btn" style={{ color: '#D4AF37', cursor: 'pointer' }} onClick={handleSave}>💾 Save Current as Template</div>
       </div>
     </div>
   )

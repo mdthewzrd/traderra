@@ -1,32 +1,25 @@
 'use client'
 
-import { useIndicatorStore, IND_REGISTRY, type IndDef } from '@/stores/charts/indicatorStore'
+import { useToolStore, IND_CATALOG, type ToolInstance } from '@/stores/charts/toolStore'
 import { C } from '@/lib/charts/theme'
 
 /**
- * TabVault — Indicator vault showing active indicators with toggle/color controls.
- * Pure React — no charts-engine.js dependency.
+ * TabVault — Shows active indicator tools. Click opens settings in Tools tab.
  */
 
-// Keys to exclude from vault display
-const VAULT_EXCLUDE = new Set(['tl','ann','otherann','exec','btexec'])
-
 export function TabVault() {
-  const inds = useIndicatorStore((s) => s.inds)
-  const toggle = useIndicatorStore((s) => s.toggle)
+  const tools = useToolStore((s) => s.tools)
+  const selectTool = useToolStore((s) => s.selectTool)
+  const activeTools = tools.filter(t => t.on)
 
-  // Group active indicators by group
-  const groups: Record<string, { key: string; def: IndDef }[]> = {}
-  for (const [key, on] of Object.entries(inds)) {
-    if (!on || VAULT_EXCLUDE.has(key)) continue
-    const reg = IND_REGISTRY[key]
-    if (!reg) continue
-    const g = reg.group || 'Other'
+  // Group by catalog group
+  const groups: Record<string, ToolInstance[]> = {}
+  activeTools.forEach(t => {
+    const cat = IND_CATALOG[t.indKey]
+    const g = cat?.group || 'Other'
     if (!groups[g]) groups[g] = []
-    groups[g].push({ key, def: reg })
-  }
-
-  const hasAny = Object.keys(groups).length > 0
+    groups[g].push(t)
+  })
 
   return (
     <div id="tab-vault">
@@ -34,7 +27,7 @@ export function TabVault() {
         <span style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', letterSpacing: 1 }}>📦 INDICATOR VAULT</span>
       </div>
       <div id="vault-list" style={{ flex: 1, overflowY: 'auto', padding: 6 }}>
-        {!hasAny && (
+        {activeTools.length === 0 && (
           <div style={{ padding: 20, textAlign: 'center', color: '#3a4a60', fontSize: 11, fontStyle: 'italic' }}>
             No indicators active.<br />Use TOOLS tab to add indicators.
           </div>
@@ -42,8 +35,8 @@ export function TabVault() {
         {Object.entries(groups).map(([group, items]) => (
           <div key={group} className="vg">
             <div className="vg-title">{group.toUpperCase()}</div>
-            {items.map(({ key, def }) => (
-              <VaultRow key={key} indKey={key} def={def} onToggle={() => toggle(key)} />
+            {items.map(tool => (
+              <VaultRow key={tool.id} tool={tool} onOpen={() => selectTool(tool.id)} />
             ))}
           </div>
         ))}
@@ -52,20 +45,34 @@ export function TabVault() {
   )
 }
 
-function VaultRow({ indKey, def, onToggle }: { indKey: string; def: IndDef; onToggle: () => void }) {
-  const mainColor = def.colors?.[0] ? C[def.colors[0]] : '#a78bfa'
+function VaultRow({ tool, onOpen }: { tool: ToolInstance; onOpen: () => void }) {
+  const toggleTool = useToolStore((s) => s.toggleTool)
+  const cat = IND_CATALOG[tool.indKey]
+  const mainColor = cat?.colors?.[0]?.def || '#a78bfa'
+  // Extract hex from rgba for the dot
+  const dotHex = mainColor.startsWith('#') ? mainColor : '#a78bfa'
 
   return (
-    <div className="vi on" onClick={onToggle} style={{ cursor: 'pointer' }}>
-      <span className="vi-dot" style={{ background: mainColor, color: mainColor }} />
-      <span className="vi-name">{def.label}</span>
-      {def.colors && def.colors.length > 0 && (
+    <div className="vi on" style={{ cursor: 'pointer' }}>
+      <span className="vi-dot" style={{ background: dotHex, color: dotHex }} />
+      <span className="vi-name" onClick={onOpen}>{tool.name}</span>
+      {cat?.colors && cat.colors.length > 0 && (
         <span className="vi-colors">
-          {def.colors.map((ck, i) => (
-            <span key={i} className="vi-cdot" style={{ background: C[ck] || '#444' }} />
-          ))}
+          {cat.colors.map((ck, i) => {
+            const cv = tool.colors[ck.key] || ck.def
+            const hex = cv.startsWith('#') ? cv : '#444'
+            return <span key={i} className="vi-cdot" style={{ background: hex }} />
+          })}
         </span>
       )}
+      <button
+        className="vi-gear"
+        onClick={(e) => { e.stopPropagation(); onOpen() }}
+        title="Settings"
+        style={{ background: 'none', border: 'none', color: '#5a6a98', cursor: 'pointer', padding: 2 }}
+      >
+        <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1l.5 2a3.5 3.5 0 011.5.9l1.9-.7.5 1.3-1.7.9a3.5 3.5 0 010 1.2l1.7.9-.5 1.3-1.9-.7a3.5 3.5 0 01-1.5.9L6 11l-.5-2a3.5 3.5 0 01-1.5-.9l-1.9.7-.5-1.3 1.7-.9a3.5 3.5 0 010-1.2l-1.7-.9.5-1.3 1.9.7a3.5 3.5 0 011.5-.9z" fill="none" stroke="currentColor" strokeWidth="1"/></svg>
+      </button>
     </div>
   )
 }

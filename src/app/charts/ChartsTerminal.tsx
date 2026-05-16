@@ -9,6 +9,7 @@ import { AnnotationToolbar } from '@/components/charts/AnnotationToolbar/Annotat
 import { MainArea } from '@/components/charts/MainArea/MainArea'
 import { Sidebar } from '@/components/charts/Sidebar/Sidebar'
 import { Overlays } from '@/components/charts/Overlays/Overlays'
+import { useWatchlistStore } from '@/stores/charts/watchlistStore'
 
 /**
  * ChartsTerminal — Pure React charts terminal.
@@ -31,6 +32,9 @@ export default function ChartsTerminal({ userId, userName, userImage }: {
 
     // Set user context
     ;(window as any).__CHARTS_USER = { id: userId, name: userName, image: userImage }
+
+    // Load persisted watchlist from localStorage
+    useWatchlistStore.getState().load()
 
     // Inject auth token
     fetch('/api/auth/token')

@@ -2,7 +2,7 @@ import { create } from 'zustand'
 
 /**
  * Drawing state — active tool, annotations, drawing defaults.
- * Self-contained with clear boundaries.
+ * Includes undo/redo history and localStorage persistence per symbol.
  */
 
 export interface Annotation {
@@ -16,6 +16,7 @@ export interface Annotation {
   text?: string
   locked: boolean
   visible: boolean
+  hidden?: boolean
   panelIdx: number
   [key: string]: any
 }
@@ -77,6 +78,37 @@ interface DrawingState {
   // Hide all drawings
   hideAll: boolean
   setHideAll: (v: boolean) => void
+
+  // Undo/Redo
+  _history: string[]
+  _redoStack: string[]
+  undo: () => void
+  redo: () => void
+
+  // Persistence
+  _currentSymbol: string | null
+  loadAnnotations: (symbol: string) => void
+  saveAnnotations: () => void
+}
+
+const ANN_STORAGE_PREFIX = 'traderra-ann-'
+
+function annKey(symbol: string): string {
+  return ANN_STORAGE_PREFIX + symbol.toUpperCase()
+}
+
+function loadFromStorage(symbol: string): Annotation[] {
+  try {
+    const s = localStorage.getItem(annKey(symbol))
+    if (s) return JSON.parse(s)
+  } catch {}
+  return []
+}
+
+function saveToStorage(symbol: string, annotations: Annotation[]) {
+  try {
+    localStorage.setItem(annKey(symbol), JSON.stringify(annotations))
+  } catch {}
 }
 
 export const useDrawingStore = create<DrawingState>((set, get) => ({
@@ -98,12 +130,40 @@ export const useDrawingStore = create<DrawingState>((set, get) => ({
   setDrawDefaults: (d) => set((s) => ({ drawDefaults: { ...s.drawDefaults, ...d } })),
 
   annotations: [],
-  setAnnotations: (a) => set({ annotations: a }),
-  addAnnotation: (a) => set((s) => ({ annotations: [...s.annotations, a] })),
-  removeAnnotation: (id) => set((s) => ({ annotations: s.annotations.filter(a => a.id !== id) })),
-  updateAnnotation: (id, updates) => set((s) => ({
-    annotations: s.annotations.map(a => a.id === id ? { ...a, ...updates } : a),
-  })),
+  setAnnotations: (a) => {
+    const { _currentSymbol } = get()
+    const snap = JSON.stringify(get().annotations)
+    set((s) => ({ annotations: a, _history: [...s._history.slice(-49), snap], _redoStack: [] }))
+    if (_currentSymbol) saveToStorage(_currentSymbol, a)
+  },
+  addAnnotation: (a) => {
+    const { _currentSymbol } = get()
+    set((s) => ({
+      annotations: [...s.annotations, a],
+      _history: [...s._history.slice(-49), JSON.stringify(s.annotations)],
+      _redoStack: [],
+    }))
+    const updated = [...get().annotations, a]
+    if (_currentSymbol) saveToStorage(_currentSymbol, updated)
+  },
+  removeAnnotation: (id) => {
+    const { _currentSymbol } = get()
+    set((s) => ({
+      annotations: s.annotations.filter(a => a.id !== id),
+      _history: [...s._history.slice(-49), JSON.stringify(s.annotations)],
+      _redoStack: [],
+    }))
+    if (_currentSymbol) saveToStorage(_currentSymbol, get().annotations)
+  },
+  updateAnnotation: (id, updates) => {
+    const { _currentSymbol } = get()
+    set((s) => ({
+      annotations: s.annotations.map(a => a.id === id ? { ...a, ...updates } : a),
+      _history: [...s._history.slice(-49), JSON.stringify(s.annotations)],
+      _redoStack: [],
+    }))
+    if (_currentSymbol) saveToStorage(_currentSymbol, get().annotations)
+  },
 
   selectedAnn: null,
   setSelectedAnn: (a) => set({ selectedAnn: a }),
@@ -130,4 +190,43 @@ export const useDrawingStore = create<DrawingState>((set, get) => ({
 
   hideAll: false,
   setHideAll: (v) => set({ hideAll: v }),
+
+  // Undo/Redo
+  _history: [],
+  _redoStack: [],
+  undo: () => {
+    const { _history, _redoStack, annotations } = get()
+    if (!_history.length) return
+    const prev = JSON.parse(_history[_history.length - 1])
+    set({
+      annotations: prev,
+      _history: _history.slice(0, -1),
+      _redoStack: [..._redoStack, JSON.stringify(annotations)],
+    })
+    const { _currentSymbol } = get()
+    if (_currentSymbol) saveToStorage(_currentSymbol, prev)
+  },
+  redo: () => {
+    const { _history, _redoStack, annotations } = get()
+    if (!_redoStack.length) return
+    const next = JSON.parse(_redoStack[_redoStack.length - 1])
+    set({
+      annotations: next,
+      _history: [..._history, JSON.stringify(annotations)],
+      _redoStack: _redoStack.slice(0, -1),
+    })
+    const { _currentSymbol } = get()
+    if (_currentSymbol) saveToStorage(_currentSymbol, next)
+  },
+
+  // Persistence
+  _currentSymbol: null,
+  loadAnnotations: (symbol) => {
+    const loaded = loadFromStorage(symbol)
+    set({ annotations: loaded, _currentSymbol: symbol, _history: [], _redoStack: [] })
+  },
+  saveAnnotations: () => {
+    const { _currentSymbol, annotations } = get()
+    if (_currentSymbol) saveToStorage(_currentSymbol, annotations)
+  },
 }))

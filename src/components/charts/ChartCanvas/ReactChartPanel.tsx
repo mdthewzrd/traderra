@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useEffect, useState, useCallback } from 'react'
-import { useBars } from '@/hooks/useBars'
+import { useLiveBars } from '@/hooks/useLiveBars'
 import { useChartStore } from '@/stores/charts/chartStore'
 import { useUIStore } from '@/stores/charts/uiStore'
 import { renderPanelSetup } from '@/lib/charts/render-panel'
@@ -12,8 +12,14 @@ import { renderLivePriceLine } from '@/lib/charts/render-price-line'
 import { renderCrosshair } from '@/lib/charts/render-crosshair'
 import { drawLine, drawBandFill, drawBandLines, drawEMABand, drawDevBand } from '@/lib/charts/render-indicators'
 import { computeIndicators } from '@/lib/charts/indicators'
+import { renderSessionShading } from '@/lib/charts/render-session'
+import { renderAnnotations } from '@/lib/charts/render-annotations'
+import { renderAnnotationPreview } from '@/lib/charts/render-preview'
+import { renderBtMarkers } from '@/lib/charts/render-bt-markers'
+import { isIntraday } from '@/lib/charts/format'
 import { C } from '@/lib/charts/theme'
 import { useIndicatorStore } from '@/stores/charts/indicatorStore'
+import { useDrawingStore } from '@/stores/charts/drawingStore'
 import type { RenderContext } from '@/lib/charts/render-types'
 
 // Read indicator state from Zustand store
@@ -37,12 +43,23 @@ const MIKE_DEV = {
 export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animRef = useRef<number>(0)
+  const rcRef = useRef<RenderContext | null>(null)
 
   // Store state
   const symbol = useChartStore(s => s.symbol)
   const panel = useChartStore(s => s.panels[panelIdx])
   const tf = panel?.tf || 'D'
   const chartStyle = useUIStore(s => s.chartStyle)
+  const liveMode = useUIStore(s => s.liveMode)
+  const fullscreenPanel = useUIStore(s => s.fullscreenPanel)
+
+  // Drawing state (subscribed for render bridge)
+  const annotations = useDrawingStore(s => s.annotations)
+  const activeTool = useDrawingStore(s => s.activeTool)
+  const toolStep = useDrawingStore(s => s.toolStep)
+  const toolAnchor = useDrawingStore(s => s.toolAnchor)
+  const selectedAnn = useDrawingStore(s => s.selectedAnn)
+  const hideAll = useDrawingStore(s => s.hideAll)
 
   // Viewport state
   const [viewStart, setViewStart] = useState(0)
@@ -55,8 +72,65 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
   const [dragging, setDragging] = useState(false)
   const dragStart = useRef({ x: 0, vs: 0 })
 
-  // Fetch bars
-  const { bars, loading } = useBars(symbol, tf)
+  // Fetch bars (with live polling when liveMode is on)
+  const { bars, loading } = useLiveBars(symbol, tf)
+
+  // Canvas screenshot utility
+  const screenshot = useCallback(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    canvas.toBlob(blob => {
+      if (!blob) return
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${symbol}-${tf}-${Date.now()}.png`
+      a.click()
+      URL.revokeObjectURL(url)
+    })
+  }, [symbol, tf])
+
+  // Expose screenshot globally for TopBar
+  useEffect(() => {
+    ;(window as any).chartScreenshot = screenshot
+    return () => { delete (window as any).chartScreenshot }
+  }, [screenshot])
+
+  // Load annotations when symbol changes
+  useEffect(() => {
+    if (symbol) useDrawingStore.getState().loadAnnotations(symbol)
+  }, [symbol])
+
+  // Keyboard shortcuts: Ctrl+Z undo, Ctrl+Y redo, Escape cancel drawing
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        const ds = useDrawingStore.getState()
+        if (ds.activeTool) {
+          ds.setActiveTool(null)
+        } else if (ds.selectedAnn) {
+          ds.setSelectedAnn(null)
+        }
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        useDrawingStore.getState().undo()
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault()
+        useDrawingStore.getState().redo()
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const ds = useDrawingStore.getState()
+        if (ds.selectedAnn) {
+          ds.removeAnnotation(ds.selectedAnn.id)
+          ds.setSelectedAnn(null)
+        }
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   // Live indicator state from Zustand store (polled for header dots)
   const liveIndsRef = useRef(getLiveInds())
@@ -136,8 +210,28 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       // Bridge globals
       ;(window as any)._chartStyle = chartStyle
       ;(window as any).showPriceLine = true
-      ;(window as any).globalCrossTime = 0
-      ;(window as any).globalCrossPrice = 0
+      ;(window as any).globalCrossTime = useChartStore.getState().globalCrossTime
+      ;(window as any).globalCrossPrice = useChartStore.getState().globalCrossPrice
+
+      // Bridge drawing state for annotation renderer
+      ;(window as any).annotations = annotations
+      ;(window as any).activeTool = activeTool
+      ;(window as any).selectedAnn = selectedAnn
+      ;(window as any)._hideAll = hideAll
+      ;(window as any).toolAnchor = toolAnchor ? { time: toolAnchor.x, price: toolAnchor.y, panelIdx } : null
+      ;(window as any).toolStep = toolStep === 1 ? 'second' : 'idle'
+
+      // Panel display toggles
+      ;(rc as any).showPDC = true
+      ;(rc as any).showTL = true
+      ;(rc as any).showAnn = true
+      ;(rc as any).showExec = true
+      ;(rc as any).showOtherAnn = true
+      ;(rc as any).showBtExec = true
+      ;(rc as any).idx = panelIdx
+
+      // Store rc for mouse handler coordinate conversion
+      rcRef.current = rc
 
       // Compute all indicators for this frame
       const ic = computeIndicators(bars, inds, tf)
@@ -146,6 +240,9 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       const { niceStep, gridMinP } = renderGrid(rc)
       renderPriceAxis(rc, niceStep, gridMinP)
       renderTimeAxis(rc)
+
+      // ── Session shading (intraday only) ──
+      if (isIntraday(tf)) renderSessionShading(rc)
 
       // ── Volume ──
       renderVolume(rc)
@@ -254,8 +351,17 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       // ── Candles ──
       renderCandles(rc)
 
+      // ── Annotations (drawings) ──
+      renderAnnotations(rc)
+
+      // ── Backtest markers ──
+      renderBtMarkers(rc)
+
       // ── Live Price Line ──
       renderLivePriceLine(rc)
+
+      // ── Annotation preview (while drawing) ──
+      if (activeTool && toolStep > 0) renderAnnotationPreview(rc)
 
       // ── Crosshair ──
       renderCrosshair(rc)
@@ -288,7 +394,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       }
       console.error('[ReactChartPanel] render error:', err)
     }
-  }, [bars, viewStart, viewBars, mouse, size, chartStyle, tf, symbol, loading])
+  }, [bars, viewStart, viewBars, mouse, size, chartStyle, tf, symbol, loading, annotations, activeTool, toolStep, toolAnchor, selectedAnn, hideAll])
 
   // Animation loop
   useEffect(() => {
@@ -302,9 +408,75 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
 
   // ── MOUSE EVENTS ──
   const onMouseDown = useCallback((e: React.MouseEvent) => {
+    const ds = useDrawingStore.getState()
+
+    // Drawing mode — capture clicks for annotation placement
+    if (ds.activeTool && rcRef.current) {
+      const rect = canvasRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const mx = e.clientX - rect.left
+      const my = e.clientY - rect.top
+      const rc = rcRef.current
+      if (my > rc.priceH) return // ignore clicks on volume area
+
+      const price = rc.minP + rc.priceRange * (1 - my / rc.priceH)
+      const bi = Math.max(0, Math.min(rc.visible.length - 1, Math.round(mx / rc.barW - 0.5)))
+      const time = rc.visible[bi]?.time
+      if (time == null) return
+
+      const TWO_CLICK = ['trendline','ray','hray','parallel','disjoint','xline','fib_ret','box_orange','box_yellow','long_pos','short_pos','circle','ellipse','triangle','callout']
+      const isTwoClick = TWO_CLICK.includes(ds.activeTool)
+
+      if (isTwoClick && ds.toolStep === 0) {
+        ds.setToolAnchor({ x: time, y: price })
+        ds.setToolStep(1)
+        return
+      }
+
+      if (isTwoClick && ds.toolStep === 1 && ds.toolAnchor) {
+        ds.addAnnotation({
+          id: ds.getNextId(),
+          type: ds.activeTool,
+          x1: ds.toolAnchor.x, y1: ds.toolAnchor.y,
+          x2: time, y2: price,
+          color: ds.drawDefaults.color,
+          lineWidth: ds.drawDefaults.lineWidth,
+          opacity: ds.drawDefaults.opacity,
+          panelIdx,
+          locked: false, visible: true, hidden: false,
+          points: [{ x: ds.toolAnchor.x, y: ds.toolAnchor.y }, { x: time, y: price }],
+          text: '',
+          lineStyle: ds.drawDefaults.dashed ? 'dashed' : 'solid',
+        } as any)
+        if (!ds.stayDraw) ds.setActiveTool(null)
+        else { ds.setToolStep(0); ds.setToolAnchor(null) }
+        return
+      }
+
+      if (!isTwoClick) {
+        ds.addAnnotation({
+          id: ds.getNextId(),
+          type: ds.activeTool,
+          x1: time, y1: price,
+          color: ds.drawDefaults.color,
+          lineWidth: ds.drawDefaults.lineWidth,
+          opacity: ds.drawDefaults.opacity,
+          text: ds.activeTool.startsWith('text_') ? 'Text' : '',
+          panelIdx,
+          locked: false, visible: true, hidden: false,
+          points: [{ x: time, y: price }],
+          lineStyle: ds.drawDefaults.dashed ? 'dashed' : 'solid',
+        } as any)
+        if (!ds.stayDraw) ds.setActiveTool(null)
+        return
+      }
+      return
+    }
+
+    // Pan mode
     setDragging(true)
     dragStart.current = { x: e.clientX, vs: viewStart }
-  }, [viewStart])
+  }, [viewStart, panelIdx])
 
   const onMouseMove = useCallback((e: React.MouseEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect()
@@ -320,6 +492,15 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       const barsMoved = Math.round(dx / barW)
       const newVs = dragStart.current.vs - barsMoved
       setViewStart(Math.max(0, Math.min(bars.length - viewBars, newVs)))
+    }
+
+    // Crosshair sync: update global crosshair position for other panels
+    if (!dragging && rcRef.current && my >= 0 && my <= rcRef.current.priceH) {
+      const rc = rcRef.current
+      const price = rc.minP + rc.priceRange * (1 - my / rc.priceH)
+      const bi = Math.max(0, Math.min(rc.visible.length - 1, Math.round(mx / rc.barW - 0.5)))
+      const time = rc.visible[bi]?.time
+      if (time != null) useChartStore.getState().setCrosshair(time, price)
     }
   }, [dragging, viewBars, bars.length, size.w])
 
@@ -369,7 +550,25 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       }}>
         <span style={{ color: '#dde3f0' }}>{symbol}</span>
         <span style={{ color: '#4a6080' }}>|</span>
-        <span style={{ color: '#8aa0c0' }}>{tfLabel}</span>
+        {/* TF Buttons */}
+        {['1','5','15','60','D','W'].map(t => (
+          <button
+            key={t}
+            onClick={() => useChartStore.getState().setPanelTf(panelIdx, t)}
+            style={{
+              background: tf === t ? '#1a2a4a' : 'none',
+              border: tf === t ? '1px solid #3a5a8a' : '1px solid transparent',
+              color: tf === t ? '#dde3f0' : '#4a6080',
+              fontSize: 9,
+              fontWeight: tf === t ? 800 : 600,
+              padding: '1px 4px',
+              borderRadius: 2,
+              cursor: 'pointer',
+              letterSpacing: 0.5,
+            }}
+          >{t === '1' ? '1m' : t === '5' ? '5m' : t === '15' ? '15m' : t === '60' ? '60m' : t}</button>
+        ))}
+        <span style={{ color: '#4a6080' }}>|</span>
         {/* Active indicator dots */}
         <div style={{ display: 'flex', gap: 3, marginLeft: 8 }}>
           {liveInds.ema9 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.ema9 }} title="EMA 9" />}
@@ -383,8 +582,14 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
           {liveInds.db_72_89 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#c87a14' }} title="DB 72/89" />}
           {liveInds.pzones && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b' }} title="Pivot Zones" />}
         </div>
-        <span style={{ marginLeft: 'auto', color: '#26a69a', fontSize: 10, fontWeight: 800, letterSpacing: 1 }}>⚛ REACT</span>
+        <span id={`ohlc-${panelIdx}`} style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 600, color: '#8aa0c0', letterSpacing: 0.5 }} />
+        <span style={{ color: '#26a69a', fontSize: 10, fontWeight: 800, letterSpacing: 1, marginLeft: 8 }}>⚛ REACT</span>
         <span style={{ color: '#4a6080', fontSize: 9, marginLeft: 8 }}>{bars.length} bars | {viewBars} vis</span>
+        <button
+          onClick={() => useUIStore.getState().setFullscreenPanel(fullscreenPanel === panelIdx ? null : panelIdx)}
+          style={{ background: 'none', border: 'none', color: '#4a6080', cursor: 'pointer', fontSize: 10, padding: '0 2px', marginLeft: 4 }}
+          title="Fullscreen"
+        >⛶</button>
       </div>
 
       {/* Canvas */}
@@ -393,7 +598,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
           ref={canvasRef}
           style={{
             display: 'block',
-            cursor: dragging ? 'grabbing' : 'crosshair',
+            cursor: dragging ? 'grabbing' : activeTool ? 'crosshair' : 'crosshair',
           }}
           onMouseDown={onMouseDown}
           onMouseMove={onMouseMove}
@@ -401,6 +606,95 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
           onMouseLeave={onMouseLeave}
           onWheel={onWheel}
         />
+      </div>
+
+      {/* Scrollbar + Scroll Arrows */}
+      <div style={{
+        height: 18,
+        background: '#080a0e',
+        borderTop: '1px solid #111620',
+        display: 'flex',
+        alignItems: 'center',
+        padding: '0 2px',
+        flexShrink: 0,
+      }}>
+        {/* Left arrow */}
+        <button
+          onClick={() => setViewStart(vs => Math.max(0, vs - 1))}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#6a80a0',
+            cursor: 'pointer',
+            fontSize: 10,
+            padding: '0 4px',
+            lineHeight: '18px',
+          }}
+        >◀</button>
+
+        {/* Scrollbar track */}
+        <div
+          style={{
+            flex: 1,
+            height: 8,
+            background: '#111620',
+            borderRadius: 4,
+            position: 'relative',
+            cursor: 'pointer',
+            margin: '0 4px',
+          }}
+          onClick={(e) => {
+            const rect = (e.target as HTMLElement).getBoundingClientRect()
+            const frac = (e.clientX - rect.left) / rect.width
+            const newStart = Math.max(0, Math.min(bars.length - viewBars, Math.round(frac * bars.length - viewBars / 2)))
+            setViewStart(newStart)
+          }}
+        >
+          {/* Thumb */}
+          {bars.length > 0 && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: `${(viewStart / bars.length) * 100}%`,
+                width: `${Math.max(2, (viewBars / bars.length) * 100)}%`,
+                height: '100%',
+                background: '#2a3a55',
+                borderRadius: 4,
+                cursor: 'grab',
+              }}
+              onMouseDown={(e) => {
+                e.stopPropagation()
+                const startX = e.clientX
+                const startVS = viewStart
+                const rect = (e.currentTarget.parentElement as HTMLElement).getBoundingClientRect()
+                const trackW = rect.width
+                const onMove = (me: MouseEvent) => {
+                  const dx = me.clientX - startX
+                  const dBars = Math.round((dx / trackW) * bars.length)
+                  setViewStart(Math.max(0, Math.min(bars.length - viewBars, startVS + dBars)))
+                }
+                const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+                window.addEventListener('mousemove', onMove)
+                window.addEventListener('mouseup', onUp)
+              }}
+            />
+          )}
+        </div>
+
+        {/* Right arrow */}
+        <button
+          onClick={() => setViewStart(vs => Math.max(0, Math.min(bars.length - viewBars, vs + 1)))}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#6a80a0',
+            cursor: 'pointer',
+            fontSize: 10,
+            padding: '0 4px',
+            lineHeight: '18px',
+          }}
+        >▶</button>
       </div>
     </div>
   )

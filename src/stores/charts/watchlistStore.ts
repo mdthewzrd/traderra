@@ -60,7 +60,7 @@ function loadCols(): string[] {
     const s = localStorage.getItem(WL_COL_KEY)
     if (s) {
       const p = JSON.parse(s)
-      if (Array.isArray(p)?.length) return p
+      if (Array.isArray(p) && p.length) return p
     }
   } catch {}
   return DEFAULT_COLS.slice()

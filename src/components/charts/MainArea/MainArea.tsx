@@ -1,10 +1,12 @@
 'use client'
 
 /**
- * MainArea — the main content area containing the React chart panel and backtest sidebar.
+ * MainArea — the main content area containing the React chart panel(s) and backtest sidebar.
+ * Supports 1, 2, or 4 panel layouts.
  */
 
 import { ReactChartPanel } from '@/components/charts/ChartCanvas/ReactChartPanel'
+import { useUIStore } from '@/stores/charts/uiStore'
 
 const BT_SIDEBAR_HTML = `
 <div id="bt-sidebar">
@@ -105,8 +107,48 @@ const BT_SIDEBAR_HTML = `
 `
 
 export function MainArea() {
+  const activeLayout = useUIStore(s => s.activeLayout)
+  const fullscreenPanel = useUIStore(s => s.fullscreenPanel)
+
+  // If a panel is fullscreen, show just that one
+  if (fullscreenPanel !== null) {
+    return (
+      <div id="main-area" style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden', marginRight: 350, marginLeft: 38 }}>
+        <ReactChartPanel panelIdx={fullscreenPanel} />
+        <div dangerouslySetInnerHTML={{ __html: BT_SIDEBAR_HTML }} />
+      </div>
+    )
+  }
+
+  if (activeLayout === 2) {
+    return (
+      <div id="main-area" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', marginRight: 350, marginLeft: 38 }}>
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <ReactChartPanel panelIdx={0} />
+        </div>
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <ReactChartPanel panelIdx={1} />
+        </div>
+        <div style={{ display: 'none' }} dangerouslySetInnerHTML={{ __html: BT_SIDEBAR_HTML }} />
+      </div>
+    )
+  }
+
+  if (activeLayout === 4) {
+    return (
+      <div id="main-area" style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', minHeight: 0, overflow: 'hidden', marginRight: 350, marginLeft: 38, gap: 2 }}>
+        <ReactChartPanel panelIdx={0} />
+        <ReactChartPanel panelIdx={1} />
+        <ReactChartPanel panelIdx={2} />
+        <ReactChartPanel panelIdx={3} />
+        <div style={{ display: 'none' }} dangerouslySetInnerHTML={{ __html: BT_SIDEBAR_HTML }} />
+      </div>
+    )
+  }
+
+  // Default: single panel
   return (
-    <div id="main-area" style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden', transition: 'margin-right 0.15s ease', marginRight: 350, marginLeft: 38 }}>
+    <div id="main-area" style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden', marginRight: 350, marginLeft: 38 }}>
       <ReactChartPanel panelIdx={0} />
       <div dangerouslySetInnerHTML={{ __html: BT_SIDEBAR_HTML }} />
     </div>

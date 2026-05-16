@@ -13,24 +13,12 @@ import { renderCrosshair } from '@/lib/charts/render-crosshair'
 import { drawLine, drawBandFill, drawBandLines, drawEMABand, drawDevBand } from '@/lib/charts/render-indicators'
 import { computeIndicators } from '@/lib/charts/indicators'
 import { C } from '@/lib/charts/theme'
+import { useIndicatorStore } from '@/stores/charts/indicatorStore'
 import type { RenderContext } from '@/lib/charts/render-types'
 
-// Read live indicator state from legacy engine panels[0].inds
-// Falls back to Mike's preset defaults if engine hasn't loaded yet
+// Read indicator state from Zustand store
 function getLiveInds(): Record<string, boolean> {
-  const p = (window as any).panels?.[0]
-  if (p?.inds) return { ...p.inds }
-  // Mike preset fallback (intraday)
-  return {
-    ema9: false, ema20: false, ema50: false, ema200: false,
-    db_upper: false, db_low1: false, db_low2: false,
-    vol: true, vwap: true,
-    ema40_60: false, ema150: false,
-    band_9_20: true, band_72_89: true,
-    dev_s_9_20: true, dev_l_9_20: false,
-    db_72_89: true, pzones: true,
-    bollinger: false, sma: false, sma_vol: false,
-  }
+  return { ...useIndicatorStore.getState().inds }
 }
 
 // Mike's deviation band parameters
@@ -70,19 +58,15 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
   // Fetch bars
   const { bars, loading } = useBars(symbol, tf)
 
-  // Live indicator state from legacy engine (read each render, store for JSX)
+  // Live indicator state from Zustand store (polled for header dots)
   const liveIndsRef = useRef(getLiveInds())
   useEffect(() => {
     const interval = setInterval(() => {
       liveIndsRef.current = getLiveInds()
-    }, 500)
+    }, 200)
     return () => clearInterval(interval)
   }, [])
-  const [liveInds, setLiveInds] = useState(getLiveInds())
-  useEffect(() => {
-    const interval = setInterval(() => setLiveInds(getLiveInds()), 500)
-    return () => clearInterval(interval)
-  }, [])
+  const liveInds = useIndicatorStore((s) => s.inds)
 
   // ResizeObserver — watch the canvas wrapper, not the outer container
   const canvasWrapRef = useRef<HTMLDivElement>(null)

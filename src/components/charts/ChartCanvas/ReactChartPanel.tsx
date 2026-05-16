@@ -16,6 +16,7 @@ import { renderSessionShading } from '@/lib/charts/render-session'
 import { renderAnnotations } from '@/lib/charts/render-annotations'
 import { renderAnnotationPreview } from '@/lib/charts/render-preview'
 import { renderBtMarkers } from '@/lib/charts/render-bt-markers'
+import { renderPivotZones } from '@/lib/charts/render-pzones'
 import { isIntraday } from '@/lib/charts/format'
 import { C } from '@/lib/charts/theme'
 import { useIndicatorStore } from '@/stores/charts/indicatorStore'
@@ -222,7 +223,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       ;(window as any).toolStep = toolStep === 1 ? 'second' : 'idle'
 
       // Panel display toggles
-      ;(rc as any).showPDC = true
+      ;(rc as any).showPDC = useUIStore.getState().showPDC
       ;(rc as any).showTL = true
       ;(rc as any).showAnn = true
       ;(rc as any).showExec = true
@@ -243,6 +244,31 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
 
       // ── Session shading (intraday only) ──
       if (isIntraday(tf)) renderSessionShading(rc)
+
+      // ── Target line (vertical dashed line at target date) ──
+      const showTarget = useUIStore.getState().showTarget
+      const targetDate = useUIStore.getState().targetDate
+      if (showTarget && targetDate && rc.visible.length > 0) {
+        const targetTs = isIntraday(tf)
+          ? Math.floor(new Date(targetDate + 'T09:30:00-05:00').getTime() / 1000)
+          : null
+        if (targetTs != null) {
+          const tx = rc.annTimeToX(targetTs)
+          if (tx != null && tx >= 0 && tx <= rc.chartW) {
+            ctx.strokeStyle = 'rgba(251,191,36,0.6)'
+            ctx.lineWidth = 1.5
+            ctx.setLineDash([6, 4])
+            ctx.beginPath(); ctx.moveTo(tx, 0); ctx.lineTo(tx, rc.priceH); ctx.stroke()
+            ctx.setLineDash([])
+            // Label
+            ctx.font = 'bold 9px Inter'
+            ctx.fillStyle = '#fbbf24'
+            ctx.textAlign = 'center'
+            ctx.fillText('TARGET', tx, 10)
+            ctx.textAlign = 'left'
+          }
+        }
+      }
 
       // ── Volume ──
       renderVolume(rc)
@@ -347,6 +373,9 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       if (inds.sma && ic.sma[20]) {
         drawLine(rc, ic.sma[20], C.sma_color, 1.4)
       }
+
+      // ── Pivot Zones (pzones) ──
+      if (inds.pzones) renderPivotZones(rc)
 
       // ── Candles ──
       renderCandles(rc)
@@ -569,6 +598,24 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
           >{t === '1' ? '1m' : t === '5' ? '5m' : t === '15' ? '15m' : t === '60' ? '60m' : t}</button>
         ))}
         <span style={{ color: '#4a6080' }}>|</span>
+        {/* Preset buttons */}
+        <button
+          onClick={() => {
+            const { useIndicatorStore } = require('@/stores/charts/indicatorStore')
+            useIndicatorStore.getState().setInds({ ema9: true, ema20: true, ema50: true, ema200: true, sma_vol: true, vwap: true, vol: true })
+          }}
+          style={{ background: '#1a2a4a', border: '1px solid #3a5a8a', color: '#8aa0c0', fontSize: 8, fontWeight: 800, padding: '1px 3px', borderRadius: 2, cursor: 'pointer' }}
+          title="SAM preset: EMA 9/20/50/200 + VWAP + Vol SMA"
+        >SAM</button>
+        <button
+          onClick={() => {
+            const { useIndicatorStore } = require('@/stores/charts/indicatorStore')
+            useIndicatorStore.getState().setInds({ band_9_20: true, band_72_89: true, dev_s_9_20: true, db_72_89: true, vwap: true, sma_vol: true, vol: true })
+          }}
+          style={{ background: '#2a1a2a', border: '1px solid #5a3a6a', color: '#a080c0', fontSize: 8, fontWeight: 800, padding: '1px 3px', borderRadius: 2, cursor: 'pointer' }}
+          title="MIKE preset: Bands 9/20, 72/89, Dev bands, VWAP"
+        >MIKE</button>
+        <span style={{ color: '#4a6080' }}>|</span>
         {/* Active indicator dots */}
         <div style={{ display: 'flex', gap: 3, marginLeft: 8 }}>
           {liveInds.ema9 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.ema9 }} title="EMA 9" />}
@@ -585,6 +632,38 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
         <span id={`ohlc-${panelIdx}`} style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 600, color: '#8aa0c0', letterSpacing: 0.5 }} />
         <span style={{ color: '#26a69a', fontSize: 10, fontWeight: 800, letterSpacing: 1, marginLeft: 8 }}>⚛ REACT</span>
         <span style={{ color: '#4a6080', fontSize: 9, marginLeft: 8 }}>{bars.length} bars | {viewBars} vis</span>
+        {/* Date range inputs */}
+        <input
+          type="date"
+          style={{ width: 90, background: '#0a0c14', border: '1px solid #1e2535', color: '#8aa0c0', fontSize: 9, padding: '0 3px', borderRadius: 2, height: 18, marginLeft: 4 }}
+          onChange={(e) => {
+            const from = e.target.value
+            if (from) {
+              const idx = bars.findIndex(b => {
+                const d = typeof b.time === 'string' ? b.time : new Date(b.time * 1000).toISOString().split('T')[0]
+                return d >= from
+              })
+              if (idx >= 0) setViewStart(idx)
+            }
+          }}
+          title="From date"
+        />
+        <span style={{ color: '#3a4560', fontSize: 9 }}>→</span>
+        <input
+          type="date"
+          style={{ width: 90, background: '#0a0c14', border: '1px solid #1e2535', color: '#8aa0c0', fontSize: 9, padding: '0 3px', borderRadius: 2, height: 18 }}
+          onChange={(e) => {
+            const to = e.target.value
+            if (to) {
+              const idx = bars.findIndex(b => {
+                const d = typeof b.time === 'string' ? b.time : new Date(b.time * 1000).toISOString().split('T')[0]
+                return d > to
+              })
+              if (idx >= 0) setViewStart(Math.max(0, idx - viewBars))
+            }
+          }}
+          title="To date"
+        />
         <button
           onClick={() => useUIStore.getState().setFullscreenPanel(fullscreenPanel === panelIdx ? null : panelIdx)}
           style={{ background: 'none', border: 'none', color: '#4a6080', cursor: 'pointer', fontSize: 10, padding: '0 2px', marginLeft: 4 }}

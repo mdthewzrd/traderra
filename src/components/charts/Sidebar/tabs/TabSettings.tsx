@@ -1,5 +1,7 @@
 'use client'
 
+import { useState } from 'react'
+
 /**
  * TabSettings — Input settings: zoom sensitivity, pan speed, right padding, display options.
  * Element IDs preserved for charts-engine.js settingsSync() interop.
@@ -76,11 +78,47 @@ export function TabSettings() {
           </div>
         </div>
 
+        {/* Lines & Markers */}
+        <div className="vs">
+          <div className="vst">LINES & MARKERS</div>
+          <ToggleRow label="PDC Line" id="set-pdc" defaultChecked={true} onChange={(v) => require('@/stores/charts/uiStore').useUIStore.getState().setShowPDC(v)} />
+          <ToggleRow label="Target Line" id="set-target" defaultChecked={false} onChange={(v) => require('@/stores/charts/uiStore').useUIStore.getState().setShowTarget(v)} />
+          <div className="vr">
+            <label>Target Date</label>
+            <input
+              type="date"
+              id="set-target-date"
+              style={{ flex: 1, background: '#141926', border: '1px solid #2a3050', color: '#dde3f0', fontSize: 11, padding: '3px 5px', borderRadius: 3, outline: 'none' }}
+              onChange={(e) => require('@/stores/charts/uiStore').useUIStore.getState().setTargetDate(e.target.value)}
+            />
+          </div>
+        </div>
+
         <div style={{ display: 'flex', gap: 6 }}>
           <button id="is-save" style={{ flex: 2, padding: 4, border: '1px solid #D4AF37', color: '#000', background: '#D4AF37', borderRadius: 4, fontSize: 11, fontWeight: 700, cursor: 'pointer' }} onClick={() => (window as any).liveS?.()}>💾 SAVE</button>
           <button id="is-reset" style={{ flex: 1, padding: 4, border: '1px solid #ef5350', color: '#ef5350', background: 'transparent', borderRadius: 4, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>↺ RESET</button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function ToggleRow({ label, id, defaultChecked, onChange }: { label: string; id: string; defaultChecked: boolean; onChange: (v: boolean) => void }) {
+  const [checked, setChecked] = useState(defaultChecked)
+  return (
+    <div className="vr">
+      <label>{label}</label>
+      <button
+        id={id}
+        style={{
+          background: checked ? '#26a69a18' : '#1a1e2a',
+          border: `1px solid ${checked ? '#26a69a' : '#2a3050'}`,
+          color: checked ? '#26a69a' : '#4a6080',
+          fontSize: 10, fontWeight: 700, padding: '2px 10px', borderRadius: 3, cursor: 'pointer',
+          marginLeft: 'auto',
+        }}
+        onClick={() => { const v = !checked; setChecked(v); onChange(v) }}
+      >{checked ? 'ON' : 'OFF'}</button>
     </div>
   )
 }

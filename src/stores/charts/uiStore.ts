@@ -21,6 +21,16 @@ interface UIState {
   showPriceLine: boolean
   setShowPriceLine: (v: boolean) => void
 
+  // PDC (Prior Day Close) line
+  showPDC: boolean
+  setShowPDC: (v: boolean) => void
+
+  // Target line (vertical dashed)
+  showTarget: boolean
+  targetDate: string
+  setShowTarget: (v: boolean) => void
+  setTargetDate: (v: string) => void
+
   // Bars visible (indicator rows)
   barsVisible: boolean
   setBarsVisible: (v: boolean) => void
@@ -68,6 +78,14 @@ export const useUIStore = create<UIState>((set) => ({
 
   showPriceLine: true,
   setShowPriceLine: (v) => set({ showPriceLine: v }),
+
+  showPDC: true,
+  setShowPDC: (v) => set({ showPDC: v }),
+
+  showTarget: false,
+  targetDate: '',
+  setShowTarget: (v) => set({ showTarget: v }),
+  setTargetDate: (v) => set({ targetDate: v }),
 
   barsVisible: true,
   setBarsVisible: (v) => set({ barsVisible: v }),

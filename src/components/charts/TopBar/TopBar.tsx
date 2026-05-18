@@ -336,7 +336,7 @@ function HotButtons() {
   const tools = useToolStore((s) => s.tools)
   const toggleTool = useToolStore((s) => s.toggleTool)
   const selectTool = useToolStore((s) => s.selectTool)
-  const hotTools = tools.filter(t => t.hot && t.on)
+  const hotTools = tools.filter(t => t.hot)
 
   return (
     <div id="hot-btns-container" style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>

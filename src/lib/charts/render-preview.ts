@@ -46,7 +46,7 @@ export function renderAnnotationPreview(rc: RenderContext) {
     ctx.setLineDash([])
   } else if (activeTool.startsWith('hl_')) {
     const rv = parseInt(col.slice(1, 3), 16), gv = parseInt(col.slice(3, 5), 16), bv = parseInt(col.slice(5, 7), 16)
-    const hlOpEl = document.getElementById('hl-opacity')
+    const hlOpEl = document.getElementById('hl-opacity') as HTMLInputElement | null
     const op = (hlOpEl ? parseInt(hlOpEl.value) : 35) / 100
     ctx.fillStyle = `rgba(${rv},${gv},${bv},${op})`
     ctx.fillRect(Math.min(ax, cx), Math.min(ay, cy), Math.abs(cx - ax), Math.abs(cy - ay))

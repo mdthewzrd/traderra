@@ -211,7 +211,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
 
       // Bridge globals
       ;(window as any)._chartStyle = chartStyle
-      ;(window as any).showPriceLine = true
+      ;(window as any).showPriceLine = useUIStore.getState().showPriceLine
       ;(window as any).globalCrossTime = useChartStore.getState().globalCrossTime
       ;(window as any).globalCrossPrice = useChartStore.getState().globalCrossPrice
 

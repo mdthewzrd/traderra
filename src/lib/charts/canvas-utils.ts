@@ -82,3 +82,37 @@ export function annLineWidth(ann: any): number {
 export function annLineDash(ann: any): number[] {
   return ann.dashed ? [6, 4] : []
 }
+
+/** Check if annotation uses point array format */
+export function isPointArrayAnn(ann: any): boolean {
+  return Array.isArray(ann.points) && ann.points.length >= 2
+}
+
+/** Get screen coordinates from annotation points */
+export function getScreenPointsFromAnn(ann: any, annTimeToX: (t: number) => number | null, pToY: (p: number) => number): { x: number; y: number }[] {
+  if (!isPointArrayAnn(ann)) {
+    const x1 = annTimeToX(ann.x1), y1 = pToY(ann.y1)
+    const x2 = ann.x2 != null ? annTimeToX(ann.x2) : x1, y2 = ann.y2 != null ? pToY(ann.y2) : y1
+    const pts: { x: number; y: number }[] = []
+    if (x1 != null) pts.push({ x: x1, y: y1 })
+    if (x2 != null) pts.push({ x: x2, y: y2 })
+    return pts
+  }
+  return ann.points.map((p: any) => {
+    const x = annTimeToX(p.x)
+    return { x: x ?? 0, y: pToY(p.y) }
+  }).filter((p: any) => p.x != null)
+}
+
+/** Get bounding box of screen points */
+export function getPointBounds(pts: { x: number; y: number }[]): { minX: number; minY: number; maxX: number; maxY: number } | null {
+  if (!pts.length) return null
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  for (const p of pts) {
+    if (p.x < minX) minX = p.x
+    if (p.y < minY) minY = p.y
+    if (p.x > maxX) maxX = p.x
+    if (p.y > maxY) maxY = p.y
+  }
+  return { minX, minY, maxX, maxY }
+}

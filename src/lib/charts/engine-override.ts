@@ -24,7 +24,7 @@ import { renderGrid, renderPriceAxis, renderTimeAxis } from './render-grid'
 import { renderCandles } from './render-candles'
 import { renderPanelSetup } from './render-panel'
 import { fmtPrice, fmtVol, fmtTimeAxis, fmtTimeCross, getNY, nyMins, isIntraday } from './format'
-import { calcEMA, calcSMA, calcBollinger, calcVolSMA, calcVWAP, calcATR, calcATRSMA } from './indicators'
+import { calcEMA, calcSMA, calcBollinger, calcVolSMA, calcVWAP, calcATR } from './indicators'
 import { C, F } from './theme'
 
 // Feature flags — set to false to use inline JS for that section
@@ -151,7 +151,7 @@ export function overrideRenderPanel() {
     ;(window as any).calcVolSMA = calcVolSMA
     ;(window as any).calcVWAP = calcVWAP
     ;(window as any).calcATR = calcATR
-    ;(window as any).calcATRSMA = calcATRSMA
+    ;(window as any).calcATRSMA = calcATR
   }
 
   // Override theme colors

@@ -7,7 +7,7 @@
 export const C: Record<string, string> = {
   bg: '#0c0e14', axisbg: '#0d0f18', grid: '#141926',
   up: '#26a69a', dn: '#ef5350',
-  vol_up: 'rgba(38,166,154,0.45)', vol_dn: 'rgba(239,83,80,0.45)',
+  vol_up: 'rgba(38,166,154,0.5)', vol_dn: 'rgba(239,83,80,0.5)',
   axisLabel: '#6878a8', axisMuted: '#4a5580', axisHighlight: '#8090b0',
   crossLabelBg: '#141a2a', crossLabelBd: '#2a3050',
   ema9: '#e8d000', ema20: '#3a70e0', ema50: '#00c8e8', ema150: '#e0e0e0', ema200: '#e0e0e0', vwap: '#00e676',
@@ -23,7 +23,6 @@ export const C: Record<string, string> = {
   trendline: '#dde3f0',
   box_orange: '#f97316', box_yellow: '#eab308',
   hl_cyan: '#22d3ee', hl_magenta: '#e879f9', hl_green: '#4ade80', hl_white: '#cbd5e1',
-  vol_up: 'rgba(38,166,154,.5)', vol_dn: 'rgba(239,83,80,.5)',
   band_green: 'rgba(34,197,94,.15)', band_red: 'rgba(239,68,68,.15)',
   band_green_line: 'rgba(34,197,94,.50)', band_red_line: 'rgba(239,68,68,.50)',
   band_9_20_bull_fill: 'rgba(34,197,94,.15)', band_9_20_bull_line: 'rgba(34,197,94,.50)',

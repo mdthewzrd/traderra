@@ -1,23 +1,19 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useUIStore, useChartStore, useDrawingStore } from '@/stores/charts'
 import { useToolStore } from '@/stores/charts/toolStore'
 
 /**
- * TopBar — the main toolbar at the top of the charts app.
- * Extracted from charts-terminal.html lines 651-736.
- * Phase 3: Theme toggle uses Zustand. Other buttons still call global functions.
+ * TopBar — the main toolbar at the top of the charts terminal.
+ * Matches the original HTML topbar exactly.
  */
 
 export function TopBar() {
   const [symInput, setSymInput] = useState('AAPL')
 
-  // Zustand-driven state
   const chartSymbol = useChartStore((s) => s.symbol)
   const setChartSymbol = useChartStore((s) => s.setSymbol)
-  const activeTool = useDrawingStore((s) => s.activeTool)
-  const setActiveTool = useDrawingStore((s) => s.setActiveTool)
   const liveMode = useUIStore((s) => s.liveMode)
   const setLiveMode = useUIStore((s) => s.setLiveMode)
   const showPriceLine = useUIStore((s) => s.showPriceLine)
@@ -29,21 +25,33 @@ export function TopBar() {
   const activeLayout = useUIStore((s) => s.activeLayout)
   const setActiveLayout = useUIStore((s) => s.setActiveLayout)
   const setSidebarTab = useUIStore((s) => s.setSidebarTab)
+  const sidebarOpen = useUIStore((s) => s.sidebarOpen)
+  const setSidebarOpen = useUIStore((s) => s.setSidebarOpen)
 
   const handleLoadSymbol = useCallback(() => {
     const sym = symInput.trim().toUpperCase()
     if (!sym) return
     setChartSymbol(sym)
-    // Bridge to legacy engine
     ;(window as any).symbol = sym
     ;(window as any).loadChart?.(sym)
   }, [symInput, setChartSymbol])
+
+  // Sync symbol input when chart symbol changes
+  useEffect(() => { setSymInput(chartSymbol) }, [chartSymbol])
 
   return (
     <div id="topbar">
       <span id="logo">TRADERRA</span>
       <div className="sep" />
-      <SidebarToggleButton />
+
+      {/* Watchlist toggle */}
+      <button
+        className="tbtn"
+        id="wl-toggle"
+        style={{ borderColor: '#6878a8!important', color: '#6878a8!important' }}
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+      >📋</button>
+
       <input
         id="symbol-input"
         type="text"
@@ -53,17 +61,58 @@ export function TopBar() {
         onKeyDown={(e) => e.key === 'Enter' && handleLoadSymbol()}
       />
       <button className="tbtn" id="load-btn" onClick={handleLoadSymbol}>▶ LOAD</button>
-      <button className={`tbtn${liveMode ? ' active' : ''}`} id="live-btn" onClick={() => setLiveMode(!liveMode)}>⬤ LIVE</button>
-      <div id="live-indicator">
+      <button
+        className={`tbtn${liveMode ? ' active' : ''}`}
+        id="live-btn"
+        onClick={() => setLiveMode(!liveMode)}
+      >⬤ LIVE</button>
+      <div id="live-indicator" className={liveMode ? 'show' : ''}>
         <div id="live-dot" />
         <span id="live-label">LIVE</span>
       </div>
+
       <div className="sep" />
 
-      {/* Draw dropdown */}
-      <DrawMenu />
-      {/* Trade dropdown */}
-      <TradeMenu />
+      {/* DRAW dropdown */}
+      <Dropdown id="draw" label="✏ DRAW ▾">
+        <DropdownToolButton emoji="✏" label="Line" tool="trendline" />
+        <DropdownToolButton emoji="〰" label="Fib Retracement" tool="fib_ret" color="#a78bfa" />
+        <DropdownToolButton emoji="▣" label="Orange Box" tool="box_orange" />
+        <DropdownToolButton emoji="▣" label="Yellow Box" tool="box_yellow" />
+        <DropdownToolButton emoji="T" label="Orange Text" tool="text_orange" />
+        <DropdownToolButton emoji="T" label="Yellow Text" tool="text_yellow" />
+        <DropdownSep />
+        <span style={{ fontSize: 8, color: '#3a4560', padding: '2px 6px' }}>HIGHLIGHT:</span>
+        <DropdownToolButton emoji="■" label="Cyan" tool="hl_cyan" color="#22d3ee" stayOpen />
+        <DropdownToolButton emoji="■" label="Magenta" tool="hl_magenta" color="#e879f9" stayOpen />
+        <DropdownToolButton emoji="■" label="Green" tool="hl_green" color="#4ade80" stayOpen />
+        <DropdownToolButton emoji="■" label="White" tool="hl_white" color="#cbd5e1" stayOpen />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 6px' }}>
+          <span style={{ fontSize: 8, color: '#3a4560' }}>OP:</span>
+          <input id="hl-opacity" type="range" min={5} max={80} defaultValue={35} style={{ width: 60, height: 14, accentColor: '#22d3ee', cursor: 'pointer' }} />
+          <span id="hl-opacity-val" style={{ fontSize: 11, color: '#4a6080' }}>15%</span>
+        </div>
+        <DropdownSep />
+        <DropdownToolButton emoji="✎" label="Edit" tool="edit" color="#fbbf24" />
+        <DropdownToolButton emoji="🗑" label="Delete" tool="del" color="#ff3d57" />
+        <button
+          className="tbtn"
+          style={{ margin: '2px 4px' }}
+          onClick={() => useDrawingStore.getState().clearAnnotations()}
+        >✕ Clear All</button>
+      </Dropdown>
+
+      {/* TRADE dropdown */}
+      <Dropdown id="trade" label="⇅ TRADE ▾" labelColor="#ff9800">
+        <DropdownToolButton emoji="▲" label="Long Entry" tool="entry_arrow" color="#ff9800" />
+        <DropdownToolButton emoji="▼" label="Long Exit" tool="exit_arrow" color="#40c4ff" />
+        <DropdownSep />
+        <DropdownToolButton emoji="▼" label="Short Entry" tool="short_arrow" color="#ff5252" />
+        <DropdownToolButton emoji="▲" label="Cover" tool="cover_arrow" color="#00e676" />
+        <DropdownSep />
+        <DropdownToolButton emoji="—" label="Stop" tool="stop_line" color="#facc15" />
+        <DropdownToolButton emoji="—" label="Trail Stop" tool="trail_stop" color="#38bdf8" />
+      </Dropdown>
 
       <div className="sep" />
 
@@ -89,9 +138,7 @@ export function TopBar() {
           style={{ borderColor: '#3a4a68', color: '#3a4a68' }}
           onClick={() => (window as any).openIndBtnPopup?.()}
           title="Add indicator button"
-        >
-          ＋
-        </button>
+        >＋</button>
         <TemplateDropdown />
         <ThemeToggleButton />
         <button
@@ -100,9 +147,7 @@ export function TopBar() {
           style={{ borderColor: '#22d3ee', color: '#22d3ee' }}
           onClick={() => window.location.reload()}
           title="Reload chart"
-        >
-          ⟳ RELOAD
-        </button>
+        >⟳ RELOAD</button>
       </div>
       <div id="ticker-info">
         <span id="ti-sym" style={{ color: '#dde3f0', fontWeight: 700, fontSize: 14 }} />
@@ -113,72 +158,91 @@ export function TopBar() {
   )
 }
 
-function DrawMenu() {
-  const setActiveTool = useDrawingStore((s) => s.setActiveTool)
-  const bridgeTool = (tool: string) => {
-    setActiveTool(tool)
-    ;(window as any).setActiveTool?.(tool)
-  }
+/* ═══════════════════════════════════════════════════════════════
+   Dropdown — handles open/close with click-outside
+   ═══════════════════════════════════════════════════════════════ */
+
+function Dropdown({ id, label, labelColor, children }: {
+  id: string
+  label: string
+  labelColor?: string
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  // Close on click outside
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [open])
+
   return (
-    <div className="dropdown-group">
-      <button className="tbtn dropdown-trigger" id="draw-menu-btn">✏ DRAW ▾</button>
-      <div className="dropdown-content" id="draw-menu">
-        <button className="tool-btn" data-tool="trendline" onClick={() => bridgeTool('trendline')}>✏ Line</button>
-        <button className="tool-btn" data-tool="fib_ret" style={{ borderColor: '#a78bfa', color: '#a78bfa' }} onClick={() => bridgeTool('fib_ret')}>〰 Fib Retracement</button>
-        <button className="tool-btn" data-tool="box_orange" onClick={() => bridgeTool('box_orange')}>▣ Orange Box</button>
-        <button className="tool-btn" data-tool="box_yellow" onClick={() => bridgeTool('box_yellow')}>▣ Yellow Box</button>
-        <button className="tool-btn" data-tool="text_orange" onClick={() => bridgeTool('text_orange')}>T Orange Text</button>
-        <button className="tool-btn" data-tool="text_yellow" onClick={() => bridgeTool('text_yellow')}>T Yellow Text</button>
-        <hr style={{ border: 'none', borderTop: '1px solid #2a3050', margin: '2px 0' }} />
-        <span style={{ fontSize: 8, color: '#3a4560', padding: '2px 6px' }}>HIGHLIGHT:</span>
-        <button className="tool-btn" data-tool="hl_cyan" style={{ borderColor: '#22d3ee', color: '#22d3ee' }} onClick={() => bridgeTool('hl_cyan')}>■ Cyan</button>
-        <button className="tool-btn" data-tool="hl_magenta" style={{ borderColor: '#e879f9', color: '#e879f9' }} onClick={() => bridgeTool('hl_magenta')}>■ Magenta</button>
-        <button className="tool-btn" data-tool="hl_green" style={{ borderColor: '#4ade80', color: '#4ade80' }} onClick={() => bridgeTool('hl_green')}>■ Green</button>
-        <button className="tool-btn" data-tool="hl_white" style={{ borderColor: '#cbd5e1', color: '#cbd5e1' }} onClick={() => bridgeTool('hl_white')}>■ White</button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 6px' }}>
-          <span style={{ fontSize: 8, color: '#3a4560' }}>OP:</span>
-          <input id="hl-opacity" type="range" min={5} max={80} defaultValue={35} style={{ width: 60, height: 14, accentColor: '#22d3ee', cursor: 'pointer' }} />
-          <span id="hl-opacity-val" style={{ fontSize: 11, color: '#4a6080' }}>15%</span>
-        </div>
-        <hr style={{ border: 'none', borderTop: '1px solid #2a3050', margin: '2px 0' }} />
-        <button className="tool-btn" data-tool="edit" style={{ borderColor: '#fbbf24', color: '#fbbf24' }} onClick={() => bridgeTool('edit')}>✎ Edit</button>
-        <button className="tool-btn" data-tool="del" style={{ borderColor: '#ff3d57', color: '#ff3d57' }} onClick={() => bridgeTool('del')}>🗑 Delete</button>
-        <button className="tbtn" id="clr-btn" style={{ margin: '2px 4px' }}>✕ Clear All</button>
+    <div className="dropdown-group" ref={ref}>
+      <button
+        className={`tbtn dropdown-trigger${open ? ' active' : ''}`}
+        id={`${id}-menu-btn`}
+        style={labelColor ? { borderColor: labelColor, color: labelColor } : undefined}
+        onClick={(e) => { e.stopPropagation(); setOpen(v => !v) }}
+      >{label}</button>
+      <div className={`dropdown-content${open ? ' open' : ''}`} id={`${id}-menu`} onClick={(e) => e.stopPropagation()}>
+        {children}
       </div>
     </div>
   )
 }
 
-function TradeMenu() {
+function DropdownSep() {
+  return <hr style={{ border: 'none', borderTop: '1px solid #2a3050', margin: '2px 0' }} />
+}
+
+function DropdownToolButton({ emoji, label, tool, color, stayOpen }: {
+  emoji: string
+  label: string
+  tool: string
+  color?: string
+  stayOpen?: boolean
+}) {
   const setActiveTool = useDrawingStore((s) => s.setActiveTool)
-  const bridgeTool = (tool: string) => {
-    setActiveTool(tool)
-    ;(window as any).setActiveTool?.(tool)
-  }
   return (
-    <div className="dropdown-group">
-      <button className="tbtn dropdown-trigger" id="trade-menu-btn" style={{ borderColor: '#ff9800', color: '#ff9800' }}>⇅ TRADE ▾</button>
-      <div className="dropdown-content" id="trade-menu">
-        <button className="tool-btn" data-tool="entry_arrow" style={{ borderColor: '#ff9800', color: '#ff9800' }} onClick={() => bridgeTool('entry_arrow')}>▲ Long Entry</button>
-        <button className="tool-btn" data-tool="exit_arrow" style={{ borderColor: '#40c4ff', color: '#40c4ff' }} onClick={() => bridgeTool('exit_arrow')}>▼ Long Exit</button>
-        <hr style={{ border: 'none', borderTop: '1px solid #2a3050', margin: '2px 0' }} />
-        <button className="tool-btn" data-tool="short_arrow" style={{ borderColor: '#ff5252', color: '#ff5252' }} onClick={() => bridgeTool('short_arrow')}>▼ Short Entry</button>
-        <button className="tool-btn" data-tool="cover_arrow" style={{ borderColor: '#00e676', color: '#00e676' }} onClick={() => bridgeTool('cover_arrow')}>▲ Cover</button>
-        <hr style={{ border: 'none', borderTop: '1px solid #2a3050', margin: '2px 0' }} />
-        <button className="tool-btn" data-tool="stop_line" style={{ borderColor: '#facc15', color: '#facc15' }} onClick={() => bridgeTool('stop_line')}>— Stop</button>
-        <button className="tool-btn" data-tool="trail_stop" style={{ borderColor: '#38bdf8', color: '#38bdf8' }} onClick={() => bridgeTool('trail_stop')}>— Trail Stop</button>
-      </div>
-    </div>
+    <button
+      className="tool-btn"
+      data-tool={tool}
+      style={color ? { borderColor: color, color } : undefined}
+      onClick={() => {
+        setActiveTool(tool)
+        ;(window as any).setActiveTool?.(tool)
+      }}
+    >{emoji} {label}</button>
   )
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Template Dropdown
+   ═══════════════════════════════════════════════════════════════ */
 
 function TemplateDropdown() {
+  const [open, setOpen] = useState(false)
   const [templates, setTemplates] = useState<any[]>([])
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [open])
 
   useEffect(() => {
     const { loadTemplatesFromStorage } = require('@/lib/charts/templates')
     setTemplates(loadTemplatesFromStorage())
-  }, [])
+  }, [open])
 
   const handleSave = () => {
     const { saveTemplate } = require('@/lib/charts/templates')
@@ -208,6 +272,7 @@ function TemplateDropdown() {
       const { useToolStore } = require('@/stores/charts/toolStore')
       useToolStore.getState().setTools(tpl.tools)
     }
+    setOpen(false)
   }
 
   const handleDelete = (idx: number) => {
@@ -217,9 +282,14 @@ function TemplateDropdown() {
   }
 
   return (
-    <div className="dropdown-group">
-      <button className="tbtn dropdown-trigger" id="tpl-menu-btn" style={{ borderColor: '#D4AF37', color: '#D4AF37' }}>📋 TPL ▾</button>
-      <div className="dropdown-content" id="tpl-dropdown" style={{ minWidth: 200 }}>
+    <div className="dropdown-group" ref={ref}>
+      <button
+        className={`tbtn dropdown-trigger${open ? ' active' : ''}`}
+        id="tpl-menu-btn"
+        style={{ borderColor: '#D4AF37', color: '#D4AF37' }}
+        onClick={(e) => { e.stopPropagation(); setOpen(v => !v) }}
+      >📋 TPL ▾</button>
+      <div className={`dropdown-content${open ? ' open' : ''}`} id="tpl-dropdown" style={{ minWidth: 200 }} onClick={(e) => e.stopPropagation()}>
         <div style={{ padding: '4px 10px', fontSize: 11, color: '#4a6080', fontWeight: 700 }}>CHART TEMPLATES</div>
         {templates.length === 0 && (
           <div style={{ padding: '6px 10px', fontSize: 11, color: '#4a6080' }}>No templates saved</div>
@@ -238,12 +308,16 @@ function TemplateDropdown() {
             >✕</button>
           </div>
         ))}
-        <hr style={{ border: 'none', borderTop: '1px solid #2a3050', margin: '2px 0' }} />
+        <DropdownSep />
         <div className="tool-btn" style={{ color: '#D4AF37', cursor: 'pointer' }} onClick={handleSave}>💾 Save Current as Template</div>
       </div>
     </div>
   )
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Theme Toggle & Hot Buttons
+   ═══════════════════════════════════════════════════════════════ */
 
 function ThemeToggleButton() {
   const theme = useUIStore((s) => s.theme)
@@ -254,28 +328,10 @@ function ThemeToggleButton() {
       id="theme-toggle-btn"
       style={{ borderColor: '#5a6a88', color: '#5a6a88' }}
       onClick={toggleTheme}
-    >
-      {theme === 'dark' ? '🌙' : '☀'}
-    </button>
+    >{theme === 'dark' ? '🌙' : '☀'}</button>
   )
 }
 
-function SidebarToggleButton() {
-  const sidebarOpen = useUIStore((s) => s.sidebarOpen)
-  const setSidebarOpen = useUIStore((s) => s.setSidebarOpen)
-  return (
-    <button
-      className="tbtn"
-      id="wl-toggle"
-      style={{ borderColor: '#6878a8!important', color: '#6878a8!important' }}
-      onClick={() => setSidebarOpen(!sidebarOpen)}
-    >
-      📋
-    </button>
-  )
-}
-
-/** Hot buttons — quick-toggle toolbar for tools marked as hot */
 function HotButtons() {
   const tools = useToolStore((s) => s.tools)
   const toggleTool = useToolStore((s) => s.toggleTool)
@@ -298,9 +354,7 @@ function HotButtons() {
           onClick={() => toggleTool(tool.id)}
           onContextMenu={(e) => { e.preventDefault(); selectTool(tool.id); useUIStore.getState().setSidebarTab('tools') }}
           title={`${tool.name} (right-click for settings)`}
-        >
-          {tool.hotLabel}
-        </button>
+        >{tool.hotLabel}</button>
       ))}
     </div>
   )

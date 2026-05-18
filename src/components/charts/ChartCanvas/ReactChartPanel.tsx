@@ -217,6 +217,25 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       ;(window as any).globalCrossTime = useChartStore.getState().globalCrossTime
       ;(window as any).globalCrossPrice = useChartStore.getState().globalCrossPrice
 
+      // Update ticker info in TopBar
+      if (panelIdx === 0 && rc.visible.length > 0) {
+        const last = rc.visible[rc.visible.length - 1]
+        if (last) {
+          const symEl = document.getElementById('ti-sym')
+          const priceEl = document.getElementById('ti-price')
+          const chgEl = document.getElementById('ti-chg')
+          if (symEl) symEl.textContent = symbol
+          if (priceEl) priceEl.textContent = `$${last.close.toFixed(2)}`
+          if (chgEl && rc.visible.length > 1) {
+            const prev = rc.visible[rc.visible.length - 2]
+            const chg = last.close - prev.close
+            const pct = prev.close > 0 ? ((chg / prev.close) * 100).toFixed(2) : '0.00'
+            const col = chg >= 0 ? '#26a69a' : '#ef5350'
+            chgEl.innerHTML = `<span style="color:${col}">${chg >= 0 ? '+' : ''}${chg.toFixed(2)} (${pct}%)</span>`
+          }
+        }
+      }
+
       // Bridge drawing state for annotation renderer
       ;(window as any).annotations = annotations
       ;(window as any).activeTool = activeTool
@@ -774,8 +793,6 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
         <div id={`ind-hot-${panelIdx}`} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           <PanelHotButtons panelIdx={panelIdx} />
         </div>
-        <span style={{ marginLeft: 'auto', fontSize: 9, color: '#4a6080' }}>{bars.length} bars</span>
-        <span style={{ color: '#26a69a', fontSize: 9, fontWeight: 800, letterSpacing: 1 }}>⚛</span>
       </div>
 
       {/* pdr — Date range row */}

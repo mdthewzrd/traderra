@@ -15,7 +15,7 @@ const inputStyle: React.CSSProperties = { width: '100%', background: '#141926', 
 
 interface BTConfig {
   side: 'long' | 'short'
-  entry: 'next_open' | 'signal_close'
+  entry: 'next_open' | 'signal_close' | 'trigger_break'
   stop: 'signal' | 'pct'
   stopPct: number
   targetR: number
@@ -48,7 +48,7 @@ export function TabBt() {
 
   const [config, setConfig] = useState<BTConfig>({ side: 'long', entry: 'next_open', stop: 'signal', stopPct: 5, targetR: 2, maxHold: 5, risk: 1000 })
   const [btResults, setBtResults] = useState<BTResult[]>([])
-  const [status, setStatus] = useState('Upload a trade CSV or use scan results to backtest.')
+  const [status, setStatus] = useState('Uses saved scan results + Polygon daily bars. Conservative fill model: if stop and target hit on the same bar, stop wins.')
   const fileRef = useRef<HTMLInputElement>(null)
   const setChartSymbol = useChartStore(s => s.setSymbol)
 
@@ -149,7 +149,7 @@ export function TabBt() {
   return (
     <div id="tab-bt" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ padding: '8px 12px', borderBottom: '1px solid #111620', display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', letterSpacing: 1 }}>⏱ BACKTEST</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', letterSpacing: 1 }}>⏱ BT — SAVED SCANS</span>
         <label style={{ marginLeft: 'auto', background: 'none', border: '1px solid #f59e0b', color: '#f59e0b', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3, cursor: 'pointer' }}>
           📂 CSV
           <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleFileUpload} />
@@ -161,6 +161,9 @@ export function TabBt() {
           fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3, cursor: 'pointer',
         }}>HLDT</button>
       </div>
+
+      {/* Info box */}
+      <div id="scan-bt-active" style={{ padding: '8px 10px', background: '#0d1220', border: '1px solid #1e2840', borderRadius: 4, fontSize: 11, color: '#8aa0c0', lineHeight: 1.5, margin: '8px 12px' }}>Select a saved scan in <span style={{ color: '#4ade80', fontWeight: 700 }}>SCAN</span> to backtest it here, or upload a CSV.</div>
 
       {/* Config */}
       <div style={{ padding: '8px 12px', borderBottom: '1px solid #111620' }}>
@@ -178,6 +181,7 @@ export function TabBt() {
             <div style={labelStyle}>ENTRY</div>
             <select value={config.entry} style={selectStyle} onChange={(e) => setConfig(c => ({ ...c, entry: e.target.value as any }))}>
               <option value="next_open">Next day open</option>
+              <option value="trigger_break">Trigger break</option>
               <option value="signal_close">Signal close</option>
             </select>
           </div>
@@ -204,6 +208,7 @@ export function TabBt() {
         </div>
         <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
           <button onClick={handleRunBT} style={{ flex: 1, background: '#f59e0b', color: '#000', border: 'none', fontSize: 11, fontWeight: 800, padding: '7px 10px', borderRadius: 4, cursor: 'pointer' }}>▶ RUN BT</button>
+          <button style={{ flex: 1, background: '#0d1220', border: '1px solid #38bdf8', color: '#38bdf8', fontSize: 11, fontWeight: 800, padding: '7px 10px', borderRadius: 4, cursor: 'pointer' }}>📋 REVIEW</button>
         </div>
       </div>
 

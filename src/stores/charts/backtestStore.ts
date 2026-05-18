@@ -32,6 +32,12 @@ interface BacktestState {
 
   btMarkers: any[]
   setBtMarkers: (m: any[]) => void
+
+  btHighlightDates: boolean
+  setBtHighlightDates: (v: boolean) => void
+
+  btStrategyMode: 'long' | 'short'
+  setBtStrategyMode: (v: 'long' | 'short') => void
 }
 
 export const useBacktestStore = create<BacktestState>((set) => ({
@@ -46,4 +52,10 @@ export const useBacktestStore = create<BacktestState>((set) => ({
 
   btMarkers: [],
   setBtMarkers: (m) => set({ btMarkers: m }),
+
+  btHighlightDates: true,
+  setBtHighlightDates: (v) => set({ btHighlightDates: v }),
+
+  btStrategyMode: 'long',
+  setBtStrategyMode: (v) => set({ btStrategyMode: v }),
 }))

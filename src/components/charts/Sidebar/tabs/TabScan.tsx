@@ -28,7 +28,10 @@ interface ScanDef {
 const STORAGE_KEY = 'traderra-scans'
 
 function loadScans(): ScanDef[] {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') } catch { return [] }
+  try {
+    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+    return Array.isArray(raw) ? raw : []
+  } catch { return [] }
 }
 
 function saveScans(scans: ScanDef[]) {

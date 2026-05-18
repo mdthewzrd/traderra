@@ -32,7 +32,11 @@ const STORAGE_KEY = 'traderra-lab-projects'
 const PHASE_NAMES = ['Idea', 'Setup', 'Execution', 'Review']
 
 function loadProjects(): LabProject[] {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') } catch { return [] }
+  try {
+    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+    if (!Array.isArray(raw)) return []
+    return raw.filter(p => p && p.phases && typeof p.phases === 'object')
+  } catch { return [] }
 }
 
 function saveProjects(projects: LabProject[]) {
@@ -118,9 +122,9 @@ export function TabLab() {
               onMouseOver={(e) => (e.currentTarget.style.background = '#1a1e2e')}
               onMouseOut={(e) => (e.currentTarget.style.background = 'transparent')}
             >
-              <span style={{ fontSize: 10, padding: '2px 5px', borderRadius: 3, fontWeight: 700, background: (statusColors[p.status] || '#4a6080') + '20', color: statusColors[p.status], border: `1px solid ${statusColors[p.status]}` }}>{p.status.toUpperCase()}</span>
+              <span style={{ fontSize: 10, padding: '2px 5px', borderRadius: 3, fontWeight: 700, background: (statusColors[p.status] || '#4a6080') + '20', color: statusColors[p.status] || '#4a6080', border: `1px solid ${statusColors[p.status] || '#4a6080'}` }}>{(p.status || 'idea').toUpperCase()}</span>
               <span style={{ fontSize: 11, color: '#dde3f0', fontWeight: 700, flex: 1 }}>{p.name}</span>
-              <span style={{ fontSize: 10, color: '#4a6080' }}>{Object.values(p.phases).reduce((s, ph) => s + ph.entries.length, 0)} entries</span>
+              <span style={{ fontSize: 10, color: '#4a6080' }}>{Object.values(p.phases || {}).reduce((s: number, ph: any) => s + (ph?.entries?.length || 0), 0)} entries</span>
               <span style={{ fontSize: 10, color: '#ff3d57', cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); deleteProject(p.id) }}>✕</span>
             </div>
           ))}

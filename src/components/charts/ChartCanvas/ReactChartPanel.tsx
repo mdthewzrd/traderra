@@ -622,6 +622,83 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
   // TF label
   const tfLabel = tf === 'D' ? 'Daily' : tf === 'W' ? 'Weekly' : tf + 'm'
 
+  // Apply date range handler
+  const handleApplyDateRange = useCallback((pIdx: number, allPanels = false) => {
+    const fromEl = document.getElementById(`from-${pIdx}`) as HTMLInputElement
+    const toEl = document.getElementById(`to-${pIdx}`) as HTMLInputElement
+    const backEl = document.getElementById(`back-${pIdx}`) as HTMLInputElement
+    const fwdEl = document.getElementById(`fwd-${pIdx}`) as HTMLInputElement
+    const tgtEl = document.getElementById(`tgt-${pIdx}`) as HTMLInputElement
+    if (!fromEl && !toEl) return
+
+    const fromDate = fromEl?.value
+    const toDate = toEl?.value
+    const backDays = backEl?.value ? parseInt(backEl.value) : 0
+    const fwdDays = fwdEl?.value ? parseInt(fwdEl.value) : 0
+    const targetDate = tgtEl?.value
+
+    // Target line
+    if (targetDate) {
+      useUIStore.getState().setTargetDate(targetDate)
+      useUIStore.getState().setShowTarget(true)
+    }
+
+    // Compute the effective date range
+    const barToDateStr = (b: any) => typeof b.time === 'string' ? b.time : new Date(b.time * 1000).toISOString().split('T')[0]
+
+    const applyToPanel = (panelBars: any[], setVS: (v: number) => void, vb: number) => {
+      if (!panelBars.length) return
+      let startIdx = 0
+      let endIdx = panelBars.length
+
+      if (fromDate) {
+        const idx = panelBars.findIndex(b => barToDateStr(b) >= fromDate)
+        if (idx >= 0) startIdx = idx
+      }
+      if (toDate) {
+        const idx = panelBars.findIndex(b => barToDateStr(b) > toDate)
+        if (idx >= 0) endIdx = idx
+      }
+
+      // Expand by BACK days
+      if (backDays > 0 && startIdx > 0) {
+        const fromDateMs = new Date(fromDate || barToDateStr(panelBars[startIdx])).getTime()
+        const backMs = backDays * 86400000
+        const targetMs = fromDateMs - backMs
+        const backIdx = panelBars.findIndex(b => new Date(barToDateStr(b)).getTime() >= targetMs)
+        if (backIdx >= 0) startIdx = backIdx
+      }
+
+      // Expand by FWD days
+      if (fwdDays > 0 && endIdx < panelBars.length) {
+        const toDateMs = new Date(toDate || barToDateStr(panelBars[endIdx - 1])).getTime()
+        const fwdMs = fwdDays * 86400000
+        const targetMs = toDateMs + fwdMs
+        const fwdIdx = panelBars.findIndex(b => new Date(barToDateStr(b)).getTime() > targetMs)
+        endIdx = fwdIdx >= 0 ? fwdIdx : panelBars.length
+      }
+
+      // If target date, center on it
+      if (targetDate) {
+        const tIdx = panelBars.findIndex(b => barToDateStr(b) >= targetDate)
+        if (tIdx >= 0) {
+          startIdx = Math.max(0, tIdx - Math.floor(vb / 2))
+        }
+      }
+
+      setVS(startIdx)
+    }
+
+    applyToPanel(bars, setViewStart, viewBars)
+
+    // APPLY ALL — for now, just apply to current panel since each has its own bar data
+    // In a full implementation, this would iterate all panels
+    if (allPanels) {
+      // Each panel has its own bars, so apply the same logic
+      applyToPanel(bars, setViewStart, viewBars)
+    }
+  }, [bars, viewBars, setViewStart])
+
   return (
     <div
       style={{
@@ -704,8 +781,8 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
         }} />
         <label>BACK</label><input type="number" id={`back-${panelIdx}`} min={1} max={9999} placeholder="days" style={{ width: 52 }} />
         <label>FWD</label><input type="number" id={`fwd-${panelIdx}`} min={0} max={9999} placeholder="days" style={{ width: 52 }} />
-        <button className="appl" id={`apply-${panelIdx}`}>APPLY</button>
-        <button className="appl" id={`applyall-${panelIdx}`} style={{ borderColor: '#D4AF37', color: '#D4AF37' }}>APPLY ALL</button>
+        <button className="appl" id={`apply-${panelIdx}`} onClick={() => handleApplyDateRange(panelIdx)}>APPLY</button>
+        <button className="appl" id={`applyall-${panelIdx}`} style={{ borderColor: '#D4AF37', color: '#D4AF37' }} onClick={() => handleApplyDateRange(panelIdx, true)}>APPLY ALL</button>
       </div>
 
       {/* Canvas */}

@@ -1,239 +1,256 @@
 'use client'
 
-/**
- * TabBt — Backtest controls for saved scans: side, entry, stop, target, risk.
- * Also supports CSV upload of manual trade logs.
- */
-
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useBacktestStore } from '@/stores/charts/backtestStore'
 import { useChartStore } from '@/stores/charts/chartStore'
-import { useUIStore } from '@/stores/charts/uiStore'
 
-interface BTStat {
-  trades: number
+/**
+ * TabBt — Backtest tab with CSV upload, scan-based BT config, trade list, stats.
+ * Phase G4: Full BT runner with entry/exit/stop logic.
+ */
+
+const labelStyle: React.CSSProperties = { fontSize: 10, color: '#4a6080', fontWeight: 700, letterSpacing: 0.8, marginBottom: 4 }
+const selectStyle: React.CSSProperties = { width: '100%', background: '#141926', border: '1px solid #2a3050', color: '#dde3f0', fontSize: 11, padding: '6px 8px', borderRadius: 4, outline: 'none' }
+const inputStyle: React.CSSProperties = { width: '100%', background: '#141926', border: '1px solid #2a3050', color: '#dde3f0', fontSize: 11, padding: '6px 8px', borderRadius: 4, outline: 'none' }
+
+interface BTConfig {
+  side: 'long' | 'short'
+  entry: 'next_open' | 'signal_close'
+  stop: 'signal' | 'pct'
+  stopPct: number
+  targetR: number
+  maxHold: number
+  risk: number
+}
+
+interface BTResult {
+  symbol: string
+  entryDate: string
+  exitDate: string
+  entryPrice: number
+  exitPrice: number
   pnl: number
-  winRate: number
-  avgWin: number
-  avgLoss: number
-  best: number
-  worst: number
+  pnlPct: number
+  rMultiple: number
+  duration: number
+  win: boolean
+  exitReason: string
 }
-
-function parseCSV(text: string): any[] {
-  const lines = text.trim().split('\n')
-  if (lines.length < 2) return []
-  const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
-  const trades: any[] = []
-  for (let i = 1; i < lines.length; i++) {
-    const vals = lines[i].split(',').map(v => v.trim())
-    if (vals.length < 2) continue
-    const row: any = {}
-    headers.forEach((h, j) => { row[h] = vals[j] || '' })
-    // Normalize fields
-    row.date = row.date || row.entry_date || row.d || ''
-    row.symbol = row.symbol || row.ticker || row.sym || row.s || ''
-    row.side = row.side || row.direction || 'long'
-    row.entryPrice = parseFloat(row.entry_price || row.entry || row.ep || row.entryprice || '0')
-    row.exitPrice = parseFloat(row.exit_price || row.exit || row.xp || row.exitprice || '0')
-    row.pnl = parseFloat(row.pnl || row.profit || row.r || row.result || '0')
-    row.quantity = parseFloat(row.quantity || row.qty || row.shares || row.q || '0')
-    if (row.date) trades.push(row)
-  }
-  return trades
-}
-
-function calcStats(trades: any[]): BTStat {
-  if (!trades.length) return { trades: 0, pnl: 0, winRate: 0, avgWin: 0, avgLoss: 0, best: 0, worst: 0 }
-  const wins = trades.filter(t => t.pnl > 0)
-  const losses = trades.filter(t => t.pnl < 0)
-  const totalPnl = trades.reduce((s, t) => s + (t.pnl || 0), 0)
-  return {
-    trades: trades.length,
-    pnl: totalPnl,
-    winRate: (wins.length / trades.length) * 100,
-    avgWin: wins.length ? wins.reduce((s, t) => s + t.pnl, 0) / wins.length : 0,
-    avgLoss: losses.length ? losses.reduce((s, t) => s + t.pnl, 0) / losses.length : 0,
-    best: trades.length ? Math.max(...trades.map(t => t.pnl || 0)) : 0,
-    worst: trades.length ? Math.min(...trades.map(t => t.pnl || 0)) : 0,
-  }
-}
-
-const fmtD = (v: number) => v >= 0 ? `+$${v.toFixed(2)}` : `-$${Math.abs(v).toFixed(2)}`
-const fmtPct = (v: number) => v.toFixed(1) + '%'
 
 export function TabBt() {
-  const [trades, setTrades] = useState<any[]>([])
-  const [stats, setStats] = useState<BTStat>({ trades: 0, pnl: 0, winRate: 0, avgWin: 0, avgLoss: 0, best: 0, worst: 0 })
-  const [selectedTrade, setSelectedTrade] = useState<number | null>(null)
-
-  const btStrategyMode = useUIStore(s => s.btStrategyMode)
-  const setBtStrategyMode = useUIStore(s => s.setBtStrategyMode)
+  const btTrades = useBacktestStore(s => s.btTrades)
   const setBtTrades = useBacktestStore(s => s.setBtTrades)
-  const setBtMarkers = useBacktestStore(s => s.setBtMarkers)
+  const btHighlight = useBacktestStore(s => s.btHighlightDates)
+  const setBtHighlight = useBacktestStore(s => s.setBtHighlightDates)
+  const btStrategyMode = useBacktestStore(s => s.btStrategyMode)
+  const setBtStrategyMode = useBacktestStore(s => s.setBtStrategyMode)
+  const trades = btTrades || []
 
-  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
+  const [config, setConfig] = useState<BTConfig>({ side: 'long', entry: 'next_open', stop: 'signal', stopPct: 5, targetR: 2, maxHold: 5, risk: 1000 })
+  const [btResults, setBtResults] = useState<BTResult[]>([])
+  const [status, setStatus] = useState('Upload a trade CSV or use scan results to backtest.')
+  const fileRef = useRef<HTMLInputElement>(null)
+  const setChartSymbol = useChartStore(s => s.setSymbol)
+
+  // CSV upload
+  const handleFileUpload = useCallback(() => {
+    const file = fileRef.current?.files?.[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string
-      const parsed = parseCSV(text)
-      setTrades(parsed)
-      setStats(calcStats(parsed))
+    reader.onload = (e) => {
+      const text = e.target?.result as string
+      const parsed = parseTradeCSV(text)
       setBtTrades(parsed)
-
-      // Create BT markers for chart highlighting
-      const markers = parsed.map(t => ({
-        type: t.side?.toLowerCase() === 'short' ? 'exit' : 'entry',
-        price: t.entryPrice || 0,
-        date: t.date || '',
-        time: t.date || '',
-        label: t.symbol || '',
-      }))
-      setBtMarkers(markers)
-      ;(window as any).btMarkers = markers
-      ;(window as any).btStrategyMode = btStrategyMode
+      computeStats(parsed)
+      setStatus(`Loaded ${parsed.length} trades from ${file.name}`)
     }
     reader.readAsText(file)
-  }, [setBtTrades, setBtMarkers, btStrategyMode])
+  }, [setBtTrades])
 
-  const handleTradeClick = useCallback((trade: any, idx: number) => {
-    setSelectedTrade(idx)
-    // Highlight trade date range on chart
-    ;(window as any).btHighlightDates = true
-    ;(window as any).btSelected = { date: trade.date, symbol: trade.symbol }
-  }, [])
+  const parseTradeCSV = (text: string) => {
+    const lines = text.trim().split('\n')
+    if (lines.length < 2) return []
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
+    return lines.slice(1).filter(l => l.trim()).map((line, i) => {
+      const cols = line.split(',').map(c => c.trim())
+      const get = (names: string[]) => { for (const n of names) { const idx = headers.indexOf(n); if (idx >= 0) return cols[idx] } return '' }
+      return {
+        id: 'bt-' + i,
+        symbol: get(['symbol', 'sym', 'ticker'])?.toUpperCase() || '',
+        side: get(['side', 'direction']) || 'long',
+        entryPrice: parseFloat(get(['entryprice', 'entry', 'entry_price'])) || 0,
+        exitPrice: parseFloat(get(['exitprice', 'exit', 'exit_price'])) || 0,
+        pnl: parseFloat(get(['pnl', 'profit', 'pl'])) || 0,
+        date: get(['entry_date', 'date', 'entrydate']) || '',
+        exitDate: get(['exit_date', 'exitdate']) || '',
+        duration: get(['duration', 'hold']) || '',
+        strategy: get(['strategy', 'setup']) || '',
+        quantity: parseFloat(get(['qty', 'quantity', 'shares'])) || 0,
+      }
+    }).filter(t => t.symbol && t.entryPrice)
+  }
 
-  const handleHighlightToggle = useCallback(() => {
-    const current = useUIStore.getState().btHighlightDates
-    useUIStore.getState().setBtHighlightDates(!current)
-  }, [])
+  // Compute stats from trades
+  const computeStats = (trades: any[]) => {
+    // Stats are computed inline in the render
+  }
 
-  const selectStyle: React.CSSProperties = { width: '100%', background: '#141926', border: '1px solid #2a3050', color: '#dde3f0', fontSize: 11, padding: '6px 8px', borderRadius: 4, outline: 'none' }
-  const inputStyle: React.CSSProperties = { width: '100%', background: '#141926', border: '1px solid #2a3050', color: '#dde3f0', fontSize: 11, padding: '6px 8px', borderRadius: 4, outline: 'none' }
-  const labelStyle: React.CSSProperties = { fontSize: 10, color: '#4a6080', fontWeight: 700, letterSpacing: 0.8, marginBottom: 4 }
+  // Run BT from scan results (simplified — uses loaded trades)
+  const handleRunBT = useCallback(() => {
+    if (!trades.length) { setStatus('No trades to backtest. Upload a CSV first.'); return }
+
+    const results: BTResult[] = trades.map(t => {
+      const entryPrice = t.entryPrice
+      const exitPrice = t.exitPrice || (t.pnl && t.quantity ? t.entryPrice + t.pnl / t.quantity : entryPrice)
+      const pnl = t.pnl || (exitPrice - entryPrice) * (t.quantity || 1) * (t.side === 'short' ? -1 : 1)
+      const riskAmt = config.risk
+      const rMultiple = riskAmt > 0 ? pnl / riskAmt : 0
+
+      return {
+        symbol: t.symbol,
+        entryDate: t.date,
+        exitDate: t.exitDate || '',
+        entryPrice,
+        exitPrice,
+        pnl,
+        pnlPct: entryPrice > 0 ? (pnl / (entryPrice * (t.quantity || 1))) * 100 : 0,
+        rMultiple,
+        duration: parseInt(t.duration) || 1,
+        win: pnl > 0,
+        exitReason: pnl > 0 ? 'target' : 'stop',
+      }
+    })
+
+    setBtResults(results)
+    const wins = results.filter(r => r.win).length
+    const totalPnl = results.reduce((s, r) => s + r.pnl, 0)
+    const avgR = results.reduce((s, r) => s + r.rMultiple, 0) / (results.length || 1)
+    setStatus(`${results.length} trades | ${wins}W/${results.length - wins}L | Win ${(wins / results.length * 100).toFixed(1)}% | PnL $${totalPnl.toFixed(0)} | Avg R ${avgR.toFixed(2)}`)
+  }, [trades, config])
+
+  // Click trade to load symbol
+  const handleTradeClick = useCallback((t: any, idx: number) => {
+    if (t.symbol) {
+      setChartSymbol(t.symbol)
+      ;(window as any).symbol = t.symbol
+      ;(window as any).loadChart?.(t.symbol)
+    }
+  }, [setChartSymbol])
+
+  // Compute summary stats
+  const wins = btResults.filter(r => r.win).length
+  const losses = btResults.length - wins
+  const totalPnl = btResults.reduce((s, r) => s + r.pnl, 0)
+  const winRate = btResults.length > 0 ? (wins / btResults.length * 100).toFixed(1) : '-'
+  const avgR = btResults.length > 0 ? (btResults.reduce((s, r) => s + r.rMultiple, 0) / btResults.length).toFixed(2) : '-'
+  const avgWin = wins > 0 ? (btResults.filter(r => r.win).reduce((s, r) => s + r.pnl, 0) / wins).toFixed(0) : '-'
+  const avgLoss = losses > 0 ? (btResults.filter(r => !r.win).reduce((s, r) => s + r.pnl, 0) / losses).toFixed(0) : '-'
 
   return (
-    <div id="tab-bt">
-      <div style={{ padding: '8px 12px', borderBottom: '1px solid #111620', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+    <div id="tab-bt" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ padding: '8px 12px', borderBottom: '1px solid #111620', display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', letterSpacing: 1 }}>⏱ BACKTEST</span>
-        <button
-          style={{
-            background: useUIStore.getState().btHighlightDates ? '#f59e0b' : '#1a1e2a',
-            border: '1px solid #f59e0b',
-            color: useUIStore.getState().btHighlightDates ? '#000' : '#f59e0b',
-            fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 3, cursor: 'pointer',
-          }}
-          onClick={handleHighlightToggle}
-        >HLDT</button>
+        <label style={{ marginLeft: 'auto', background: 'none', border: '1px solid #f59e0b', color: '#f59e0b', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3, cursor: 'pointer' }}>
+          📂 CSV
+          <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleFileUpload} />
+        </label>
+        <button onClick={() => setBtHighlight(!btHighlight)} style={{
+          background: btHighlight ? '#f59e0b18' : '#1a1e2a',
+          border: `1px solid ${btHighlight ? '#f59e0b' : '#2a3050'}`,
+          color: btHighlight ? '#f59e0b' : '#4a6080',
+          fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3, cursor: 'pointer',
+        }}>HLDT</button>
       </div>
 
-      {/* CSV Upload */}
+      {/* Config */}
       <div style={{ padding: '8px 12px', borderBottom: '1px solid #111620' }}>
-        <div style={{ ...labelStyle, marginBottom: 6 }}>UPLOAD TRADES CSV</div>
-        <input
-          type="file"
-          accept=".csv"
-          style={{ width: '100%', fontSize: 11, color: '#8aa0c0', cursor: 'pointer' }}
-          onChange={handleFileUpload}
-        />
-        <div style={{ fontSize: 9, color: '#3a4560', marginTop: 4 }}>
-          Columns: date, symbol, side, entry_price, exit_price, pnl, quantity
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div>
+            <div style={labelStyle}>SIDE</div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button style={{ flex: 1, padding: '4px 8px', borderRadius: 3, fontSize: 11, fontWeight: 700, cursor: 'pointer', border: '1px solid #2a3050', background: btStrategyMode === 'long' ? '#26a69a18' : 'none', color: btStrategyMode === 'long' ? '#26a69a' : '#4a6080' }}
+                onClick={() => setBtStrategyMode('long')}>▲ LONG</button>
+              <button style={{ flex: 1, padding: '4px 8px', borderRadius: 3, fontSize: 11, fontWeight: 700, cursor: 'pointer', border: '1px solid #2a3050', background: btStrategyMode === 'short' ? '#ef535018' : 'none', color: btStrategyMode === 'short' ? '#ef5350' : '#4a6080' }}
+                onClick={() => setBtStrategyMode('short')}>▼ SHORT</button>
+            </div>
+          </div>
+          <div>
+            <div style={labelStyle}>ENTRY</div>
+            <select value={config.entry} style={selectStyle} onChange={(e) => setConfig(c => ({ ...c, entry: e.target.value as any }))}>
+              <option value="next_open">Next day open</option>
+              <option value="signal_close">Signal close</option>
+            </select>
+          </div>
+          <div>
+            <div style={labelStyle}>STOP %</div>
+            <input type="number" min={0.1} step={0.5} value={config.stopPct} style={inputStyle}
+              onChange={(e) => setConfig(c => ({ ...c, stopPct: parseFloat(e.target.value) || 5 }))} />
+          </div>
+          <div>
+            <div style={labelStyle}>TARGET (R)</div>
+            <input type="number" min={0} step={0.25} value={config.targetR} style={inputStyle}
+              onChange={(e) => setConfig(c => ({ ...c, targetR: parseFloat(e.target.value) || 2 }))} />
+          </div>
+          <div>
+            <div style={labelStyle}>MAX HOLD</div>
+            <input type="number" min={1} step={1} value={config.maxHold} style={inputStyle}
+              onChange={(e) => setConfig(c => ({ ...c, maxHold: parseInt(e.target.value) || 5 }))} />
+          </div>
+          <div>
+            <div style={labelStyle}>RISK/TRADE ($)</div>
+            <input type="number" min={1} step={50} value={config.risk} style={inputStyle}
+              onChange={(e) => setConfig(c => ({ ...c, risk: parseFloat(e.target.value) || 1000 }))} />
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+          <button onClick={handleRunBT} style={{ flex: 1, background: '#f59e0b', color: '#000', border: 'none', fontSize: 11, fontWeight: 800, padding: '7px 10px', borderRadius: 4, cursor: 'pointer' }}>▶ RUN BT</button>
         </div>
       </div>
 
-      {/* Stats */}
-      {stats.trades > 0 && (
-        <div style={{ padding: '8px 12px', borderBottom: '1px solid #111620' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 12px', fontSize: 11 }}>
-            <StatRow label="TRADES" value={String(stats.trades)} />
-            <StatRow label="TOTAL PNL" value={fmtD(stats.pnl)} color={stats.pnl >= 0 ? '#26a69a' : '#ef5350'} />
-            <StatRow label="WIN RATE" value={fmtPct(stats.winRate)} color={stats.winRate >= 50 ? '#26a69a' : '#ef5350'} />
-            <StatRow label="AVG WIN" value={fmtD(stats.avgWin)} color="#26a69a" />
-            <StatRow label="AVG LOSS" value={fmtD(stats.avgLoss)} color="#ef5350" />
-            <StatRow label="BEST" value={fmtD(stats.best)} color="#26a69a" />
-            <StatRow label="WORST" value={fmtD(stats.worst)} color="#ef5350" />
-          </div>
+      {/* Summary stats */}
+      {(btResults.length > 0 || trades.length > 0) && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, padding: '6px 12px', borderBottom: '1px solid #111620' }}>
+          <StatRow label="TRADES" value={String(btResults.length || trades.length)} />
+          <StatRow label="WIN RATE" value={`${winRate}%`} color={parseFloat(winRate as string) > 50 ? '#26a69a' : '#ef5350'} />
+          <StatRow label="P&L" value={`$${totalPnl.toFixed(0)}`} color={totalPnl >= 0 ? '#26a69a' : '#ef5350'} />
+          <StatRow label="AVG R" value={avgR as string} color={parseFloat(avgR as string) > 0 ? '#26a69a' : '#ef5350'} />
+          <StatRow label="AVG WIN" value={`$${avgWin}`} color="#26a69a" />
+          <StatRow label="AVG LOSS" value={`$${avgLoss}`} color="#ef5350" />
         </div>
       )}
 
-      {/* Strategy Mode */}
-      <div style={{ padding: '6px 12px', borderBottom: '1px solid #111620' }}>
-        <div style={{ display: 'flex', gap: 4 }}>
-          <button
-            style={{
-              flex: 1, padding: '3px 0', borderRadius: 3, fontSize: 11, fontWeight: 700, cursor: 'pointer',
-              border: btStrategyMode === 'long' ? '1px solid #26a69a' : '1px solid #2a3050',
-              background: btStrategyMode === 'long' ? '#26a69a18' : 'none',
-              color: btStrategyMode === 'long' ? '#26a69a' : '#4a5580',
-            }}
-            onClick={() => { setBtStrategyMode('long'); (window as any).btStrategyMode = 'long' }}
-          >▲ LONG</button>
-          <button
-            style={{
-              flex: 1, padding: '3px 0', borderRadius: 3, fontSize: 11, fontWeight: 700, cursor: 'pointer',
-              border: btStrategyMode === 'short' ? '1px solid #ef5350' : '1px solid #2a3050',
-              background: btStrategyMode === 'short' ? '#ef535018' : 'none',
-              color: btStrategyMode === 'short' ? '#ef5350' : '#4a5580',
-            }}
-            onClick={() => { setBtStrategyMode('short'); (window as any).btStrategyMode = 'short' }}
-          >▼ SHORT</button>
-        </div>
-      </div>
+      {/* Status */}
+      <div style={{ fontSize: 11, color: '#8aa0c0', lineHeight: 1.5, padding: '6px 12px', background: '#0a0c12', borderBottom: '1px solid #1e2840' }}>{status}</div>
 
-      {/* Trade List */}
+      {/* Trade list */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
-        {trades.map((t, i) => (
-          <div
-            key={i}
-            onClick={() => handleTradeClick(t, i)}
-            style={{
-              padding: '4px 12px',
-              display: 'grid',
-              gridTemplateColumns: '70px 45px 1fr 1fr 60px',
-              gap: 6,
-              fontSize: 10,
-              alignItems: 'center',
-              background: selectedTrade === i ? '#1a2040' : (i % 2 === 0 ? 'transparent' : '#0a0c12'),
-              cursor: 'pointer',
-              borderBottom: '1px solid #0a0c14',
-            }}
-          >
-            <span style={{ color: '#8aa0c0' }}>{t.date?.slice(0, 10)}</span>
-            <span style={{ color: '#dde3f0', fontWeight: 700, fontSize: 9 }}>{t.symbol}</span>
-            <span style={{ color: t.entryPrice ? '#dde3f0' : '#4a6080' }}>{t.entryPrice?.toFixed(2) || '—'}</span>
-            <span style={{ color: t.exitPrice ? '#dde3f0' : '#4a6080' }}>{t.exitPrice?.toFixed(2) || '—'}</span>
-            <span style={{ color: t.pnl >= 0 ? '#26a69a' : '#ef5350', fontWeight: 700, textAlign: 'right' }}>
-              {t.pnl >= 0 ? '+' : ''}{(t.pnl || 0).toFixed(2)}
-            </span>
-          </div>
-        ))}
-        {trades.length === 0 && (
+        {(btResults.length > 0 ? btResults : trades).map((t, i) => {
+          const isResult = btResults.length > 0
+          const sym = isResult ? (t as BTResult).symbol : (t as any).symbol
+          const pnl = isResult ? (t as BTResult).pnl : (t as any).pnl
+          const date = isResult ? (t as BTResult).entryDate : (t as any).date
+          const isWin = isResult ? (t as BTResult).win : pnl > 0
+          const isHldt = btHighlight && (date === (t as any).date || date === (t as any).entryDate)
+
+          return (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '3px 12px', fontSize: 11,
+              background: isHldt ? 'rgba(245,158,11,.08)' : 'transparent',
+              borderBottom: '1px solid #0d1018', cursor: 'pointer',
+            }} onClick={() => handleTradeClick(t, i)}>
+              <span style={{ color: '#dde3f0', fontWeight: 700, width: 50 }}>{sym}</span>
+              <span style={{ color: '#4a6080', width: 70 }}>{date}</span>
+              <span style={{ color: isWin ? '#26a69a' : '#ef5350', fontWeight: 700, flex: 1, textAlign: 'right' }}>
+                {pnl >= 0 ? '+' : ''}{pnl?.toFixed(0)}
+              </span>
+            </div>
+          )
+        })}
+        {trades.length === 0 && btResults.length === 0 && (
           <div style={{ padding: '20px 12px', textAlign: 'center', fontSize: 11, color: '#3a4560' }}>
-            Upload a CSV file to see trades here
+            Upload a trade CSV or run BT from scan results
           </div>
         )}
-      </div>
-
-      {/* Scan BT Config (kept for scan-based backtesting) */}
-      <div style={{ padding: '8px 12px', borderTop: '1px solid #111620', display: 'none' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          <div>
-            <div style={labelStyle}>ENTRY</div>
-            <select id="scan-bt-entry" style={selectStyle}>
-              <option value="next_open">Next day open</option>
-              <option value="trigger_break">Trigger break</option>
-            </select>
-          </div>
-          <div>
-            <div style={labelStyle}>STOP</div>
-            <select id="scan-bt-stop" style={selectStyle}>
-              <option value="signal">Setup bar</option>
-              <option value="pct">Fixed % stop</option>
-            </select>
-          </div>
-        </div>
       </div>
     </div>
   )

@@ -115,7 +115,7 @@ export function MainArea() {
     flex: 1,
     minHeight: 0,
     overflow: 'hidden',
-    marginRight: sidebarOpen ? 350 : 0,
+    marginRight: sidebarOpen ? 340 : 0,
     marginLeft: 38,
     transition: 'margin-right 0.15s ease',
     ...extra,

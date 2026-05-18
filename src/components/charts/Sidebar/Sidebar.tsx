@@ -154,6 +154,7 @@ export function Sidebar() {
   }, [sidebarTab])
 
   const tabs = ['look', 'tools', 'settings', 'vault', 'scan', 'bt', 'lab'] as const
+  const tabLabels: Record<string, string> = { look: 'LOOK', tools: 'TOOLS', settings: 'SET', vault: 'VAULT', scan: 'SCAN', bt: 'BT', lab: 'LAB' }
 
   return (
     <div id="sidebar" ref={sbRef} className={sidebarOpen ? 'open' : ''}>
@@ -229,7 +230,7 @@ export function Sidebar() {
             data-tab={tab}
             onClick={() => { setSidebarTab(tab); (window as any).sbTab?.(tab) }}
           >
-            {tab.toUpperCase()}
+            {tabLabels[tab] || tab.toUpperCase()}
           </div>
         ))}
         <div style={{ flex: 1 }} />

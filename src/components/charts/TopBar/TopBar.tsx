@@ -142,13 +142,6 @@ export function TopBar() {
           onClick={() => window.location.reload()}
           title="Reload chart"
         >⟳ RELOAD</button>
-        <button
-          className="tbtn"
-          id="screenshot-btn"
-          style={{ borderColor: '#c084fc', color: '#c084fc' }}
-          onClick={() => (window as any).chartScreenshot?.()}
-          title="Screenshot chart"
-        >📷</button>
       </div>
       <div id="ticker-info">
         <span id="ti-sym" style={{ color: '#dde3f0', fontWeight: 700, fontSize: 14 }} />

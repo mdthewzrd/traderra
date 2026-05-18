@@ -131,7 +131,7 @@ export function TopBar() {
         <button className="tbtn" id="tools-btn" style={{ borderColor: '#D4AF37!important', color: '#D4AF37!important' }} onClick={() => setSidebarTab('tools')}>🔧 TOOLS</button>
         <button className="tbtn" id="input-settings-btn" style={{ borderColor: '#22d3ee!important', color: '#22d3ee!important' }} onClick={() => setSidebarTab('settings')}>⚙ SET</button>
         <IndBtnsContainer />
-        <HotButtons />
+        <div id="hot-btns-container" style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }} />
         <AddIndBtnButton />
         <TemplateDropdown />
         <ThemeToggleButton />
@@ -356,33 +356,6 @@ function ThemeToggleButton() {
   )
 }
 
-function HotButtons() {
-  const tools = useToolStore((s) => s.tools)
-  const toggleTool = useToolStore((s) => s.toggleTool)
-  const selectTool = useToolStore((s) => s.selectTool)
-  const hotTools = tools.filter(t => t.hot)
-
-  return (
-    <div id="hot-btns-container" style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
-      {hotTools.map(tool => (
-        <button
-          key={tool.id}
-          className="tbtn"
-          style={{
-            borderColor: tool.on ? tool.hotColor : '#3a4a68',
-            color: tool.on ? tool.hotColor : '#3a4a68',
-            fontSize: 10, fontWeight: 800,
-            opacity: tool.on ? 1 : 0.5,
-            background: '#0a0c12',
-          }}
-          onClick={() => toggleTool(tool.id)}
-          onContextMenu={(e) => { e.preventDefault(); selectTool(tool.id); useUIStore.getState().setSidebarTab('tools') }}
-          title={`${tool.name} (right-click for settings)`}
-        >{tool.hotLabel}</button>
-      ))}
-    </div>
-  )
-}
 
 /** Custom indicator buttons in TopBar */
 function IndBtnsContainer() {

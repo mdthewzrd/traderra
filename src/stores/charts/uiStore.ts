@@ -73,6 +73,16 @@ interface UIState {
   // Active template name (for update button)
   activeTemplateName: string | null
   setActiveTemplateName: (v: string | null) => void
+
+  // Input settings
+  zoomSens: number
+  trackPanSens: number
+  mousePanSens: number
+  rightPad: number
+  setZoomSens: (v: number) => void
+  setTrackPanSens: (v: number) => void
+  setMousePanSens: (v: number) => void
+  setRightPad: (v: number) => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -136,4 +146,13 @@ export const useUIStore = create<UIState>((set) => ({
 
   activeTemplateName: null,
   setActiveTemplateName: (v) => set({ activeTemplateName: v }),
+
+  zoomSens: 0.15,
+  trackPanSens: 0.5,
+  mousePanSens: 1.0,
+  rightPad: 6,
+  setZoomSens: (v) => set({ zoomSens: v }),
+  setTrackPanSens: (v) => set({ trackPanSens: v }),
+  setMousePanSens: (v) => set({ mousePanSens: v }),
+  setRightPad: (v) => set({ rightPad: v }),
 }))

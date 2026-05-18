@@ -634,7 +634,8 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
 
   const onWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault()
-    const delta = e.deltaY > 0 ? 15 : -15
+    const zoomSens = useUIStore.getState().zoomSens
+    const delta = e.deltaY > 0 ? Math.round(15 * zoomSens / 0.15) : -Math.round(15 * zoomSens / 0.15)
     setViewBars(prev => Math.max(20, Math.min(bars.length || 500, prev + delta)))
   }, [bars.length])
 

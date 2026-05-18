@@ -10,6 +10,7 @@ import { MainArea } from '@/components/charts/MainArea/MainArea'
 import { Sidebar } from '@/components/charts/Sidebar/Sidebar'
 import { Overlays } from '@/components/charts/Overlays/Overlays'
 import { useWatchlistStore } from '@/stores/charts/watchlistStore'
+import { useUIStore } from '@/stores/charts/uiStore'
 
 /**
  * ChartsTerminal — Pure React charts terminal.
@@ -35,6 +36,9 @@ export default function ChartsTerminal({ userId, userName, userImage }: {
 
     // Load persisted watchlist from localStorage
     useWatchlistStore.getState().load()
+
+    // Hydrate client-only state from localStorage
+    useUIStore.getState()._hydrateIndBtns()
 
     // Inject auth token
     fetch('/api/auth/token')

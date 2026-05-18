@@ -69,6 +69,7 @@ interface UIState {
   indBtns: string[]  // indKey list
   addIndBtn: (indKey: string) => void
   removeIndBtn: (indKey: string) => void
+  _hydrateIndBtns: () => void
 
   // Active template name (for update button)
   activeTemplateName: string | null
@@ -132,7 +133,13 @@ export const useUIStore = create<UIState>((set) => ({
   activeLayout: 1,
   setActiveLayout: (v) => set({ activeLayout: v }),
 
-  indBtns: (typeof window !== 'undefined' && JSON.parse(localStorage.getItem('traderra-ind-btns') || '[]')) || [],
+  indBtns: [] as string[],
+  _hydrateIndBtns: () => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('traderra-ind-btns') || '[]')
+      if (Array.isArray(stored) && stored.length) set({ indBtns: stored })
+    } catch {}
+  },
   addIndBtn: (indKey) => set((s) => {
     const next = [...s.indBtns, indKey]
     localStorage.setItem('traderra-ind-btns', JSON.stringify(next))

@@ -21,6 +21,7 @@ import { isIntraday } from '@/lib/charts/format'
 import { C } from '@/lib/charts/theme'
 import { useIndicatorStore } from '@/stores/charts/indicatorStore'
 import { useDrawingStore } from '@/stores/charts/drawingStore'
+import { useToolStore } from '@/stores/charts/toolStore'
 import type { RenderContext } from '@/lib/charts/render-types'
 
 // Read indicator state from Zustand store
@@ -672,17 +673,10 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
           require('@/stores/charts/indicatorStore').useIndicatorStore.getState().setInds({ band_9_20: true, band_72_89: true, dev_s_9_20: true, db_72_89: true, vwap: true, sma_vol: true, vol: true })
         }}>MIKE</button>
         <span style={{ width: 1, height: 10, background: '#2a3050', margin: '0 2px' }} />
-        {/* Active indicator dots */}
-        {liveInds.ema9 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.ema9 }} title="EMA 9" />}
-        {liveInds.ema20 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.ema20 }} title="EMA 20" />}
-        {liveInds.ema50 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.ema50 }} title="EMA 50" />}
-        {liveInds.ema200 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.ema200 }} title="EMA 200" />}
-        {liveInds.vwap && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.vwap }} title="VWAP" />}
-        {liveInds.band_9_20 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#6ab4ff' }} title="Band 9/20" />}
-        {liveInds.band_72_89 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#a078ff' }} title="Band 72/89" />}
-        {liveInds.dev_s_9_20 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#dc8c1e' }} title="Dev S 9/20" />}
-        {liveInds.db_72_89 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#c87a14' }} title="DB 72/89" />}
-        {liveInds.pzones && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b' }} title="Pivot Zones" />}
+        {/* Per-panel hot tool toggle buttons */}
+        <div id={`ind-hot-${panelIdx}`} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <PanelHotButtons panelIdx={panelIdx} />
+        </div>
         <span style={{ marginLeft: 'auto', fontSize: 9, color: '#4a6080' }}>{bars.length} bars</span>
         <span style={{ color: '#26a69a', fontSize: 9, fontWeight: 800, letterSpacing: 1 }}>⚛</span>
       </div>
@@ -820,4 +814,33 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       </div>
     </div>
   )
+}
+
+/** Per-panel hot tool toggle buttons */
+function PanelHotButtons({ panelIdx }: { panelIdx: number }) {
+  const tools = useToolStore(s => s.tools)
+  const toggleTool = useToolStore(s => s.toggleTool)
+  const selectTool = useToolStore(s => s.selectTool)
+  const hotTools = tools.filter(t => t.hot)
+
+  if (!hotTools.length) return null
+  return <>{hotTools.map(tool => {
+    const color = tool.hotColor || '#D4AF37'
+    const name = (tool.hotLabel || tool.name).toUpperCase().slice(0, 10)
+    return (
+      <button
+        key={tool.id}
+        className={`ptog${tool.on ? ' on' : ''}`}
+        style={{
+          borderColor: tool.on ? color : '#3a4a68',
+          color: tool.on ? color : '#3a4a68',
+          background: '#0a0c12',
+          opacity: tool.on ? 1 : 0.5,
+        }}
+        onClick={(e) => { e.stopPropagation(); toggleTool(tool.id) }}
+        onContextMenu={(e) => { e.preventDefault(); selectTool(tool.id); useUIStore.getState().setSidebarTab('tools') }}
+        title={`${tool.name} (right-click → settings)`}
+      >{name}</button>
+    )
+  })}</>
 }

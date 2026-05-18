@@ -109,11 +109,21 @@ const BT_SIDEBAR_HTML = `
 export function MainArea() {
   const activeLayout = useUIStore(s => s.activeLayout)
   const fullscreenPanel = useUIStore(s => s.fullscreenPanel)
+  const sidebarOpen = useUIStore(s => s.sidebarOpen)
 
-  // If a panel is fullscreen, show just that one
+  const maStyle = (extra: React.CSSProperties = {}): React.CSSProperties => ({
+    flex: 1,
+    minHeight: 0,
+    overflow: 'hidden',
+    marginRight: sidebarOpen ? 350 : 0,
+    marginLeft: 38,
+    transition: 'margin-right 0.15s ease',
+    ...extra,
+  })
+
   if (fullscreenPanel !== null) {
     return (
-      <div id="main-area" style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden', marginRight: 350, marginLeft: 38 }}>
+      <div id="main-area" style={maStyle()}>
         <ReactChartPanel panelIdx={fullscreenPanel} />
         <div dangerouslySetInnerHTML={{ __html: BT_SIDEBAR_HTML }} />
       </div>
@@ -122,7 +132,7 @@ export function MainArea() {
 
   if (activeLayout === 2) {
     return (
-      <div id="main-area" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', marginRight: 350, marginLeft: 38 }}>
+      <div id="main-area" style={maStyle({ display: 'flex', flexDirection: 'column' })}>
         <div style={{ flex: 1, minHeight: 0 }}>
           <ReactChartPanel panelIdx={0} />
         </div>
@@ -136,7 +146,7 @@ export function MainArea() {
 
   if (activeLayout === 4) {
     return (
-      <div id="main-area" style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', minHeight: 0, overflow: 'hidden', marginRight: 350, marginLeft: 38, gap: 2 }}>
+      <div id="main-area" style={maStyle({ display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', gap: 2 })}>
         <ReactChartPanel panelIdx={0} />
         <ReactChartPanel panelIdx={1} />
         <ReactChartPanel panelIdx={2} />
@@ -146,9 +156,8 @@ export function MainArea() {
     )
   }
 
-  // Default: single panel
   return (
-    <div id="main-area" style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden', marginRight: 350, marginLeft: 38 }}>
+    <div id="main-area" style={maStyle({ display: 'flex' })}>
       <ReactChartPanel panelIdx={0} />
       <div dangerouslySetInnerHTML={{ __html: BT_SIDEBAR_HTML }} />
     </div>

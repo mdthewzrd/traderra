@@ -64,6 +64,11 @@ interface UIState {
   // Active layout
   activeLayout: number
   setActiveLayout: (v: number) => void
+
+  // Custom indicator buttons in TopBar
+  indBtns: string[]  // indKey list
+  addIndBtn: (indKey: string) => void
+  removeIndBtn: (indKey: string) => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -112,4 +117,16 @@ export const useUIStore = create<UIState>((set) => ({
 
   activeLayout: 1,
   setActiveLayout: (v) => set({ activeLayout: v }),
+
+  indBtns: (typeof window !== 'undefined' && JSON.parse(localStorage.getItem('traderra-ind-btns') || '[]')) || [],
+  addIndBtn: (indKey) => set((s) => {
+    const next = [...s.indBtns, indKey]
+    localStorage.setItem('traderra-ind-btns', JSON.stringify(next))
+    return { indBtns: next }
+  }),
+  removeIndBtn: (indKey) => set((s) => {
+    const next = s.indBtns.filter(k => k !== indKey)
+    localStorage.setItem('traderra-ind-btns', JSON.stringify(next))
+    return { indBtns: next }
+  }),
 }))

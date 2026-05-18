@@ -124,7 +124,7 @@ export function TabLook() {
     <div id="tab-look">
       <div id="settings-panel-header" style={{ justifyContent: 'space-between' }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: '#D4AF37', letterSpacing: 1 }}>⚙ LOOK & FEEL</span>
-        <span id="theme-editing-label" style={{ fontSize: 11, fontWeight: 700, color: '#6878a8', letterSpacing: 0.5, background: '#1a1e2e', padding: '2px 8px', borderRadius: 3 }}>EDITING: DARK</span>
+        <span id="theme-editing-label" style={{ fontSize: 11, fontWeight: 700, color: '#6878a8', letterSpacing: 0.5, background: '#1a1e2e', padding: '2px 8px', borderRadius: 3 }}>EDITING: {useUIStore(s => s.theme).toUpperCase()}</span>
       </div>
       <div id="settings-panel-body">
         {/* Candles */}

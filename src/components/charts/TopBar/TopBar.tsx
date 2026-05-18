@@ -130,15 +130,9 @@ export function TopBar() {
         <button className="tbtn" id="settings-btn" style={{ borderColor: '#D4AF37!important', color: '#D4AF37!important' }} onClick={() => setSidebarTab('look')}>⚙ LOOK</button>
         <button className="tbtn" id="tools-btn" style={{ borderColor: '#D4AF37!important', color: '#D4AF37!important' }} onClick={() => setSidebarTab('tools')}>🔧 TOOLS</button>
         <button className="tbtn" id="input-settings-btn" style={{ borderColor: '#22d3ee!important', color: '#22d3ee!important' }} onClick={() => setSidebarTab('settings')}>⚙ SET</button>
-        <div id="ind-btns-container" style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }} />
+        <IndBtnsContainer />
         <HotButtons />
-        <button
-          className="tbtn"
-          id="add-ind-btn"
-          style={{ borderColor: '#3a4a68', color: '#3a4a68' }}
-          onClick={() => (window as any).openIndBtnPopup?.()}
-          title="Add indicator button"
-        >＋</button>
+        <AddIndBtnButton />
         <TemplateDropdown />
         <ThemeToggleButton />
         <button
@@ -148,6 +142,13 @@ export function TopBar() {
           onClick={() => window.location.reload()}
           title="Reload chart"
         >⟳ RELOAD</button>
+        <button
+          className="tbtn"
+          id="screenshot-btn"
+          style={{ borderColor: '#c084fc', color: '#c084fc' }}
+          onClick={() => (window as any).chartScreenshot?.()}
+          title="Screenshot chart"
+        >📷</button>
       </div>
       <div id="ticker-info">
         <span id="ti-sym" style={{ color: '#dde3f0', fontWeight: 700, fontSize: 14 }} />
@@ -356,6 +357,78 @@ function HotButtons() {
           title={`${tool.name} (right-click for settings)`}
         >{tool.hotLabel}</button>
       ))}
+    </div>
+  )
+}
+
+/** Custom indicator buttons in TopBar */
+function IndBtnsContainer() {
+  const indBtns = useUIStore(s => s.indBtns)
+  const removeIndBtn = useUIStore(s => s.removeIndBtn)
+
+  return (
+    <div id="ind-btns-container" style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+      {indBtns.map((indKey: string) => {
+        const { IND_CATALOG } = require('@/stores/charts/toolStore')
+        const cat = IND_CATALOG[indKey]
+        const label = cat?.label || indKey
+        const isOn = !!require('@/stores/charts/indicatorStore').useIndicatorStore.getState().inds[indKey]
+        return (
+          <button
+            key={indKey}
+            className={`ptog${isOn ? ' on' : ''}`}
+            data-ind={indKey}
+            style={{ opacity: isOn ? 1 : 0.55 }}
+            onClick={() => {
+              const store = require('@/stores/charts/indicatorStore').useIndicatorStore.getState()
+              store.setInds({ ...store.inds, [indKey]: !store.inds[indKey] })
+            }}
+            onContextMenu={(e) => { e.preventDefault(); removeIndBtn(indKey) }}
+            title={`${label} (right-click to remove)`}
+          >{label.toUpperCase().slice(0, 8)}</button>
+        )
+      })}
+    </div>
+  )
+}
+
+/** + button to add indicator button */
+function AddIndBtnButton() {
+  const [open, setOpen] = useState(false)
+  const addIndBtn = useUIStore(s => s.addIndBtn)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [open])
+
+  const { IND_CATALOG } = require('@/stores/charts/toolStore')
+
+  return (
+    <div className="dropdown-group" ref={ref}>
+      <button
+        className="tbtn"
+        id="add-ind-btn"
+        style={{ borderColor: '#3a4a68', color: '#3a4a68' }}
+        onClick={(e) => { e.stopPropagation(); setOpen(v => !v) }}
+        title="Add indicator button"
+      >＋</button>
+      <div className={`dropdown-content${open ? ' open' : ''}`} style={{ minWidth: 200, maxHeight: 300, overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ padding: '4px 10px', fontSize: 11, color: '#4a6080', fontWeight: 700 }}>ADD INDICATOR BUTTON</div>
+        {Object.entries(IND_CATALOG).map(([key, cat]: [string, any]) => (
+          <button
+            key={key}
+            className="tool-btn"
+            style={{ textAlign: 'left' }}
+            onClick={() => { addIndBtn(key); setOpen(false) }}
+          >{cat.label}</button>
+        ))}
+      </div>
     </div>
   )
 }

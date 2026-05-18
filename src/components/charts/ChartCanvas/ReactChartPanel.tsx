@@ -634,119 +634,84 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
         border: '1px solid #1e2535',
       }}
     >
-      {/* Panel header */}
-      <div style={{
-        background: '#080a0e',
-        borderBottom: '1px solid #111620',
-        padding: '4px 8px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 5,
-        fontSize: 11,
-        color: '#dde3f0',
-        fontWeight: 700,
-        flexShrink: 0,
-        minHeight: 30,
-      }}>
-        <span style={{ color: '#dde3f0' }}>{symbol}</span>
-        <span style={{ color: '#4a6080' }}>|</span>
-        {/* TF Buttons */}
-        {['1','5','15','60','D','W'].map(t => (
-          <button
-            key={t}
-            onClick={() => useChartStore.getState().setPanelTf(panelIdx, t)}
-            style={{
-              background: tf === t ? '#1a2a4a' : 'none',
-              border: tf === t ? '1px solid #3a5a8a' : '1px solid transparent',
-              color: tf === t ? '#dde3f0' : '#4a6080',
-              fontSize: 9,
-              fontWeight: tf === t ? 800 : 600,
-              padding: '1px 4px',
-              borderRadius: 2,
-              cursor: 'pointer',
-              letterSpacing: 0.5,
-            }}
-          >{t === '1' ? '1m' : t === '5' ? '5m' : t === '15' ? '15m' : t === '60' ? '60m' : t}</button>
-        ))}
-        <span style={{ color: '#4a6080' }}>|</span>
-        {/* Preset buttons */}
-        <button
-          onClick={() => {
-            const { useIndicatorStore } = require('@/stores/charts/indicatorStore')
-            useIndicatorStore.getState().setInds({ ema9: true, ema20: true, ema50: true, ema200: true, sma_vol: true, vwap: true, vol: true })
-          }}
-          style={{ background: '#1a2a4a', border: '1px solid #3a5a8a', color: '#8aa0c0', fontSize: 8, fontWeight: 800, padding: '1px 3px', borderRadius: 2, cursor: 'pointer' }}
-          title="SAM preset: EMA 9/20/50/200 + VWAP + Vol SMA"
-        >SAM</button>
-        <button
-          onClick={() => {
-            const { useIndicatorStore } = require('@/stores/charts/indicatorStore')
-            useIndicatorStore.getState().setInds({ band_9_20: true, band_72_89: true, dev_s_9_20: true, db_72_89: true, vwap: true, sma_vol: true, vol: true })
-          }}
-          style={{ background: '#2a1a2a', border: '1px solid #5a3a6a', color: '#a080c0', fontSize: 8, fontWeight: 800, padding: '1px 3px', borderRadius: 2, cursor: 'pointer' }}
-          title="MIKE preset: Bands 9/20, 72/89, Dev bands, VWAP"
-        >MIKE</button>
-        <span style={{ color: '#4a6080' }}>|</span>
-        {/* Active indicator dots */}
-        <div style={{ display: 'flex', gap: 3, marginLeft: 8 }}>
-          {liveInds.ema9 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.ema9 }} title="EMA 9" />}
-          {liveInds.ema20 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.ema20 }} title="EMA 20" />}
-          {liveInds.ema50 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.ema50 }} title="EMA 50" />}
-          {liveInds.ema200 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.ema200 }} title="EMA 200" />}
-          {liveInds.vwap && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.vwap }} title="VWAP" />}
-          {liveInds.band_9_20 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#6ab4ff' }} title="Band 9/20" />}
-          {liveInds.band_72_89 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#a078ff' }} title="Band 72/89" />}
-          {liveInds.dev_s_9_20 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#dc8c1e' }} title="Dev S 9/20" />}
-          {liveInds.db_72_89 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#c87a14' }} title="DB 72/89" />}
-          {liveInds.pzones && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b' }} title="Pivot Zones" />}
+      {/* ph — Panel header row */}
+      <div className="ph">
+        <span className="ph-sym">{symbol}</span>
+        <div className="tf-wrap">
+          {['1','5','15','60','D','W'].map(t => (
+            <button
+              key={t}
+              className={`tf-btn${tf === t ? ' active' : ''}`}
+              onClick={() => useChartStore.getState().setPanelTf(panelIdx, t)}
+            >{t === '1' ? '1m' : t === '5' ? '5m' : t === '15' ? '15m' : t === '60' ? '60m' : t}</button>
+          ))}
         </div>
-        <span id={`ohlc-${panelIdx}`} style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 600, color: '#8aa0c0', letterSpacing: 0.5 }} />
-        <span style={{ color: '#26a69a', fontSize: 10, fontWeight: 800, letterSpacing: 1, marginLeft: 8 }}>⚛ REACT</span>
-        {activeTool && (
-          <span style={{
-            background: '#D4AF37', color: '#000', fontSize: 9, fontWeight: 800,
-            padding: '1px 6px', borderRadius: 3, marginLeft: 4,
-            animation: 'pulse 1.5s infinite',
-          }} title="Click chart to draw. Escape to cancel.">✏ {activeTool.replace('_', ' ').toUpperCase()}</span>
-        )}
-        <span style={{ color: '#4a6080', fontSize: 9, marginLeft: 8 }}>{bars.length} bars | {viewBars} vis</span>
-        {/* Date range inputs */}
-        <input
-          type="date"
-          style={{ width: 90, background: '#0a0c14', border: '1px solid #1e2535', color: '#8aa0c0', fontSize: 9, padding: '0 3px', borderRadius: 2, height: 18, marginLeft: 4 }}
-          onChange={(e) => {
-            const from = e.target.value
-            if (from) {
-              const idx = bars.findIndex(b => {
-                const d = typeof b.time === 'string' ? b.time : new Date(b.time * 1000).toISOString().split('T')[0]
-                return d >= from
-              })
-              if (idx >= 0) setViewStart(idx)
-            }
-          }}
-          title="From date"
-        />
-        <span style={{ color: '#3a4560', fontSize: 9 }}>→</span>
-        <input
-          type="date"
-          style={{ width: 90, background: '#0a0c14', border: '1px solid #1e2535', color: '#8aa0c0', fontSize: 9, padding: '0 3px', borderRadius: 2, height: 18 }}
-          onChange={(e) => {
-            const to = e.target.value
-            if (to) {
-              const idx = bars.findIndex(b => {
-                const d = typeof b.time === 'string' ? b.time : new Date(b.time * 1000).toISOString().split('T')[0]
-                return d > to
-              })
-              if (idx >= 0) setViewStart(Math.max(0, idx - viewBars))
-            }
-          }}
-          title="To date"
-        />
-        <button
-          onClick={() => useUIStore.getState().setFullscreenPanel(fullscreenPanel === panelIdx ? null : panelIdx)}
-          style={{ background: 'none', border: 'none', color: '#4a6080', cursor: 'pointer', fontSize: 10, padding: '0 2px', marginLeft: 4 }}
-          title="Fullscreen"
-        >⛶</button>
+        <span className="ph-ohlc" id={`ohlc-${panelIdx}`} />
+        <div className="panel-btns">
+          {activeTool && (
+            <span style={{
+              background: '#D4AF37', color: '#000', fontSize: 9, fontWeight: 800,
+              padding: '1px 6px', borderRadius: 3,
+            }} title="Click chart to draw. Escape to cancel.">✏ {activeTool.replace(/_/g, ' ').toUpperCase()}</span>
+          )}
+          <button
+            className="pnl-btn expand-btn"
+            onClick={() => useUIStore.getState().setFullscreenPanel(fullscreenPanel === panelIdx ? null : panelIdx)}
+            title="Fullscreen"
+          >⛶</button>
+        </div>
+      </div>
+
+      {/* ind-row — Indicator preset row */}
+      <div className="ind-row" id={`indrow-${panelIdx}`}>
+        <span style={{ fontSize: 11, color: '#2a3050', letterSpacing: 1, marginRight: 2 }}>IND</span>
+        <button className="preset-btn" onClick={() => {
+          require('@/stores/charts/indicatorStore').useIndicatorStore.getState().setInds({ ema9: true, ema20: true, ema50: true, ema200: true, sma_vol: true, vwap: true, vol: true })
+        }}>SAM</button>
+        <button className="preset-btn" onClick={() => {
+          require('@/stores/charts/indicatorStore').useIndicatorStore.getState().setInds({ band_9_20: true, band_72_89: true, dev_s_9_20: true, db_72_89: true, vwap: true, sma_vol: true, vol: true })
+        }}>MIKE</button>
+        <span style={{ width: 1, height: 10, background: '#2a3050', margin: '0 2px' }} />
+        {/* Active indicator dots */}
+        {liveInds.ema9 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.ema9 }} title="EMA 9" />}
+        {liveInds.ema20 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.ema20 }} title="EMA 20" />}
+        {liveInds.ema50 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.ema50 }} title="EMA 50" />}
+        {liveInds.ema200 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.ema200 }} title="EMA 200" />}
+        {liveInds.vwap && <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.vwap }} title="VWAP" />}
+        {liveInds.band_9_20 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#6ab4ff' }} title="Band 9/20" />}
+        {liveInds.band_72_89 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#a078ff' }} title="Band 72/89" />}
+        {liveInds.dev_s_9_20 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#dc8c1e' }} title="Dev S 9/20" />}
+        {liveInds.db_72_89 && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#c87a14' }} title="DB 72/89" />}
+        {liveInds.pzones && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b' }} title="Pivot Zones" />}
+        <span style={{ marginLeft: 'auto', fontSize: 9, color: '#4a6080' }}>{bars.length} bars</span>
+        <span style={{ color: '#26a69a', fontSize: 9, fontWeight: 800, letterSpacing: 1 }}>⚛</span>
+      </div>
+
+      {/* pdr — Date range row */}
+      <div className="pdr" id={`pdr-${panelIdx}`}>
+        <label>FROM</label><input type="date" id={`from-${panelIdx}`} autoComplete="off" onChange={(e) => {
+          const from = e.target.value
+          if (from) {
+            const idx = bars.findIndex(b => { const d = typeof b.time === 'string' ? b.time : new Date(b.time * 1000).toISOString().split('T')[0]; return d >= from })
+            if (idx >= 0) setViewStart(idx)
+          }
+        }} />
+        <label>TO</label><input type="date" id={`to-${panelIdx}`} autoComplete="off" onChange={(e) => {
+          const to = e.target.value
+          if (to) {
+            const idx = bars.findIndex(b => { const d = typeof b.time === 'string' ? b.time : new Date(b.time * 1000).toISOString().split('T')[0]; return d > to })
+            if (idx >= 0) setViewStart(Math.max(0, idx - viewBars))
+          }
+        }} />
+        <div className="pdr-sep" />
+        <label>TARGET</label><input type="date" id={`tgt-${panelIdx}`} autoComplete="off" onChange={(e) => {
+          useUIStore.getState().setTargetDate(e.target.value)
+          useUIStore.getState().setShowTarget(!!e.target.value)
+        }} />
+        <label>BACK</label><input type="number" id={`back-${panelIdx}`} min={1} max={9999} placeholder="days" style={{ width: 52 }} />
+        <label>FWD</label><input type="number" id={`fwd-${panelIdx}`} min={0} max={9999} placeholder="days" style={{ width: 52 }} />
+        <button className="appl" id={`apply-${panelIdx}`}>APPLY</button>
+        <button className="appl" id={`applyall-${panelIdx}`} style={{ borderColor: '#D4AF37', color: '#D4AF37' }}>APPLY ALL</button>
       </div>
 
       {/* Canvas */}

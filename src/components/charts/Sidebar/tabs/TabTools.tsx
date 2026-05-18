@@ -165,11 +165,8 @@ function ToolSettings({ tool }: { tool: ToolInstance }) {
 
   return (
     <div id="tab-tools">
-      <div style={{ padding: '6px 12px', borderBottom: '1px solid #1e2535' }}>
-        <button
-          onClick={() => selectTool(null)}
-          style={{ background: 'none', border: '1px solid #2a3050', color: '#6a7a98', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '3px 10px', borderRadius: 3, fontFamily: 'monospace' }}
-        >← Back to list</button>
+      <div style={{ padding: '6px 12px', borderBottom: '1px solid #1e2535', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#D4AF37', letterSpacing: 1 }}>⚙ EDITING TOOL</span>
       </div>
       {/* Toggle + name */}
       <div style={{ padding: '8px 16px', borderBottom: '1px solid #1e2535', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -314,6 +311,7 @@ function ToolSettings({ tool }: { tool: ToolInstance }) {
 
       {/* Bottom buttons */}
       <div style={{ padding: '8px 16px', borderTop: '1px solid #1e2535', display: 'flex', gap: 6 }}>
+        <button onClick={() => selectTool(null)} style={{ flex: 2, padding: 5, border: '1px solid #D4AF37', color: '#000', background: '#D4AF37', borderRadius: 4, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'monospace' }}>💾 SAVE & CLOSE</button>
         <button onClick={() => duplicateTool(tool.id)} style={{ flex: 1, padding: 5, border: '1px solid #5a9ae6', color: '#5a9ae6', background: 'transparent', borderRadius: 4, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'monospace' }}>⧉ DUPE</button>
         <button onClick={() => { deleteTool(tool.id) }} style={{ flex: 1, padding: 5, border: '1px solid #ef5350', color: '#ef5350', background: 'transparent', borderRadius: 4, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'monospace' }}>✕ DEL</button>
       </div>

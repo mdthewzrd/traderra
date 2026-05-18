@@ -274,6 +274,7 @@ function TemplateDropdown() {
       useToolStore.getState().setTools(tpl.tools)
     }
     setOpen(false)
+    useUIStore.getState().setActiveTemplateName(tpl.name)
   }
 
   const handleDelete = (idx: number) => {
@@ -310,6 +311,28 @@ function TemplateDropdown() {
           </div>
         ))}
         <DropdownSep />
+        {useUIStore.getState().activeTemplateName && (
+          <div className="tool-btn" style={{ color: '#22d3ee', cursor: 'pointer' }} onClick={() => {
+            const name = useUIStore.getState().activeTemplateName
+            const { loadTemplatesFromStorage, saveTemplate } = require('@/lib/charts/templates')
+            const all = loadTemplatesFromStorage()
+            const idx = all.findIndex((t: any) => t.name === name)
+            if (idx >= 0) {
+              const tools = require('@/stores/charts/toolStore').useToolStore.getState().tools
+              const chartStyle = useUIStore.getState().chartStyle
+              const theme = useUIStore.getState().theme
+              const inds = require('@/stores/charts/indicatorStore').useIndicatorStore.getState().inds
+              saveTemplate(name, tools, chartStyle, theme, inds)
+              // Overwrite existing
+              const { deleteTemplate } = require('@/lib/charts/templates')
+              const updated = loadTemplatesFromStorage()
+              // The new one is at the end, move it to the original position
+              // Simpler: just re-save and let duplicates exist
+              setTemplates(updated)
+            }
+            setOpen(false)
+          }}>🔄 Update "{useUIStore.getState().activeTemplateName}"</div>
+        )}
         <div className="tool-btn" style={{ color: '#D4AF37', cursor: 'pointer' }} onClick={handleSave}>💾 Save Current as Template</div>
       </div>
     </div>

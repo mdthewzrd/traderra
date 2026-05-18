@@ -69,6 +69,10 @@ interface UIState {
   indBtns: string[]  // indKey list
   addIndBtn: (indKey: string) => void
   removeIndBtn: (indKey: string) => void
+
+  // Active template name (for update button)
+  activeTemplateName: string | null
+  setActiveTemplateName: (v: string | null) => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -129,4 +133,7 @@ export const useUIStore = create<UIState>((set) => ({
     localStorage.setItem('traderra-ind-btns', JSON.stringify(next))
     return { indBtns: next }
   }),
+
+  activeTemplateName: null,
+  setActiveTemplateName: (v) => set({ activeTemplateName: v }),
 }))

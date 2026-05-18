@@ -129,10 +129,17 @@ export interface IndicatorCache {
  * Compute all needed indicators for a panel.
  * `inds` is the panel's indicator toggle state (e.g. {ema9: true, ema20: true, vwap: false}).
  */
+export interface ToolOverride {
+  indKey: string
+  params: Record<string, number>
+  colors: Record<string, string>
+}
+
 export function computeIndicators(
   data: CalcBar[],
   inds: Record<string, boolean>,
-  tf: string
+  tf: string,
+  toolOverrides?: ToolOverride[]
 ): IndicatorCache {
   const cache: IndicatorCache = { ema: {}, atr: {}, sma: {}, vwap: null, bollinger: null, volSma: null }
 
@@ -142,15 +149,38 @@ export function computeIndicators(
   const ensureATR = (period: number) => {
     if (!cache.atr[period]) cache.atr[period] = calcATR(data, period)
   }
+  const ensureSMA = (period: number) => {
+    if (!cache.sma[period]) cache.sma[period] = calcSMA(data, period)
+  }
 
-  // Resolve EMA deps
-  if (inds.ema9 || inds.db_upper || inds.band_9_20 || inds.dev_s_9_20 || inds.dev_l_9_20) ensureEMA(9)
-  if (inds.ema20 || inds.db_low1 || inds.db_low2 || inds.band_9_20 || inds.dev_s_9_20 || inds.dev_l_9_20) ensureEMA(20)
-  if (inds.ema50) ensureEMA(50)
-  if (inds.ema150) ensureEMA(150)
-  if (inds.ema200) ensureEMA(200)
+  // Build a map of indKey → tool override for quick lookup
+  const toolMap: Record<string, ToolOverride> = {}
+  if (toolOverrides) for (const t of toolOverrides) toolMap[t.indKey] = t
+
+  // Resolve EMA deps — tool overrides take priority
+  const ema9Tool = toolMap['ema9']
+  const ema20Tool = toolMap['ema20']
+  const ema50Tool = toolMap['ema50']
+  const ema150Tool = toolMap['ema150']
+  const ema200Tool = toolMap['ema200']
+  const emaTool = toolMap['ema']
+  const smaTool = toolMap['sma']
+
+  if (inds.ema9) ensureEMA(ema9Tool?.params?.period ?? 9)
+  if (inds.ema20 || inds.db_low1 || inds.db_low2 || inds.band_9_20 || inds.dev_s_9_20 || inds.dev_l_9_20) ensureEMA(ema20Tool?.params?.period ?? 20)
+  if (inds.ema50) ensureEMA(ema50Tool?.params?.period ?? 50)
+  if (inds.ema150) ensureEMA(ema150Tool?.params?.period ?? 150)
+  if (inds.ema200) ensureEMA(ema200Tool?.params?.period ?? 200)
   if (inds.ema40_60) { ensureEMA(40); ensureEMA(60) }
   if (inds.band_72_89 || inds.db_72_89) { ensureEMA(72); ensureEMA(89) }
+  if (inds.ema || emaTool) ensureEMA(emaTool?.params?.period ?? 20)
+
+  // Generic EMA from tool overrides (keys like ema_50, ema_100, etc.)
+  for (const t of (toolOverrides || [])) {
+    if (t.indKey.startsWith('ema') && !['ema9','ema20','ema50','ema150','ema200','ema40_60'].includes(t.indKey)) {
+      if (t.params?.period) ensureEMA(t.params.period)
+    }
+  }
 
   // ATR deps
   if (inds.db_upper || inds.dev_s_9_20 || inds.dev_l_9_20) ensureATR(9)
@@ -165,18 +195,19 @@ export function computeIndicators(
 
   // Bollinger
   if (inds.bollinger) {
-    cache.bollinger = calcBollinger(data, 20, 2)
+    const bt = toolMap['bollinger']
+    cache.bollinger = calcBollinger(data, bt?.params?.period ?? 20, bt?.params?.stddev ?? 2)
   }
 
   // SMA
-  if (inds.sma) {
-    const period = 20
-    cache.sma[period] = calcSMA(data, period)
+  if (inds.sma || smaTool) {
+    ensureSMA(smaTool?.params?.period ?? 20)
   }
 
   // Volume SMA
   if (inds.sma_vol) {
-    cache.volSma = calcVolSMA(data, 20)
+    const vt = toolMap['sma_vol']
+    cache.volSma = calcVolSMA(data, vt?.params?.period ?? 20)
   }
 
   return cache

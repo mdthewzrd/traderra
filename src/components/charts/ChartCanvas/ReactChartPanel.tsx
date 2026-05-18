@@ -71,6 +71,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
   // Mouse state
   const mouseRef = useRef({ x: -1, y: -1 })
   const [mouse, setMouse] = useState({ x: -1, y: -1 })
+  const [ohlcvTip, setOhlcvTip] = useState<{ x: number; y: number; bar: any } | null>(null)
   const [dragging, setDragging] = useState(false)
   const dragStart = useRef({ x: 0, vs: 0 })
   const drawingDragRef = useRef<{ startX: number; startTime: number; startPrice: number } | null>(null)
@@ -236,8 +237,16 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       // Store rc for mouse handler coordinate conversion
       rcRef.current = rc
 
-      // Compute all indicators for this frame
-      const ic = computeIndicators(bars, inds, tf)
+      // Compute all indicators for this frame — pass tool overrides for param control
+      const activeTools = useToolStore.getState().tools.filter((t: any) => t.on)
+      const toolOverrides = activeTools.map((t: any) => ({ indKey: t.indKey, params: t.params, colors: t.colors }))
+      const ic = computeIndicators(bars, inds, tf, toolOverrides)
+
+      // Helper: get tool color override or fall back to theme default
+      const toolColor = (indKey: string, colorKey: string, fallback: string): string => {
+        const tool = activeTools.find((t: any) => t.indKey === indKey)
+        return tool?.colors?.[colorKey] || fallback
+      }
 
       // ── Grid + Axes ──
       const { niceStep, gridMinP } = renderGrid(rc)
@@ -277,7 +286,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
 
       // ── Volume SMA ──
       if (inds.sma_vol && ic.volSma) {
-        drawLine(rc, ic.volSma, C.vol_sma_color, 1.5)
+        drawLine(rc, ic.volSma, toolColor('sma_vol', 'color', C.vol_sma_color), 1.5)
       }
 
       // ── Indicators (bands first, then lines, so lines draw on top) ──
@@ -360,20 +369,20 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       // ── Indicator lines (on top of bands) ──
 
       // EMA lines
-      if (inds.ema9 && ic.ema[9])   drawLine(rc, ic.ema[9],  C.ema9, 1.4)
-      if (inds.ema20 && ic.ema[20]) drawLine(rc, ic.ema[20], C.ema20, 1.4)
-      if (inds.ema50 && ic.ema[50]) drawLine(rc, ic.ema[50], C.ema50, 1.4)
-      if (inds.ema150 && ic.ema[150]) drawLine(rc, ic.ema[150], C.ema150, 1.0)
-      if (inds.ema200 && ic.ema[200]) drawLine(rc, ic.ema[200], C.ema200, 1.0)
+      if (inds.ema9 && ic.ema[9])   drawLine(rc, ic.ema[9],  toolColor('ema9', 'color', C.ema9), 1.4)
+      if (inds.ema20 && ic.ema[20]) drawLine(rc, ic.ema[20], toolColor('ema20', 'color', C.ema20), 1.4)
+      if (inds.ema50 && ic.ema[50]) drawLine(rc, ic.ema[50], toolColor('ema50', 'color', C.ema50), 1.4)
+      if (inds.ema150 && ic.ema[150]) drawLine(rc, ic.ema[150], toolColor('ema150', 'color', C.ema150), 1.0)
+      if (inds.ema200 && ic.ema[200]) drawLine(rc, ic.ema[200], toolColor('ema200', 'color', C.ema200), 1.0)
 
       // VWAP
       if (inds.vwap && ic.vwap) {
-        drawLine(rc, ic.vwap, C.vwap, 1.6)
+        drawLine(rc, ic.vwap, toolColor('vwap', 'color', C.vwap), 1.6)
       }
 
       // SMA
       if (inds.sma && ic.sma[20]) {
-        drawLine(rc, ic.sma[20], C.sma_color, 1.4)
+        drawLine(rc, ic.sma[20], toolColor('sma', 'color', C.sma_color), 1.4)
       }
 
       // ── Pivot Zones (pzones) ──
@@ -549,6 +558,16 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
     mouseRef.current = { x: mx, y: my }
     setMouse({ x: mx, y: my })
 
+    // OHLCV tooltip on right-button hold
+    if (e.buttons === 2 && rcRef.current && bars.length) {
+      const rc = rcRef.current
+      const bi = Math.max(0, Math.min(rc.visible.length - 1, Math.round(mx / rc.barW - 0.5)))
+      const bar = rc.visible[bi]
+      if (bar) setOhlcvTip({ x: e.clientX + 12, y: e.clientY - 10, bar })
+    } else {
+      if (ohlcvTip) setOhlcvTip(null)
+    }
+
     if (dragging) {
       const dx = e.clientX - dragStart.current.x
       const barW = size.w > 0 ? (size.w - 70) / viewBars : 10
@@ -557,7 +576,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       setViewStart(Math.max(0, Math.min(bars.length - viewBars, newVs)))
     }
 
-    // Crosshair sync: update global crosshair position for other panels
+    // Crosshair sync
     if (!dragging && rcRef.current && my >= 0 && my <= rcRef.current.priceH) {
       const rc = rcRef.current
       const price = rc.minP + rc.priceRange * (1 - my / rc.priceH)
@@ -565,7 +584,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       const time = rc.visible[bi]?.time
       if (time != null) useChartStore.getState().setCrosshair(time, price)
     }
-  }, [dragging, viewBars, bars.length, size.w])
+  }, [dragging, viewBars, bars.length, size.w, ohlcvTip])
 
   const onMouseUp = useCallback(() => {
     // Finalize drag-based annotation (highlights)
@@ -798,7 +817,22 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
           onMouseUp={onMouseUp}
           onMouseLeave={onMouseLeave}
           onWheel={onWheel}
+          onContextMenu={(e) => e.preventDefault()}
         />
+        {/* Floating OHLCV tooltip on right-click-hold */}
+        {ohlcvTip && ohlcvTip.bar && (
+          <div style={{
+            position: 'fixed', left: ohlcvTip.x, top: ohlcvTip.y,
+            background: 'rgba(16,19,26,.92)', border: '1px solid #2a3050',
+            borderRadius: 4, padding: '4px 8px', fontSize: 11, fontFamily: 'monospace',
+            color: '#dde3f0', pointerEvents: 'none', zIndex: 800, whiteSpace: 'nowrap',
+            boxShadow: '0 4px 12px rgba(0,0,0,.5)',
+          }}>
+            <div>O {ohlcvTip.bar.open?.toFixed(2)} H {ohlcvTip.bar.high?.toFixed(2)}</div>
+            <div>L {ohlcvTip.bar.low?.toFixed(2)} C {ohlcvTip.bar.close?.toFixed(2)}</div>
+            {ohlcvTip.bar.volume != null && <div style={{ color: '#8aa0c0' }}>Vol {(ohlcvTip.bar.volume / 1e6).toFixed(2)}M</div>}
+          </div>
+        )}
       </div>
 
       {/* Scrollbar + Scroll Arrows */}

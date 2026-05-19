@@ -117,19 +117,19 @@ export function TopBar() {
       <div className="sep" />
 
       <div className="tbtn-row">
-        <button className="tbtn" id="toggle-bars-btn" style={{ padding: '3px 8px', fontSize: 11, minWidth: 0 }} onClick={() => useUIStore.getState().setBarsVisible(!useUIStore.getState().barsVisible)}>≡ BARS</button>
-        <button className={`tbtn${showPriceLine ? '' : ' off'}`} id="price-line-btn" style={{ borderColor: showPriceLine ? '#26a69a' : '#4a5580', color: showPriceLine ? '#26a69a' : '#4a5580', textDecoration: showPriceLine ? 'none' : 'line-through', padding: '3px 8px', fontSize: 11, minWidth: 0 }} onClick={() => setShowPriceLine(!showPriceLine)}>— LINE</button>
-        <button className={`tbtn${useAdjusted ? '' : ' unadj'}`} id="adj-btn" style={{ borderColor: useAdjusted ? '#f59e0b' : '#4a5580', color: useAdjusted ? '#f59e0b' : '#4a5580', textDecoration: useAdjusted ? 'none' : 'line-through', padding: '3px 8px', fontSize: 11, minWidth: 0 }} onClick={() => setUseAdjusted(!useAdjusted)}>ADJ</button>
-        <button className={`tbtn${cleanPrints ? ' on' : ''}`} id="clean-btn" style={{ borderColor: '#e879f9', color: '#e879f9', textDecoration: cleanPrints ? 'none' : 'line-through', padding: '3px 8px', fontSize: 11, minWidth: 0 }} onClick={() => setCleanPrints(!cleanPrints)}>CLN</button>
+        <button className="tbtn" id="toggle-bars-btn">≡ BARS</button>
+        <button className={`tbtn${showPriceLine ? '' : ' off'}`} id="price-line-btn" style={{ borderColor: showPriceLine ? '#26a69a' : '#4a5580', color: showPriceLine ? '#26a69a' : '#4a5580', textDecoration: showPriceLine ? 'none' : 'line-through' }} onClick={() => setShowPriceLine(!showPriceLine)}>— LINE</button>
+        <button className={`tbtn${useAdjusted ? '' : ' unadj'}`} id="adj-btn" style={{ borderColor: useAdjusted ? '#f59e0b' : '#4a5580', color: useAdjusted ? '#f59e0b' : '#4a5580', textDecoration: useAdjusted ? 'none' : 'line-through' }} onClick={() => setUseAdjusted(!useAdjusted)}>ADJ</button>
+        <button className={`tbtn${cleanPrints ? ' on' : ''}`} id="clean-btn" style={{ borderColor: '#e879f9', color: '#e879f9', textDecoration: cleanPrints ? 'none' : 'line-through' }} onClick={() => setCleanPrints(!cleanPrints)}>CLN</button>
         {[1, 2, 4].map(n => (
-          <button key={n} className={`tbtn${activeLayout === n ? ' active' : ''}`} id={`ly${n}`} style={{ fontWeight: 900, padding: '3px 8px', fontSize: 11, minWidth: 0 }} onClick={() => setActiveLayout(n)}>{n}</button>
+          <button key={n} className={`tbtn${activeLayout === n ? ' active' : ''}`} id={`ly${n}`} style={{ fontWeight: 900 }} onClick={() => setActiveLayout(n)}>{n}</button>
         ))}
-        <button className="tbtn" id="bt-btn" style={{ borderColor: '#f59e0b', color: '#f59e0b', padding: '3px 8px', fontSize: 11, minWidth: 0 }} onClick={() => setSidebarTab('bt')}>⏱ BT</button>
-        <button className="tbtn" id="scan-btn" style={{ borderColor: '#4ade80', color: '#4ade80', padding: '3px 8px', fontSize: 11, minWidth: 0 }} onClick={() => setSidebarTab('scan')}>📡 SCAN</button>
-        <button className="tbtn" id="vault-btn" style={{ borderColor: '#a78bfa', color: '#a78bfa', padding: '3px 8px', fontSize: 11, minWidth: 0 }} onClick={() => setSidebarTab('vault')}>📦 VAULT</button>
-        <button className="tbtn" id="settings-btn" style={{ borderColor: '#D4AF37', color: '#D4AF37', padding: '3px 8px', fontSize: 11, minWidth: 0 }} onClick={() => setSidebarTab('look')}>⚙ LOOK</button>
-        <button className="tbtn" id="tools-btn" style={{ borderColor: '#D4AF37', color: '#D4AF37', padding: '3px 8px', fontSize: 11, minWidth: 0 }} onClick={() => setSidebarTab('tools')}>🔧 TOOLS</button>
-        <button className="tbtn" id="input-settings-btn" style={{ borderColor: '#22d3ee', color: '#22d3ee', padding: '3px 8px', fontSize: 11, minWidth: 0 }} onClick={() => setSidebarTab('settings')}>⚙ SET</button>
+        <button className="tbtn" id="bt-btn" style={{ borderColor: '#f59e0b', color: '#f59e0b' }} onClick={() => setSidebarTab('bt')}>⏱ BT</button>
+        <button className="tbtn" id="scan-btn" style={{ borderColor: '#4ade80', color: '#4ade80' }} onClick={() => setSidebarTab('scan')}>📡 SCAN</button>
+        <button className="tbtn" id="vault-btn" style={{ borderColor: '#a78bfa', color: '#a78bfa' }} onClick={() => setSidebarTab('vault')}>📦 VAULT</button>
+        <button className="tbtn" id="settings-btn" style={{ borderColor: '#D4AF37', color: '#D4AF37' }} onClick={() => setSidebarTab('look')}>⚙ LOOK</button>
+        <button className="tbtn" id="tools-btn" style={{ borderColor: '#D4AF37', color: '#D4AF37' }} onClick={() => setSidebarTab('tools')}>🔧 TOOLS</button>
+        <button className="tbtn" id="input-settings-btn" style={{ borderColor: '#22d3ee', color: '#22d3ee' }} onClick={() => setSidebarTab('settings')}>⚙ SET</button>
         <IndBtnsContainer />
         <div id="hot-btns-container" style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }} />
         <AddIndBtnButton />
@@ -138,7 +138,7 @@ export function TopBar() {
         <button
           className="tbtn"
           id="reload-chart-btn"
-          style={{ borderColor: '#22d3ee', color: '#22d3ee', padding: '3px 8px', fontSize: 11, minWidth: 0 }}
+          style={{ borderColor: '#22d3ee', color: '#22d3ee' }}
           onClick={() => window.location.reload()}
           title="Reload chart"
         >⟳ RELOAD</button>

@@ -1,12 +1,22 @@
+import '../../styles/charts-terminal.css'
+
 /**
  * Charts layout — no footer, no Renata sidebar.
- * Body already has display:flex;flex-direction:column from charts-terminal.css.
- * Just pass children through — don't wrap in any extra div.
+ * Override body styles from globals.css to match charts-terminal requirements:
+ * body must be display:flex, flex-direction:column, height:100%, overflow:hidden.
  */
 export default function ChartsLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  return <>{children}</>
+  return (
+    <>
+      <style dangerouslySetInnerHTML={{ __html: `
+        html, body { height: 100% !important; overflow: hidden !important; }
+        body { display: flex !important; flex-direction: column !important; }
+      ` }} />
+      {children}
+    </>
+  )
 }

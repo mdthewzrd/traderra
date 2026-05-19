@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useUIStore, useChartStore, useDrawingStore } from '@/stores/charts'
+import { ProfileIcon } from '@/app/charts/ChartsTerminal'
 import { useToolStore } from '@/stores/charts/toolStore'
 
 /**
@@ -148,6 +149,7 @@ export function TopBar() {
         <span id="ti-price" style={{ fontSize: 13 }} />
         <span id="ti-chg" style={{ fontSize: 12 }} />
       </div>
+      <ProfileIcon />
     </div>
   )
 }

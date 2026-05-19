@@ -51,7 +51,6 @@ export default function ChartsTerminal({ userId, userName, userImage }: {
 
   return (
     <div style={{ display: 'contents' }}>
-      <ProfileIcon />
       <TopBar />
       <LeftToolbar />
       <AnnotationToolbar />
@@ -62,17 +61,17 @@ export default function ChartsTerminal({ userId, userName, userImage }: {
   )
 }
 
-/** Profile icon — fixed top right corner */
-function ProfileIcon() {
+/** Profile icon — lives inside the TopBar, absolute top-right */
+export function ProfileIcon() {
   return (
     <div
       id="profile-icon"
       style={{
-        position: 'fixed', top: 6, right: 12, zIndex: 9999, cursor: 'pointer',
-        width: 28, height: 28, borderRadius: '50%', background: '#2a3050',
+        position: 'absolute', top: 5, right: 8, cursor: 'pointer',
+        width: 26, height: 26, borderRadius: '50%', background: '#2a3050',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 13, color: '#6a7a98', border: '1px solid #3a4a68',
-        transition: 'all .15s',
+        fontSize: 12, color: '#6a7a98', border: '1px solid #3a4a68',
+        transition: 'all .15s', zIndex: 10,
       }}
       onMouseOver={(e) => {
         e.currentTarget.style.borderColor = '#D4AF37'

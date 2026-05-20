@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { C, F, LIGHT_THEME_OVERRIDES, hexRgb } from '@/lib/charts/theme'
 
 /**
  * UI state — theme, fullscreen, visibility toggles.
@@ -87,8 +88,28 @@ interface UIState {
 }
 
 export const useUIStore = create<UIState>((set) => ({
-  theme: 'dark',
-  toggleTheme: () => set((s) => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })),
+  theme: (typeof window !== 'undefined' && localStorage.getItem('traderra-theme') === 'light') ? 'light' as const : 'dark' as const,
+  toggleTheme: () => set((s) => {
+    const next = s.theme === 'dark' ? 'light' : 'dark'
+    localStorage.setItem('traderra-theme', next)
+    // Apply to mutable C object
+    if (next === 'light') {
+      document.body.classList.add('light')
+      Object.entries(LIGHT_THEME_OVERRIDES).forEach(([k, v]) => { (C as any)[k] = v })
+    } else {
+      document.body.classList.remove('light')
+      // Restore dark defaults
+      const darkDefaults: Record<string, string> = {
+        bg: '#0c0e14', axisbg: '#0d0f18', grid: '#141926',
+        axisLabel: '#6878a8', axisMuted: '#4a5580', axisHighlight: '#8090b0',
+        crossLabelBg: '#141a2a', crossLabelBd: '#2a3050',
+      }
+      Object.entries(darkDefaults).forEach(([k, v]) => { (C as any)[k] = v })
+    }
+    C.vol_up = `rgba(${hexRgb(C.up).r},${hexRgb(C.up).g},${hexRgb(C.up).b},.5)`
+    C.vol_dn = `rgba(${hexRgb(C.dn).r},${hexRgb(C.dn).g},${hexRgb(C.dn).b},.5)`
+    return { theme: next }
+  }),
 
   fullscreenPanel: null,
   setFullscreenPanel: (idx) => set({ fullscreenPanel: idx }),

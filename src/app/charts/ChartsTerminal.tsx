@@ -40,6 +40,12 @@ export default function ChartsTerminal({ userId, userName, userImage }: {
     // Hydrate client-only state from localStorage
     useUIStore.getState()._hydrateIndBtns()
 
+    // Apply saved theme on mount
+    const savedTheme = localStorage.getItem('traderra-theme')
+    if (savedTheme === 'light' && useUIStore.getState().theme !== 'light') {
+      useUIStore.getState().toggleTheme()
+    }
+
     // Inject auth token
     fetch('/api/auth/token')
       .then(r => r.ok ? r.json() : null)

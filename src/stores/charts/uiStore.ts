@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { C, F, LIGHT_THEME_OVERRIDES, hexRgb } from '@/lib/charts/theme'
+import { C, LIGHT_THEME_OVERRIDES } from '@/lib/charts/theme'
 
 /**
  * UI state — theme, fullscreen, visibility toggles.
@@ -92,24 +92,16 @@ export const useUIStore = create<UIState>((set) => ({
   toggleTheme: () => set((s) => {
     const next = s.theme === 'dark' ? 'light' : 'dark'
     localStorage.setItem('traderra-theme', next)
-    // Apply to mutable C object
     if (next === 'light') {
       document.body.classList.add('light')
-      Object.entries(LIGHT_THEME_OVERRIDES).forEach(([k, v]) => { (C as any)[k] = v })
     } else {
       document.body.classList.remove('light')
-      // Restore dark defaults
-      const darkDefaults: Record<string, string> = {
-        bg: '#0c0e14', axisbg: '#0d0f18', grid: '#141926',
-        axisLabel: '#6878a8', axisMuted: '#4a5580', axisHighlight: '#8090b0',
-        crossLabelBg: '#141a2a', crossLabelBd: '#2a3050',
-        up: '#26a69a', dn: '#ef5350',
-        vol_up: 'rgba(38,166,154,.5)', vol_dn: 'rgba(239,83,80,.5)',
-      }
-      Object.entries(darkDefaults).forEach(([k, v]) => { (C as any)[k] = v })
     }
-    C.vol_up = `rgba(${hexRgb(C.up).r},${hexRgb(C.up).g},${hexRgb(C.up).b},.5)`
-    C.vol_dn = `rgba(${hexRgb(C.dn).r},${hexRgb(C.dn).g},${hexRgb(C.dn).b},.5)`
+    // Apply bg/axis/grid/cross overrides — up/dn come from user's saved cfg
+    const overrides: Record<string, string> = next === 'light'
+      ? { bg: '#e8e4d9', axisbg: '#ddd9cc', grid: '#d0cdc2', axisLabel: '#4a5580', axisMuted: '#6a7a9a', axisHighlight: '#3a4a6a', crossLabelBg: '#d8d4c8', crossLabelBd: '#b0a898' }
+      : { bg: '#0c0e14', axisbg: '#0d0f18', grid: '#141926', axisLabel: '#6878a8', axisMuted: '#4a5580', axisHighlight: '#8090b0', crossLabelBg: '#141a2a', crossLabelBd: '#2a3050' }
+    Object.entries(overrides).forEach(([k, v]) => { (C as any)[k] = v })
     return { theme: next }
   }),
 

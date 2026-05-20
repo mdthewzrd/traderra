@@ -58,4 +58,7 @@ export const LIGHT_THEME_OVERRIDES: Record<string, string> = {
   bg: '#e8e4d9', axisbg: '#ddd9cc', grid: '#d0cdc2',
   axisLabel: '#4a5580', axisMuted: '#6a7a9a', axisHighlight: '#3a4a6a',
   crossLabelBg: '#d8d4c8', crossLabelBd: '#b0a898',
+  up: '#1a7a6f', dn: '#c0392b',
+  vol_up: 'rgba(26,122,111,.45)', vol_dn: 'rgba(192,57,43,.45)',
+  axisbg: '#ddd9cc',
 }

@@ -103,6 +103,8 @@ export const useUIStore = create<UIState>((set) => ({
         bg: '#0c0e14', axisbg: '#0d0f18', grid: '#141926',
         axisLabel: '#6878a8', axisMuted: '#4a5580', axisHighlight: '#8090b0',
         crossLabelBg: '#141a2a', crossLabelBd: '#2a3050',
+        up: '#26a69a', dn: '#ef5350',
+        vol_up: 'rgba(38,166,154,.5)', vol_dn: 'rgba(239,83,80,.5)',
       }
       Object.entries(darkDefaults).forEach(([k, v]) => { (C as any)[k] = v })
     }

@@ -8,6 +8,7 @@ import { C, F } from './theme'
 import { fmtVol } from './format'
 
 export function renderVolume(rc: RenderContext) {
+  if ((window as any)._barsVisible === false) return // ≡ BARS toggle
   const { ctx, data, W, chartW, PRICE_W, priceH, volH, visible, vs, barW, candleW, xLc, xCtr, pToY, inds: pi } = rc
   if (volH <= 0) return
 

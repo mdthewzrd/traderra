@@ -7,6 +7,7 @@ import type { RenderContext } from './render-types'
 import { C, hexRgb } from './theme'
 
 export function renderCandles(rc: RenderContext) {
+  if ((window as any)._barsVisible === false) return // ≡ BARS toggle
   const { ctx, data, chartW, priceH, volH, visible, vs, barW, candleW, xLc, xCtr, pToY } = rc
   const chartStyle = (window as any)._chartStyle || 'candles'
 

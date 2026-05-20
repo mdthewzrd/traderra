@@ -214,6 +214,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       // Bridge globals
       ;(window as any)._chartStyle = chartStyle
       ;(window as any).showPriceLine = useUIStore.getState().showPriceLine
+      ;(window as any)._barsVisible = useUIStore.getState().barsVisible
       ;(window as any).globalCrossTime = useChartStore.getState().globalCrossTime
       ;(window as any).globalCrossPrice = useChartStore.getState().globalCrossPrice
 
@@ -545,6 +546,10 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
 
       // Single-click tools (text, arrow, hline, vline, stop_line, trail_stop, etc.)
       if (!isTwoClick && !isDragTool) {
+        let text = ''
+        if (ds.activeTool.startsWith('text_')) {
+          text = prompt('Annotation text:') || 'Text'
+        }
         ds.addAnnotation({
           id: ds.getNextId(),
           type: ds.activeTool,
@@ -552,7 +557,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
           color: ds.drawDefaults.color,
           lineWidth: ds.drawDefaults.lineWidth,
           opacity: ds.drawDefaults.opacity,
-          text: ds.activeTool.startsWith('text_') ? 'Text' : '',
+          text: ds.activeTool.startsWith('text_') ? text : '',
           panelIdx,
           locked: false, visible: true, hidden: false,
           points: [{ x: time, y: price }],

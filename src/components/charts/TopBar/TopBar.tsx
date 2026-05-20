@@ -118,7 +118,7 @@ export function TopBar() {
       <div className="sep" />
 
       <div className="tbtn-row">
-        <button className="tbtn" id="toggle-bars-btn">≡ BARS</button>
+        <button className="tbtn" id="toggle-bars-btn" onClick={() => useUIStore.getState().setBarsVisible(!useUIStore.getState().barsVisible)}>≡ BARS</button>
         <button className={`tbtn${showPriceLine ? '' : ' off'}`} id="price-line-btn" style={{ borderColor: showPriceLine ? '#26a69a' : '#4a5580', color: showPriceLine ? '#26a69a' : '#4a5580', textDecoration: showPriceLine ? 'none' : 'line-through' }} onClick={() => setShowPriceLine(!showPriceLine)}>— LINE</button>
         <button className={`tbtn${useAdjusted ? '' : ' unadj'}`} id="adj-btn" style={{ borderColor: useAdjusted ? '#f59e0b' : '#4a5580', color: useAdjusted ? '#f59e0b' : '#4a5580', textDecoration: useAdjusted ? 'none' : 'line-through' }} onClick={() => setUseAdjusted(!useAdjusted)}>ADJ</button>
         <button className={`tbtn${cleanPrints ? ' on' : ''}`} id="clean-btn" style={{ borderColor: '#e879f9', color: '#e879f9', textDecoration: cleanPrints ? 'none' : 'line-through' }} onClick={() => setCleanPrints(!cleanPrints)}>CLN</button>

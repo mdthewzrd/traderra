@@ -22,7 +22,7 @@ const PRESETS: Record<string, ThemeCfg> = {
 }
 
 interface ThemeCfg {
-  bg?: string; ax?: string; gr?: string; up?: string; dn?: string
+  bg?: string; ax?: string; gr?: string; up?: string; dn?: string; vu?: string; vd?: string
   pre?: string; po?: number; aft?: string; ao?: number
   cr?: string; co?: number; bd?: string
   p?: number; t?: number; o?: number; ui?: number
@@ -44,6 +44,7 @@ function readInputs(): ThemeCfg {
   return {
     bg: g('sc-bg'), ax: g('sc-ax'), gr: g('sc-gr'),
     up: g('sc-up'), dn: g('sc-dn'),
+    vu: g('sc-vu'), vd: g('sc-vd'),
     pre: g('sc-pre'), po: +(g('sc-preo')||7),
     aft: g('sc-aft'), ao: +(g('sc-afto')||9),
     cr: g('sc-cr'), co: +(g('sc-cro')||50),
@@ -56,6 +57,8 @@ function readInputs(): ThemeCfg {
 function applyCfg(s: ThemeCfg) {
   if (s.up) { C.up = s.up; C.vol_up = `rgba(${hexRgb(s.up).r},${hexRgb(s.up).g},${hexRgb(s.up).b},.5)` }
   if (s.dn) { C.dn = s.dn; C.vol_dn = `rgba(${hexRgb(s.dn).r},${hexRgb(s.dn).g},${hexRgb(s.dn).b},.5)` }
+  if (s.vu) C.vol_up = `rgba(${hexRgb(s.vu).r},${hexRgb(s.vu).g},${hexRgb(s.vu).b},.5)`
+  if (s.vd) C.vol_dn = `rgba(${hexRgb(s.vd).r},${hexRgb(s.vd).g},${hexRgb(s.vd).b},.5)`
   if (s.bg) C.bg = s.bg
   if (s.ax) C.axisbg = s.ax
   if (s.gr) C.grid = s.gr
@@ -75,6 +78,7 @@ function syncInputsFromTheme() {
     if (e) e.value = v; if (ve) ve.textContent = v + (suffix || '')
   }
   s('sc-up', C.up); s('sc-dn', C.dn)
+  s('sc-vu', C.up); s('sc-vd', C.dn)
   s('sc-bg', C.bg); s('sc-ax', C.axisbg); s('sc-gr', C.grid)
   sv('sf-p', F.p, 'sf-p-v'); sv('sf-t', F.t, 'sf-t-v'); sv('sf-o', F.o, 'sf-o-v')
 }

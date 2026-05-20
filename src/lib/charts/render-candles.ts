@@ -4,7 +4,7 @@
  */
 
 import type { RenderContext } from './render-types'
-import { C } from './theme'
+import { C, hexRgb } from './theme'
 
 export function renderCandles(rc: RenderContext) {
   const { ctx, data, chartW, priceH, volH, visible, vs, barW, candleW, xLc, xCtr, pToY } = rc
@@ -51,7 +51,7 @@ export function renderCandles(rc: RenderContext) {
       else ctx.lineTo(cx2, Math.round(pToY(b.close)))
       if (i === visible.length - 1) {
         ctx.lineTo(cx2, priceH); ctx.lineTo(Math.round(xCtr(0)), priceH); ctx.closePath()
-        ctx.fillStyle = up ? 'rgba(38,166,154,.18)' : 'rgba(239,83,80,.18)'
+        ctx.fillStyle = up ? `rgba(${hexRgb(C.up).r},${hexRgb(C.up).g},${hexRgb(C.up).b},.18)` : `rgba(${hexRgb(C.dn).r},${hexRgb(C.dn).g},${hexRgb(C.dn).b},.18)`
         ctx.fill()
         ctx.beginPath()
         for (let j = 0; j < visible.length; j++) {
@@ -86,7 +86,7 @@ export function renderCandles(rc: RenderContext) {
       const ref = (window as any)._baselineRef ?? b.close
       const refY = Math.round(pToY(ref))
       const cY2 = Math.round(pToY(b.close))
-      ctx.fillStyle = cY2 < refY ? 'rgba(38,166,154,.25)' : 'rgba(239,83,80,.25)'
+      ctx.fillStyle = cY2 < refY ? `rgba(${hexRgb(C.up).r},${hexRgb(C.up).g},${hexRgb(C.up).b},.25)` : `rgba(${hexRgb(C.dn).r},${hexRgb(C.dn).g},${hexRgb(C.dn).b},.25)`
       ctx.fillRect(bodyX, Math.min(cY2, refY), bodyW, Math.abs(cY2 - refY) || 1)
       if (i === 0) {
         ctx.beginPath(); ctx.strokeStyle = '#4a6080'; ctx.lineWidth = 0.5; ctx.setLineDash([3, 3])

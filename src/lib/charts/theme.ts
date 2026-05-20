@@ -40,6 +40,12 @@ export const C: Record<string, string> = {
   pz_res_fill: 'rgba(239,68,68,.08)', pz_res_line: 'rgba(239,68,68,.35)', pz_res_label: '#ef5350',
 }
 
+/** Hex color → {r,g,b} */
+export function hexRgb(hex: string) {
+  const h = hex.replace('#', '')
+  return { r: parseInt(h.substring(0, 2), 16), g: parseInt(h.substring(2, 4), 16), b: parseInt(h.substring(4, 6), 16) }
+}
+
 /** Font size constants */
 export const F: Record<string, number> = {
   p: 11, // price axis

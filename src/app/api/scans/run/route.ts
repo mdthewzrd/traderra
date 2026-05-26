@@ -4,13 +4,19 @@ import { writeFile, mkdir, unlink } from 'fs/promises'
 import path from 'path'
 import os from 'os'
 
-// POST /api/scans/run — execute Python scan code and return results
+// POST /api/scans/run — execute Python scan code or run a named spec
 export async function POST(request: NextRequest) {
   const body = await request.json()
-  const { code, from, to, filterMode = '3', name = 'custom_scan' } = body
+  const { code, from, to, filterMode = '3', name = 'custom_scan', spec } = body
 
+  // Mode 1: Run a named spec through the scan engine
+  if (spec) {
+    return await runSpecScan(spec, from, to)
+  }
+
+  // Mode 2: Run raw Python code
   if (!code) {
-    return NextResponse.json({ error: 'No code provided' }, { status: 400 })
+    return NextResponse.json({ error: 'No code or spec provided' }, { status: 400 })
   }
   if (!from || !to) {
     return NextResponse.json({ error: 'Date range required (from, to)' }, { status: 400 })
@@ -142,6 +148,50 @@ async function runPythonScan(
   } finally {
     // Cleanup temp file
     try { await unlink(tmpFile) } catch {}
+  }
+}
+
+async function runSpecScan(specName: string, from?: string, to?: string): Promise<Response> {
+  const assetsDir = path.join(os.homedir(), '.wzrd-pi-dev', 'projects', 'edge-dev', 'assets')
+  const scanScript = path.join(assetsDir, 'traderra_scan.py')
+  const pythonPath = path.join(os.homedir(), 'edge.dev', '.venv', 'bin', 'python')
+  const envPath = path.join(os.homedir(), 'edge.dev', '.env')
+
+  const args = ['--spec', specName]
+  if (from) args.push('--start', from)
+  if (to) args.push('--end', to)
+
+  try {
+    const result = await execFileAsync(pythonPath, [scanScript, ...args], {
+      cwd: assetsDir,
+      env: {
+        ...process.env,
+        PYTHONPATH: `${assetsDir}/scan-engine:${path.join(os.homedir(), 'edge.dev', 'src')}`,
+        DOTENV_PATH: envPath,
+      },
+      maxBuffer: 50 * 1024 * 1024,
+      timeout: 300000,
+    })
+
+    const stdout = result.stdout.trim()
+    const jsonLine = stdout.split('\n').find(l => l.trim().startsWith('{'))
+    if (jsonLine) {
+      const parsed = JSON.parse(jsonLine)
+      return NextResponse.json({
+        signals: parsed.signals || [],
+        count: parsed.count || 0,
+        raw: stdout,
+        stderr: result.stderr,
+        language: 'python',
+        spec: specName,
+      })
+    }
+    return NextResponse.json({ signals: [], count: 0, raw: stdout, stderr: result.stderr, language: 'python', spec: specName })
+  } catch (error: any) {
+    const stderr = error.stderr || ''
+    const message = error.message || 'Unknown error'
+    const tbMatch = stderr.match(/(?:Traceback[\s\S]*?)$/m)
+    return NextResponse.json({ error: tbMatch ? tbMatch[0] : message, stderr, spec: specName }, { status: 500 })
   }
 }
 

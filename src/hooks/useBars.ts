@@ -21,7 +21,8 @@ export function useBars(
   symbol: string | null,
   timeframe: string,
   fromDate?: string,
-  toDate?: string
+  toDate?: string,
+  paused: boolean = false
 ) {
   const [bars, setBars] = useState<Bar[]>([])
   const [loading, setLoading] = useState(false)
@@ -29,7 +30,7 @@ export function useBars(
   const abortRef = useRef<AbortController | null>(null)
 
   const fetchBars = useCallback(async () => {
-    if (!symbol) {
+    if (!symbol || paused) {
       setBars([])
       return
     }
@@ -50,8 +51,6 @@ export function useBars(
       if (fromDate) params.set('from', fromDate)
       if (toDate) params.set('to', toDate)
 
-      console.log(`[useBars] fetching ${symbol} tf=${timeframe} from=${fromDate} to=${toDate} url=/api/chart-data/bars?${params}`)
-
       const resp = await fetch(`/api/chart-data/bars?${params}`, {
         signal: controller.signal,
       })
@@ -70,7 +69,7 @@ export function useBars(
     } finally {
       setLoading(false)
     }
-  }, [symbol, timeframe, fromDate, toDate])
+  }, [symbol, timeframe, fromDate, toDate, paused])
 
   useEffect(() => {
     fetchBars()

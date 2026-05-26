@@ -1,20 +1,29 @@
 /**
- * useLiveBars — wraps useBars with live polling when liveMode is on.
- * Appends/updates only new bars instead of refetching everything.
+ * useLiveBars — fetches OHLCV bars with two modes:
+ *
+ * Live mode (focusDate=null): fetches latest data, polls every 3s to append new bars.
+ * Historical mode (focusDate set): fetches data ending at focusDate, no polling,
+ *   bars are hard-trimmed to never exceed the signal date.
  */
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useBars, Bar } from './useBars'
 import { useUIStore } from '@/stores/charts/uiStore'
+
+function barToDate(bar: Bar): string {
+  if (typeof bar.time === 'string') return bar.time
+  // time is in seconds for intraday, or ms for daily — normalize
+  const d = new Date(bar.time * 1000)
+  return d.toISOString().split('T')[0]
+}
 
 export function useLiveBars(symbol: string | null, tf: string, focusDate?: string | null) {
   const liveMode = useUIStore(s => s.liveMode)
 
   // Compute from/to dates based on focusDate
   const { fromDate, toDate } = useMemo(() => {
-    console.log(`[useLiveBars] focusDate=${focusDate} tf=${tf}`)
     if (!focusDate) return { fromDate: undefined, toDate: undefined }
-    // Calculate how many days back based on timeframe
-    const daysBack: Record<string, number> = { '2': 1, '5': 2, '15': 8, '60': 22, 'D': 90 }
+    // How many calendar days back per timeframe to get enough trading days
+    const daysBack: Record<string, number> = { '2': 2, '5': 4, '15': 15, '60': 40, 'D': 120 }
     const back = daysBack[tf] || 30
     const to = new Date(focusDate + 'T12:00:00')
     const from = new Date(to.getTime() - back * 24 * 60 * 60 * 1000)
@@ -24,25 +33,36 @@ export function useLiveBars(symbol: string | null, tf: string, focusDate?: strin
     }
   }, [focusDate, tf])
 
-  const { bars: fetchedBars, loading, error } = useBars(symbol, tf, fromDate, toDate)
+  // In historical mode, pause fetching until we have bounded dates
+  const paused = !!focusDate && !toDate
+
+  const { bars: fetchedBars, loading, error } = useBars(symbol, tf, fromDate, toDate, paused)
   const [liveBars, setLiveBars] = useState<Bar[]>([])
   const barsRef = useRef<Bar[]>([])
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // When fetched bars change (new symbol/tf), reset live bars
+  // When fetched bars change, update live bars
+  // In historical mode: hard-trim any bars past focusDate
   useEffect(() => {
-    setLiveBars(fetchedBars)
-    barsRef.current = fetchedBars
-  }, [fetchedBars])
+    if (focusDate) {
+      // Historical mode: only keep bars up to and including focusDate
+      const trimmed = fetchedBars.filter(b => barToDate(b) <= focusDate)
+      setLiveBars(trimmed)
+      barsRef.current = trimmed
+    } else {
+      // Live mode: use all fetched bars
+      setLiveBars(fetchedBars)
+      barsRef.current = fetchedBars
+    }
+  }, [fetchedBars, focusDate])
 
-  // Live polling — fetch only latest bars and merge
+  // Live polling — only in live mode (no focusDate)
   useEffect(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current)
       intervalRef.current = null
     }
 
-    // No live polling when viewing historical focusDate
     if (!liveMode || !symbol || fetchedBars.length === 0 || focusDate) return
 
     intervalRef.current = setInterval(async () => {
@@ -62,10 +82,10 @@ export function useLiveBars(symbol: string | null, tf: string, focusDate?: strin
           const lastT = updated[updated.length - 1]?.time ?? 0
           for (const nb of newBars) {
             if (nb.time > lastT) {
-              updated.push(nb) // brand new bar
+              updated.push(nb)
             } else {
               const idx = updated.findIndex(b => b.time === nb.time)
-              if (idx >= 0) updated[idx] = nb // update in-progress bar
+              if (idx >= 0) updated[idx] = nb
             }
           }
           barsRef.current = updated
@@ -79,7 +99,7 @@ export function useLiveBars(symbol: string | null, tf: string, focusDate?: strin
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
-  }, [liveMode, symbol, tf, fetchedBars])
+  }, [liveMode, symbol, tf, fetchedBars, focusDate])
 
   return { bars: liveBars, loading, error }
 }

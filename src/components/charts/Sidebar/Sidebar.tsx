@@ -9,6 +9,7 @@ import { TabVault } from './tabs/TabVault'
 import { TabScan } from './tabs/TabScan'
 import { TabBt } from './tabs/TabBt'
 import { TabLab } from './tabs/TabLab'
+import { TabAgent } from './tabs/TabAgent'
 
 /**
  * Sidebar — right-side panel with watchlist, tab navigation, and tab content.
@@ -153,8 +154,8 @@ export function Sidebar() {
     })
   }, [sidebarTab])
 
-  const tabs = ['look', 'tools', 'settings', 'vault', 'scan', 'bt', 'lab'] as const
-  const tabLabels: Record<string, string> = { look: 'LOOK', tools: 'TOOLS', settings: 'SET', vault: 'VAULT', scan: 'SCAN', bt: 'BT', lab: 'LAB' }
+  const tabs = ['look', 'tools', 'settings', 'vault', 'scan', 'bt', 'lab', 'agent'] as const
+  const tabLabels: Record<string, string> = { look: 'LOOK', tools: 'TOOLS', settings: 'SET', vault: 'VAULT', scan: 'SCAN', bt: 'BT', lab: 'LAB', agent: '🤖' }
 
   return (
     <div id="sidebar" ref={sbRef} className={sidebarOpen ? 'open' : ''}>
@@ -246,6 +247,7 @@ export function Sidebar() {
         <TabScan />
         <TabBt />
         <TabLab />
+        <TabAgent />
       </div>
 
       {/* Overlay modals — still HTML for charts-engine.js interop */}

@@ -51,23 +51,53 @@ export function TabScan() {
   // Reload on mount
   useEffect(() => { setScans(loadScans()) }, [])
 
-  // Listen for new scans from Renata agent
+  // Handle incoming scan — from local agent chat OR from server push
+  const receiveScan = useCallback((scan: ScanDef) => {
+    // Save to localStorage
+    const existing = loadScans()
+    const updated = [...existing, scan]
+    saveScans(updated)
+    setScans(updated)
+    setActiveScan(scan)
+    setResults(scan.results || [])
+    setStatus(`✅ ${scan.results?.length || 0} signals from ${scan.name}`)
+    // Switch to WL view + SCAN tab so user sees results
+    const ui = useUIStore.getState()
+    ui.setAgentChatOpen(false)
+    ui.setSidebarTab('scan')
+  }, [])
+
+  // Listen for new scans from local agent chat
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail as ScanDef
-      const refreshed = loadScans()
-      setScans(refreshed)
-      setActiveScan(detail)
-      setResults(detail.results || [])
-      setStatus(`✅ ${detail.results?.length || 0} signals from ${detail.name}`)
-      // Switch to WL view + SCAN tab so user sees results
-      const ui = useUIStore.getState()
-      ui.setAgentChatOpen(false)
-      ui.setSidebarTab('scan')
+      receiveScan(detail)
     }
     window.addEventListener('traderra-scans-update', handler)
     return () => window.removeEventListener('traderra-scans-update', handler)
-  }, [])
+  }, [receiveScan])
+
+  // SSE stream — listen for pushed scans from Renata (pi agent)
+  useEffect(() => {
+    const es = new EventSource('/api/scans/stream')
+    es.addEventListener('scan', (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        const scanDef: ScanDef = {
+          id: data.id || 'push-' + Date.now(),
+          name: data.name || 'Pushed Scan',
+          type: 'code',
+          results: data.results || [],
+          createdAt: data.createdAt || Date.now(),
+        }
+        receiveScan(scanDef)
+      } catch (err) {
+        console.error('SSE scan parse error:', err)
+      }
+    })
+    es.onerror = () => es.close()
+    return () => es.close()
+  }, [receiveScan])
 
   // CSV parsing
   const parseCSV = useCallback((text: string): ScanResult[] => {

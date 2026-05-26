@@ -11,7 +11,6 @@ import { useUIStore } from '@/stores/charts/uiStore'
 
 function barToDate(bar: Bar): string {
   if (typeof bar.time === 'string') return bar.time
-  // time is in seconds for intraday, or ms for daily — normalize
   const d = new Date(bar.time * 1000)
   return d.toISOString().split('T')[0]
 }
@@ -22,7 +21,6 @@ export function useLiveBars(symbol: string | null, tf: string, focusDate?: strin
   // Compute from/to dates based on focusDate
   const { fromDate, toDate } = useMemo(() => {
     if (!focusDate) return { fromDate: undefined, toDate: undefined }
-    // How many calendar days back per timeframe to get enough trading days
     const daysBack: Record<string, number> = { '2': 2, '5': 4, '15': 15, '60': 40, 'D': 120 }
     const back = daysBack[tf] || 30
     const to = new Date(focusDate + 'T12:00:00')
@@ -33,34 +31,35 @@ export function useLiveBars(symbol: string | null, tf: string, focusDate?: strin
     }
   }, [focusDate, tf])
 
-  // In historical mode, pause fetching until we have bounded dates
   const paused = !!focusDate && !toDate
 
   const { bars: fetchedBars, loading, error } = useBars(symbol, tf, fromDate, toDate, paused)
   const [liveBars, setLiveBars] = useState<Bar[]>([])
   const barsRef = useRef<Bar[]>([])
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const barsOwnerRef = useRef<{ sym: string | null; fd: string | null }>({ sym: null, fd: null })
 
-  // Clear bars immediately when symbol or focusDate changes (don't show stale data)
+  // When symbol or focusDate changes, clear bars and update ownership
   useEffect(() => {
+    barsOwnerRef.current = { sym: symbol, fd: focusDate ?? null }
     setLiveBars([])
     barsRef.current = []
   }, [symbol, focusDate])
 
-  // When fetched bars change, update live bars
-  // In historical mode: hard-trim any bars past focusDate
+  // When fetched bars arrive, only apply if they match current symbol+focusDate
   useEffect(() => {
-    if (focusDate) {
-      // Historical mode: only keep bars up to and including focusDate
-      const trimmed = fetchedBars.filter(b => barToDate(b) <= focusDate)
+    const owner = barsOwnerRef.current
+    if (fetchedBars.length > 0 && owner.sym !== symbol) return
+
+    if (owner.fd) {
+      const trimmed = fetchedBars.filter(b => barToDate(b) <= owner.fd!)
       setLiveBars(trimmed)
       barsRef.current = trimmed
     } else {
-      // Live mode: use all fetched bars
       setLiveBars(fetchedBars)
       barsRef.current = fetchedBars
     }
-  }, [fetchedBars, focusDate])
+  }, [fetchedBars, symbol])
 
   // Live polling — only in live mode (no focusDate)
   useEffect(() => {

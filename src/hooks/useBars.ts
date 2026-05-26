@@ -35,6 +35,9 @@ export function useBars(
       return
     }
 
+    // Clear stale data immediately on new fetch
+    setBars([])
+
     // Cancel previous request
     abortRef.current?.abort()
     const controller = new AbortController()

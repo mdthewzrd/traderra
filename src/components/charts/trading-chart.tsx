@@ -131,6 +131,9 @@ const TradingChartComponent = function TradingChart({ symbol, trade, className, 
   const focusDate = useChartStore((s) => s.focusDate)
   console.log(`🎯 TradingChart component rendered for ${symbol}`, { trade: trade ? 'YES' : 'NO', timeframe, focusDate })
 
+  // Read focusDate directly from store inside loadChartData to avoid stale closures
+  const getFocusDate = () => useChartStore.getState().focusDate
+
   const [candlestickData, setCandlestickData] = useState<CandlestickData>({
     x: [],
     open: [],
@@ -430,12 +433,13 @@ const TradingChartComponent = function TradingChart({ symbol, trade, className, 
         console.log(`   Exit Eastern: ${trade.exitTime} (${exitDateStr})`)
         console.log(`   Date range: ${fromDate} to ${toDate}`)
       } else {
-        // Default based on timeframe configuration
-        const { from, to } = getTradingDateRange(config.daysBefore, focusDate)
+        // Default based on timeframe configuration — read focusDate from store to avoid stale closure
+        const currentDate = getFocusDate()
+        const { from, to } = getTradingDateRange(config.daysBefore, currentDate)
         fromDate = from
         toDate = to
 
-        console.log(`📊 Loading default ${timeframe} chart data from ${fromDate} to ${toDate}`)
+        console.log(`📊 Loading default ${timeframe} chart data from ${fromDate} to ${toDate} (focusDate: ${currentDate})`)
       }
 
       // Always try to fetch data with timeout for poor connectivity

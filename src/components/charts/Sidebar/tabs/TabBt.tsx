@@ -147,7 +147,8 @@ export function TabBt() {
   const avgLoss = losses > 0 ? (btResults.filter(r => !r.win).reduce((s, r) => s + r.pnl, 0) / losses).toFixed(0) : '-'
 
   return (
-    <div id="tab-bt" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div id="tab-bt">
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ padding: '8px 12px', borderBottom: '1px solid #111620', display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', letterSpacing: 1 }}>⏱ BT — SAVED SCANS</span>
         <label style={{ marginLeft: 'auto', background: 'none', border: '1px solid #f59e0b', color: '#f59e0b', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3, cursor: 'pointer' }}>
@@ -257,6 +258,7 @@ export function TabBt() {
           </div>
         )}
       </div>
+    </div>
     </div>
   )
 }

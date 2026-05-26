@@ -138,7 +138,8 @@ export function TabLab() {
   const entries = phase?.entries || []
 
   return (
-    <div id="tab-lab" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div id="tab-lab" >
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ padding: '8px 12px', borderBottom: '1px solid #1e2840', display: 'flex', alignItems: 'center', gap: 6 }}>
         <button onClick={() => setActiveProject(null)} style={{ background: 'none', border: 'none', color: '#4a6080', fontSize: 14, cursor: 'pointer' }}>←</button>
         <span style={{ fontSize: 12, fontWeight: 800, color: '#c084fc', flex: 1 }}>{activeProject.name}</span>
@@ -189,6 +190,7 @@ export function TabLab() {
         />
         <button onClick={addNote} style={{ background: '#c084fc', color: '#000', border: 'none', fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 3, cursor: 'pointer' }}>+</button>
       </div>
+    </div>
     </div>
   )
 }

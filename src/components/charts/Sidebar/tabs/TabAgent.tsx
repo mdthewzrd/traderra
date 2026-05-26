@@ -200,7 +200,8 @@ export function TabAgent() {
   }
 
   return (
-    <div id="tab-agent" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div id="tab-agent">
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', padding: '8px 10px', borderBottom: '1px solid #111620' }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: '#a855f7', letterSpacing: 1 }}>🤖 RENATA</span>
@@ -311,6 +312,7 @@ export function TabAgent() {
           </button>
         </div>
       </div>
+    </div>
     </div>
   )
 }

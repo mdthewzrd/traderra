@@ -256,7 +256,7 @@ export function TabScan() {
   }, [scans, activeScan])
 
   const handleResultClick = useCallback((r: ScanResult) => {
-    console.log(`[SCAN CLICK] symbol=${r.symbol} date=${r.date} focusDate=`, useChartStore.getState().focusDate)
+    console.log(`[SCAN CLICK] symbol=${r.symbol} date=${r.date}`)
     if (r.symbol) {
       setChartSymbol(r.symbol)
       ;(window as any).symbol = r.symbol
@@ -264,6 +264,8 @@ export function TabScan() {
       if (r.date) {
         setFocusDate(r.date)
         console.log(`[SCAN CLICK] setFocusDate to ${r.date}`)
+      } else {
+        setFocusDate(null) // Clear focusDate for live mode
       }
     }
   }, [setChartSymbol, setFocusDate])

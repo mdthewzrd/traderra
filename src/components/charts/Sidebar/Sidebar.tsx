@@ -132,6 +132,7 @@ export function Sidebar() {
   const wlCreateList = useWatchlistStore((s) => s.createList)
   const wlRemoveSymbol = useWatchlistStore((s) => s.removeSymbol)
   const setChartSymbol = useChartStore((s) => s.setSymbol)
+  const setFocusDate = useChartStore((s) => s.setFocusDate)
   const sbRef = useRef<HTMLDivElement>(null)
 
   // Sync open/close + bridge sbOpen/sbClose
@@ -206,6 +207,7 @@ export function Sidebar() {
                 className={`wl-row${(window as any).symbol === sym ? ' active' : ''}`}
                 onClick={() => {
                   setChartSymbol(sym)
+                  setFocusDate(null) // Clear historical mode — back to live
                   ;(window as any).symbol = sym
                   ;(window as any).loadChart?.(sym)
                 }}

@@ -50,6 +50,8 @@ export function useBars(
       if (fromDate) params.set('from', fromDate)
       if (toDate) params.set('to', toDate)
 
+      console.log(`[useBars] fetching ${symbol} tf=${timeframe} from=${fromDate} to=${toDate} url=/api/chart-data/bars?${params}`)
+
       const resp = await fetch(`/api/chart-data/bars?${params}`, {
         signal: controller.signal,
       })

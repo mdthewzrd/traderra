@@ -11,6 +11,7 @@ export function useLiveBars(symbol: string | null, tf: string, focusDate?: strin
 
   // Compute from/to dates based on focusDate
   const { fromDate, toDate } = useMemo(() => {
+    console.log(`[useLiveBars] focusDate=${focusDate} tf=${tf}`)
     if (!focusDate) return { fromDate: undefined, toDate: undefined }
     // Calculate how many days back based on timeframe
     const daysBack: Record<string, number> = { '2': 1, '5': 2, '15': 8, '60': 22, 'D': 90 }

@@ -162,15 +162,13 @@ export function Sidebar() {
   return (
     <div id="sidebar" ref={sbRef} className={sidebarOpen ? 'open' : ''}>
       {/* WL / RENATA toggle tabs at top */}
-      <div style={{ display: 'flex', borderBottom: '1px solid #111620', flexShrink: 0 }}>
+      <div style={{ display: 'flex', background: '#0a0c12', borderBottom: '1px solid #222840', flexShrink: 0 }}>
         <div
-          className={`sb-tab${!agentChatOpen ? ' active' : ''}`}
-          style={{ padding: '4px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer', border: !agentChatOpen ? 'none' : 'none', borderBottom: !agentChatOpen ? '2px solid #6878a8' : '2px solid transparent', color: !agentChatOpen ? '#dde3f0' : '#4a6080' }}
+          style={{ padding: '6px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer', borderBottom: !agentChatOpen ? '2px solid #6878a8' : '2px solid transparent', color: !agentChatOpen ? '#dde3f0' : '#4a6080', background: !agentChatOpen ? '#141926' : 'transparent' }}
           onClick={() => setAgentChatOpen(false)}
         >📋 WL</div>
         <div
-          className={`sb-tab${agentChatOpen ? ' active' : ''}`}
-          style={{ padding: '4px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer', borderBottom: agentChatOpen ? '2px solid #a855f7' : '2px solid transparent', color: agentChatOpen ? '#a855f7' : '#4a6080' }}
+          style={{ padding: '6px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer', borderBottom: agentChatOpen ? '2px solid #a855f7' : '2px solid transparent', color: agentChatOpen ? '#a855f7' : '#4a6080', background: agentChatOpen ? '#1a1030' : 'transparent' }}
           onClick={() => setAgentChatOpen(true)}
         >🤖 RENATA</div>
         <div style={{ flex: 1 }} />

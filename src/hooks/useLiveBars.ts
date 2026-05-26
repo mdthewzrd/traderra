@@ -2,13 +2,28 @@
  * useLiveBars — wraps useBars with live polling when liveMode is on.
  * Appends/updates only new bars instead of refetching everything.
  */
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useBars, Bar } from './useBars'
 import { useUIStore } from '@/stores/charts/uiStore'
 
-export function useLiveBars(symbol: string | null, tf: string) {
+export function useLiveBars(symbol: string | null, tf: string, focusDate?: string | null) {
   const liveMode = useUIStore(s => s.liveMode)
-  const { bars: fetchedBars, loading, error } = useBars(symbol, tf)
+
+  // Compute from/to dates based on focusDate
+  const { fromDate, toDate } = useMemo(() => {
+    if (!focusDate) return { fromDate: undefined, toDate: undefined }
+    // Calculate how many days back based on timeframe
+    const daysBack: Record<string, number> = { '2': 1, '5': 2, '15': 8, '60': 22, 'D': 90 }
+    const back = daysBack[tf] || 30
+    const to = new Date(focusDate + 'T12:00:00')
+    const from = new Date(to.getTime() - back * 24 * 60 * 60 * 1000)
+    return {
+      fromDate: from.toISOString().split('T')[0],
+      toDate: focusDate,
+    }
+  }, [focusDate, tf])
+
+  const { bars: fetchedBars, loading, error } = useBars(symbol, tf, fromDate, toDate)
   const [liveBars, setLiveBars] = useState<Bar[]>([])
   const barsRef = useRef<Bar[]>([])
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)

@@ -77,7 +77,8 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
   const drawingDragRef = useRef<{ startX: number; startTime: number; startPrice: number } | null>(null)
 
   // Fetch bars (with live polling when liveMode is on)
-  const { bars, loading } = useLiveBars(symbol, tf)
+  const focusDate = useChartStore(s => s.focusDate)
+  const { bars, loading } = useLiveBars(symbol, tf, focusDate)
 
   // Canvas screenshot utility
   const screenshot = useCallback(() => {

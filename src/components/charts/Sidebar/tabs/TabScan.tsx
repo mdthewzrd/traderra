@@ -77,27 +77,67 @@ export function TabScan() {
     return () => window.removeEventListener('traderra-scans-update', handler)
   }, [receiveScan])
 
-  // SSE stream — listen for pushed scans from Renata (pi agent)
+  // Poll server DB for new scans pushed by Renata (pi agent)
+  // Also loads on mount to sync localStorage with DB
   useEffect(() => {
-    const es = new EventSource('/api/scans/stream')
-    es.addEventListener('scan', (e) => {
+    let lastCount = 0
+    let interval: ReturnType<typeof setInterval>
+
+    const fetchDBScans = async () => {
       try {
-        const data = JSON.parse(e.data)
-        const scanDef: ScanDef = {
-          id: data.id || 'push-' + Date.now(),
-          name: data.name || 'Pushed Scan',
-          type: 'code',
-          results: data.results || [],
-          createdAt: data.createdAt || Date.now(),
+        const res = await fetch('/api/scans')
+        if (!res.ok) return
+        const data = await res.json()
+        const dbScans: any[] = data.scans || []
+        if (dbScans.length <= lastCount && lastCount > 0) return
+        lastCount = dbScans.length
+
+        // Get existing localStorage scan IDs
+        const local = loadScans()
+        const localIds = new Set(local.map(s => s.id))
+
+        // Find new DB scans not yet in localStorage
+        const newScans: ScanDef[] = []
+        for (const dbs of dbScans) {
+          if (localIds.has(dbs.id)) continue
+          // Fetch full results for this scan
+          const detailRes = await fetch(`/api/scans/${dbs.id}`)
+          if (!detailRes.ok) continue
+          const detail = await detailRes.json()
+          const scanDef: ScanDef = {
+            id: dbs.id,
+            name: dbs.name || 'DB Scan',
+            type: (dbs.type as any) || 'code',
+            results: Array.isArray(detail.results) ? detail.results : [],
+            createdAt: new Date(dbs.createdAt).getTime(),
+          }
+          newScans.push(scanDef)
         }
-        receiveScan(scanDef)
+
+        if (newScans.length > 0) {
+          // Merge into localStorage
+          const updated = [...local, ...newScans]
+          saveScans(updated)
+          setScans(updated)
+          // Auto-load the latest (last in array = newest)
+          const latest = newScans[newScans.length - 1]
+          setActiveScan(latest)
+          setResults(latest.results || [])
+          setStatus(`✅ ${latest.results?.length || 0} signals from ${latest.name}`)
+          // Switch to WL view + SCAN tab
+          const ui = useUIStore.getState()
+          ui.setAgentChatOpen(false)
+          ui.setSidebarTab('scan')
+        }
       } catch (err) {
-        console.error('SSE scan parse error:', err)
+        // Silent fail — polling will retry
       }
-    })
-    es.onerror = () => es.close()
-    return () => es.close()
-  }, [receiveScan])
+    }
+
+    fetchDBScans()
+    interval = setInterval(fetchDBScans, 5000) // poll every 5s
+    return () => clearInterval(interval)
+  }, [])
 
   // CSV parsing
   const parseCSV = useCallback((text: string): ScanResult[] => {

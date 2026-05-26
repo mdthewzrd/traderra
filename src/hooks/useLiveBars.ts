@@ -41,6 +41,12 @@ export function useLiveBars(symbol: string | null, tf: string, focusDate?: strin
   const barsRef = useRef<Bar[]>([])
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // Clear bars immediately when symbol or focusDate changes (don't show stale data)
+  useEffect(() => {
+    setLiveBars([])
+    barsRef.current = []
+  }, [symbol, focusDate])
+
   // When fetched bars change, update live bars
   // In historical mode: hard-trim any bars past focusDate
   useEffect(() => {

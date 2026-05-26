@@ -491,7 +491,7 @@ body.light #modal-actions{border-top-color:#ddd!important;}
 
 /* ── SETTINGS PANEL ── */
 /* Unified right sidebar */
-#sidebar{position:fixed;top:36px;right:0;bottom:0;width:340px;background:#10131a;border-left:2px solid #222840;display:none;flex-direction:column;z-index:500;overflow:hidden;}
+#sidebar{position:fixed;top:38px;right:0;bottom:0;width:340px;background:#10131a;border-left:2px solid #222840;display:none;flex-direction:column;z-index:500;overflow:hidden;}
 #sidebar.open{display:flex;}
 body.light #sidebar{background:#eae9e5!important;border-left-color:#ccc!important;}
 /* Watchlist */

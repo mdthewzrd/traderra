@@ -41,14 +41,29 @@ function saveHistory(msgs: ChatMessage[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(msgs.slice(-100)))
 }
 
+interface SpecInfo {
+  id: string
+  name: string
+  spec: string
+  yaml: string
+}
+
 export function TabAgent({ embedded }: { embedded?: boolean }) {
   const [messages, setMessages] = useState<ChatMessage[]>(loadHistory)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [mode, setMode] = useState<'chat' | 'scan'>('chat')
+  const [availableSpecs, setAvailableSpecs] = useState<SpecInfo[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const setChartSymbol = useChartStore(s => s.setSymbol)
+
+  // Fetch available specs from server
+  useEffect(() => {
+    fetch('/api/scans/specs').then(r => r.json()).then(data => {
+      if (data.specs) setAvailableSpecs(data.specs)
+    }).catch(() => {})
+  }, [])
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -264,12 +279,14 @@ export function TabAgent({ embedded }: { embedded?: boolean }) {
     }
   }, [input, loading, addMessage, runSpecScan])
 
-  // Quick actions — run scans directly
-  const quickActions = [
-    { label: '📈 Gap Up', specKey: 'gap-up' },
-    { label: '📉 Backside B', specKey: 'backside-b' },
-    { label: '🚩 HTF', specKey: 'htf' },
-  ]
+  // Quick actions — run specs from DB, fallback to hardcoded
+  const quickActions = availableSpecs.length > 0
+    ? availableSpecs.map(s => ({ label: `📡 ${s.name}`, specKey: s.spec }))
+    : [
+        { label: '📈 Gap Up', specKey: 'gap-up' },
+        { label: '📉 Backside B', specKey: 'backside-b' },
+        { label: '🚩 HTF', specKey: 'htf' },
+      ]
 
   const handleQuickAction = useCallback((action: { label: string; specKey: string }) => {
     const today = new Date()

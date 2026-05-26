@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useCallback, memo } from 'react'
 import dynamic from 'next/dynamic'
 import { cn } from '@/lib/utils'
 import { isWeekend, subDays, format, addHours } from 'date-fns'
+import { useChartStore } from '@/stores/charts/chartStore'
 
 // Dynamically import Plotly to avoid SSR issues
 const Plot = dynamic(() => import('react-plotly.js'), {
@@ -98,8 +99,8 @@ const getLastTradingDay = (fromDate: Date): Date => {
 }
 
 // Helper function to get trading days for date range
-const getTradingDateRange = (daysBack: number): { from: string, to: string } => {
-  let endDate = getLastTradingDay(new Date())
+const getTradingDateRange = (daysBack: number, centerDate?: string | null): { from: string, to: string } => {
+  let endDate = centerDate ? getLastTradingDay(new Date(centerDate + 'T12:00:00')) : getLastTradingDay(new Date())
   let startDate = new Date(endDate)
   let tradingDaysFound = 0
 
@@ -127,7 +128,8 @@ interface TradeArrow {
 }
 
 const TradingChartComponent = function TradingChart({ symbol, trade, className, height = 800, timeframe = '15m' }: TradingChartProps) {
-  console.log(`🎯 TradingChart component rendered for ${symbol}`, { trade: trade ? 'YES' : 'NO', timeframe })
+  const focusDate = useChartStore((s) => s.focusDate)
+  console.log(`🎯 TradingChart component rendered for ${symbol}`, { trade: trade ? 'YES' : 'NO', timeframe, focusDate })
 
   const [candlestickData, setCandlestickData] = useState<CandlestickData>({
     x: [],
@@ -429,7 +431,7 @@ const TradingChartComponent = function TradingChart({ symbol, trade, className, 
         console.log(`   Date range: ${fromDate} to ${toDate}`)
       } else {
         // Default based on timeframe configuration
-        const { from, to } = getTradingDateRange(config.daysBefore)
+        const { from, to } = getTradingDateRange(config.daysBefore, focusDate)
         fromDate = from
         toDate = to
 
@@ -475,7 +477,7 @@ const TradingChartComponent = function TradingChart({ symbol, trade, className, 
     if (symbol) {
       loadChartData()
     }
-  }, [symbol, trade, timeframe])
+  }, [symbol, trade, timeframe, focusDate])
 
   if (error) {
     return (

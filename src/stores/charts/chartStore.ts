@@ -20,6 +20,11 @@ interface ChartState {
   symbol: string
   setSymbol: (s: string) => void
 
+  // Focus date — when set, chart navigates to this date (YYYY-MM-DD)
+  focusDate: string | null
+  setFocusDate: (d: string | null) => void
+  clearFocusDate: () => void
+
   // Panels (4 by default: 5min, 15min, 60min, Daily)
   panels: Panel[]
   setPanels: (p: Panel[]) => void
@@ -46,6 +51,10 @@ const BAR_CACHE_TTL = 120000
 export const useChartStore = create<ChartState>((set, get) => ({
   symbol: 'AAPL',
   setSymbol: (s) => set({ symbol: s.toUpperCase() }),
+
+  focusDate: null,
+  setFocusDate: (d) => set({ focusDate: d }),
+  clearFocusDate: () => set({ focusDate: null }),
 
   panels: [
     { tf: '5', bars: [], tools: [], inds: {} },

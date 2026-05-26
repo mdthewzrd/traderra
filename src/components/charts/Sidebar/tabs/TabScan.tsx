@@ -57,6 +57,7 @@ export function TabScan() {
   const fileRef = useRef<HTMLInputElement>(null)
   const dropRef = useRef<HTMLDivElement>(null)
   const setChartSymbol = useChartStore(s => s.setSymbol)
+  const setFocusDate = useChartStore(s => s.setFocusDate)
 
   // Reload on mount
   useEffect(() => { setScans(loadScans()) }, [])
@@ -259,8 +260,12 @@ export function TabScan() {
       setChartSymbol(r.symbol)
       ;(window as any).symbol = r.symbol
       ;(window as any).loadChart?.(r.symbol)
+      // Navigate chart to the signal's date
+      if (r.date) {
+        setFocusDate(r.date)
+      }
     }
-  }, [setChartSymbol])
+  }, [setChartSymbol, setFocusDate])
 
   // Date presets
   const setDatePreset = useCallback((days: number) => {
@@ -413,13 +418,16 @@ export function TabScan() {
           <div id="scan-watchlist" style={{ marginTop: 8 }}>
             <div style={{ fontSize: 10, color: '#4a6080', fontWeight: 700, marginBottom: 4 }}>QUICK LOAD</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {[...new Set(results.map(r => r.symbol))].slice(0, 30).map(sym => (
+              {[...new Set(results.map(r => r.symbol))].slice(0, 30).map(sym => {
+                const latestResult = results.find(r => r.symbol === sym)
+                return (
                 <button key={sym} className="scan-item" style={{
                   background: '#1a1e2a', border: '1px solid #2a3050', color: '#dde3f0',
                   fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3, cursor: 'pointer',
                   transition: 'transform .1s',
-                }} onClick={() => handleResultClick({ symbol: sym } as ScanResult)}>{sym}</button>
-              ))}
+                }} onClick={() => handleResultClick({ symbol: sym, date: latestResult?.date || '' } as ScanResult)}>{sym}</button>
+                )
+              })}
             </div>
           </div>
         )}

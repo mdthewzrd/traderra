@@ -57,6 +57,7 @@ export function TabAgent({ embedded }: { embedded?: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const setChartSymbol = useChartStore(s => s.setSymbol)
+  const setFocusDate = useChartStore(s => s.setFocusDate)
 
   // Fetch available specs from server
   useEffect(() => {
@@ -384,6 +385,7 @@ export function TabAgent({ embedded }: { embedded?: boolean }) {
                     setChartSymbol(s.symbol)
                     ;(window as any).symbol = s.symbol
                     ;(window as any).loadChart?.(s.symbol)
+                    if (s.date) setFocusDate(s.date)
                   }} style={{
                     background: '#1a1e2a', border: '1px solid #2a3050', color: '#4ade80',
                     fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3, cursor: 'pointer',

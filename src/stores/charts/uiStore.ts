@@ -58,6 +58,10 @@ interface UIState {
   setSidebarOpen: (v: boolean) => void
   setSidebarTab: (v: string) => void
 
+  // Agent chat panel (sits in watchlist area, independent of tabs)
+  agentChatOpen: boolean
+  setAgentChatOpen: (v: boolean) => void
+
   // Chart style
   chartStyle: string
   setChartStyle: (v: string) => void
@@ -141,6 +145,9 @@ export const useUIStore = create<UIState>((set) => ({
   sidebarTab: 'vault',
   setSidebarOpen: (v) => set({ sidebarOpen: v }),
   setSidebarTab: (v) => set({ sidebarTab: v, sidebarOpen: true }),
+
+  agentChatOpen: false,
+  setAgentChatOpen: (v) => set({ agentChatOpen: v }),
 
   chartStyle: 'candles',
   setChartStyle: (v) => set({ chartStyle: v }),

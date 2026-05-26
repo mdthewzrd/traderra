@@ -120,6 +120,8 @@ export function Sidebar() {
   const sidebarTab = useUIStore((s) => s.sidebarTab)
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen)
   const setSidebarTab = useUIStore((s) => s.setSidebarTab)
+  const agentChatOpen = useUIStore((s) => s.agentChatOpen)
+  const setAgentChatOpen = useUIStore((s) => s.setAgentChatOpen)
 
   const wlLists = useWatchlistStore((s) => s.lists)
   const wlActiveIdx = useWatchlistStore((s) => s.activeIdx)
@@ -154,11 +156,24 @@ export function Sidebar() {
     })
   }, [sidebarTab])
 
-  const tabs = ['look', 'tools', 'settings', 'vault', 'scan', 'bt', 'lab', 'agent'] as const
-  const tabLabels: Record<string, string> = { look: 'LOOK', tools: 'TOOLS', settings: 'SET', vault: 'VAULT', scan: 'SCAN', bt: 'BT', lab: 'LAB', agent: '🤖' }
+  const tabs = ['look', 'tools', 'settings', 'vault', 'scan', 'bt', 'lab'] as const
+  const tabLabels: Record<string, string> = { look: 'LOOK', tools: 'TOOLS', settings: 'SET', vault: 'VAULT', scan: 'SCAN', bt: 'BT', lab: 'LAB' }
 
   return (
     <div id="sidebar" ref={sbRef} className={sidebarOpen ? 'open' : ''}>
+      {/* Agent Chat Panel — toggleable, sits above tabs */}
+      {agentChatOpen && (
+        <div style={{ display: 'flex', flexDirection: 'column', borderBottom: '1px solid #111620', maxHeight: '45%', minHeight: 180, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', padding: '4px 10px', borderBottom: '1px solid #111620' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#a855f7', letterSpacing: 1 }}>🤖 RENATA</span>
+            <span style={{ marginLeft: 'auto', fontSize: 10, color: '#4a6080', cursor: 'pointer' }} onClick={() => setAgentChatOpen(false)}>✕</span>
+          </div>
+          <div style={{ flex: 1, overflow: 'hidden' }}>
+            <TabAgent embedded />
+          </div>
+        </div>
+      )}
+
       {/* Watchlist */}
       <div id="wl-section">
         <div id="wl-head" onClick={() => document.getElementById('wl-section')?.classList.toggle('collapsed')}>
@@ -247,7 +262,6 @@ export function Sidebar() {
         <TabScan />
         <TabBt />
         <TabLab />
-        <TabAgent />
       </div>
 
       {/* Overlay modals — still HTML for charts-engine.js interop */}

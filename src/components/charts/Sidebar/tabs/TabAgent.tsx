@@ -41,7 +41,7 @@ function saveHistory(msgs: ChatMessage[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(msgs.slice(-100)))
 }
 
-export function TabAgent() {
+export function TabAgent({ embedded }: { embedded?: boolean }) {
   const [messages, setMessages] = useState<ChatMessage[]>(loadHistory)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -202,7 +202,8 @@ export function TabAgent() {
   return (
     <div id="tab-agent">
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Header */}
+      {/* Header — hidden when embedded (sidebar provides its own) */}
+      {!embedded && (
       <div style={{ display: 'flex', alignItems: 'center', padding: '8px 10px', borderBottom: '1px solid #111620' }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: '#a855f7', letterSpacing: 1 }}>🤖 RENATA</span>
         <span style={{ marginLeft: 8, fontSize: 10, color: loading ? '#fbbf24' : '#4a6080' }}>
@@ -213,6 +214,7 @@ export function TabAgent() {
           🗑
         </span>
       </div>
+      )}
 
       {/* Quick actions */}
       {messages.length === 0 && (

@@ -42,7 +42,8 @@ export function useLiveBars(symbol: string | null, tf: string, focusDate?: strin
       intervalRef.current = null
     }
 
-    if (!liveMode || !symbol || fetchedBars.length === 0) return
+    // No live polling when viewing historical focusDate
+    if (!liveMode || !symbol || fetchedBars.length === 0 || focusDate) return
 
     intervalRef.current = setInterval(async () => {
       try {

@@ -127,7 +127,7 @@ export function TopBar() {
         ))}
         <button className="tbtn" id="bt-btn" style={{ borderColor: '#f59e0b', color: '#f59e0b' }} onClick={() => setSidebarTab('bt')}>⏱ BT</button>
         <button className="tbtn" id="scan-btn" style={{ borderColor: '#4ade80', color: '#4ade80' }} onClick={() => setSidebarTab('scan')}>📡 SCAN</button>
-        <button className="tbtn" id="agent-btn" style={{ borderColor: '#a855f7', color: '#a855f7' }} onClick={() => useUIStore.getState().setAgentChatOpen(!useUIStore.getState().agentChatOpen)}>🤖</button>
+        <button className="tbtn" id="agent-btn" style={{ borderColor: '#a855f7', color: '#a855f7' }} onClick={() => useUIStore.getState().setAgentChatOpen(!useUIStore.getState().agentChatOpen)}>🤖 RENATA</button>
         <button className="tbtn" id="vault-btn" style={{ borderColor: '#a78bfa', color: '#a78bfa' }} onClick={() => setSidebarTab('vault')}>📦 VAULT</button>
         <button className="tbtn" id="settings-btn" style={{ borderColor: '#D4AF37', color: '#D4AF37' }} onClick={() => setSidebarTab('look')}>⚙ LOOK</button>
         <button className="tbtn" id="tools-btn" style={{ borderColor: '#D4AF37', color: '#D4AF37' }} onClick={() => setSidebarTab('tools')}>🔧 TOOLS</button>

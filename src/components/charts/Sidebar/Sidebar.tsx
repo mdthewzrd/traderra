@@ -161,20 +161,23 @@ export function Sidebar() {
 
   return (
     <div id="sidebar" ref={sbRef} className={sidebarOpen ? 'open' : ''}>
-      {/* Agent Chat Panel — toggleable, sits above tabs */}
-      {agentChatOpen && (
-        <div style={{ display: 'flex', flexDirection: 'column', borderBottom: '1px solid #111620', maxHeight: '45%', minHeight: 180, flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', padding: '4px 10px', borderBottom: '1px solid #111620' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#a855f7', letterSpacing: 1 }}>🤖 RENATA</span>
-            <span style={{ marginLeft: 'auto', fontSize: 10, color: '#4a6080', cursor: 'pointer' }} onClick={() => setAgentChatOpen(false)}>✕</span>
-          </div>
-          <div style={{ flex: 1, overflow: 'hidden' }}>
-            <TabAgent embedded />
-          </div>
-        </div>
-      )}
+      {/* WL / RENATA toggle tabs at top */}
+      <div style={{ display: 'flex', borderBottom: '1px solid #111620', flexShrink: 0 }}>
+        <div
+          className={`sb-tab${!agentChatOpen ? ' active' : ''}`}
+          style={{ padding: '4px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer', border: !agentChatOpen ? 'none' : 'none', borderBottom: !agentChatOpen ? '2px solid #6878a8' : '2px solid transparent', color: !agentChatOpen ? '#dde3f0' : '#4a6080' }}
+          onClick={() => setAgentChatOpen(false)}
+        >📋 WL</div>
+        <div
+          className={`sb-tab${agentChatOpen ? ' active' : ''}`}
+          style={{ padding: '4px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer', borderBottom: agentChatOpen ? '2px solid #a855f7' : '2px solid transparent', color: agentChatOpen ? '#a855f7' : '#4a6080' }}
+          onClick={() => setAgentChatOpen(true)}
+        >🤖 RENATA</div>
+        <div style={{ flex: 1 }} />
+      </div>
 
-      {/* Watchlist */}
+      {/* Watchlist or Renata Chat */}
+      {!agentChatOpen ? (
       <div id="wl-section">
         <div id="wl-head" onClick={() => document.getElementById('wl-section')?.classList.toggle('collapsed')}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -236,6 +239,11 @@ export function Sidebar() {
           </div>
         </div>
       </div>
+      ) : (
+      <div id="wl-section" style={{ display: 'flex', flexDirection: 'column', flex: '1 1 0', minHeight: 0, overflow: 'hidden' }}>
+        <TabAgent embedded />
+      </div>
+      )}
 
       {/* Tab Bar */}
       <div id="sidebar-tabs">

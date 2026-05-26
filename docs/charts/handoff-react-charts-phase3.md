@@ -483,7 +483,8 @@ cd /home/mdwzrd/traderra
 # Build check
 npx next build
 # Deploy
-npx vercel --prod --token $VERCEL_TOKEN --yes
+npx vercel --prod --yes
+# Or: npx vercel --prod --token $VERCEL_TOKEN --yes
 # URL: https://traderra-lime.vercel.app/charts
 ```
 

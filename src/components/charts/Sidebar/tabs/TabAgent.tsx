@@ -113,6 +113,9 @@ export function TabAgent({ embedded }: { embedded?: boolean }) {
       const updated = [...existingScans, scanDef]
       localStorage.setItem('traderra-scans', JSON.stringify(updated))
 
+      // Notify SCAN tab to refresh
+      window.dispatchEvent(new CustomEvent('traderra-scans-update', { detail: scanDef }))
+
       addMessage('agent',
         `✅ **${signals.length} signals found.** Results loaded into SCAN tab.\n\nTop results:\n${formatSignalTable(signals.slice(0, 10))}`,
         { scanId, signals }
@@ -203,6 +206,9 @@ export function TabAgent({ embedded }: { embedded?: boolean }) {
       }
       const existing = JSON.parse(localStorage.getItem('traderra-scans') || '[]')
       localStorage.setItem('traderra-scans', JSON.stringify([...existing, scanDef]))
+
+      // Notify SCAN tab to refresh
+      window.dispatchEvent(new CustomEvent('traderra-scans-update', { detail: scanDef }))
 
       addMessage('agent',
         `✅ **${signals.length} signals** from **${info.name}**. Loaded into SCAN tab.\n\n${formatSignalTable(signals.slice(0, 15))}`,

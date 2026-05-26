@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useChartStore } from '@/stores/charts/chartStore'
+import { useUIStore } from '@/stores/charts/uiStore'
 
 /**
  * TabScan — Scan panel with CSV upload, saved scans, results table.
@@ -49,6 +50,24 @@ export function TabScan() {
 
   // Reload on mount
   useEffect(() => { setScans(loadScans()) }, [])
+
+  // Listen for new scans from Renata agent
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as ScanDef
+      const refreshed = loadScans()
+      setScans(refreshed)
+      setActiveScan(detail)
+      setResults(detail.results || [])
+      setStatus(`✅ ${detail.results?.length || 0} signals from ${detail.name}`)
+      // Switch to WL view + SCAN tab so user sees results
+      const ui = useUIStore.getState()
+      ui.setAgentChatOpen(false)
+      ui.setSidebarTab('scan')
+    }
+    window.addEventListener('traderra-scans-update', handler)
+    return () => window.removeEventListener('traderra-scans-update', handler)
+  }, [])
 
   // CSV parsing
   const parseCSV = useCallback((text: string): ScanResult[] => {

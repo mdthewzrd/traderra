@@ -125,7 +125,98 @@ export function TabAgent({ embedded }: { embedded?: boolean }) {
     }
   }, [addMessage])
 
-  // Send message to agent
+  // Available scan specs
+  const SPECS: Record<string, { name: string; spec: string; desc: string }> = {
+    'gap-up': { name: 'Gap Up Breakout', spec: 'gap-up', desc: 'Stocks gapping up > 2x ATR with volume' },
+    'gap up': { name: 'Gap Up Breakout', spec: 'gap-up', desc: 'Stocks gapping up > 2x ATR with volume' },
+    'gapup': { name: 'Gap Up Breakout', spec: 'gap-up', desc: 'Stocks gapping up > 2x ATR with volume' },
+    'backside-b': { name: 'Backside B', spec: 'backside-b', desc: 'Uptrend pullback to EMA support after gap' },
+    'backside b': { name: 'Backside B', spec: 'backside-b', desc: 'Uptrend pullback to EMA support after gap' },
+    'backside_b': { name: 'Backside B', spec: 'backside-b', desc: 'Uptrend pullback to EMA support after gap' },
+    'high-tight-flag': { name: 'High Tight Flag', spec: 'high-tight-flag', desc: 'Parabolic move consolidating in tight range' },
+    'htf': { name: 'High Tight Flag', spec: 'high-tight-flag', desc: 'Parabolic move consolidating in tight range' },
+  }
+
+  // Detect if message is a scan request and extract spec name
+  const parseScanRequest = (text: string): { specKey: string; dateFrom: string; dateTo: string } | null => {
+    const lower = text.toLowerCase()
+    
+    // Check for spec name in message
+    for (const [key, info] of Object.entries(SPECS)) {
+      if (lower.includes(key) || lower.includes(info.name.toLowerCase())) {
+        // Try to extract date range
+        const dateMatch = lower.match(/(\d{4}-\d{2}-\d{2}).*?(\d{4}-\d{2}-\d{2})/)
+        const today = new Date()
+        const threeMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 3, 1)
+        return {
+          specKey: key,
+          dateFrom: dateMatch?.[1] || threeMonthsAgo.toISOString().slice(0, 10),
+          dateTo: dateMatch?.[2] || today.toISOString().slice(0, 10),
+        }
+      }
+    }
+    
+    // Generic "run scan" without specific spec
+    if (lower.match(/run.*scan|scan.*run|run.*scan|start.*scan|execute.*scan/)) {
+      return null // no spec matched
+    }
+    
+    return null
+  }
+
+  // Run a named scan spec via the API
+  const runSpecScan = useCallback(async (specName: string, from: string, to: string) => {
+    const info = SPECS[specName]
+    if (!info) {
+      addMessage('system', `Unknown scan: ${specName}. Available: ${Object.values(SPECS).map(s => s.name).filter((v,i,a) => a.indexOf(v) === i).join(', ')}`)
+      return null
+    }
+
+    addMessage('agent', `🔍 Running **${info.name}** scan (${from} to ${to})...\n${info.desc}`)
+
+    try {
+      const res = await fetch('/api/scans/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spec: info.spec, from, to }),
+      })
+      const data = await res.json()
+
+      if (data.error) {
+        addMessage('system', `❌ Scan error:\n\`\`\`\n${data.error}\n\`\`\``)
+        return null
+      }
+
+      const signals: ScanResult[] = data.signals || []
+      if (signals.length === 0) {
+        addMessage('agent', `No signals found for **${info.name}** in this range.`)
+        return null
+      }
+
+      // Store in SCAN tab localStorage
+      const scanDef = {
+        id: 'scan-' + Date.now(),
+        name: `${info.name} ${from}→${to}`,
+        type: 'code' as const,
+        results: signals,
+        createdAt: Date.now(),
+      }
+      const existing = JSON.parse(localStorage.getItem('traderra-scans') || '[]')
+      localStorage.setItem('traderra-scans', JSON.stringify([...existing, scanDef]))
+
+      addMessage('agent',
+        `✅ **${signals.length} signals** from **${info.name}**. Loaded into SCAN tab.\n\n${formatSignalTable(signals.slice(0, 15))}`,
+        { signals }
+      )
+
+      return signals
+    } catch (err: any) {
+      addMessage('system', `❌ Scan failed: ${err.message}`)
+      return null
+    }
+  }, [addMessage])
+
+  // Send message — routes to scan engine or generic agent
   const sendMessage = useCallback(async () => {
     const text = input.trim()
     if (!text || loading) return
@@ -135,6 +226,14 @@ export function TabAgent({ embedded }: { embedded?: boolean }) {
     setLoading(true)
 
     try {
+      // Check if this is a scan request
+      const scanReq = parseScanRequest(text)
+      if (scanReq) {
+        await runSpecScan(scanReq.specKey, scanReq.dateFrom, scanReq.dateTo)
+        return
+      }
+
+      // Otherwise, send to generic agent API
       const res = await fetch('/api/agents/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -148,33 +247,32 @@ export function TabAgent({ embedded }: { embedded?: boolean }) {
       const data = await res.json()
 
       if (data.success) {
-        addMessage('agent', data.response, data.data)
-
-        // Check if agent returned scan code
-        if (data.data?.scanCode) {
-          await runScanCode(data.data.scanCode, data.data.from, data.data.to)
-        }
+        addMessage('agent', data.response || 'Got it.', data.data)
       } else {
-        addMessage('system', data.message || 'Agent request failed. Try again.')
+        addMessage('system', 'Agent not available yet. Try running a scan: "run gap up scan" or "run backside b scan"')
       }
     } catch (err: any) {
       addMessage('system', `❌ Connection error: ${err.message}`)
     } finally {
       setLoading(false)
     }
-  }, [input, loading, addMessage, runScanCode])
+  }, [input, loading, addMessage, runSpecScan])
 
-  // Quick actions
+  // Quick actions — run scans directly
   const quickActions = [
-    { label: '📈 Scan backside B', prompt: 'Run a backside B scan for the last 3 months. Use the V31 gold standard methodology.' },
-    { label: '📊 Scan gap ups', prompt: 'Run a gap up scan for today. Look for stocks gapping up > 2x ATR with volume confirmation.' },
-    { label: '🔍 Scan FBO', prompt: 'Run a fade-breakout (FBO) scan for the last month. Look for failed breakouts at significant levels.' },
-    { label: '📚 Explain setup', prompt: 'Explain the backside B setup. What are the key features, entry conditions, and how does the V31 methodology work?' },
+    { label: '📈 Gap Up', specKey: 'gap-up' },
+    { label: '📉 Backside B', specKey: 'backside-b' },
+    { label: '🚩 HTF', specKey: 'htf' },
   ]
 
-  const handleQuickAction = useCallback((prompt: string) => {
-    setInput(prompt)
-  }, [])
+  const handleQuickAction = useCallback((action: { label: string; specKey: string }) => {
+    const today = new Date()
+    const threeMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 3, 1)
+    addMessage('user', `Run ${SPECS[action.specKey]?.name || action.specKey} scan`)
+    setLoading(true)
+    runSpecScan(action.specKey, threeMonthsAgo.toISOString().slice(0, 10), today.toISOString().slice(0, 10))
+      .finally(() => setLoading(false))
+  }, [addMessage, runSpecScan])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -222,7 +320,7 @@ export function TabAgent({ embedded }: { embedded?: boolean }) {
           <div style={{ fontSize: 10, color: '#4a6080', fontWeight: 700, marginBottom: 6 }}>QUICK ACTIONS</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
             {quickActions.map((a, i) => (
-              <button key={i} onClick={() => handleQuickAction(a.prompt)} style={{
+              <button key={i} onClick={() => handleQuickAction(a)} style={{
                 background: '#1a1030', border: '1px solid #2a2040', color: '#c084fc',
                 fontSize: 10, fontWeight: 700, padding: '4px 8px', borderRadius: 3, cursor: 'pointer',
               }}>
@@ -231,8 +329,8 @@ export function TabAgent({ embedded }: { embedded?: boolean }) {
             ))}
           </div>
           <div style={{ fontSize: 10, color: '#3a4560', marginTop: 10, lineHeight: 1.5 }}>
-            Ask Renata to build scans, explain setups, or run code.
-            <br />Results load directly into the SCAN tab.
+            Click a button to run a scan, or type: "run gap up scan", "run backside b scan"
+            <br />Results load into the SCAN tab. Click any ticker to see the chart.
           </div>
         </div>
       )}

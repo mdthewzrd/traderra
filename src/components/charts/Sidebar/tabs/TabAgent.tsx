@@ -59,6 +59,13 @@ export function TabAgent({ embedded }: { embedded?: boolean }) {
   const setChartSymbol = useChartStore(s => s.setSymbol)
   const setFocusDate = useChartStore(s => s.setFocusDate)
 
+  // Advance scan signal date by 1 trading day (signal = T, trade day = T+1)
+  const toTradeDay = (dateStr: string): string => {
+    const d = new Date(dateStr + 'T12:00:00')
+    do { d.setDate(d.getDate() + 1) } while (d.getDay() === 0 || d.getDay() === 6)
+    return d.toISOString().split('T')[0]
+  }
+
   // Fetch available specs from server
   useEffect(() => {
     fetch('/api/scans/specs').then(r => r.json()).then(data => {
@@ -385,7 +392,7 @@ export function TabAgent({ embedded }: { embedded?: boolean }) {
                     setChartSymbol(s.symbol)
                     ;(window as any).symbol = s.symbol
                     ;(window as any).loadChart?.(s.symbol)
-                    if (s.date) setFocusDate(s.date)
+                    if (s.date) setFocusDate(toTradeDay(s.date))
                   }} style={{
                     background: '#1a1e2a', border: '1px solid #2a3050', color: '#4ade80',
                     fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3, cursor: 'pointer',

@@ -255,15 +255,21 @@ export function TabScan() {
     if (activeScan?.id === id) { setActiveScan(null); setResults([]) }
   }, [scans, activeScan])
 
+  // Advance scan signal date by 1 trading day (signal day = T, trade day = T+1)
+  const toTradeDay = (dateStr: string): string => {
+    const d = new Date(dateStr + 'T12:00:00')
+    do { d.setDate(d.getDate() + 1) } while (d.getDay() === 0 || d.getDay() === 6)
+    return d.toISOString().split('T')[0]
+  }
+
   const handleResultClick = useCallback((r: ScanResult) => {
-    console.log(`[SCAN CLICK] symbol=${r.symbol} date=${r.date}`)
     if (r.symbol) {
       setChartSymbol(r.symbol)
       ;(window as any).symbol = r.symbol
       ;(window as any).loadChart?.(r.symbol)
       if (r.date) {
-        setFocusDate(r.date)
-        console.log(`[SCAN CLICK] setFocusDate to ${r.date}`)
+        const tradeDay = toTradeDay(r.date)
+        setFocusDate(tradeDay)
       } else {
         setFocusDate(null) // Clear focusDate for live mode
       }

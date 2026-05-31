@@ -135,7 +135,7 @@ function barETDate(b: any): string {
 }
 
 // ─── MiniChart with zoom & drag ─────────────────────────
-function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset = 0 }: {
+function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset = 0 }: {
   symbol: string
   tf: Timeframe
   date?: string
@@ -882,12 +882,16 @@ export default function ScanDashboardPage() {
     fetch('/api/scans')
       .then(r => r.json())
       .then(data => {
-        const dbScans = (data.scans || []).filter((s: ScanDef) => s.resultCount > 0)
-        // Merge: built-ins first, then DB scans (DB overrides built-in if same name)
+        const dbScans: ScanDef[] = (data.scans || []).filter((s: ScanDef) => s.resultCount > 0)
+        // Merge: built-ins first, then DB scans. If a DB scan's strategy matches a built-in, link them.
         const dbNames = new Set(dbScans.map((s: ScanDef) => s.name?.toLowerCase()))
         const list = [...BUILTIN_SCANS.filter(b => !dbNames.has(b.name.toLowerCase())), ...dbScans]
         setScans(list)
-        if (list.length && !selectedScan) setSelectedScan(list[0].id)
+        if (list.length && !selectedScan) {
+          // Prefer the first scan with results
+          const withResults = list.find(s => s.resultCount > 0)
+          setSelectedScan(withResults ? withResults.id : list[0].id)
+        }
       })
   }, [])
 
@@ -1237,13 +1241,13 @@ export default function ScanDashboardPage() {
 
           {/* Chart(s) */}
           {chartMode === 'single' ? (
-            <MiniChart symbol={sig.ticker} tf={tf} date={sig.date} height={580} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
+            <ScanMiniChart symbol={sig.ticker} tf={tf} date={sig.date} height={580} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
           ) : (
             <div className="space-y-2">
-              <MiniChart symbol={sig.ticker} tf="D" date={sig.date} height={360} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
-              <MiniChart symbol={sig.ticker} tf="60" date={sig.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
-              <MiniChart symbol={sig.ticker} tf="15" date={sig.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
-              <MiniChart symbol={sig.ticker} tf="5" date={sig.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
+              <ScanMiniChart symbol={sig.ticker} tf="D" date={sig.date} height={360} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
+              <ScanMiniChart symbol={sig.ticker} tf="60" date={sig.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
+              <ScanMiniChart symbol={sig.ticker} tf="15" date={sig.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
+              <ScanMiniChart symbol={sig.ticker} tf="5" date={sig.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
             </div>
           )}
 

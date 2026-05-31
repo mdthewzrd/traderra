@@ -54,14 +54,36 @@ interface BacktestResults {
   winRate: number
   profitFactor: number
   sharpe: number
+  sortino: number
+  calmar: number
   maxDrawdown: number
+  maxDDDuration: number
   avgRMultiple: number
+  medianR: number
   avgWinPct: number
   avgLossPct: number
   expectancy: number
+  expectancyPct: number
   wlRatio: number
   totalPnl: number
-  dayStats: { day: string; pnl: number }[]
+  totalReturnPct: number
+  cagr: number
+  avgTradeDuration: string
+  maxConsecWins: number
+  maxConsecLosses: number
+  bestTrade: number
+  worstTrade: number
+  stdDevReturns: number
+  downsideDev: number
+  recoveryFactor: number
+  pctProfitable: number
+  grossWin: number
+  grossLoss: number
+  tradeReturns: number[]
+  cumPnlSeries: number[]
+  drawdownSeries: number[]
+  dayStats: { day: string; pnl: number; count: number }[]
+  monthlyStats: { month: string; pnl: number; count: number }[]
 }
 
 interface ChartSettings {
@@ -631,9 +653,12 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
   )
 }
 
-// ─── Backtest Stats Panel ────────────────────────────
+// ─── Backtest Stats Panel — Multi-Tab ────────────────
+type StatsTab = 'overview' | 'performance' | 'pnl' | 'robustness'
+
 function BacktestStatsPanel({ signals, backtestResults }: { signals: Signal[]; backtestResults: BacktestResults | null }) {
-  // Signal stats (always visible)
+  const [activeTab, setActiveTab] = useState<StatsTab>('overview')
+
   const sigStats = useMemo(() => {
     if (!signals.length) return null
     const gaps = signals.map(s => s.gap_pct || 0)
@@ -645,15 +670,28 @@ function BacktestStatsPanel({ signals, backtestResults }: { signals: Signal[]; b
     const redPct = d0Chg.filter(c => c < 0).length / d0Chg.length * 100
     const closePosRange = signals.map(s => { const r = s.high - s.low; return r > 0 ? (s.close - s.low) / r : 0.5 })
     const avgClosePos = closePosRange.reduce((a, b) => a + b, 0) / closePosRange.length
-    return { dates, tickers, avgD0Chg, redPct, avgClosePos, avgGap: gaps.reduce((a, b) => a + b, 0) / gaps.length, avgAbs: abses.reduce((a, b) => a + b, 0) / abses.length }
+    const vols = signals.map(s => s.volume || 0)
+    const avgVol = vols.reduce((a, b) => a + b, 0) / vols.length
+    const minClose = Math.min(...signals.map(s => s.close))
+    const maxClose = Math.max(...signals.map(s => s.close))
+    const freq: Record<string, number> = {}
+    signals.forEach(s => { freq[s.ticker] = (freq[s.ticker] || 0) + 1 })
+    const topTickers = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 5)
+    return { dates, tickers, avgD0Chg, redPct, avgClosePos, avgGap: gaps.reduce((a, b) => a + b, 0) / gaps.length, avgAbs: abses.reduce((a, b) => a + b, 0) / abses.length, avgVol, minClose, maxClose, topTickers }
   }, [signals])
 
   if (!sigStats) return null
   const bt = backtestResults
+  const tabs: { key: StatsTab; label: string; icon: React.ReactNode }[] = [
+    { key: 'overview', label: 'Overview', icon: <Zap className="h-3 w-3" /> },
+    { key: 'performance', label: 'Performance', icon: <Activity className="h-3 w-3" /> },
+    { key: 'pnl', label: 'P&L / Drawdown', icon: <TrendingUp className="h-3 w-3" /> },
+    { key: 'robustness', label: 'Robustness', icon: <Shield className="h-3 w-3" /> },
+  ]
 
   return (
     <div className="space-y-1.5">
-      {/* ── Row 1: Signal Overview ── */}
+      {/* ── Signal Overview Row (always visible) ── */}
       <div className="grid grid-cols-4 lg:grid-cols-8 gap-1">
         <StatBox label="Signals" value={signals.length.toString()} icon={<Zap className="h-3 w-3" />} />
         <StatBox label="Days" value={sigStats.dates.toString()} icon={<Calendar className="h-3 w-3" />} />
@@ -665,81 +703,272 @@ function BacktestStatsPanel({ signals, backtestResults }: { signals: Signal[]; b
         <StatBox label="Close Pos" value={sigStats.avgClosePos.toFixed(2)} icon={<Target className="h-3 w-3" />} color={sigStats.avgClosePos < 0.5 ? RED : TEAL} />
       </div>
 
-      {/* ── Row 2: Backtest Results (placeholder when no results) ── */}
-      {bt ? (
+      {/* ── Tab Bar ── */}
+      <div className="flex items-center gap-1" style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '3px 6px' }}>
+        {tabs.map(t => (
+          <button key={t.key} onClick={() => setActiveTab(t.key)} style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: activeTab === t.key ? 700 : 500,
+            background: activeTab === t.key ? TEAL : 'transparent',
+            color: activeTab === t.key ? '#000' : MUTED,
+            border: 'none', cursor: 'pointer', transition: 'all 0.15s',
+          }}>{t.icon}{t.label}</button>
+        ))}
+        {bt && <span style={{ color: MUTED, fontSize: 8, marginLeft: 'auto' }}>{bt.entryType} → {bt.exitType} · {bt.totalTrades} trades</span>}
+      </div>
+
+      {/* ── Tab Content ── */}
+      {!bt ? (
+        <div style={{ background: SURFACE, border: `1px dashed ${BORDER}`, borderRadius: 4, padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <Activity className="h-4 w-4" style={{ color: MUTED, opacity: 0.4 }} />
+          <span style={{ color: MUTED, fontSize: 11 }}>Run a baseline backtest to see full stats — click <strong style={{ color: TEAL }}>Baseline</strong> above</span>
+        </div>
+      ) : activeTab === 'overview' ? (
         <>
-          {/* ── Entry Config ── */}
-          <div style={{ background: SURFACE, border: `1px solid ${TEAL}40`, borderRadius: 4, padding: '6px 10px' }}>
-            <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
-              <Activity className="h-3 w-3" style={{ color: TEAL }} />
-              <span style={{ color: TEAL, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Backtest Results · {bt.entryType}</span>
-              <span style={{ color: MUTED, fontSize: 8, marginLeft: 'auto' }}>{bt.exitType} · {bt.totalTrades} trades</span>
-            </div>
-            <div className="grid grid-cols-2 lg:grid-cols-10 gap-1">
-              <StatBox label="Win Rate" value={`${bt.winRate.toFixed(1)}%`} icon={<TrendingUp className="h-3 w-3" />} color={bt.winRate >= 50 ? TEAL : RED} />
-              <StatBox label="Profit Factor" value={bt.profitFactor.toFixed(2)} icon={<BarChart3 className="h-3 w-3" />} color={bt.profitFactor >= 1.5 ? TEAL : RED} />
-              <StatBox label="Sharpe" value={bt.sharpe.toFixed(2)} icon={<Activity className="h-3 w-3" />} color={bt.sharpe >= 1.0 ? TEAL : RED} />
-              <StatBox label="Max DD" value={`${bt.maxDrawdown.toFixed(1)}%`} icon={<TrendingDown className="h-3 w-3" />} color={RED} />
-              <StatBox label="Avg R" value={`${bt.avgRMultiple > 0 ? '+' : ''}${bt.avgRMultiple.toFixed(2)}R`} icon={<Target className="h-3 w-3" />} color={bt.avgRMultiple >= 0 ? TEAL : RED} />
-              <StatBox label="Avg Win" value={`${bt.avgWinPct > 0 ? '+' : ''}${bt.avgWinPct.toFixed(1)}%`} icon={<TrendingUp className="h-3 w-3" />} color={TEAL} />
-              <StatBox label="Avg Loss" value={`${bt.avgLossPct.toFixed(1)}%`} icon={<TrendingDown className="h-3 w-3" />} color={RED} />
-              <StatBox label="Expectancy" value={`$${bt.expectancy.toFixed(0)}`} icon={<DollarSign className="h-3 w-3" />} color={bt.expectancy >= 0 ? TEAL : RED} />
-              <StatBox label="W/L Ratio" value={`${bt.wlRatio.toFixed(2)}x`} icon={<BarChart3 className="h-3 w-3" />} />
-              <StatBox label="Total P&L" value={`$${bt.totalPnl > 0 ? '+' : ''}${(bt.totalPnl / 1000).toFixed(1)}k`} icon={<DollarSign className="h-3 w-3" />} color={bt.totalPnl >= 0 ? TEAL : RED} />
+          {/* ── OVERVIEW TAB: Key metrics grid ── */}
+          <div style={{ background: SURFACE, border: `1px solid ${TEAL}40`, borderRadius: 4, padding: '8px 10px' }}>
+            <div className="grid grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-1.5">
+              <MetricRow label="Total Return" value={`${bt.totalReturnPct > 0 ? '+' : ''}${bt.totalReturnPct.toFixed(1)}%`} color={bt.totalReturnPct >= 0 ? TEAL : RED} />
+              <MetricRow label="CAGR" value={`${bt.cagr > 0 ? '+' : ''}${bt.cagr.toFixed(1)}%`} color={bt.cagr >= 0 ? TEAL : RED} />
+              <MetricRow label="Total P&L" value={`$${bt.totalPnl > 0 ? '+' : ''}${(bt.totalPnl / 1000).toFixed(1)}k`} color={bt.totalPnl >= 0 ? TEAL : RED} />
+              <MetricRow label="Total Trades" value={bt.totalTrades.toString()} />
+              <MetricRow label="Win Rate" value={`${bt.winRate.toFixed(1)}%`} color={bt.winRate >= 50 ? TEAL : RED} />
+              <MetricRow label="Profit Factor" value={bt.profitFactor.toFixed(2)} color={bt.profitFactor >= 1.5 ? TEAL : RED} />
+              <MetricRow label="Avg R-Multiple" value={`${bt.avgRMultiple > 0 ? '+' : ''}${bt.avgRMultiple.toFixed(2)}R`} color={bt.avgRMultiple >= 0 ? TEAL : RED} />
+              <MetricRow label="Median R" value={`${bt.medianR > 0 ? '+' : ''}${bt.medianR.toFixed(2)}R`} color={bt.medianR >= 0 ? TEAL : RED} />
+              <MetricRow label="Expectancy" value={`${bt.expectancyPct > 0 ? '+' : ''}${bt.expectancyPct.toFixed(2)}%`} color={bt.expectancyPct >= 0 ? TEAL : RED} />
+              <MetricRow label="Sharpe Ratio" value={bt.sharpe.toFixed(2)} color={bt.sharpe >= 1.0 ? TEAL : RED} />
+              <MetricRow label="Sortino Ratio" value={bt.sortino.toFixed(2)} color={bt.sortino >= 1.5 ? TEAL : RED} />
+              <MetricRow label="Calmar Ratio" value={bt.calmar.toFixed(2)} color={bt.calmar >= 1.0 ? TEAL : RED} />
+              <MetricRow label="Max Drawdown" value={`-${bt.maxDrawdown.toFixed(1)}%`} color={RED} />
+              <MetricRow label="Max DD Duration" value={`${bt.maxDDDuration} bars`} />
+              <MetricRow label="Recovery Factor" value={bt.recoveryFactor.toFixed(2)} color={bt.recoveryFactor >= 3 ? TEAL : RED} />
+              <MetricRow label="Avg Win" value={`+${bt.avgWinPct.toFixed(2)}%`} color={TEAL} />
+              <MetricRow label="Avg Loss" value={`${bt.avgLossPct.toFixed(2)}%`} color={RED} />
+              <MetricRow label="Win/Loss Ratio" value={`${bt.wlRatio.toFixed(2)}x`} />
+              <MetricRow label="Best Trade" value={`+${bt.bestTrade.toFixed(2)}%`} color={TEAL} />
+              <MetricRow label="Worst Trade" value={`${bt.worstTrade.toFixed(2)}%`} color={RED} />
+              <MetricRow label="Std Dev Returns" value={`${bt.stdDevReturns.toFixed(2)}%`} />
+              <MetricRow label="Max Consec Wins" value={bt.maxConsecWins.toString()} color={TEAL} />
+              <MetricRow label="Max Consec Loss" value={bt.maxConsecLosses.toString()} color={RED} />
+              <MetricRow label="Gross Win" value={`+${bt.grossWin.toFixed(1)}%`} color={TEAL} />
+              <MetricRow label="Gross Loss" value={`${bt.grossLoss.toFixed(1)}%`} color={RED} />
             </div>
           </div>
 
-          {/* ── Day-by-Day Breakdown ── */}
+          {/* Day-by-day */}
           {bt.dayStats.length > 0 && (
             <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '6px 10px' }}>
               <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
                 <Clock className="h-3 w-3" style={{ color: GOLD }} />
                 <span style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Daily Breakdown</span>
               </div>
-              <div style={{ display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 4 }}>
+              <div style={{ display: 'flex', gap: 3, overflowX: 'auto', paddingBottom: 4 }}>
                 {bt.dayStats.map((d, i) => {
                   const col = d.pnl >= 0 ? TEAL : RED
                   return (
-                    <div key={i} style={{ minWidth: 52, padding: '3px 6px', background: SURFACE2, borderRadius: 3, textAlign: 'center' }}>
+                    <div key={i} style={{ minWidth: 48, padding: '3px 5px', background: SURFACE2, borderRadius: 3, textAlign: 'center' }}>
                       <div style={{ color: MUTED, fontSize: 7, fontWeight: 600 }}>{d.day}</div>
-                      <div style={{ color: col, fontSize: 11, fontWeight: 700 }}>{d.pnl >= 0 ? '+' : ''}{d.pnl.toFixed(1)}%</div>
+                      <div style={{ color: col, fontSize: 10, fontWeight: 700 }}>{d.pnl >= 0 ? '+' : ''}{d.pnl.toFixed(1)}%</div>
+                      <div style={{ color: MUTED, fontSize: 6 }}>{d.count}t</div>
                     </div>
                   )
                 })}
               </div>
             </div>
           )}
+        </>
+      ) : activeTab === 'performance' ? (
+        <>
+          {/* ── PERFORMANCE TAB: Distribution + Monthly ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-1">
+            {/* Return Distribution */}
+            <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '8px 10px' }}>
+              <div style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Return Distribution</div>
+              {(() => {
+                const buckets = { '< -5%': 0, '-5 to -2%': 0, '-2 to 0%': 0, '0 to +2%': 0, '+2 to +5%': 0, '> +5%': 0 }
+                bt.tradeReturns.forEach(r => {
+                  if (r < -5) buckets['< -5%']++
+                  else if (r < -2) buckets['-5 to -2%']++
+                  else if (r < 0) buckets['-2 to 0%']++
+                  else if (r < 2) buckets['0 to +2%']++
+                  else if (r < 5) buckets['+2 to +5%']++
+                  else buckets['> +5%']++
+                })
+                const maxB = Math.max(...Object.values(buckets), 1)
+                return Object.entries(buckets).map(([label, count]) => {
+                  const pct = (count / bt.totalTrades) * 100
+                  const barCol = label.startsWith('-') || label.startsWith('<') ? RED : TEAL
+                  return (
+                    <div key={label} className="flex items-center gap-1.5" style={{ marginBottom: 3 }}>
+                      <span style={{ color: MUTED, fontSize: 8, width: 56, fontFamily: 'monospace', textAlign: 'right' }}>{label}</span>
+                      <div style={{ flex: 1, height: 12, background: SURFACE3, borderRadius: 2, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${(count / maxB) * 100}%`, background: barCol, borderRadius: 2, minWidth: count > 0 ? 2 : 0 }} />
+                      </div>
+                      <span style={{ color: TEXT2, fontSize: 8, width: 28 }}>{count}</span>
+                      <span style={{ color: MUTED, fontSize: 7, width: 30 }}>{pct.toFixed(0)}%</span>
+                    </div>
+                  )
+                })
+              })()}
+            </div>
 
-          {/* ── Validation Scores ── */}
-          <div className="grid grid-cols-3 gap-1">
-            <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '8px 10px', textAlign: 'center' }}>
-              <Shield className="h-4 w-4 mx-auto" style={{ color: MUTED, marginBottom: 2 }} />
-              <div style={{ color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Walk-Forward</div>
-              <div style={{ color: TEXT2, fontSize: 16, fontWeight: 700, marginTop: 2 }}>—</div>
-              <div style={{ color: MUTED, fontSize: 8, marginTop: 1 }}>Anchored WFO 5-fold</div>
+            {/* Monthly Breakdown */}
+            <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '8px 10px' }}>
+              <div style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Monthly Returns</div>
+              {bt.monthlyStats.map((m, i) => {
+                const col = m.pnl >= 0 ? TEAL : RED
+                const barW = Math.min(Math.abs(m.pnl) * 3, 100)
+                return (
+                  <div key={i} className="flex items-center gap-1.5" style={{ marginBottom: 4 }}>
+                    <span style={{ color: GOLD, fontSize: 9, fontWeight: 600, width: 36, fontFamily: 'monospace' }}>{m.month.slice(5)}</span>
+                    <div style={{ flex: 1, height: 14, background: SURFACE3, borderRadius: 2, overflow: 'hidden', position: 'relative' }}>
+                      <div style={{ height: '100%', width: `${barW}%`, background: col, borderRadius: 2, opacity: 0.7 }} />
+                    </div>
+                    <span style={{ color: col, fontSize: 9, fontWeight: 700, width: 48, textAlign: 'right' }}>{m.pnl >= 0 ? '+' : ''}{m.pnl.toFixed(1)}%</span>
+                    <span style={{ color: MUTED, fontSize: 7, width: 24 }}>{m.count}t</span>
+                  </div>
+                )
+              })}
             </div>
-            <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '8px 10px', textAlign: 'center' }}>
-              <BarChart3 className="h-4 w-4 mx-auto" style={{ color: MUTED, marginBottom: 2 }} />
-              <div style={{ color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Monte Carlo</div>
-              <div style={{ color: TEXT2, fontSize: 16, fontWeight: 700, marginTop: 2 }}>—</div>
-              <div style={{ color: MUTED, fontSize: 8, marginTop: 1 }}>10K permutation</div>
+          </div>
+
+          {/* Trade Details Table */}
+          <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '6px 10px' }}>
+            <div style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>R-Multiple Distribution</div>
+            {(() => {
+              const rBuckets = { '< -2R': 0, '-2 to -1R': 0, '-1 to 0R': 0, '0 to +1R': 0, '+1 to +2R': 0, '> +2R': 0 }
+              bt.tradeReturns.forEach((_, i) => {
+                const r = bt.tradeReturns[i] // simplified: using return as proxy
+                // We can't get exact R here without original risk, show return dist instead
+              })
+              const rMults = bt.tradeReturns.map(r => r / Math.abs(bt.avgLossPct || 1)) // normalized
+              rMults.forEach(r => {
+                if (r < -2) rBuckets['< -2R']++
+                else if (r < -1) rBuckets['-2 to -1R']++
+                else if (r < 0) rBuckets['-1 to 0R']++
+                else if (r < 1) rBuckets['0 to +1R']++
+                else if (r < 2) rBuckets['+1 to +2R']++
+                else rBuckets['> +2R']++
+              })
+              const maxR = Math.max(...Object.values(rBuckets), 1)
+              return Object.entries(rBuckets).map(([label, count]) => {
+                const col = label.includes('-') ? RED : TEAL
+                return (
+                  <div key={label} className="flex items-center gap-1.5" style={{ marginBottom: 3 }}>
+                    <span style={{ color: MUTED, fontSize: 8, width: 52, fontFamily: 'monospace', textAlign: 'right' }}>{label}</span>
+                    <div style={{ flex: 1, height: 12, background: SURFACE3, borderRadius: 2, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${(count / maxR) * 100}%`, background: col, borderRadius: 2, minWidth: count > 0 ? 2 : 0 }} />
+                    </div>
+                    <span style={{ color: TEXT2, fontSize: 8, width: 20 }}>{count}</span>
+                  </div>
+                )
+              })
+            })()}
+          </div>
+        </>
+      ) : activeTab === 'pnl' ? (
+        <>
+          {/* ── P&L / DRAWDOWN TAB: Equity curve + DD chart (canvas) ── */}
+          <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '8px 10px' }}>
+            <div style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Equity Curve (Cumulative P&L)</div>
+            <EquityChart data={bt.cumPnlSeries} color={bt.cumPnlSeries[bt.cumPnlSeries.length - 1] >= 0 ? TEAL : RED} height={100} />
+          </div>
+          <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '8px 10px' }}>
+            <div style={{ color: RED, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Drawdown</div>
+            <EquityChart data={bt.drawdownSeries} color={RED} height={80} inverted />
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-1">
+            <StatBox label="Total Return" value={`${bt.totalReturnPct > 0 ? '+' : ''}${bt.totalReturnPct.toFixed(1)}%`} icon={<TrendingUp className="h-3 w-3" />} color={bt.totalReturnPct >= 0 ? TEAL : RED} />
+            <StatBox label="Max DD" value={`-${bt.maxDrawdown.toFixed(1)}%`} icon={<TrendingDown className="h-3 w-3" />} color={RED} />
+            <StatBox label="Recovery Factor" value={bt.recoveryFactor.toFixed(2)} icon={<Activity className="h-3 w-3" />} color={bt.recoveryFactor >= 3 ? TEAL : RED} />
+            <StatBox label="Calmar" value={bt.calmar.toFixed(2)} icon={<BarChart3 className="h-3 w-3" />} color={bt.calmar >= 1 ? TEAL : RED} />
+          </div>
+        </>
+      ) : activeTab === 'robustness' ? (
+        <>
+          {/* ── ROBUSTNESS TAB: Validation placeholders ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-1">
+            <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '12px 10px', textAlign: 'center' }}>
+              <Shield className="h-5 w-5 mx-auto" style={{ color: MUTED, marginBottom: 4 }} />
+              <div style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Walk-Forward Analysis</div>
+              <div style={{ color: TEXT2, fontSize: 20, fontWeight: 700, marginTop: 6 }}>—</div>
+              <div style={{ color: MUTED, fontSize: 8, marginTop: 2, lineHeight: 1.4 }}>Anchored WFO 5-fold\nIS/OOS degradation</div>
+              <div style={{ color: SURFACE3, fontSize: 7, marginTop: 6 }}>Not yet computed</div>
             </div>
-            <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '8px 10px', textAlign: 'center' }}>
-              <TrendingUp className="h-4 w-4 mx-auto" style={{ color: MUTED, marginBottom: 2 }} />
-              <div style={{ color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Robustness</div>
-              <div style={{ color: TEXT2, fontSize: 16, fontWeight: 700, marginTop: 2 }}>—</div>
-              <div style={{ color: MUTED, fontSize: 8, marginTop: 1 }}>Param sensitivity</div>
+            <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '12px 10px', textAlign: 'center' }}>
+              <BarChart3 className="h-5 w-5 mx-auto" style={{ color: MUTED, marginBottom: 4 }} />
+              <div style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Monte Carlo Simulation</div>
+              <div style={{ color: TEXT2, fontSize: 20, fontWeight: 700, marginTop: 6 }}>—</div>
+              <div style={{ color: MUTED, fontSize: 8, marginTop: 2, lineHeight: 1.4 }}>10K permutations\n95% CI bounds</div>
+              <div style={{ color: SURFACE3, fontSize: 7, marginTop: 6 }}>Not yet computed</div>
+            </div>
+            <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '12px 10px', textAlign: 'center' }}>
+              <TrendingUp className="h-5 w-5 mx-auto" style={{ color: MUTED, marginBottom: 4 }} />
+              <div style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Parameter Sensitivity</div>
+              <div style={{ color: TEXT2, fontSize: 20, fontWeight: 700, marginTop: 6 }}>—</div>
+              <div style={{ color: MUTED, fontSize: 8, marginTop: 2, lineHeight: 1.4 }}>±20% param sweep\nRobustness score</div>
+              <div style={{ color: SURFACE3, fontSize: 7, marginTop: 6 }}>Not yet computed</div>
+            </div>
+          </div>
+          <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '8px 10px' }}>
+            <div style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Current Strategy Parameters</div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+              <div><span style={{ color: MUTED, fontSize: 8 }}>Entry</span><div style={{ color: TEXT, fontSize: 11, fontWeight: 600 }}>{bt.entryType}</div></div>
+              <div><span style={{ color: MUTED, fontSize: 8 }}>Exit</span><div style={{ color: TEXT, fontSize: 11, fontWeight: 600 }}>{bt.exitType}</div></div>
+              <div><span style={{ color: MUTED, fontSize: 8 }}>Stop</span><div style={{ color: TEXT, fontSize: 11, fontWeight: 600 }}>D0 Low (baseline)</div></div>
+              <div><span style={{ color: MUTED, fontSize: 8 }}>Duration</span><div style={{ color: TEXT, fontSize: 11, fontWeight: 600 }}>{bt.avgTradeDuration}</div></div>
             </div>
           </div>
         </>
-      ) : (
-        <div style={{ background: `${SURFACE}`, border: `1px dashed ${BORDER}`, borderRadius: 4, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-          <Activity className="h-4 w-4" style={{ color: MUTED, opacity: 0.4 }} />
-          <span style={{ color: MUTED, fontSize: 11 }}>Run a baseline backtest to see entry/exit stats — click <strong style={{ color: TEAL }}>Baseline</strong> above</span>
-        </div>
-      )}
+      ) : null}
     </div>
   )
+}
+
+// ─── Helper components for stats ──
+function MetricRow({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div className="flex items-center justify-between" style={{ padding: '2px 0', borderBottom: `1px solid ${SURFACE3}` }}>
+      <span style={{ color: MUTED, fontSize: 10 }}>{label}</span>
+      <span style={{ color: color || TEXT, fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+    </div>
+  )
+}
+
+function EquityChart({ data, color, height, inverted }: { data: number[]; color: string; height: number; inverted?: boolean }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !data.length) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const w = canvas.offsetWidth, h = height
+    canvas.width = w * 2; canvas.height = h * 2
+    ctx.scale(2, 2)
+    ctx.clearRect(0, 0, w, h)
+    const min = Math.min(...data), max = Math.max(...data)
+    const range = max - min || 1
+    const xStep = w / (data.length - 1 || 1)
+    // Zero line
+    const zeroY = h - ((0 - min) / range) * h
+    ctx.strokeStyle = `${SURFACE3}`; ctx.lineWidth = 0.5; ctx.setLineDash([3, 3])
+    ctx.beginPath(); ctx.moveTo(0, zeroY); ctx.lineTo(w, zeroY); ctx.stroke(); ctx.setLineDash([])
+    // Fill
+    ctx.beginPath()
+    ctx.moveTo(0, h - ((data[0] - min) / range) * h)
+    data.forEach((v, i) => ctx.lineTo(i * xStep, h - ((v - min) / range) * h))
+    ctx.lineTo((data.length - 1) * xStep, h); ctx.lineTo(0, h); ctx.closePath()
+    const grad = ctx.createLinearGradient(0, 0, 0, h)
+    grad.addColorStop(0, color + '30'); grad.addColorStop(1, color + '05')
+    ctx.fillStyle = grad; ctx.fill()
+    // Line
+    ctx.beginPath()
+    ctx.moveTo(0, h - ((data[0] - min) / range) * h)
+    data.forEach((v, i) => ctx.lineTo(i * xStep, h - ((v - min) / range) * h))
+    ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke()
+  }, [data, color, height])
+  return <canvas ref={canvasRef} style={{ width: '100%', height, display: 'block' }} />
 }
 
 // DistBar removed — not needed for backtest page
@@ -852,27 +1081,72 @@ export default function BacktestPage() {
     const trades = signals.map(s => {
       const pnlPct = ((s.close - s.open) / s.open) * 100
       const range = s.high - s.low
-      const stop = s.low // baseline stop = D0 low
+      const stop = s.low
       const risk = s.open - stop
       const rMultiple = risk > 0 ? (s.close - s.open) / risk : 0
-      return { pnlPct, rMultiple, win: pnlPct > 0 }
+      return { pnlPct, rMultiple, win: pnlPct > 0, date: s.date }
     })
+    const returns = trades.map(t => t.pnlPct)
     const wins = trades.filter(t => t.win)
     const losses = trades.filter(t => !t.win)
-    const totalPnl = trades.reduce((a, t) => a + t.pnlPct, 0)
+    const totalPnl = returns.reduce((a, r) => a + r, 0)
     const grossWin = wins.reduce((a, t) => a + t.pnlPct, 0)
     const grossLoss = Math.abs(losses.reduce((a, t) => a + t.pnlPct, 0))
     const winRate = (wins.length / trades.length) * 100
+    const pctProfitable = winRate
     const profitFactor = grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? 999 : 0
-    const avgRMultiple = trades.reduce((a, t) => a + t.rMultiple, 0) / trades.length
+    const rMultiples = trades.map(t => t.rMultiple)
+    const avgRMultiple = rMultiples.reduce((a, r) => a + r, 0) / rMultiples.length
+    const sortedR = [...rMultiples].sort((a, b) => a - b)
+    const medianR = sortedR.length % 2 === 0 ? (sortedR[sortedR.length / 2 - 1] + sortedR[sortedR.length / 2]) / 2 : sortedR[Math.floor(sortedR.length / 2)]
     const avgWinPct = wins.length > 0 ? wins.reduce((a, t) => a + t.pnlPct, 0) / wins.length : 0
     const avgLossPct = losses.length > 0 ? losses.reduce((a, t) => a + t.pnlPct, 0) / losses.length : 0
-    const expectancy = (winRate / 100) * avgWinPct + ((100 - winRate) / 100) * avgLossPct
+    const expectancyPct = (winRate / 100) * avgWinPct + ((100 - winRate) / 100) * avgLossPct
     const wlRatio = losses.length > 0 && avgLossPct !== 0 ? Math.abs(avgWinPct / avgLossPct) : 0
 
-    // Cumulative P&L for max drawdown
-    let cumPnl = 0, peak = 0, maxDd = 0
-    trades.forEach(t => { cumPnl += t.pnlPct; peak = Math.max(peak, cumPnl); maxDd = Math.max(maxDd, peak - cumPnl) })
+    // Cumulative P&L series
+    let cumPnl = 0
+    const cumPnlSeries: number[] = []
+    const drawdownSeries: number[] = []
+    let peak = 0, maxDd = 0, ddStart = 0, maxDDDuration = 0
+    returns.forEach((r, i) => {
+      cumPnl += r; cumPnlSeries.push(cumPnl)
+      peak = Math.max(peak, cumPnl)
+      const dd = peak - cumPnl
+      drawdownSeries.push(dd)
+      if (dd > 0 && ddStart === 0) ddStart = i
+      maxDd = Math.max(maxDd, dd)
+      if (dd === 0 && ddStart > 0) { maxDDDuration = Math.max(maxDDDuration, i - ddStart); ddStart = 0 }
+    })
+    if (ddStart > 0) maxDDDuration = Math.max(maxDDDuration, returns.length - ddStart)
+
+    // Sharpe ratio (annualized, assume ~252 trading days)
+    const meanReturn = returns.reduce((a, r) => a + r, 0) / returns.length
+    const stdDev = Math.sqrt(returns.reduce((a, r) => a + (r - meanReturn) ** 2, 0) / returns.length)
+    const sharpe = stdDev > 0 ? (meanReturn / stdDev) * Math.sqrt(252) : 0
+
+    // Sortino (downside deviation only)
+    const downsideReturns = returns.filter(r => r < 0)
+    const downsideDev = downsideReturns.length > 0 ? Math.sqrt(downsideReturns.reduce((a, r) => a + r ** 2, 0) / downsideReturns.length) : 0
+    const sortino = downsideDev > 0 ? (meanReturn / downsideDev) * Math.sqrt(252) : 0
+
+    // Calmar = CAGR / MaxDD
+    const totalReturnPct = totalPnl
+    const tradingDays = new Set(signals.map(s => s.date)).size
+    const yearsInSample = tradingDays / 252
+    const cagr = yearsInSample > 0 ? (Math.pow(1 + totalReturnPct / 100, 1 / yearsInSample) - 1) * 100 : totalReturnPct
+    const calmar = maxDd > 0 ? Math.abs(totalReturnPct / maxDd) : 0
+
+    // Consecutive wins/losses
+    let cWins = 0, cLosses = 0, maxCWins = 0, maxCLosses = 0
+    trades.forEach(t => {
+      if (t.win) { cWins++; cLosses = 0; maxCWins = Math.max(maxCWins, cWins) }
+      else { cLosses++; cWins = 0; maxCLosses = Math.max(maxCLosses, cLosses) }
+    })
+
+    const bestTrade = Math.max(...returns)
+    const worstTrade = Math.min(...returns)
+    const recoveryFactor = maxDd > 0 ? totalPnl / maxDd : 0
 
     // Day-by-day breakdown
     const byDate: Record<string, { pnls: number[] }> = {}
@@ -881,14 +1155,31 @@ export default function BacktestPage() {
       byDate[s.date].pnls.push(trades[i].pnlPct)
     })
     const dayStats = Object.entries(byDate).map(([date, d]) => ({
-      day: date.slice(5), pnl: d.pnls.reduce((a, b) => a + b, 0),
+      day: date.slice(5), pnl: d.pnls.reduce((a, b) => a + b, 0), count: d.pnls.length,
+    }))
+
+    // Monthly breakdown
+    const byMonth: Record<string, { pnls: number[] }> = {}
+    signals.forEach((s, i) => {
+      const month = s.date.slice(0, 7)
+      if (!byMonth[month]) byMonth[month] = { pnls: [] }
+      byMonth[month].pnls.push(trades[i].pnlPct)
+    })
+    const monthlyStats = Object.entries(byMonth).map(([month, d]) => ({
+      month, pnl: d.pnls.reduce((a, b) => a + b, 0), count: d.pnls.length,
     }))
 
     setBacktestResults({
       entryType: 'D0 Open', exitType: 'D0 Close', totalTrades: trades.length,
-      winRate, profitFactor, sharpe: 0, maxDrawdown: maxDd, avgRMultiple,
-      avgWinPct, avgLossPct, expectancy, wlRatio, totalPnl: totalPnl * 1000,
-      dayStats,
+      winRate, pctProfitable, profitFactor, sharpe, sortino, calmar,
+      maxDrawdown: maxDd, maxDDDuration, avgRMultiple, medianR,
+      avgWinPct, avgLossPct, expectancy: expectancyPct, expectancyPct,
+      wlRatio, totalPnl: totalPnl * 1000, totalReturnPct, cagr,
+      avgTradeDuration: '1 day', maxConsecWins: maxCWins, maxConsecLosses: maxCLosses,
+      bestTrade, worstTrade, stdDevReturns: stdDev, downsideDev, recoveryFactor,
+      grossWin, grossLoss,
+      tradeReturns: returns, cumPnlSeries, drawdownSeries,
+      dayStats, monthlyStats,
     })
   }, [signals])
   // Mock runs for demo

@@ -527,7 +527,7 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
       }
 
       // ── VWAP line (5m / 15m only, resets at market day boundary) ──
-      if (settings.showVwap && (tf === '5m' || tf === '15m')) {
+      if (settings.showVwap && (tf === '5' || tf === '15')) {
         let cumVP = 0, cumV = 0, lastMktDay: string | null = null
         const vwapVals: number[] = []
         for (let i = 0; i < bars.length; i++) {
@@ -658,7 +658,7 @@ type StatsTab = 'overview' | 'performance' | 'pnl' | 'robustness'
 
 function BacktestStatsPanel({ signals, backtestResults, dark }: { signals: Signal[]; backtestResults: BacktestResults | null; dark: boolean }) {
   const C = dark
-    ? { BG, SURFACE, SURFACE2, SURFACE3, BORDER, TEXT, TEXT2, MUTED, WHITE, RED, TEAL, VOL_UP, VOL_DN, GOLD_DIM, GOLD_BORDER }
+    ? { BG, SURFACE, SURFACE2, SURFACE3, BORDER, TEXT, TEXT2, MUTED, WHITE, RED, TEAL, GOLD, VOL_UP, VOL_DN, GOLD_DIM, GOLD_BORDER }
     : { ...LIGHT, GOLD, GOLD_DIM: LIGHT.GOLD_DIM, GOLD_BORDER: LIGHT.GOLD_BORDER }
   const [activeTab, setActiveTab] = useState<StatsTab>('overview')
 

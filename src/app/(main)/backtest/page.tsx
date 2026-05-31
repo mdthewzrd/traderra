@@ -1191,12 +1191,8 @@ export default function BacktestPage() {
     if (signals.length > 0 && !backtestResults) runBaselineBacktest()
   }, [signals])
 
-  // Mock runs for demo
-  const [runs] = useState<ScanRun[]>([
-    { id: 'r1', scanId: '', dateRange: '90d', runAt: '2025-01-15 14:32', resultCount: 52 },
-    { id: 'r2', scanId: '', dateRange: '30d', runAt: '2025-01-14 09:10', resultCount: 18 },
-    { id: 'r3', scanId: '', dateRange: '7d', runAt: '2025-01-13 16:45', resultCount: 4 },
-  ])
+  // Runs derived from loaded scans (no mock data)
+  const [runs, setRuns] = useState<ScanRun[]>([])
 
   useEffect(() => {
     fetch('/api/scans')
@@ -1215,8 +1211,21 @@ export default function BacktestPage() {
     if (!selectedScan) return
     setLoading(true)
     fetch(`/api/scans/${selectedScan}`)
-      .then(r => r.json())
-      .then(data => { setSignals(data.results || []); setSelectedIdx(0); setDayOffset(0); setLoading(false) })
+      .then(data => {
+        const sigs = data.results || []
+        setSignals(sigs); setSelectedIdx(0); setDayOffset(0); setLoading(false)
+        // Create a run from this scan's data
+        if (sigs.length && selectedScan) {
+          const scan = scans.find(s => s.id === selectedScan)
+          setRuns([{
+            id: selectedScan + '-r1',
+            scanId: selectedScan,
+            dateRange: sigs.length > 1 ? `${sigs[sigs.length-1]?.date?.slice(5)} → ${sigs[0]?.date?.slice(5)}` : '1d',
+            runAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
+            resultCount: sigs.length,
+          }])
+        }
+      })
       .catch(() => setLoading(false))
   }, [selectedScan])
 

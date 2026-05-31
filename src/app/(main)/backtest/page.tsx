@@ -104,7 +104,8 @@ interface FilterDef {
   label: string
   shortLabel: string
   description: string
-  compute: (s: Signal) => boolean
+  needsBars?: '15m' // if set, this filter requires intraday bars (lazy loaded)
+  compute: (s: Signal, bars15m?: any[]) => boolean
 }
 
 const FILTERS: FilterDef[] = [
@@ -122,6 +123,40 @@ const FILTERS: FilterDef[] = [
     compute: (s) => (s.volume || 0) > 10e6 },
   { key: 'rangeOver5', label: 'Range > 5%', shortLabel: 'R>5%', description: 'Intraday range > 5%',
     compute: (s) => { const r = s.high - s.low; return s.open > 0 ? (r / s.open) * 100 > 5 : false } },
+  // ── Intraday filters (require 15m bars, lazy loaded) ──
+  { key: 'amPush', label: 'AM Push', shortLabel: 'PUSH', needsBars: '15m',
+    description: 'Morning 7:30-12:00 ET push: ≥2 higher highs, EMA(9) extension ≥0.5 ATR on 15m',
+    compute: (s, bars15m) => {
+      if (!bars15m || bars15m.length < 10) return false
+      // Filter to 7:30-12:00 ET (11:30-16:00 UTC)
+      const morningBars = bars15m.filter(b => {
+        const h = new Date(b.time * 1000).getUTCHours()
+        const m = new Date(b.time * 1000).getUTCMinutes()
+        const minutesSinceMidnight = h * 60 + m
+        return minutesSinceMidnight >= 690 && minutesSinceMidnight < 960 // 11:30-16:00 UTC = 7:30-12:00 ET
+      })
+      if (morningBars.length < 5) return false
+      // Count higher highs
+      let higherHighs = 0
+      for (let i = 1; i < morningBars.length; i++) {
+        if (morningBars[i].high > morningBars[i - 1].high) higherHighs++
+      }
+      if (higherHighs < 2) return false
+      // Compute EMA(9) on 15m closes
+      const closes = morningBars.map(b => b.close)
+      const ema: number[] = [closes[0]]
+      const mult = 2 / (9 + 1)
+      for (let i = 1; i < closes.length; i++) ema.push(closes[i] * mult + ema[i - 1] * (1 - mult))
+      // Morning high vs last EMA value
+      const morningHigh = Math.max(...morningBars.map(b => b.high))
+      const lastEma = ema[ema.length - 1]
+      const extension = lastEma > 0 ? (morningHigh - lastEma) / lastEma : 0
+      // ATR approximation from daily signal (use high-low as proxy)
+      const atrProxy = s.high - s.low
+      const extNormalized = atrProxy > 0 ? (morningHigh - lastEma) / atrProxy : 0
+      return extNormalized >= 0.5
+    }
+  },
 ]
 
 // ─── Color constants ────────────────────────────────────
@@ -1103,16 +1138,66 @@ export default function BacktestPage() {
   const [dayOffset, setDayOffset] = useState(0)
   const [backtestResults, setBacktestResults] = useState<BacktestResults | null>(null)
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set())
+  const [bars15mCache, setBars15mCache] = useState<Record<string, any[]>>({})
+  const [bars15mLoading, setBars15mLoading] = useState(false)
   const T = useThemeColors(dark)
 
-  // ── Compute filter results for all signals ──
+  // ── Compute filter results for all signals (instant for daily, lazy for intraday) ──
   const filterResults = useMemo(() => {
     const results: Record<string, boolean[]> = {}
     FILTERS.forEach(f => {
-      results[f.key] = signals.map(s => f.compute(s))
+      if (f.needsBars === '15m') {
+        // Only compute if bars are loaded
+        results[f.key] = signals.map((s, i) => {
+          const cacheKey = `${s.ticker}-${s.date}`
+          const bars = bars15mCache[cacheKey]
+          return f.compute(s, bars)
+        })
+      } else {
+        results[f.key] = signals.map(s => f.compute(s))
+      }
     })
     return results
-  }, [signals])
+  }, [signals, bars15mCache])
+
+  // ── Lazy-load 15m bars when an intraday filter is toggled ──
+  useEffect(() => {
+    const needsBars = Array.from(activeFilters).some(k => FILTERS.find(f => f.key === k)?.needsBars === '15m')
+    if (!needsBars || !signals.length) return
+    // Find signals we haven't fetched yet
+    const toFetch = signals.filter(s => {
+      const key = `${s.ticker}-${s.date}`
+      return !bars15mCache[key]
+    })
+    if (toFetch.length === 0) return
+
+    setBars15mLoading(true)
+    const newCache: Record<string, any[]> = { ...bars15mCache }
+    let fetched = 0
+    toFetch.forEach(s => {
+      const date = s.date
+      const nextDay = new Date(date); nextDay.setDate(nextDay.getDate() + 1)
+      const url = `/api/chart-data/bars?symbol=${encodeURIComponent(s.ticker)}&tf=15&from=${date}&to=${nextDay.toISOString().slice(0, 10)}`
+      fetch(url)
+        .then(r => r.json())
+        .then(data => {
+          newCache[`${s.ticker}-${date}`] = data.bars || []
+          fetched++
+          if (fetched === toFetch.length) {
+            setBars15mCache(newCache)
+            setBars15mLoading(false)
+          }
+        })
+        .catch(() => {
+          newCache[`${s.ticker}-${date}`] = []
+          fetched++
+          if (fetched === toFetch.length) {
+            setBars15mCache(newCache)
+            setBars15mLoading(false)
+          }
+        })
+    })
+  }, [activeFilters, signals])
 
   // ── Filtered signals (based on active filters) ──
   const filteredSignals = useMemo(() => {
@@ -1423,6 +1508,7 @@ export default function BacktestPage() {
             {FILTERS.map(f => {
               const active = activeFilters.has(f.key)
               const count = filterCounts[f.key] || 0
+              const isLoading = f.needsBars === '15m' && active && bars15mLoading
               return (
                 <button key={f.key} title={f.description} onClick={() => {
                   const next = new Set(activeFilters)
@@ -1431,12 +1517,12 @@ export default function BacktestPage() {
                 }} style={{
                   display: 'flex', alignItems: 'center', gap: 3,
                   padding: '2px 6px', borderRadius: 3, fontSize: 9, fontWeight: active ? 700 : 500,
-                  background: active ? T.TEAL : T.SURFACE2,
-                  color: active ? '#000' : T.MUTED,
-                  border: `1px solid ${active ? T.TEAL : T.BORDER}`,
+                  background: isLoading ? '#f59e0b' : active ? T.TEAL : T.SURFACE2,
+                  color: isLoading ? '#000' : active ? '#000' : T.MUTED,
+                  border: `1px solid ${isLoading ? '#f59e0b' : active ? T.TEAL : T.BORDER}`,
                   cursor: 'pointer', transition: 'all 0.15s',
                 }}>
-                  {f.shortLabel}
+                  {isLoading ? '⏳' : ''}{f.shortLabel}
                   <span style={{ fontSize: 7, opacity: 0.7 }}>{count}</span>
                 </button>
               )

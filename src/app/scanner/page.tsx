@@ -851,7 +851,7 @@ function RunModal({ scan, onClose, onRun }: { scan: ScanDef | undefined; onClose
 
 // ─── Main Page ──────────────────────────────────────────
 export default function ScanDashboardPage() {
-  const [scans, setScans] = useState<ScanDef[]>([])
+  const [scans, setScans] = useState<ScanDef[]>(BUILTIN_SCANS)
   const [selectedScan, setSelectedScan] = useState<string>('')
   const [signals, setSignals] = useState<Signal[]>([])
   const [selectedIdx, setSelectedIdx] = useState(0)

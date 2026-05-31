@@ -98,6 +98,32 @@ interface ChartSettings {
   showLegend: boolean
 }
 
+// ─── Filter Definitions ──────────────────────────
+interface FilterDef {
+  key: string
+  label: string
+  shortLabel: string
+  description: string
+  compute: (s: Signal) => boolean
+}
+
+const FILTERS: FilterDef[] = [
+  { key: 'green', label: 'Green Candle', shortLabel: 'GRN', description: 'Close > Open (bullish day)',
+    compute: (s) => s.close > s.open },
+  { key: 'closePos50', label: 'Close > Mid', shortLabel: 'C>50', description: 'Closed above midpoint of range',
+    compute: (s) => { const r = s.high - s.low; return r > 0 ? (s.close - s.low) / r > 0.5 : false } },
+  { key: 'closePos75', label: 'Close > 75%ile', shortLabel: 'C>75', description: 'Closed in upper 25% of range',
+    compute: (s) => { const r = s.high - s.low; return r > 0 ? (s.close - s.low) / r > 0.75 : false } },
+  { key: 'gapOver100', label: 'Gap > 100%', shortLabel: 'G>1x', description: 'Gap up more than 100%',
+    compute: (s) => (s.gap_pct || 0) > 100 },
+  { key: 'gapOver50', label: 'Gap > 50%', shortLabel: 'G>50', description: 'Gap up more than 50%',
+    compute: (s) => (s.gap_pct || 0) > 50 },
+  { key: 'volOver10M', label: 'Vol > 10M', shortLabel: 'V>10M', description: 'Dollar volume over $10M',
+    compute: (s) => (s.volume || 0) > 10e6 },
+  { key: 'rangeOver5', label: 'Range > 5%', shortLabel: 'R>5%', description: 'Intraday range > 5%',
+    compute: (s) => { const r = s.high - s.low; return s.open > 0 ? (r / s.open) * 100 > 5 : false } },
+]
+
 // ─── Color constants ────────────────────────────────────
 const GOLD = '#D4AF37'
 const GOLD_DIM = 'rgba(212,175,55,0.12)'
@@ -1076,12 +1102,43 @@ export default function BacktestPage() {
   const [dark, setDark] = useState(true)
   const [dayOffset, setDayOffset] = useState(0)
   const [backtestResults, setBacktestResults] = useState<BacktestResults | null>(null)
+  const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set())
   const T = useThemeColors(dark)
 
+  // ── Compute filter results for all signals ──
+  const filterResults = useMemo(() => {
+    const results: Record<string, boolean[]> = {}
+    FILTERS.forEach(f => {
+      results[f.key] = signals.map(s => f.compute(s))
+    })
+    return results
+  }, [signals])
+
+  // ── Filtered signals (based on active filters) ──
+  const filteredSignals = useMemo(() => {
+    if (activeFilters.size === 0) return signals
+    return signals.filter((s, i) => {
+      for (const key of activeFilters) {
+        if (!filterResults[key]?.[i]) return false
+      }
+      return true
+    })
+  }, [signals, activeFilters, filterResults])
+
+  // ── Filter counts (for toggle badges) ──
+  const filterCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    FILTERS.forEach(f => {
+      counts[f.key] = filterResults[f.key]?.filter(Boolean).length || 0
+    })
+    return counts
+  }, [filterResults])
+
   // ── Baseline backtest: buy D0 open, sell D0 close ──
-  const runBaselineBacktest = useCallback(() => {
-    if (!signals.length) return
-    const trades = signals.map(s => {
+  const runBaselineBacktest = useCallback((sigs?: Signal[]) => {
+    const source = sigs || filteredSignals
+    if (!source.length) return
+    const trades = source.map(s => {
       const pnlPct = ((s.close - s.open) / s.open) * 100
       const range = s.high - s.low
       const stop = s.low
@@ -1190,6 +1247,11 @@ export default function BacktestPage() {
   useEffect(() => {
     if (signals.length > 0 && !backtestResults) runBaselineBacktest()
   }, [signals])
+
+  // Re-run when filters change
+  useEffect(() => {
+    if (filteredSignals.length > 0) runBaselineBacktest(filteredSignals)
+  }, [activeFilters])
 
   // Runs derived from loaded scans (no mock data)
   const [runs, setRuns] = useState<ScanRun[]>([])
@@ -1353,8 +1415,34 @@ export default function BacktestPage() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <div className="px-2 py-1.5 flex items-center justify-between" style={{ borderBottom: `1px solid ${T.BORDER}`, background: T.SURFACE2 }}>
           <span style={{ color: T.GOLD, fontSize: 10, fontWeight: 700 }}>SIGNALS</span>
-          <span style={{ color: T.MUTED, fontSize: 9 }}>{signals.length}</span>
+          <span style={{ color: T.MUTED, fontSize: 9 }}>{filteredSignals.length}/{signals.length}</span>
         </div>
+        {/* ── Filter Toggles ── */}
+        {signals.length > 0 && (
+          <div style={{ padding: '4px 8px', borderBottom: `1px solid ${T.BORDER}`, display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+            {FILTERS.map(f => {
+              const active = activeFilters.has(f.key)
+              const count = filterCounts[f.key] || 0
+              return (
+                <button key={f.key} title={f.description} onClick={() => {
+                  const next = new Set(activeFilters)
+                  active ? next.delete(f.key) : next.add(f.key)
+                  setActiveFilters(next)
+                }} style={{
+                  display: 'flex', alignItems: 'center', gap: 3,
+                  padding: '2px 6px', borderRadius: 3, fontSize: 9, fontWeight: active ? 700 : 500,
+                  background: active ? T.TEAL : T.SURFACE2,
+                  color: active ? '#000' : T.MUTED,
+                  border: `1px solid ${active ? T.TEAL : T.BORDER}`,
+                  cursor: 'pointer', transition: 'all 0.15s',
+                }}>
+                  {f.shortLabel}
+                  <span style={{ fontSize: 7, opacity: 0.7 }}>{count}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
         <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
           <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 10 }}>
             <thead>
@@ -1375,8 +1463,10 @@ export default function BacktestPage() {
                 const isActive = i === selectedIdx
                 const d0chg = ((s.close - s.open) / s.open * 100)
                 const rng = ((s.high - s.low) / s.open * 100)
+                const passesAllFilters = activeFilters.size === 0 || Array.from(activeFilters).every(k => filterResults[k]?.[i])
+                const dimmed = activeFilters.size > 0 && !passesAllFilters
                 return (
-                  <tr key={`${s.ticker}-${s.date}`} onClick={() => { setSelectedIdx(i); setDayOffset(0) }} style={{ cursor: 'pointer', background: isActive ? T.GOLD_DIM : 'transparent' }}
+                  <tr key={`${s.ticker}-${s.date}`} onClick={() => { setSelectedIdx(i); setDayOffset(0) }} style={{ cursor: 'pointer', background: isActive ? T.GOLD_DIM : 'transparent', opacity: dimmed ? 0.3 : 1 }}
                     onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
                     onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
                   >
@@ -1435,7 +1525,7 @@ export default function BacktestPage() {
   )
   const renderCenter = () => (
     <div style={{ flex: 1, padding: 12, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <BacktestStatsPanel signals={signals} backtestResults={backtestResults} dark={dark} />
+      <BacktestStatsPanel signals={filteredSignals} backtestResults={backtestResults} dark={dark} />
 
       {loading ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 60 }}>

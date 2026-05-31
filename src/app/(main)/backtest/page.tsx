@@ -690,9 +690,9 @@ function BacktestStatsPanel({ signals, backtestResults }: { signals: Signal[]; b
   ]
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
       {/* ── Signal Overview Row (always visible) ── */}
-      <div className="grid grid-cols-4 lg:grid-cols-8 gap-1">
+      <div className="grid grid-cols-4 lg:grid-cols-8 gap-1.5">
         <StatBox label="Signals" value={signals.length.toString()} icon={<Zap className="h-3 w-3" />} />
         <StatBox label="Days" value={sigStats.dates.toString()} icon={<Calendar className="h-3 w-3" />} />
         <StatBox label="Tickers" value={sigStats.tickers.toString()} icon={<Hash className="h-3 w-3" />} />
@@ -704,17 +704,17 @@ function BacktestStatsPanel({ signals, backtestResults }: { signals: Signal[]; b
       </div>
 
       {/* ── Tab Bar ── */}
-      <div className="flex items-center gap-1" style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '3px 6px' }}>
+      <div className="flex items-center gap-1" style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '4px 8px' }}>
         {tabs.map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key)} style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: activeTab === t.key ? 700 : 500,
+            display: 'flex', alignItems: 'center', gap: 5,
+            padding: '6px 14px', borderRadius: 3, fontSize: 11, fontWeight: activeTab === t.key ? 700 : 500,
             background: activeTab === t.key ? TEAL : 'transparent',
             color: activeTab === t.key ? '#000' : MUTED,
             border: 'none', cursor: 'pointer', transition: 'all 0.15s',
           }}>{t.icon}{t.label}</button>
         ))}
-        {bt && <span style={{ color: MUTED, fontSize: 8, marginLeft: 'auto' }}>{bt.entryType} → {bt.exitType} · {bt.totalTrades} trades</span>}
+        {bt && <span style={{ color: MUTED, fontSize: 9, marginLeft: 'auto' }}>{bt.entryType} → {bt.exitType} · {bt.totalTrades} trades</span>}
       </div>
 
       {/* ── Tab Content ── */}
@@ -726,8 +726,8 @@ function BacktestStatsPanel({ signals, backtestResults }: { signals: Signal[]; b
       ) : activeTab === 'overview' ? (
         <>
           {/* ── OVERVIEW TAB: Key metrics grid ── */}
-          <div style={{ background: SURFACE, border: `1px solid ${TEAL}40`, borderRadius: 4, padding: '8px 10px' }}>
-            <div className="grid grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-1.5">
+          <div style={{ background: SURFACE, border: `1px solid ${TEAL}40`, borderRadius: 4, padding: '12px 14px' }}>
+            <div className="grid grid-cols-3 lg:grid-cols-6 gap-x-6 gap-y-2">
               <MetricRow label="Total Return" value={`${bt.totalReturnPct > 0 ? '+' : ''}${bt.totalReturnPct.toFixed(1)}%`} color={bt.totalReturnPct >= 0 ? TEAL : RED} />
               <MetricRow label="CAGR" value={`${bt.cagr > 0 ? '+' : ''}${bt.cagr.toFixed(1)}%`} color={bt.cagr >= 0 ? TEAL : RED} />
               <MetricRow label="Total P&L" value={`$${bt.totalPnl > 0 ? '+' : ''}${(bt.totalPnl / 1000).toFixed(1)}k`} color={bt.totalPnl >= 0 ? TEAL : RED} />
@@ -763,14 +763,14 @@ function BacktestStatsPanel({ signals, backtestResults }: { signals: Signal[]; b
                 <Clock className="h-3 w-3" style={{ color: GOLD }} />
                 <span style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Daily Breakdown</span>
               </div>
-              <div style={{ display: 'flex', gap: 3, overflowX: 'auto', paddingBottom: 4 }}>
+              <div style={{ display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 4 }}>
                 {bt.dayStats.map((d, i) => {
                   const col = d.pnl >= 0 ? TEAL : RED
                   return (
-                    <div key={i} style={{ minWidth: 48, padding: '3px 5px', background: SURFACE2, borderRadius: 3, textAlign: 'center' }}>
-                      <div style={{ color: MUTED, fontSize: 7, fontWeight: 600 }}>{d.day}</div>
-                      <div style={{ color: col, fontSize: 10, fontWeight: 700 }}>{d.pnl >= 0 ? '+' : ''}{d.pnl.toFixed(1)}%</div>
-                      <div style={{ color: MUTED, fontSize: 6 }}>{d.count}t</div>
+                    <div key={i} style={{ minWidth: 54, padding: '4px 6px', background: SURFACE2, borderRadius: 3, textAlign: 'center' }}>
+                      <div style={{ color: MUTED, fontSize: 8, fontWeight: 600 }}>{d.day}</div>
+                      <div style={{ color: col, fontSize: 12, fontWeight: 700 }}>{d.pnl >= 0 ? '+' : ''}{d.pnl.toFixed(1)}%</div>
+                      <div style={{ color: MUTED, fontSize: 7 }}>{d.count}t</div>
                     </div>
                   )
                 })}
@@ -784,7 +784,7 @@ function BacktestStatsPanel({ signals, backtestResults }: { signals: Signal[]; b
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-1">
             {/* Return Distribution */}
             <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '8px 10px' }}>
-              <div style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Return Distribution</div>
+              <div style={{ color: GOLD, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Return Distribution</div>
               {(() => {
                 const buckets = { '< -5%': 0, '-5 to -2%': 0, '-2 to 0%': 0, '0 to +2%': 0, '+2 to +5%': 0, '> +5%': 0 }
                 bt.tradeReturns.forEach(r => {
@@ -872,11 +872,11 @@ function BacktestStatsPanel({ signals, backtestResults }: { signals: Signal[]; b
           {/* ── P&L / DRAWDOWN TAB: Equity curve + DD chart (canvas) ── */}
           <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '8px 10px' }}>
             <div style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Equity Curve (Cumulative P&L)</div>
-            <EquityChart data={bt.cumPnlSeries} color={bt.cumPnlSeries[bt.cumPnlSeries.length - 1] >= 0 ? TEAL : RED} height={100} />
+            <EquityChart data={bt.cumPnlSeries} color={bt.cumPnlSeries[bt.cumPnlSeries.length - 1] >= 0 ? TEAL : RED} height={130} />
           </div>
           <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '8px 10px' }}>
             <div style={{ color: RED, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Drawdown</div>
-            <EquityChart data={bt.drawdownSeries} color={RED} height={80} inverted />
+            <EquityChart data={bt.drawdownSeries} color={RED} height={100} inverted />
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-1">
             <StatBox label="Total Return" value={`${bt.totalReturnPct > 0 ? '+' : ''}${bt.totalReturnPct.toFixed(1)}%`} icon={<TrendingUp className="h-3 w-3" />} color={bt.totalReturnPct >= 0 ? TEAL : RED} />
@@ -929,9 +929,9 @@ function BacktestStatsPanel({ signals, backtestResults }: { signals: Signal[]; b
 // ─── Helper components for stats ──
 function MetricRow({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div className="flex items-center justify-between" style={{ padding: '2px 0', borderBottom: `1px solid ${SURFACE3}` }}>
-      <span style={{ color: MUTED, fontSize: 10 }}>{label}</span>
-      <span style={{ color: color || TEXT, fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+    <div className="flex items-center justify-between" style={{ padding: '4px 0', borderBottom: `1px solid ${SURFACE3}` }}>
+      <span style={{ color: MUTED, fontSize: 11 }}>{label}</span>
+      <span style={{ color: color || TEXT, fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
     </div>
   )
 }
@@ -974,9 +974,9 @@ function EquityChart({ data, color, height, inverted }: { data: number[]; color:
 // DistBar removed — not needed for backtest page
 function StatBox({ label, value, icon, color }: { label: string; value: string; icon: React.ReactNode; color?: string }) {
   return (
-    <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '4px 8px' }}>
-      <div className="flex items-center gap-1" style={{ color: MUTED, fontSize: 8 }}>{icon}{label}</div>
-      <div style={{ color: color || GOLD, fontSize: 13, fontWeight: 700 }}>{value}</div>
+    <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '6px 10px' }}>
+      <div className="flex items-center gap-1" style={{ color: MUTED, fontSize: 9 }}>{icon}{label}</div>
+      <div style={{ color: color || GOLD, fontSize: 16, fontWeight: 700, marginTop: 1 }}>{value}</div>
     </div>
   )
 }
@@ -1074,6 +1074,11 @@ export default function BacktestPage() {
   const [dayOffset, setDayOffset] = useState(0)
   const [backtestResults, setBacktestResults] = useState<BacktestResults | null>(null)
   const T = useThemeColors(dark)
+
+  // Auto-run baseline when signals load
+  useEffect(() => {
+    if (signals.length > 0 && !backtestResults) runBaselineBacktest()
+  }, [signals])
 
   // ── Baseline backtest: buy D0 open, sell D0 close ──
   const runBaselineBacktest = useCallback(() => {

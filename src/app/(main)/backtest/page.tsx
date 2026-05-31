@@ -206,6 +206,12 @@ function useThemeColors(dark: boolean) {
 }
 
 // ─── MiniChart with zoom ────────────────────────────────
+// Safe ISO date from timestamp (guards against NaN/invalid)
+function safeISO(ts: number): string {
+  const d = new Date(ts * 1000)
+  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
+}
+
 function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset = 0 }: {
   symbol: string
   tf: Timeframe
@@ -275,7 +281,8 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
         if (typeof b.time === 'number') {
           // Convert to ET date
           const etMs = b.time * 1000 - 4 * 3600000
-          bd = new Date(etMs).toISOString().slice(0, 10)
+          const etD = new Date(etMs)
+          bd = isNaN(etD.getTime()) ? '' : etD.toISOString().slice(0, 10)
         } else if (typeof b.time === 'string') {
           bd = b.time.slice(0, 10)
         }
@@ -411,7 +418,7 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
       }
       const getBarDate = (b: any): string => {
         if (typeof b.time === 'string') return b.time.slice(0, 10)
-        if (typeof b.time === 'number') return new Date(b.time * 1000).toISOString().slice(0, 10)
+        if (typeof b.time === 'number') { const d = new Date(b.time * 1000); return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10) }
         return ''
       }
       const preMktStart = 4 * 60
@@ -443,7 +450,7 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
         if (typeof b.time === 'number') {
           const d = new Date(b.time * 1000)
           const etDate = new Date(d.getTime() - 4 * 3600000)
-          barDate = etDate.toISOString().slice(0, 10)
+          barDate = isNaN(etDate.getTime()) ? '' : etDate.toISOString().slice(0, 10)
         } else if (typeof b.time === 'string') {
           barDate = b.time.slice(0, 10)
         }
@@ -616,7 +623,7 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
         let prevClose: number | null = null
         for (let i = 0; i < bars.length; i++) {
           const bt = bars[i].time
-          const bd = typeof bt === 'string' ? bt : (typeof bt === 'number' ? new Date(bt * 1000).toISOString().slice(0, 10) : '')
+          const bd = typeof bt === 'string' ? bt : (typeof bt === 'number' ? (() => { const d = new Date(bt * 1000); return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10) })() : '')
           if (bd === date) {
             // This is D0 — prev close is the close of the bar just before
             if (i > 0) prevClose = bars[i - 1].close

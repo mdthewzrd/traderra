@@ -7,7 +7,8 @@ import {
   Plus, ExternalLink, Calendar, Zap, Activity,
   ArrowUpRight, Hash, DollarSign, Target, Layers,
   Clock, TrendingDown, Minus, Play, Rows3,
-  LayoutGrid, X, Settings2, Save, Sun, Moon, Shield
+  LayoutGrid, X, Settings2, Save, Sun, Moon, Shield,
+  MessageSquare, Send
 } from 'lucide-react'
 
 // ─── Types ──────────────────────────────────────────────
@@ -832,6 +833,8 @@ export default function BacktestPage() {
   const [loading, setLoading] = useState(false)
   const [showRunModal, setShowRunModal] = useState(false)
   const [selectedRun, setSelectedRun] = useState<string>('r1')
+  const [chatInput, setChatInput] = useState('')
+  const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([])
   const [showSettings, setShowSettings] = useState(false)
   const [chartSettings, setChartSettings] = useState<ChartSettings>({
     showEma9_20: true, showEma72_89: true, showDevBands: true,
@@ -1083,10 +1086,43 @@ export default function BacktestPage() {
           </table>
         </div>
       </div>
+
+      {/* Chat */}
+      <div style={{ flex: 1, minHeight: 200, borderTop: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
+        <div className="px-2 py-1.5 flex items-center gap-1.5" style={{ borderBottom: `1px solid ${BORDER}`, background: SURFACE2 }}>
+          <MessageSquare className="h-3 w-3" style={{ color: GOLD }} />
+          <span style={{ color: GOLD, fontSize: 10, fontWeight: 700 }}>CHAT</span>
+        </div>
+        <div className="flex-1 overflow-y-auto" style={{ padding: '6px 8px' }}>
+          {chatMessages.length === 0 && (
+            <p style={{ color: MUTED, fontSize: 10, fontStyle: 'italic', padding: '8px 4px' }}>Ask about backtest results, entry systems, or signal patterns...</p>
+          )}
+          {chatMessages.map((m, i) => (
+            <div key={i} style={{ marginBottom: 6 }}>
+              <div style={{ display: 'inline-block', padding: '4px 8px', borderRadius: 6, fontSize: 11, lineHeight: 1.4, background: m.role === 'user' ? GOLD_DIM : SURFACE2, color: TEXT, maxWidth: '90%', wordBreak: 'break-word' }}>{m.content}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: '4px 6px', borderTop: `1px solid ${BORDER}`, display: 'flex', gap: 4 }}>
+          <input value={chatInput} onChange={e => setChatInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && chatInput.trim()) {
+                const msg = chatInput.trim()
+                setChatMessages(prev => [...prev, { role: 'user', content: msg }])
+                setChatInput('')
+                setTimeout(() => { setChatMessages(prev => [...prev, { role: 'assistant', content: `Analyzing: "${msg}" — API coming soon.` }]) }, 500)
+              }
+            }}
+            placeholder="Ask about backtest..."
+            style={{ flex: 1, background: BG, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '5px 8px', color: TEXT, fontSize: 11, outline: 'none' }}
+          />
+          <button style={{ padding: '4px 8px', borderRadius: 3, background: GOLD, color: '#000', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+            <Send className="h-3 w-3" />
+          </button>
+        </div>
+      </div>
     </div>
   )
-
-  // ─── Center: Stats + Chart ────────────────────────
   const renderCenter = () => (
     <div style={{ flex: 1, padding: 12, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
       <BacktestStatsPanel signals={signals} backtestResults={backtestResults} />

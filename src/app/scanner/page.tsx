@@ -10,6 +10,21 @@ import {
   LayoutGrid, X, Settings2, Save, Sun, Moon
 } from 'lucide-react'
 
+// ─── Built-in Scans (shared with SCAN tab) ─────────────
+const BUILTIN_SCANS: ScanDef[] = [
+  { id: 'builtin-backside-b', name: 'Backside B', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString() },
+  { id: 'builtin-gap-up', name: 'Gap Up', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString() },
+  { id: 'builtin-high-tight-flag', name: 'High Tight Flag', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString() },
+  { id: 'builtin-aparascan', name: 'Aparascan', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString() },
+]
+
+const BUILTIN_SPEC_MAP: Record<string, string> = {
+  'builtin-backside-b': 'backside-b',
+  'builtin-gap-up': 'gap-up',
+  'builtin-high-tight-flag': 'high-tight-flag',
+  'builtin-aparascan': 'aparascan',
+}
+
 // ─── Types ──────────────────────────────────────────────
 interface Signal {
   ticker: string
@@ -104,7 +119,22 @@ function useThemeColors(dark: boolean) {
   } : { ...LIGHT, GOLD, GOLD_DIM: LIGHT.GOLD_DIM, GOLD_BORDER: LIGHT.GOLD_BORDER }
 }
 
-// ─── MiniChart with zoom ────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────
+/** Get the ET (America/New_York) date string for a bar (YYYY-MM-DD). */
+function barETDate(b: any): string {
+  if (typeof b.time === 'string') return b.time.slice(0, 10)
+  if (typeof b.time === 'number') {
+    try {
+      return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' })
+        .format(new Date(b.time * 1000))
+    } catch {
+      return new Date(b.time * 1000 - 5 * 3600000).toISOString().slice(0, 10)
+    }
+  }
+  return ''
+}
+
+// ─── MiniChart with zoom & drag ─────────────────────────
 function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset = 0 }: {
   symbol: string
   tf: Timeframe
@@ -118,6 +148,8 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
   const [allBars, setAllBars] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const mouseRef = useRef<{ x: number; y: number } | null>(null)
+  const dragRef = useRef<{ active: boolean; startX: number; zoomStart: number; zoomEnd: number } | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
   // Manual zoom from wheel — null means "compute default"
   const [manualZoom, setManualZoom] = useState<{ start: number; end: number } | null>(null)
 
@@ -165,20 +197,11 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
     else if (tf === '60') defaultBars = Math.min(allBars.length, 98)
     else defaultBars = Math.min(allBars.length, 120)
 
-    // Find D0 — the last bar matching signal date
+    // Find D0 — the last bar whose ET date matches the signal date
     let d0Idx = allBars.length - 1
     if (date) {
       for (let i = allBars.length - 1; i >= 0; i--) {
-        const b = allBars[i]
-        let bd = ''
-        if (typeof b.time === 'number') {
-          // Convert to ET date
-          const etMs = b.time * 1000 - 4 * 3600000
-          bd = new Date(etMs).toISOString().slice(0, 10)
-        } else if (typeof b.time === 'string') {
-          bd = b.time.slice(0, 10)
-        }
-        if (bd === date) { d0Idx = i; break }
+        if (barETDate(allBars[i]) === date) { d0Idx = i; break }
       }
     }
 
@@ -308,11 +331,7 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
         }
         return null
       }
-      const getBarDate = (b: any): string => {
-        if (typeof b.time === 'string') return b.time.slice(0, 10)
-        if (typeof b.time === 'number') return new Date(b.time * 1000).toISOString().slice(0, 10)
-        return ''
-      }
+      const getBarDate = (b: any): string => barETDate(b)
       const preMktStart = 4 * 60
       const mktOpen = 9 * 60 + 30
       const mktClose = 16 * 60
@@ -338,15 +357,7 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
     if (date && tf === 'D' && bars.length > 0) {
       for (let i = 0; i < bars.length; i++) {
         const b = bars[i]
-        let barDate = ''
-        if (typeof b.time === 'number') {
-          const d = new Date(b.time * 1000)
-          const etDate = new Date(d.getTime() - 4 * 3600000)
-          barDate = etDate.toISOString().slice(0, 10)
-        } else if (typeof b.time === 'string') {
-          barDate = b.time.slice(0, 10)
-        }
-        if (barDate === date) {
+        if (barETDate(b) === date) {
           const x = xFor(i)
           const lowY = yFor(b.low)
           // Upward wedge ▲ below the candle
@@ -487,7 +498,7 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
       }
 
       // ── VWAP line (5m / 15m only, resets at market day boundary) ──
-      if (settings.showVwap && (tf === '5m' || tf === '15m')) {
+      if (settings.showVwap && (tf === '5' || tf === '15')) {
         let cumVP = 0, cumV = 0, lastMktDay: string | null = null
         const vwapVals: number[] = []
         for (let i = 0; i < bars.length; i++) {
@@ -514,9 +525,7 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
       if (settings.showPrevClose && date) {
         let prevClose: number | null = null
         for (let i = 0; i < bars.length; i++) {
-          const bt = bars[i].time
-          const bd = typeof bt === 'string' ? bt : (typeof bt === 'number' ? new Date(bt * 1000).toISOString().slice(0, 10) : '')
-          if (bd === date) {
+          if (barETDate(bars[i]) === date) {
             // This is D0 — prev close is the close of the bar just before
             if (i > 0) prevClose = bars[i - 1].close
             break
@@ -583,12 +592,56 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
     setManualZoom({ start: newStart, end: newEnd })
   }, [allBars, visibleBars])
 
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (e.button !== 0) return // left click only
+    const rect = canvasRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const zoom = manualZoom || { start: 0, end: allBars.length }
+    dragRef.current = { active: true, startX: e.clientX, zoomStart: zoom.start, zoomEnd: zoom.end }
+    setIsDragging(true)
+    mouseRef.current = null // hide crosshair during drag
+  }
+
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current?.getBoundingClientRect()
     if (!rect) return
-    mouseRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top }; draw()
+
+    // If dragging, pan the chart (no crosshair)
+    if (dragRef.current?.active && allBars.length > 0) {
+      const dx = e.clientX - dragRef.current.startX
+      const chartW = rect.width - 54
+      const barsPerPx = (dragRef.current.zoomEnd - dragRef.current.zoomStart) / chartW
+      const shift = Math.round(dx * barsPerPx)
+      let newStart = dragRef.current.zoomStart - shift
+      let newEnd = dragRef.current.zoomEnd - shift
+      if (newStart < 0) { newEnd -= newStart; newStart = 0 }
+      if (newEnd > allBars.length) { newStart -= (newEnd - allBars.length); newEnd = allBars.length }
+      newStart = Math.max(0, newStart)
+      if (newEnd - newStart < 10) return
+      setManualZoom({ start: newStart, end: newEnd })
+      return
+    }
+
+    // Otherwise, show crosshair
+    mouseRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+    draw()
   }
-  const handleMouseLeave = () => { mouseRef.current = null; draw() }
+
+  const handleMouseUp = () => {
+    if (dragRef.current?.active) {
+      dragRef.current = null
+      setIsDragging(false)
+    }
+  }
+
+  const handleMouseLeave = () => {
+    mouseRef.current = null
+    if (dragRef.current?.active) {
+      dragRef.current = null
+      setIsDragging(false)
+    }
+    draw()
+  }
   const tfLabel = tf === '5' ? '5m' : tf === '15' ? '15m' : tf === '60' ? '1H' : '1D'
   const Th = dark
     ? { bg: BG, surface: SURFACE, border: BORDER, muted: MUTED }
@@ -605,9 +658,11 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
           <Loader2 className="h-4 w-4 animate-spin" style={{ color: GOLD }} />
         </div>
       ) : (
-        <canvas ref={canvasRef} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}
+        <canvas ref={canvasRef}
+          onMouseDown={handleMouseDown} onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp} onMouseLeave={handleMouseLeave}
           onWheel={handleWheel}
-          style={{ width: '100%', height, display: 'block', cursor: 'crosshair' }} />
+          style={{ width: '100%', height, display: 'block', cursor: isDragging ? 'grabbing' : 'grab' }} />
       )}
     </div>
   )
@@ -827,7 +882,10 @@ export default function ScanDashboardPage() {
     fetch('/api/scans')
       .then(r => r.json())
       .then(data => {
-        const list = (data.scans || []).filter((s: ScanDef) => s.resultCount > 0)
+        const dbScans = (data.scans || []).filter((s: ScanDef) => s.resultCount > 0)
+        // Merge: built-ins first, then DB scans (DB overrides built-in if same name)
+        const dbNames = new Set(dbScans.map((s: ScanDef) => s.name?.toLowerCase()))
+        const list = [...BUILTIN_SCANS.filter(b => !dbNames.has(b.name.toLowerCase())), ...dbScans]
         setScans(list)
         if (list.length && !selectedScan) setSelectedScan(list[0].id)
       })
@@ -835,6 +893,11 @@ export default function ScanDashboardPage() {
 
   useEffect(() => {
     if (!selectedScan) return
+    // Built-in scans don't have DB data — skip fetch
+    if (selectedScan.startsWith('builtin-')) {
+      setSignals([])
+      return
+    }
     setLoading(true)
     fetch(`/api/scans/${selectedScan}`)
       .then(r => r.json())
@@ -1255,9 +1318,41 @@ export default function ScanDashboardPage() {
       </div>
 
       {/* Run Modal */}
-      {showRunModal && <RunModal scan={activeScan} onClose={() => setShowRunModal(false)} onRun={(range) => {
-        // TODO: wire to scan API
-        setTimeout(() => setShowRunModal(false), 1000)
+      {showRunModal && <RunModal scan={activeScan} onClose={() => setShowRunModal(false)} onRun={async (range) => {
+        if (!activeScan) return
+        const days = parseInt(range)
+        const to = new Date()
+        const from = new Date(to.getTime() - days * 86400000)
+        const specName = BUILTIN_SPEC_MAP[activeScan.id] || activeScan.name.toLowerCase().replace(/\s+/g, '-')
+        try {
+          const res = await fetch('/api/scans/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              spec: specName,
+              from: from.toISOString().slice(0, 10),
+              to: to.toISOString().slice(0, 10),
+            }),
+          })
+          const data = await res.json()
+          if (data.error) {
+            alert(`Error: ${data.error}`)
+          } else {
+            const newSignals = (data.signals || []).map((s: any) => ({
+              ...s,
+              ticker: s.ticker || s.symbol || '',
+              symbol: s.ticker || s.symbol || '',
+            }))
+            setSignals(newSignals)
+            setSelectedIdx(0)
+            setDayOffset(0)
+            // Update the scan's resultCount in the list
+            setScans(prev => prev.map(s => s.id === activeScan.id ? { ...s, resultCount: newSignals.length } : s))
+          }
+        } catch (err: any) {
+          alert(`Failed: ${err.message}`)
+        }
+        setShowRunModal(false)
       }} />}
     </div>
   )

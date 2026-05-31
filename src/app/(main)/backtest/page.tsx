@@ -603,7 +603,7 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
           const ts = (bars[i].time || 0) * 1000
           const utcH = new Date(ts).getUTCHours()
           const etDate = new Date(ts - (utcH < 5 ? 86400000 : 0))
-          const mktDay = etDate.toISOString().slice(0, 10)
+          const mktDay = isNaN(etDate.getTime()) ? '' : etDate.toISOString().slice(0, 10)
           if (mktDay !== lastMktDay) { cumVP = 0; cumV = 0; lastMktDay = mktDay }
           const typical = (bars[i].high + bars[i].low + bars[i].close) / 3
           cumVP += typical * (bars[i].volume || 0)

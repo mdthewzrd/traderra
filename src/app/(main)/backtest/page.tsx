@@ -932,8 +932,8 @@ function BacktestStatsPanel({ signals, backtestResults, dark }: { signals: Signa
 // ─── Helper components for stats ──
 function MetricRow({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div className="flex items-center justify-between" style={{ padding: '4px 0', borderBottom: `1px solid ${C.SURFACE3}` }}>
-      <span style={{ color: C.MUTED, fontSize: 11 }}>{label}</span>
+    <div className="flex items-center justify-between" style={{ padding: '4px 0', borderBottom: `1px solid ${SURFACE3}` }}>
+      <span style={{ color: MUTED, fontSize: 11 }}>{label}</span>
       <span style={{ color: color || TEXT, fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
     </div>
   )
@@ -955,7 +955,7 @@ function EquityChart({ data, color, height, inverted }: { data: number[]; color:
     const xStep = w / (data.length - 1 || 1)
     // Zero line
     const zeroY = h - ((0 - min) / range) * h
-    ctx.strokeStyle = `${C.SURFACE3}`; ctx.lineWidth = 0.5; ctx.setLineDash([3, 3])
+    ctx.strokeStyle = `${SURFACE3}`; ctx.lineWidth = 0.5; ctx.setLineDash([3, 3])
     ctx.beginPath(); ctx.moveTo(0, zeroY); ctx.lineTo(w, zeroY); ctx.stroke(); ctx.setLineDash([])
     // Fill
     ctx.beginPath()
@@ -977,16 +977,16 @@ function EquityChart({ data, color, height, inverted }: { data: number[]; color:
 // DistBar removed — not needed for backtest page
 function StatBox({ label, value, icon, color }: { label: string; value: string; icon: React.ReactNode; color?: string }) {
   return (
-    <div style={{ background: C.SURFACE, border: `1px solid ${C.BORDER}`, borderRadius: 4, padding: '6px 10px' }}>
-      <div className="flex items-center gap-1" style={{ color: C.MUTED, fontSize: 9 }}>{icon}{label}</div>
-      <div style={{ color: color || C.GOLD, fontSize: 16, fontWeight: 700, marginTop: 1 }}>{value}</div>
+    <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '6px 10px' }}>
+      <div className="flex items-center gap-1" style={{ color: MUTED, fontSize: 9 }}>{icon}{label}</div>
+      <div style={{ color: color || GOLD, fontSize: 16, fontWeight: 700, marginTop: 1 }}>{value}</div>
     </div>
   )
 }
 function Detail({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div style={{ background: C.SURFACE, border: `1px solid ${C.BORDER}`, borderRadius: 3, padding: '2px 6px' }}>
-      <span style={{ color: C.MUTED, fontSize: 8, textTransform: 'uppercase' }}>{label} </span>
+    <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '2px 6px' }}>
+      <span style={{ color: MUTED, fontSize: 8, textTransform: 'uppercase' }}>{label} </span>
       <span style={{ color: color || TEXT, fontSize: 10, fontWeight: 600 }}>{value}</span>
     </div>
   )

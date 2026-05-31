@@ -1490,7 +1490,13 @@ export default function BacktestPage() {
   )
 
   // ─── Right Sidebar: Signals only ─────────────────
-  const renderRightSidebar = () => (
+  // ── Visible filter columns (separate from active filter toggles) ──
+  const [visibleFilters, setVisibleFilters] = useState<Set<string>>(new Set())
+  const [showFilterMenu, setShowFilterMenu] = useState(false)
+
+  const renderRightSidebar = () => {
+    const activeFilterDefs = FILTERS.filter(f => visibleFilters.has(f.key))
+    return (
     <div style={{
       width: RIGHT_W, minWidth: RIGHT_W, maxWidth: RIGHT_W,
       background: T.SURFACE, borderLeft: `1px solid ${T.BORDER}`,
@@ -1498,73 +1504,136 @@ export default function BacktestPage() {
       position: 'sticky', top: 48,
     }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <div className="px-2 py-1.5 flex items-center justify-between" style={{ borderBottom: `1px solid ${T.BORDER}`, background: T.SURFACE2 }}>
+        {/* ── Signal Header + Filter Button ── */}
+        <div className="flex items-center justify-between px-2 py-1.5" style={{ borderBottom: `1px solid ${T.BORDER}`, background: T.SURFACE2 }}>
           <span style={{ color: T.GOLD, fontSize: 10, fontWeight: 700 }}>SIGNALS</span>
-          <span style={{ color: T.MUTED, fontSize: 9 }}>{filteredSignals.length}/{signals.length}</span>
-        </div>
-        {/* ── Filter Toggles ── */}
-        {signals.length > 0 && (
-          <div style={{ padding: '4px 8px', borderBottom: `1px solid ${T.BORDER}`, display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-            {FILTERS.map(f => {
-              const active = activeFilters.has(f.key)
-              const count = filterCounts[f.key] || 0
-              const isLoading = f.needsBars === '15m' && active && bars15mLoading
-              return (
-                <button key={f.key} title={f.description} onClick={() => {
-                  const next = new Set(activeFilters)
-                  active ? next.delete(f.key) : next.add(f.key)
-                  setActiveFilters(next)
-                }} style={{
-                  display: 'flex', alignItems: 'center', gap: 3,
-                  padding: '2px 6px', borderRadius: 3, fontSize: 9, fontWeight: active ? 700 : 500,
-                  background: isLoading ? '#f59e0b' : active ? T.TEAL : T.SURFACE2,
-                  color: isLoading ? '#000' : active ? '#000' : T.MUTED,
-                  border: `1px solid ${isLoading ? '#f59e0b' : active ? T.TEAL : T.BORDER}`,
-                  cursor: 'pointer', transition: 'all 0.15s',
+          <div className="flex items-center gap-2">
+            <span style={{ color: T.MUTED, fontSize: 9 }}>{filteredSignals.length}/{signals.length}</span>
+            {/* Add Filter dropdown */}
+            <div style={{ position: 'relative' }}>
+              <button onClick={() => setShowFilterMenu(!showFilterMenu)} style={{
+                display: 'flex', alignItems: 'center', gap: 3,
+                padding: '2px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600,
+                background: showFilterMenu ? T.TEAL : T.SURFACE,
+                color: showFilterMenu ? '#000' : T.MUTED,
+                border: `1px solid ${showFilterMenu ? T.TEAL : T.BORDER}`,
+                cursor: 'pointer',
+              }}>
+                <Settings2 className="h-3 w-3" />+ Filter
+              </button>
+              {/* Dropdown menu */}
+              {showFilterMenu && (
+                <div style={{
+                  position: 'absolute', right: 0, top: '100%', zIndex: 50,
+                  width: 260, background: T.SURFACE, border: `1px solid ${T.BORDER}`,
+                  borderRadius: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                  maxHeight: 360, overflowY: 'auto',
                 }}>
-                  {isLoading ? '⏳' : ''}{f.shortLabel}
-                  <span style={{ fontSize: 7, opacity: 0.7 }}>{count}</span>
-                </button>
-              )
-            })}
+                  <div style={{ padding: '6px 8px', borderBottom: `1px solid ${T.BORDER}` }}>
+                    <span style={{ color: T.GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Add Filter Columns</span>
+                  </div>
+                  {FILTERS.map(f => {
+                    const visible = visibleFilters.has(f.key)
+                    const count = filterCounts[f.key] || 0
+                    const isLoading = f.needsBars === '15m' && visible && bars15mLoading
+                    return (
+                      <button key={f.key} onClick={() => {
+                        const next = new Set(visibleFilters)
+                        visible ? next.delete(f.key) : next.add(f.key)
+                        setVisibleFilters(next)
+                        if (visible) {
+                          const nextActive = new Set(activeFilters)
+                          nextActive.delete(f.key)
+                          setActiveFilters(nextActive)
+                        }
+                        setShowFilterMenu(false)
+                      }} style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        width: '100%', padding: '6px 10px', border: 'none', cursor: 'pointer',
+                        background: visible ? `${T.TEAL}15` : 'transparent',
+                        borderBottom: `1px solid ${T.BORDER}`,
+                        textAlign: 'left',
+                      }}>
+                        <div style={{ width: 14, height: 14, borderRadius: 3, border: `2px solid ${visible ? T.TEAL : T.BORDER}`, background: visible ? T.TEAL : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          {visible && <span style={{ color: '#000', fontSize: 10, fontWeight: 700 }}>✓</span>}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ color: visible ? T.TEXT : T.MUTED, fontSize: 10, fontWeight: 600 }}>{f.shortLabel} — {f.label}</div>
+                          <div style={{ color: T.MUTED, fontSize: 8 }}>{f.description}</div>
+                        </div>
+                        <span style={{ color: isLoading ? '#f59e0b' : T.MUTED, fontSize: 8, fontWeight: 600 }}>{isLoading ? '⏳' : `${count}/${signals.length}`}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
           </div>
-        )}
+        </div>
+
         <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
           <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 10 }}>
             <thead>
               <tr style={{ background: T.SURFACE2, position: 'sticky', top: 0, zIndex: 2 }}>
                 <th style={{ padding: '4px 6px', textAlign: 'left', color: T.GOLD, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 0, background: T.SURFACE2, zIndex: 3, minWidth: 56 }}>Ticker</th>
                 <th style={{ padding: '4px 6px', textAlign: 'left', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 56, background: T.SURFACE2, zIndex: 3, minWidth: 68, borderRight: `1px solid ${T.BORDER}` }}>Date</th>
-                <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Open</th>
-                <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Close</th>
                 <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Gap%</th>
                 <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>D0</th>
-                <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Rng%</th>
                 <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>ABS</th>
-                <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Vol</th>
+                {/* ── Dynamic filter columns ── */}
+                {activeFilterDefs.map(f => {
+                  const isActive = activeFilters.has(f.key)
+                  const count = filterCounts[f.key] || 0
+                  return (
+                    <th key={f.key} title={`${f.description}\nClick to ${isActive ? 'disable' : 'enable'} filter (${count}/${signals.length} pass)`}
+                      onClick={() => {
+                        const next = new Set(activeFilters)
+                        isActive ? next.delete(f.key) : next.add(f.key)
+                        setActiveFilters(next)
+                      }}
+                      style={{
+                        padding: '4px 4px', textAlign: 'center', cursor: 'pointer',
+                        color: isActive ? '#000' : T.MUTED, fontSize: 7, fontWeight: 700,
+                        textTransform: 'uppercase', letterSpacing: 0.5,
+                        background: isActive ? T.TEAL : T.SURFACE3,
+                        borderLeft: `1px solid ${T.BORDER}`,
+                        minWidth: 30,
+                      }}>
+                      <div>{f.shortLabel}</div>
+                      <div style={{ fontSize: 7, fontWeight: 400, opacity: 0.7 }}>{count}</div>
+                    </th>
+                  )
+                })}
               </tr>
             </thead>
             <tbody>
               {signals.map((s, i) => {
                 const isActive = i === selectedIdx
                 const d0chg = ((s.close - s.open) / s.open * 100)
-                const rng = ((s.high - s.low) / s.open * 100)
                 const passesAllFilters = activeFilters.size === 0 || Array.from(activeFilters).every(k => filterResults[k]?.[i])
                 const dimmed = activeFilters.size > 0 && !passesAllFilters
                 return (
-                  <tr key={`${s.ticker}-${s.date}`} onClick={() => { setSelectedIdx(i); setDayOffset(0) }} style={{ cursor: 'pointer', background: isActive ? T.GOLD_DIM : 'transparent', opacity: dimmed ? 0.3 : 1 }}
+                  <tr key={`${s.ticker}-${s.date}`} onClick={() => { setSelectedIdx(i); setDayOffset(0) }} style={{ cursor: 'pointer', background: isActive ? T.GOLD_DIM : 'transparent', opacity: dimmed ? 0.25 : 1 }}
                     onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
                     onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
                   >
                     <td style={{ padding: '3px 6px', color: isActive ? T.GOLD : T.WHITE, fontWeight: 700, fontFamily: 'monospace', position: 'sticky', left: 0, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1 }}>{s.ticker}</td>
                     <td style={{ padding: '3px 6px', color: isActive ? T.GOLD : T.MUTED, position: 'sticky', left: 56, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1, borderRight: `1px solid ${T.BORDER}` }}>{s.date.slice(5)}</td>
-                    <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>${s.open?.toFixed(2)}</td>
-                    <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>${s.close?.toFixed(2)}</td>
                     <td style={{ padding: '3px 4px', color: T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{(s.gap_pct || 0).toFixed(0)}%</td>
                     <td style={{ padding: '3px 4px', color: d0chg < 0 ? T.RED : T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{d0chg > 0 ? '+' : ''}{d0chg.toFixed(1)}%</td>
-                    <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{rng.toFixed(1)}%</td>
                     <td style={{ padding: '3px 4px', color: T.GOLD, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(s.pos_abs || 0).toFixed(2)}</td>
-                    <td style={{ padding: '3px 4px', color: T.MUTED, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{((s.volume || 0) / 1e6).toFixed(0)}M</td>
+                    {/* Filter column cells */}
+                    {activeFilterDefs.map(f => {
+                      const passes = filterResults[f.key]?.[i]
+                      return (
+                        <td key={f.key} title={passes ? 'Passes ' + f.label : 'Fails ' + f.label} style={{
+                          padding: '3px 4px', textAlign: 'center',
+                          borderLeft: `1px solid ${T.BORDER}`,
+                          color: passes ? T.TEAL : T.RED,
+                          fontSize: 10, fontWeight: 700,
+                        }}>{passes ? '✓' : '✗'}</td>
+                      )
+                    })}
                   </tr>
                 )
               })}
@@ -1608,7 +1677,9 @@ export default function BacktestPage() {
         </div>
       </div>
     </div>
-  )
+    )
+  }
+
   const renderCenter = () => (
     <div style={{ flex: 1, padding: 12, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
       <BacktestStatsPanel signals={filteredSignals} backtestResults={backtestResults} dark={dark} />

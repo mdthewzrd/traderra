@@ -157,6 +157,48 @@ const FILTERS: FilterDef[] = [
       return extNormalized >= 0.5
     }
   },
+  // ── Dev Band Upper 1 hit during morning ──
+  { key: 'devBand1', label: 'Dev Band Upper 1', shortLabel: 'DEV1', needsBars: '15m',
+    description: 'Morning high hits EMA(72)+ATR(72)*6.9 upper dev band on 15m',
+    compute: (s, bars15m) => {
+      if (!bars15m || bars15m.length < 90) return false // need enough bars for EMA(72)
+      // Filter to 7:30-12:00 ET (11:30-16:00 UTC)
+      const morningBars = bars15m.filter(b => {
+        const h = new Date(b.time * 1000).getUTCHours()
+        const m = new Date(b.time * 1000).getUTCMinutes()
+        const mins = h * 60 + m
+        return mins >= 690 && mins < 960
+      })
+      if (morningBars.length < 3) return false
+      // Compute EMA(72) on all 15m closes
+      const closes = bars15m.map(b => b.close)
+      const ema72: number[] = [closes[0]]
+      const mult72 = 2 / (72 + 1)
+      for (let i = 1; i < closes.length; i++) ema72.push(closes[i] * mult72 + ema72[i - 1] * (1 - mult72))
+      // Compute ATR(72) on 15m bars (using high-low as TR proxy)
+      const tr: number[] = []
+      for (let i = 0; i < bars15m.length; i++) {
+        tr.push(bars15m[i].high - bars15m[i].low)
+      }
+      const atr72: number[] = [tr.slice(0, 72).reduce((a, b) => a + b, 0) / Math.min(72, tr.length)]
+      for (let i = 1; i < tr.length; i++) {
+        if (i < 72) {
+          atr72.push(tr.slice(0, i + 1).reduce((a, b) => a + b, 0) / (i + 1))
+        } else {
+          atr72.push((atr72[i - 1] * 71 + tr[i]) / 72)
+        }
+      }
+      // Get the index of the first morning bar
+      const firstMorningTime = morningBars[0].time
+      const firstMorningIdx = bars15m.findIndex(b => b.time === firstMorningTime)
+      if (firstMorningIdx < 0 || firstMorningIdx >= ema72.length) return false
+      // Upper band 1 level = EMA(72) + ATR(72) * 6.9 at start of morning
+      const bandLevel = ema72[firstMorningIdx] + atr72[firstMorningIdx] * 6.9
+      // Check if any morning bar high hits above the band
+      const morningHigh = Math.max(...morningBars.map(b => b.high))
+      return morningHigh >= bandLevel
+    }
+  },
 ]
 
 // ─── Color constants ────────────────────────────────────

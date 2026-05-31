@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { useUIStore, useChartStore, useDrawingStore } from '@/stores/charts'
 import { ProfileIcon } from '@/app/charts/ChartsTerminal'
 import { useToolStore } from '@/stores/charts/toolStore'
+import { ChartDateNav } from './ChartDateNav'
 
 /**
  * TopBar — the main toolbar at the top of the charts terminal.
@@ -67,10 +68,8 @@ export function TopBar() {
         id="live-btn"
         onClick={() => setLiveMode(!liveMode)}
       >⬤ LIVE</button>
-      <div id="live-indicator" className={liveMode ? 'show' : ''}>
-        <div id="live-dot" />
-        <span id="live-label">LIVE</span>
-      </div>
+
+      <ChartDateNav />
 
       <div className="sep" />
 
@@ -127,6 +126,7 @@ export function TopBar() {
         ))}
         <button className="tbtn" id="bt-btn" style={{ borderColor: '#f59e0b', color: '#f59e0b' }} onClick={() => setSidebarTab('bt')}>⏱ BT</button>
         <button className="tbtn" id="scan-btn" style={{ borderColor: '#4ade80', color: '#4ade80' }} onClick={() => setSidebarTab('scan')}>📡 SCAN</button>
+        <a className="tbtn" href="/scanner" target="_blank" style={{ borderColor: '#D4AF37', color: '#D4AF37', textDecoration: 'none' }} title="Open Scan Dashboard">🔍 DASH</a>
         <button className="tbtn" id="agent-btn" style={{ borderColor: '#a855f7', color: '#a855f7' }} onClick={() => useUIStore.getState().setAgentChatOpen(!useUIStore.getState().agentChatOpen)}>🤖 RENATA</button>
         <button className="tbtn" id="vault-btn" style={{ borderColor: '#a78bfa', color: '#a78bfa' }} onClick={() => setSidebarTab('vault')}>📦 VAULT</button>
         <button className="tbtn" id="settings-btn" style={{ borderColor: '#D4AF37', color: '#D4AF37' }} onClick={() => setSidebarTab('look')}>⚙ LOOK</button>

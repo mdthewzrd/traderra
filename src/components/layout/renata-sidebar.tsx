@@ -17,7 +17,6 @@ export function RenataSidebar() {
   const isLandingPage = pathname === '/' || pathname === ''
 
   // Don't render if on landing page, not loaded, or sidebar is closed
-  // Allow rendering if EITHER signed in OR in guest mode
   if (isLandingPage || !isLoaded || !aiSidebarOpen) {
     return null
   }

@@ -29,11 +29,28 @@ interface ScanDef {
 
 const STORAGE_KEY = 'traderra-scans'
 
+const BUILTIN_SCANS: ScanDef[] = [
+  { id: 'builtin-backside-b', name: 'Backside B', type: 'builtin', createdAt: Date.now() },
+  { id: 'builtin-gap-up', name: 'Gap Up', type: 'builtin', createdAt: Date.now() },
+  { id: 'builtin-high-tight-flag', name: 'High Tight Flag', type: 'builtin', createdAt: Date.now() },
+  { id: 'builtin-aparascan', name: 'Aparascan', type: 'builtin', createdAt: Date.now() },
+]
+
 function loadScans(): ScanDef[] {
-  try {
-    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-    return Array.isArray(raw) ? raw : []
-  } catch { return [] }
+  // Only show built-in scans, clear all old accumulated runs
+  localStorage.removeItem(STORAGE_KEY)
+  return [...BUILTIN_SCANS]
+}
+
+function cleanupScans(scans: ScanDef[]): ScanDef[] {
+  // Keep built-ins + deduplicate by name (keep latest only)
+  const map = new Map<string, ScanDef>()
+  for (const s of BUILTIN_SCANS) map.set(s.name.toLowerCase(), s)
+  for (const s of scans) {
+    if (s.type === 'builtin') continue // already added
+    map.set(s.name.toLowerCase(), s)
+  }
+  return Array.from(map.values())
 }
 
 function saveScans(scans: ScanDef[]) {
@@ -56,8 +73,7 @@ export function TabScan() {
   const [scanning, setScanning] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const dropRef = useRef<HTMLDivElement>(null)
-  const setChartSymbol = useChartStore(s => s.setSymbol)
-  const setFocusDate = useChartStore(s => s.setFocusDate)
+  const scanNavigate = useChartStore(s => s.scanNavigate)
 
   // Reload on mount
   useEffect(() => { setScans(loadScans()) }, [])
@@ -65,7 +81,8 @@ export function TabScan() {
   // Handle incoming scan
   const receiveScan = useCallback((scan: ScanDef) => {
     const existing = loadScans()
-    const updated = [...existing, scan]
+    // Replace existing scan with same name, or append
+    const updated = [...existing.filter(s => s.name.toLowerCase() !== scan.name.toLowerCase()), scan]
     saveScans(updated)
     setScans(updated)
     setActiveScan(scan)
@@ -115,9 +132,15 @@ export function TabScan() {
           })
         }
         if (newScans.length > 0) {
-          const updated = [...local, ...newScans]
-          saveScans(updated)
-          setScans(updated)
+          // Merge: replace by name, don't duplicate
+          const merged = [...local]
+          for (const ns of newScans) {
+            const idx = merged.findIndex(s => s.name.toLowerCase() === ns.name.toLowerCase())
+            if (idx >= 0) merged[idx] = ns
+            else merged.push(ns)
+          }
+          saveScans(merged)
+          setScans(merged)
           const latest = newScans[newScans.length - 1]
           setActiveScan(latest)
           setResults(latest.results || [])
@@ -255,26 +278,19 @@ export function TabScan() {
     if (activeScan?.id === id) { setActiveScan(null); setResults([]) }
   }, [scans, activeScan])
 
-  // Advance scan signal date by 1 trading day (signal day = T, trade day = T+1)
-  const toTradeDay = (dateStr: string): string => {
-    const d = new Date(dateStr + 'T12:00:00')
-    do { d.setDate(d.getDate() + 1) } while (d.getDay() === 0 || d.getDay() === 6)
-    return d.toISOString().split('T')[0]
-  }
-
   const handleResultClick = useCallback((r: ScanResult) => {
     if (r.symbol) {
-      setChartSymbol(r.symbol)
       ;(window as any).symbol = r.symbol
       ;(window as any).loadChart?.(r.symbol)
       if (r.date) {
-        const tradeDay = toTradeDay(r.date)
-        setFocusDate(tradeDay)
+        // Normalize to plain date string (strip time component)
+        const day = r.date.length > 10 ? r.date.slice(0, 10) : r.date
+        scanNavigate(r.symbol, day)
       } else {
-        setFocusDate(null) // Clear focusDate for live mode
+        scanNavigate(r.symbol, null)
       }
     }
-  }, [setChartSymbol, setFocusDate])
+  }, [scanNavigate])
 
   // Date presets
   const setDatePreset = useCallback((days: number) => {
@@ -483,6 +499,7 @@ export function TabScan() {
                     <option value="gap_up">Gap Up</option>
                     <option value="backside_b">Backside B</option>
                     <option value="high_tight_flag">High Tight Flag</option>
+                    <option value="aparascan">Aparascan</option>
                   </select>
                   <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                     <div style={{ flex: 1 }}>

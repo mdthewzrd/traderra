@@ -147,26 +147,30 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
   }, [])
   const liveInds = useIndicatorStore((s) => s.inds)
 
-  // ResizeObserver — watch the canvas wrapper, not the outer container
+  // ResizeObserver — contentRect gives unzoomed CSS pixels for canvas sizing
   const canvasWrapRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const el = canvasWrapRef.current
     if (!el) return
     const ro = new ResizeObserver(entries => {
       const { width, height } = entries[0].contentRect
-      setSize({ w: Math.floor(width), h: Math.floor(height) })
+      if (width > 0 && height > 0) {
+        setSize({ w: Math.floor(width), h: Math.floor(height) })
+      }
     })
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
 
-  // Set canvas pixel size
+  // Set canvas pixel buffer + CSS size (must match exactly)
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || size.w === 0) return
     const dpr = window.devicePixelRatio || 1
-    canvas.width = size.w * dpr
-    canvas.height = size.h * dpr
+    const pw = Math.floor(size.w * dpr)
+    const ph = Math.floor(size.h * dpr)
+    canvas.width = pw
+    canvas.height = ph
     canvas.style.width = size.w + 'px'
     canvas.style.height = size.h + 'px'
   }, [size])
@@ -576,11 +580,19 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
   }, [viewStart, panelIdx])
 
   const onMouseMove = useCallback((e: React.MouseEvent) => {
-    const rect = canvasRef.current?.getBoundingClientRect()
-    if (!rect) return
-    const mx = e.clientX - rect.left
-    const my = e.clientY - rect.top
-    mouseRef.current = { x: mx, y: my }
+    const canvas = canvasRef.current
+    const rect = canvas?.getBoundingClientRect()
+    if (!canvas || !rect) return
+    // canvas.style.width is set from contentRect (unzoomed CSS px).
+    // getBoundingClientRect returns zoomed CSS px.
+    // The ratio tells us the effective zoom so we can map mouse -> canvas coords.
+    const cssW = parseFloat(canvas.style.width) || rect.width
+    const cssH = parseFloat(canvas.style.height) || rect.height
+    const scaleX = cssW / rect.width
+    const scaleY = cssH / rect.height
+    const mx = (e.clientX - rect.left) * scaleX
+    const my = (e.clientY - rect.top) * scaleY
+    mouseRef.current = { x: mx, y: my } as any
     setMouse({ x: mx, y: my })
 
     // OHLCV tooltip on right-button hold
@@ -834,6 +846,9 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
           ref={canvasRef}
           style={{
             display: 'block',
+            position: 'absolute',
+            top: 0,
+            left: 0,
             cursor: dragging ? 'grabbing' : activeTool ? 'cell' : 'crosshair',
           }}
           onMouseDown={onMouseDown}

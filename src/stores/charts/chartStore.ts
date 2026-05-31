@@ -25,6 +25,9 @@ interface ChartState {
   setFocusDate: (d: string | null) => void
   clearFocusDate: () => void
 
+  // Atomic update — sets symbol + focusDate in a single Zustand transaction
+  scanNavigate: (symbol: string, focusDate: string | null) => void
+
   // Panels (4 by default: 5min, 15min, 60min, Daily)
   panels: Panel[]
   setPanels: (p: Panel[]) => void
@@ -55,6 +58,7 @@ export const useChartStore = create<ChartState>((set, get) => ({
   focusDate: null,
   setFocusDate: (d) => set({ focusDate: d }),
   clearFocusDate: () => set({ focusDate: null }),
+  scanNavigate: (symbol, focusDate) => set({ symbol: symbol.toUpperCase(), focusDate }),
 
   panels: [
     { tf: '5', bars: [], tools: [], inds: {} },

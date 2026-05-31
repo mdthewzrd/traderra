@@ -96,14 +96,36 @@ export function calcVolSMA(data: CalcBar[], period: number): (number | null)[] {
   return out
 }
 
-/** VWAP — resets daily for intraday, cumulative for daily+ */
+/** VWAP — resets daily at market open (9:30 ET) for intraday, cumulative for daily+.
+ *  Only meaningful on 5m and 15m timeframes. */
 export function calcVWAP(data: CalcBar[], intraday: boolean): (number | null)[] {
   const out: (number | null)[] = []
-  let cumPV = 0, cumV = 0, lastDay: string | null = null
+  let cumPV = 0, cumV = 0, lastMktDay: string | null = null
+
   for (let i = 0; i < data.length; i++) {
     const b = data[i]
-    const day = intraday ? new Date(Number(b.time) * 1000).toISOString().slice(0, 10) : null
-    if (intraday && day !== lastDay) { cumPV = 0; cumV = 0; lastDay = day }
+    if (!intraday) {
+      // Daily+ — simple cumulative
+      const tp = (b.high + b.low + b.close) / 3
+      cumPV += tp * (b.volume || 0)
+      cumV += (b.volume || 0)
+      out.push(cumV > 0 ? cumPV / cumV : tp)
+      continue
+    }
+
+    // Intraday — determine market day in ET
+    const ts = Number(b.time) * 1000
+    const utcH = new Date(ts).getUTCHours()
+    // If UTC hour is 0–4 (i.e. 7pm–11:59pm ET previous day), shift back one day
+    const etDate = new Date(ts - (utcH < 5 ? 86400000 : 0))
+    const mktDay = etDate.toISOString().slice(0, 10)
+
+    if (mktDay !== lastMktDay) {
+      cumPV = 0
+      cumV = 0
+      lastMktDay = mktDay
+    }
+
     const tp = (b.high + b.low + b.close) / 3
     cumPV += tp * (b.volume || 0)
     cumV += (b.volume || 0)
@@ -187,10 +209,9 @@ export function computeIndicators(
   if (inds.db_low1 || inds.db_low2 || inds.dev_s_9_20 || inds.dev_l_9_20) ensureATR(20)
   if (inds.db_72_89) { ensureATR(72); ensureATR(89) }
 
-  // VWAP
-  if (inds.vwap) {
-    const isIntra = ['1','2','3','5','10','15','30','60','240','1m','2m','5m','10m','15m','30m','60m'].includes(tf)
-    cache.vwap = calcVWAP(data, isIntra)
+  // VWAP — only compute on 5m and 15m
+  if (inds.vwap && (tf === '5' || tf === '5m' || tf === '15' || tf === '15m')) {
+    cache.vwap = calcVWAP(data, true)
   }
 
   // Bollinger

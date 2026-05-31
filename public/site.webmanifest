@@ -1,0 +1,9 @@
+{
+  "name": "Traderra",
+  "short_name": "Traderra",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a14",
+  "theme_color": "#D4AF37",
+  "icons": []
+}

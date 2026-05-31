@@ -5,7 +5,6 @@
  * Historical mode (focusDate set): fetches data ending at focusDate, no polling.
  */
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { useChartStore } from '@/stores/charts/chartStore'
 import { useUIStore } from '@/stores/charts/uiStore'
 
 export interface Bar {
@@ -25,13 +24,29 @@ function barToDate(bar: Bar): string {
 }
 
 function computeDateRange(tf: string, focusDate: string) {
-  const daysBack: Record<string, number> = { '2': 2, '5': 4, '15': 15, '60': 40, 'D': 120 }
+  const daysBack: Record<string, number> = { '2': 2, '5': 4, '15': 15, '60': 40, 'D': 120, 'W': 260 }
   const back = daysBack[tf] || 30
   const to = new Date(focusDate + 'T12:00:00')
   const from = new Date(to.getTime() - back * 24 * 60 * 60 * 1000)
+
+  // For intraday TFs, set `to` to 7:59:59 PM ET (end of after-hours)
+  // This captures all bars including post-market on the focus date
+  const isIntraday = tf !== 'D' && tf !== 'W' && tf !== 'M'
+  let toDate: string
+  if (isIntraday) {
+    // 7:59:59 PM ET = next day ~00:00 UTC (EST) or 23:59 UTC (EDT)
+    // Use day+1 at 05:00 UTC to cover both EST/EDT after-hours
+    const eod = new Date(focusDate + 'T12:00:00')
+    eod.setDate(eod.getDate() + 1)
+    eod.setUTCHours(5, 0, 0, 0) // 1 AM ET next day = safely past after-hours
+    toDate = String(eod.getTime()) // Unix ms for Polygon
+  } else {
+    toDate = focusDate // date string works fine for daily/weekly
+  }
+
   return {
     fromDate: from.toISOString().split('T')[0],
-    toDate: focusDate,
+    toDate,
   }
 }
 
@@ -43,14 +58,13 @@ export function useLiveBars(symbol: string | null, tf: string, focusDate?: strin
   const fetchIdRef = useRef(0)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Fetch data — reads focusDate from store to avoid stale closures
+  // Fetch data — uses focusDate prop directly (no store read needed)
   useEffect(() => {
     if (!symbol) {
       setBars([])
       return
     }
 
-    const currentFocus = useChartStore.getState().focusDate
     const thisFetchId = ++fetchIdRef.current
 
     // Clear old data immediately
@@ -59,8 +73,8 @@ export function useLiveBars(symbol: string | null, tf: string, focusDate?: strin
 
     const params = new URLSearchParams({ symbol, tf })
 
-    if (currentFocus) {
-      const { fromDate, toDate } = computeDateRange(tf, currentFocus)
+    if (focusDate) {
+      const { fromDate, toDate } = computeDateRange(tf, focusDate)
       params.set('from', fromDate)
       params.set('to', toDate)
       console.log(`[useLiveBars] ${symbol} tf=${tf} HISTORICAL from=${fromDate} to=${toDate} fetchId=${thisFetchId}`)
@@ -77,9 +91,11 @@ export function useLiveBars(symbol: string | null, tf: string, focusDate?: strin
         }
         const raw: Bar[] = data.bars || data.results || []
 
-        if (currentFocus) {
-          const trimmed = raw.filter(b => barToDate(b) <= currentFocus)
-          console.log(`[useLiveBars] ${symbol} HISTORICAL got ${raw.length} bars, trimmed to ${trimmed.length} (last: ${trimmed.length ? barToDate(trimmed[trimmed.length-1]) : 'none'})`)
+        if (focusDate) {
+          const fd = focusDate.length > 10 ? focusDate.slice(0, 10) : focusDate
+          const trimmed = raw.filter(b => barToDate(b) <= fd)
+          const rawDates = raw.length > 3 ? `${barToDate(raw[0])}..${barToDate(raw[raw.length-1])}` : raw.map(b => barToDate(b)).join(',')
+          console.log(`[useLiveBars] ${symbol} HISTORICAL focusDate=${focusDate} raw=${raw.length} (${rawDates}) trimmed=${trimmed.length} last=${trimmed.length ? barToDate(trimmed[trimmed.length-1]) : 'none'}`)
           setBars(trimmed)
         } else {
           console.log(`[useLiveBars] ${symbol} LIVE got ${raw.length} bars (last: ${raw.length ? barToDate(raw[raw.length-1]) : 'none'})`)

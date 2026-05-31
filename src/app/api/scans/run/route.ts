@@ -156,54 +156,26 @@ async function runSpecScan(specName: string, from?: string, to?: string): Promis
   const scanScript = path.join(assetsDir, 'traderra_scan.py')
   const pythonPath = path.join(os.homedir(), 'edge.dev', '.venv', 'bin', 'python')
   const envPath = path.join(os.homedir(), 'edge.dev', '.env')
+  const cwd = path.join(os.homedir(), 'edge.dev')
 
-  // Try to find spec file — first in local filesystem, then from DB
-  let specFile = path.join(assetsDir, 'specs', `${specName}.yaml`)
-  let yamlContent: string | null = null
-
-  try { yamlContent = await import('fs/promises').then(fs => fs.readFile(specFile, 'utf-8')) } catch {}
-
-  if (!yamlContent) {
-    // Try DB
-    try {
-      const { PrismaClient } = await import('@prisma/client')
-      const prisma = new PrismaClient()
-      const dbSpec = await prisma.savedScan.findFirst({
-        where: { type: 'spec', strategy: specName },
-      })
-      await prisma.$disconnect()
-      if (dbSpec?.code) yamlContent = dbSpec.code
-    } catch {}
+  const args: string[] = [scanScript, '--spec', specName]
+  if (from && to) {
+    args.push('--start', from, '--end', to)
+  } else {
+    args.push('--live')
   }
-
-  if (!yamlContent) {
-    return NextResponse.json({ error: `Spec '${specName}' not found` }, { status: 404 })
-  }
-
-  // Write spec to temp file for engine
-  const tmpDir = path.join(os.tmpdir(), 'traderra-specs')
-  await mkdir(tmpDir, { recursive: true })
-  const tmpSpec = path.join(tmpDir, `${specName}-${Date.now()}.yaml`)
-  await writeFile(tmpSpec, yamlContent, 'utf-8')
-
-  const args = ['scan-engine/engine.py', '--spec-file', tmpSpec]
-  if (from) args.push('--start', from)
-  if (to) args.push('--end', to)
 
   try {
     const result = await execFileAsync(pythonPath, args, {
-      cwd: assetsDir,
+      cwd,
       env: {
         ...process.env,
-        PYTHONPATH: `${assetsDir}/scan-engine:${path.join(os.homedir(), 'edge.dev', 'src')}`,
+        PYTHONPATH: 'src',
         DOTENV_PATH: envPath,
       },
       maxBuffer: 50 * 1024 * 1024,
       timeout: 300000,
     })
-
-    // Cleanup temp spec
-    try { await unlink(tmpSpec) } catch {}
 
     const stdout = result.stdout.trim()
     const jsonLine = stdout.split('\n').find(l => l.trim().startsWith('{'))
@@ -220,7 +192,6 @@ async function runSpecScan(specName: string, from?: string, to?: string): Promis
     }
     return NextResponse.json({ signals: [], count: 0, raw: stdout, stderr: result.stderr, language: 'python', spec: specName })
   } catch (error: any) {
-    try { await unlink(tmpSpec) } catch {}
     const stderr = error.stderr || ''
     const message = error.message || 'Unknown error'
     const tbMatch = stderr.match(/(?:Traceback[\s\S]*?)$/m)

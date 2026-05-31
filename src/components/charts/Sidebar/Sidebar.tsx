@@ -131,8 +131,7 @@ export function Sidebar() {
   const wlRenameList = useWatchlistStore((s) => s.renameList)
   const wlCreateList = useWatchlistStore((s) => s.createList)
   const wlRemoveSymbol = useWatchlistStore((s) => s.removeSymbol)
-  const setChartSymbol = useChartStore((s) => s.setSymbol)
-  const setFocusDate = useChartStore((s) => s.setFocusDate)
+  const scanNavigate = useChartStore((s) => s.scanNavigate)
   const sbRef = useRef<HTMLDivElement>(null)
 
   // Sync open/close + bridge sbOpen/sbClose
@@ -206,8 +205,7 @@ export function Sidebar() {
                 key={sym}
                 className={`wl-row${(window as any).symbol === sym ? ' active' : ''}`}
                 onClick={() => {
-                  setChartSymbol(sym)
-                  setFocusDate(null) // Clear historical mode — back to live
+                  scanNavigate(sym, null) // Live mode — no focus date
                   ;(window as any).symbol = sym
                   ;(window as any).loadChart?.(sym)
                 }}

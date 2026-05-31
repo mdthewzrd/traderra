@@ -3,11 +3,11 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   Search, Loader2, ChevronLeft, ChevronRight,
-  BarChart3, TrendingUp, List,
+  BarChart3, TrendingUp, List, MessageSquare,
   Plus, ExternalLink, Calendar, Zap, Activity,
   ArrowUpRight, Hash, DollarSign, Target, Layers,
-  Clock, TrendingDown, Minus, Play, Rows3,
-  LayoutGrid, X, Settings2, Save, Sun, Moon, Shield
+  Clock, TrendingDown, Minus, Send, Play, Rows3,
+  LayoutGrid, X, Settings2, Save, Sun, Moon
 } from 'lucide-react'
 
 // ─── Types ──────────────────────────────────────────────
@@ -45,23 +45,6 @@ interface ScanRun {
 
 type Timeframe = '5' | '15' | '60' | 'D'
 type ChartMode = 'single' | 'stacked'
-
-interface BacktestResults {
-  entryType: string
-  exitType: string
-  totalTrades: number
-  winRate: number
-  profitFactor: number
-  sharpe: number
-  maxDrawdown: number
-  avgRMultiple: number
-  avgWinPct: number
-  avgLossPct: number
-  expectancy: number
-  wlRatio: number
-  totalPnl: number
-  dayStats: { day: string; pnl: number }[]
-}
 
 interface ChartSettings {
   showEma9_20: boolean
@@ -630,118 +613,108 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
   )
 }
 
-// ─── Backtest Stats Panel ────────────────────────────
-function BacktestStatsPanel({ signals, backtestResults }: { signals: Signal[]; backtestResults: BacktestResults | null }) {
-  // Signal stats (always visible)
-  const sigStats = useMemo(() => {
+// ─── Stats (unchanged, compact) ─────────────────────────
+function StatsPanel({ signals }: { signals: Signal[] }) {
+  const stats = useMemo(() => {
     if (!signals.length) return null
     const gaps = signals.map(s => s.gap_pct || 0)
     const abses = signals.map(s => s.pos_abs || 0)
+    const vols = signals.map(s => s.volume || 0)
+    const closes = signals.map(s => s.close)
+    const avgGap = gaps.reduce((a, b) => a + b, 0) / gaps.length
+    const minGap = Math.min(...gaps), maxGap = Math.max(...gaps)
+    const avgAbs = abses.reduce((a, b) => a + b, 0) / abses.length
     const dates = new Set(signals.map(s => s.date)).size
     const tickers = new Set(signals.map(s => s.ticker)).size
+    const byDate: Record<string, number> = {}
+    signals.forEach(s => { byDate[s.date] = (byDate[s.date] || 0) + 1 })
+    const maxPerDay = Math.max(...Object.values(byDate))
+    const avgPerDay = signals.length / dates
+    const freq: Record<string, number> = {}
+    signals.forEach(s => { freq[s.ticker] = (freq[s.ticker] || 0) + 1 })
+    const topTickers = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 5)
+    const gapBuckets = { '<50': 0, '50-100': 0, '100-200': 0, '>200': 0 }
+    gaps.forEach(g => { if (g < 50) gapBuckets['<50']++; else if (g < 100) gapBuckets['50-100']++; else if (g < 200) gapBuckets['100-200']++; else gapBuckets['>200']++ })
+    const absBuckets = { '<0.25': 0, '0.25-0.50': 0, '0.50-0.75': 0, '>0.75': 0 }
+    abses.forEach(a => { if (a < 0.25) absBuckets['<0.25']++; else if (a < 0.5) absBuckets['0.25-0.50']++; else if (a <= 0.75) absBuckets['0.50-0.75']++; else absBuckets['>0.75']++ })
     const d0Chg = signals.map(s => ((s.close - s.open) / s.open) * 100)
     const avgD0Chg = d0Chg.reduce((a, b) => a + b, 0) / d0Chg.length
     const redPct = d0Chg.filter(c => c < 0).length / d0Chg.length * 100
+    const d0Range = signals.map(s => ((s.high - s.low) / s.open) * 100)
+    const avgD0Range = d0Range.reduce((a, b) => a + b, 0) / d0Range.length
+    const rangeVsGap = signals.map(s => (((s.high - s.low) / s.open) * 100) / (s.gap_pct || 1))
+    const avgRangeVsGap = rangeVsGap.reduce((a, b) => a + b, 0) / rangeVsGap.length
     const closePosRange = signals.map(s => { const r = s.high - s.low; return r > 0 ? (s.close - s.low) / r : 0.5 })
     const avgClosePos = closePosRange.reduce((a, b) => a + b, 0) / closePosRange.length
-    return { dates, tickers, avgD0Chg, redPct, avgClosePos, avgGap: gaps.reduce((a, b) => a + b, 0) / gaps.length, avgAbs: abses.reduce((a, b) => a + b, 0) / abses.length }
+    const reversalPct = signals.filter(s => (s.gap_pct || 0) > 0 && ((s.close - s.open) / s.open * 100) < 0).length / signals.length * 100
+    const firstHourReversal = signals.filter(s => s.close < s.open).length / signals.length * 100
+    return { avgGap, minGap, maxGap, avgAbs, dates, tickers, topTickers, avgPerDay, maxPerDay, gapBuckets, absBuckets, minClose: Math.min(...closes), maxClose: Math.max(...closes), totalVol: vols.reduce((a, b) => a + b, 0), avgD0Chg, redPct, avgD0Range, avgRangeVsGap, avgClosePos, reversalPct, firstHourReversal }
   }, [signals])
-
-  if (!sigStats) return null
-  const bt = backtestResults
-
+  if (!stats) return null
   return (
     <div className="space-y-1.5">
-      {/* ── Row 1: Signal Overview ── */}
-      <div className="grid grid-cols-4 lg:grid-cols-8 gap-1">
+      <div className="grid grid-cols-3 lg:grid-cols-6 gap-1">
         <StatBox label="Signals" value={signals.length.toString()} icon={<Zap className="h-3 w-3" />} />
-        <StatBox label="Days" value={sigStats.dates.toString()} icon={<Calendar className="h-3 w-3" />} />
-        <StatBox label="Tickers" value={sigStats.tickers.toString()} icon={<Hash className="h-3 w-3" />} />
-        <StatBox label="Avg Gap%" value={`${sigStats.avgGap.toFixed(1)}%`} icon={<TrendingUp className="h-3 w-3" />} color={TEAL} />
-        <StatBox label="Avg ABS" value={sigStats.avgAbs.toFixed(3)} icon={<Target className="h-3 w-3" />} color={GOLD} />
-        <StatBox label="Avg D0 Chg" value={`${sigStats.avgD0Chg > 0 ? '+' : ''}${sigStats.avgD0Chg.toFixed(1)}%`} icon={<TrendingDown className="h-3 w-3" />} color={sigStats.avgD0Chg < 0 ? RED : TEAL} />
-        <StatBox label="% Red" value={`${sigStats.redPct.toFixed(0)}%`} icon={<Minus className="h-3 w-3" />} color={RED} />
-        <StatBox label="Close Pos" value={sigStats.avgClosePos.toFixed(2)} icon={<Target className="h-3 w-3" />} color={sigStats.avgClosePos < 0.5 ? RED : TEAL} />
+        <StatBox label="Days" value={stats.dates.toString()} icon={<Calendar className="h-3 w-3" />} />
+        <StatBox label="Tickers" value={stats.tickers.toString()} icon={<Hash className="h-3 w-3" />} />
+        <StatBox label="Avg/Day" value={stats.avgPerDay.toFixed(1)} icon={<Layers className="h-3 w-3" />} color={TEAL} />
+        <StatBox label="Max/Day" value={stats.maxPerDay.toString()} icon={<Activity className="h-3 w-3" />} />
+        <StatBox label="Total Vol" value={`$${(stats.totalVol / 1e9).toFixed(1)}B`} icon={<DollarSign className="h-3 w-3" />} />
       </div>
-
-      {/* ── Row 2: Backtest Results (placeholder when no results) ── */}
-      {bt ? (
-        <>
-          {/* ── Entry Config ── */}
-          <div style={{ background: SURFACE, border: `1px solid ${TEAL}40`, borderRadius: 4, padding: '6px 10px' }}>
-            <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
-              <Activity className="h-3 w-3" style={{ color: TEAL }} />
-              <span style={{ color: TEAL, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Backtest Results · {bt.entryType}</span>
-              <span style={{ color: MUTED, fontSize: 8, marginLeft: 'auto' }}>{bt.exitType} · {bt.totalTrades} trades</span>
-            </div>
-            <div className="grid grid-cols-2 lg:grid-cols-10 gap-1">
-              <StatBox label="Win Rate" value={`${bt.winRate.toFixed(1)}%`} icon={<TrendingUp className="h-3 w-3" />} color={bt.winRate >= 50 ? TEAL : RED} />
-              <StatBox label="Profit Factor" value={bt.profitFactor.toFixed(2)} icon={<BarChart3 className="h-3 w-3" />} color={bt.profitFactor >= 1.5 ? TEAL : RED} />
-              <StatBox label="Sharpe" value={bt.sharpe.toFixed(2)} icon={<Activity className="h-3 w-3" />} color={bt.sharpe >= 1.0 ? TEAL : RED} />
-              <StatBox label="Max DD" value={`${bt.maxDrawdown.toFixed(1)}%`} icon={<TrendingDown className="h-3 w-3" />} color={RED} />
-              <StatBox label="Avg R" value={`${bt.avgRMultiple > 0 ? '+' : ''}${bt.avgRMultiple.toFixed(2)}R`} icon={<Target className="h-3 w-3" />} color={bt.avgRMultiple >= 0 ? TEAL : RED} />
-              <StatBox label="Avg Win" value={`${bt.avgWinPct > 0 ? '+' : ''}${bt.avgWinPct.toFixed(1)}%`} icon={<TrendingUp className="h-3 w-3" />} color={TEAL} />
-              <StatBox label="Avg Loss" value={`${bt.avgLossPct.toFixed(1)}%`} icon={<TrendingDown className="h-3 w-3" />} color={RED} />
-              <StatBox label="Expectancy" value={`$${bt.expectancy.toFixed(0)}`} icon={<DollarSign className="h-3 w-3" />} color={bt.expectancy >= 0 ? TEAL : RED} />
-              <StatBox label="W/L Ratio" value={`${bt.wlRatio.toFixed(2)}x`} icon={<BarChart3 className="h-3 w-3" />} />
-              <StatBox label="Total P&L" value={`$${bt.totalPnl > 0 ? '+' : ''}${(bt.totalPnl / 1000).toFixed(1)}k`} icon={<DollarSign className="h-3 w-3" />} color={bt.totalPnl >= 0 ? TEAL : RED} />
-            </div>
-          </div>
-
-          {/* ── Day-by-Day Breakdown ── */}
-          {bt.dayStats.length > 0 && (
-            <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '6px 10px' }}>
-              <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
-                <Clock className="h-3 w-3" style={{ color: GOLD }} />
-                <span style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Daily Breakdown</span>
-              </div>
-              <div style={{ display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 4 }}>
-                {bt.dayStats.map((d, i) => {
-                  const col = d.pnl >= 0 ? TEAL : RED
-                  return (
-                    <div key={i} style={{ minWidth: 52, padding: '3px 6px', background: SURFACE2, borderRadius: 3, textAlign: 'center' }}>
-                      <div style={{ color: MUTED, fontSize: 7, fontWeight: 600 }}>{d.day}</div>
-                      <div style={{ color: col, fontSize: 11, fontWeight: 700 }}>{d.pnl >= 0 ? '+' : ''}{d.pnl.toFixed(1)}%</div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* ── Validation Scores ── */}
-          <div className="grid grid-cols-3 gap-1">
-            <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '8px 10px', textAlign: 'center' }}>
-              <Shield className="h-4 w-4 mx-auto" style={{ color: MUTED, marginBottom: 2 }} />
-              <div style={{ color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Walk-Forward</div>
-              <div style={{ color: TEXT2, fontSize: 16, fontWeight: 700, marginTop: 2 }}>—</div>
-              <div style={{ color: MUTED, fontSize: 8, marginTop: 1 }}>Anchored WFO 5-fold</div>
-            </div>
-            <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '8px 10px', textAlign: 'center' }}>
-              <BarChart3 className="h-4 w-4 mx-auto" style={{ color: MUTED, marginBottom: 2 }} />
-              <div style={{ color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Monte Carlo</div>
-              <div style={{ color: TEXT2, fontSize: 16, fontWeight: 700, marginTop: 2 }}>—</div>
-              <div style={{ color: MUTED, fontSize: 8, marginTop: 1 }}>10K permutation</div>
-            </div>
-            <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '8px 10px', textAlign: 'center' }}>
-              <TrendingUp className="h-4 w-4 mx-auto" style={{ color: MUTED, marginBottom: 2 }} />
-              <div style={{ color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Robustness</div>
-              <div style={{ color: TEXT2, fontSize: 16, fontWeight: 700, marginTop: 2 }}>—</div>
-              <div style={{ color: MUTED, fontSize: 8, marginTop: 1 }}>Param sensitivity</div>
-            </div>
-          </div>
-        </>
-      ) : (
-        <div style={{ background: `${SURFACE}`, border: `1px dashed ${BORDER}`, borderRadius: 4, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-          <Activity className="h-4 w-4" style={{ color: MUTED, opacity: 0.4 }} />
-          <span style={{ color: MUTED, fontSize: 11 }}>Run a baseline backtest to see entry/exit stats — click <strong style={{ color: TEAL }}>Baseline</strong> above</span>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-1">
+        <StatBox label="Avg Gap%" value={`${stats.avgGap.toFixed(1)}%`} icon={<TrendingUp className="h-3 w-3" />} color={TEAL} />
+        <StatBox label="Gap Range" value={`${stats.minGap.toFixed(0)}-${stats.maxGap.toFixed(0)}%`} icon={<ArrowUpRight className="h-3 w-3" />} />
+        <StatBox label="Avg ABS" value={stats.avgAbs.toFixed(3)} icon={<Target className="h-3 w-3" />} color={GOLD} />
+        <StatBox label="Price" value={`$${stats.minClose.toFixed(0)}-$${stats.maxClose.toFixed(0)}`} icon={<DollarSign className="h-3 w-3" />} />
+      </div>
+      <div style={{ background: SURFACE, border: `1px solid ${GOLD_BORDER}`, borderRadius: 4, padding: '6px 10px' }}>
+        <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
+          <TrendingDown className="h-3 w-3" style={{ color: RED }} />
+          <span style={{ color: RED, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Short & Mean Reversion</span>
         </div>
-      )}
+        <div className="grid grid-cols-2 lg:grid-cols-7 gap-1">
+          <StatBox label="Avg D0 Chg" value={`${stats.avgD0Chg > 0 ? '+' : ''}${stats.avgD0Chg.toFixed(1)}%`} icon={<TrendingDown className="h-3 w-3" />} color={stats.avgD0Chg < 0 ? RED : TEAL} />
+          <StatBox label="% Red" value={`${stats.redPct.toFixed(0)}%`} icon={<Minus className="h-3 w-3" />} color={RED} />
+          <StatBox label="Range%" value={`${stats.avgD0Range.toFixed(1)}%`} icon={<Activity className="h-3 w-3" />} color={GOLD} />
+          <StatBox label="Rng/Gap" value={`${stats.avgRangeVsGap.toFixed(2)}x`} icon={<BarChart3 className="h-3 w-3" />} />
+          <StatBox label="Close Pos" value={stats.avgClosePos.toFixed(2)} icon={<Target className="h-3 w-3" />} color={stats.avgClosePos < 0.5 ? RED : TEAL} />
+          <StatBox label="Reversal" value={`${stats.reversalPct.toFixed(0)}%`} icon={<TrendingDown className="h-3 w-3" />} color={RED} />
+          <StatBox label="1H Rev" value={`${stats.firstHourReversal.toFixed(0)}%`} icon={<Clock className="h-3 w-3" />} color={GOLD} />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-1">
+        <DistBar title="Gap Dist" buckets={stats.gapBuckets} total={signals.length} color={TEAL} />
+        <DistBar title="ABS Position" buckets={stats.absBuckets} total={signals.length} color={GOLD} />
+        <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: 8 }}>
+          <div style={{ color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Top Tickers</div>
+          {stats.topTickers.map(([ticker, count]) => (
+            <div key={ticker} className="flex items-center justify-between" style={{ marginBottom: 2 }}>
+              <span style={{ color: GOLD, fontSize: 10, fontWeight: 700, fontFamily: 'monospace' }}>{ticker}</span>
+              <span style={{ color: TEXT2, fontSize: 10 }}>{count}x</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
 
-// DistBar removed — not needed for backtest page
+function DistBar({ title, buckets, total, color }: { title: string; buckets: Record<string, number>; total: number; color: string }) {
+  return (
+    <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: 8 }}>
+      <div style={{ color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>{title}</div>
+      {Object.entries(buckets).map(([label, count]) => (
+        <div key={label} className="flex items-center gap-1.5" style={{ marginBottom: 3 }}>
+          <span style={{ color: TEXT2, fontSize: 9, width: 40, fontFamily: 'monospace' }}>{label}</span>
+          <div style={{ flex: 1, height: 10, background: SURFACE3, borderRadius: 2, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${(count / total) * 100}%`, background: color, borderRadius: 2, minWidth: count > 0 ? 2 : 0 }} />
+          </div>
+          <span style={{ color: MUTED, fontSize: 9, width: 16, textAlign: 'right' }}>{count}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
 function StatBox({ label, value, icon, color }: { label: string; value: string; icon: React.ReactNode; color?: string }) {
   return (
     <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '4px 8px' }}>
@@ -822,7 +795,7 @@ function RunModal({ scan, onClose, onRun }: { scan: ScanDef | undefined; onClose
 }
 
 // ─── Main Page ──────────────────────────────────────────
-export default function BacktestPage() {
+export default function ScanDashboardPage() {
   const [scans, setScans] = useState<ScanDef[]>([])
   const [selectedScan, setSelectedScan] = useState<string>('')
   const [signals, setSignals] = useState<Signal[]>([])
@@ -831,6 +804,8 @@ export default function BacktestPage() {
   const [chartMode, setChartMode] = useState<ChartMode>('single')
   const [loading, setLoading] = useState(false)
   const [showRunModal, setShowRunModal] = useState(false)
+  const [chatInput, setChatInput] = useState('')
+  const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([])
   const [selectedRun, setSelectedRun] = useState<string>('r1')
   const [showSettings, setShowSettings] = useState(false)
   const [chartSettings, setChartSettings] = useState<ChartSettings>({
@@ -840,54 +815,7 @@ export default function BacktestPage() {
   })
   const [dark, setDark] = useState(true)
   const [dayOffset, setDayOffset] = useState(0)
-  const [backtestResults, setBacktestResults] = useState<BacktestResults | null>(null)
   const T = useThemeColors(dark)
-
-  // ── Baseline backtest: buy D0 open, sell D0 close ──
-  const runBaselineBacktest = useCallback(() => {
-    if (!signals.length) return
-    const trades = signals.map(s => {
-      const pnlPct = ((s.close - s.open) / s.open) * 100
-      const range = s.high - s.low
-      const stop = s.low // baseline stop = D0 low
-      const risk = s.open - stop
-      const rMultiple = risk > 0 ? (s.close - s.open) / risk : 0
-      return { pnlPct, rMultiple, win: pnlPct > 0 }
-    })
-    const wins = trades.filter(t => t.win)
-    const losses = trades.filter(t => !t.win)
-    const totalPnl = trades.reduce((a, t) => a + t.pnlPct, 0)
-    const grossWin = wins.reduce((a, t) => a + t.pnlPct, 0)
-    const grossLoss = Math.abs(losses.reduce((a, t) => a + t.pnlPct, 0))
-    const winRate = (wins.length / trades.length) * 100
-    const profitFactor = grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? 999 : 0
-    const avgRMultiple = trades.reduce((a, t) => a + t.rMultiple, 0) / trades.length
-    const avgWinPct = wins.length > 0 ? wins.reduce((a, t) => a + t.pnlPct, 0) / wins.length : 0
-    const avgLossPct = losses.length > 0 ? losses.reduce((a, t) => a + t.pnlPct, 0) / losses.length : 0
-    const expectancy = (winRate / 100) * avgWinPct + ((100 - winRate) / 100) * avgLossPct
-    const wlRatio = losses.length > 0 && avgLossPct !== 0 ? Math.abs(avgWinPct / avgLossPct) : 0
-
-    // Cumulative P&L for max drawdown
-    let cumPnl = 0, peak = 0, maxDd = 0
-    trades.forEach(t => { cumPnl += t.pnlPct; peak = Math.max(peak, cumPnl); maxDd = Math.max(maxDd, peak - cumPnl) })
-
-    // Day-by-day breakdown
-    const byDate: Record<string, { pnls: number[] }> = {}
-    signals.forEach((s, i) => {
-      if (!byDate[s.date]) byDate[s.date] = { pnls: [] }
-      byDate[s.date].pnls.push(trades[i].pnlPct)
-    })
-    const dayStats = Object.entries(byDate).map(([date, d]) => ({
-      day: date.slice(5), pnl: d.pnls.reduce((a, b) => a + b, 0),
-    }))
-
-    setBacktestResults({
-      entryType: 'D0 Open', exitType: 'D0 Close', totalTrades: trades.length,
-      winRate, profitFactor, sharpe: 0, maxDrawdown: maxDd, avgRMultiple,
-      avgWinPct, avgLossPct, expectancy, wlRatio, totalPnl: totalPnl * 1000,
-      dayStats,
-    })
-  }, [signals])
   // Mock runs for demo
   const [runs] = useState<ScanRun[]>([
     { id: 'r1', scanId: '', dateRange: '90d', runAt: '2025-01-15 14:32', resultCount: 52 },
@@ -901,10 +829,7 @@ export default function BacktestPage() {
       .then(data => {
         const list = (data.scans || []).filter((s: ScanDef) => s.resultCount > 0)
         setScans(list)
-        // Auto-select Backside B if found
-        const backside = list.find((s: ScanDef) => s.name.toLowerCase().includes('backside'))
-        if (backside) setSelectedScan(backside.id)
-        else if (list.length && !selectedScan) setSelectedScan(list[0].id)
+        if (list.length && !selectedScan) setSelectedScan(list[0].id)
       })
   }, [])
 
@@ -1029,7 +954,7 @@ export default function BacktestPage() {
     </div>
   )
 
-  // ─── Right Sidebar: Signals only ─────────────────
+  // ─── Right Sidebar: Signals + Chat ────────────────
   const renderRightSidebar = () => (
     <div style={{
       width: RIGHT_W, minWidth: RIGHT_W, maxWidth: RIGHT_W,
@@ -1083,13 +1008,48 @@ export default function BacktestPage() {
           </table>
         </div>
       </div>
+
+      {/* Chat */}
+      <div style={{ height: '35%', minHeight: 140, borderTop: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
+        <div className="px-2 py-1.5 flex items-center gap-1.5" style={{ borderBottom: `1px solid ${BORDER}`, background: SURFACE2 }}>
+          <MessageSquare className="h-3 w-3" style={{ color: GOLD }} />
+          <span style={{ color: GOLD, fontSize: 10, fontWeight: 700 }}>CHAT</span>
+        </div>
+        <div className="flex-1 overflow-y-auto" style={{ padding: '6px 8px' }}>
+          {chatMessages.length === 0 && (
+            <p style={{ color: MUTED, fontSize: 10, fontStyle: 'italic', padding: '8px 4px' }}>Ask about signals, patterns, or scan params...</p>
+          )}
+          {chatMessages.map((m, i) => (
+            <div key={i} style={{ marginBottom: 6 }}>
+              <div style={{ display: 'inline-block', padding: '4px 8px', borderRadius: 6, fontSize: 11, lineHeight: 1.4, background: m.role === 'user' ? GOLD_DIM : SURFACE2, color: TEXT, maxWidth: '90%', wordBreak: 'break-word' }}>{m.content}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: '4px 6px', borderTop: `1px solid ${BORDER}`, display: 'flex', gap: 4 }}>
+          <input value={chatInput} onChange={e => setChatInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && chatInput.trim()) {
+                const msg = chatInput.trim()
+                setChatMessages(prev => [...prev, { role: 'user', content: msg }])
+                setChatInput('')
+                setTimeout(() => { setChatMessages(prev => [...prev, { role: 'assistant', content: `Analyzing: "${msg}" — API coming soon.` }]) }, 500)
+              }
+            }}
+            placeholder="Ask about signals..."
+            style={{ flex: 1, background: BG, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '5px 8px', color: TEXT, fontSize: 11, outline: 'none' }}
+          />
+          <button style={{ padding: '4px 8px', borderRadius: 3, background: GOLD, color: '#000', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+            <Send className="h-3 w-3" />
+          </button>
+        </div>
+      </div>
     </div>
   )
 
   // ─── Center: Stats + Chart ────────────────────────
   const renderCenter = () => (
     <div style={{ flex: 1, padding: 12, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <BacktestStatsPanel signals={signals} backtestResults={backtestResults} />
+      <StatsPanel signals={signals} />
 
       {loading ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 60 }}>
@@ -1250,19 +1210,11 @@ export default function BacktestPage() {
         position: 'sticky', top: 0, zIndex: 40,
       }}>
         <div className="flex items-center gap-3">
-          <Activity className="h-4 w-4" style={{ color: GOLD }} />
-          <span style={{ color: GOLD, fontSize: 14, fontWeight: 800 }}>Backtest Workshop</span>
+          <Search className="h-4 w-4" style={{ color: GOLD }} />
+          <span style={{ color: GOLD, fontSize: 14, fontWeight: 800 }}>Scan Dashboard</span>
           {activeScan && <span style={{ color: MUTED, fontSize: 11 }}>· {activeScan.name}</span>}
         </div>
         <div className="flex items-center gap-1">
-          <a href="/scanner" title="Scanner" style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-            background: SURFACE2, color: GOLD, border: `1px solid ${GOLD_BORDER}`, cursor: 'pointer',
-            textDecoration: 'none',
-          }}>
-            <Search className="h-3 w-3" /> Scanner
-          </a>
           <a href="/charts-terminal.html" target="_blank" rel="noreferrer" title="Open Charts" style={{
             display: 'flex', alignItems: 'center', gap: 4,
             padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600,
@@ -1276,14 +1228,7 @@ export default function BacktestPage() {
             padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600,
             background: GOLD, color: '#000', border: 'none', cursor: 'pointer',
           }}>
-            <Play className="h-3 w-3" /> Run Scan
-          </button>
-          <button onClick={() => runBaselineBacktest()} style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-            background: '#14b8a6', color: '#000', border: 'none', cursor: 'pointer',
-          }}>
-            <Activity className="h-3 w-3" /> Baseline
+            <Play className="h-3 w-3" /> Run
           </button>
           <button style={{
             display: 'flex', alignItems: 'center', gap: 4,

@@ -1211,6 +1211,7 @@ export default function BacktestPage() {
     if (!selectedScan) return
     setLoading(true)
     fetch(`/api/scans/${selectedScan}`)
+      .then(r => r.json())
       .then(data => {
         const sigs = data.results || []
         setSignals(sigs); setSelectedIdx(0); setDayOffset(0); setLoading(false)

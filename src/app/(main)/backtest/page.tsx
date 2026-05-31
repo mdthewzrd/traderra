@@ -1568,7 +1568,7 @@ export default function BacktestPage() {
             <span style={{ color: T.MUTED, fontSize: 9 }}>{filteredSignals.length}/{signals.length}</span>
             {/* Add Filter dropdown */}
             <div style={{ position: 'relative' }}>
-              <button onClick={() => setShowFilterMenu(!showFilterMenu)} style={{
+              <button data-filter-btn onClick={() => setShowFilterMenu(!showFilterMenu)} style={{
                 display: 'flex', alignItems: 'center', gap: 3,
                 padding: '2px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600,
                 background: showFilterMenu ? T.TEAL : T.SURFACE,
@@ -1578,13 +1578,18 @@ export default function BacktestPage() {
               }}>
                 <Settings2 className="h-3 w-3" />+ Filter
               </button>
-              {/* Dropdown menu */}
-              {showFilterMenu && (
+              {/* Click-away backdrop */}
+              {showFilterMenu && <div onClick={() => setShowFilterMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />}
+              {/* Dropdown — fixed position to escape overflow clipping */}
+              {showFilterMenu && (() => {
+                const btn = document.querySelector('[data-filter-btn]') as HTMLElement
+                const rect = btn?.getBoundingClientRect()
+                return (
                 <div style={{
-                  position: 'absolute', right: 0, top: '100%', zIndex: 50,
-                  width: 260, background: T.SURFACE, border: `1px solid ${T.BORDER}`,
-                  borderRadius: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-                  maxHeight: 360, overflowY: 'auto',
+                  position: 'fixed', right: 8, top: (rect?.bottom || 60) + 2, zIndex: 100,
+                  width: 280, background: T.SURFACE, border: `1px solid ${T.BORDER}`,
+                  borderRadius: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                  maxHeight: 400, overflowY: 'auto',
                 }}>
                   <div style={{ padding: '6px 8px', borderBottom: `1px solid ${T.BORDER}` }}>
                     <span style={{ color: T.GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Add Filter Columns</span>
@@ -1623,7 +1628,8 @@ export default function BacktestPage() {
                     )
                   })}
                 </div>
-              )}
+                )
+              })()}
             </div>
           </div>
         </div>

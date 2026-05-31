@@ -861,7 +861,7 @@ export default function ScanDashboardPage() {
   const [showRunModal, setShowRunModal] = useState(false)
   const [chatInput, setChatInput] = useState('')
   const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([])
-  const [selectedRun, setSelectedRun] = useState<string>('r1')
+  const [selectedRun, setSelectedRun] = useState<string>('')
   const [showSettings, setShowSettings] = useState(false)
   const [chartSettings, setChartSettings] = useState<ChartSettings>({
     showEma9_20: true, showEma72_89: true, showDevBands: true,
@@ -871,42 +871,100 @@ export default function ScanDashboardPage() {
   const [dark, setDark] = useState(true)
   const [dayOffset, setDayOffset] = useState(0)
   const T = useThemeColors(dark)
-  // Mock runs for demo
-  const [runs] = useState<ScanRun[]>([
-    { id: 'r1', scanId: '', dateRange: '90d', runAt: '2025-01-15 14:32', resultCount: 52 },
-    { id: 'r2', scanId: '', dateRange: '30d', runAt: '2025-01-14 09:10', resultCount: 18 },
-    { id: 'r3', scanId: '', dateRange: '7d', runAt: '2025-01-13 16:45', resultCount: 4 },
-  ])
+
+  // DB scan records — keyed by strategy, used as runs
+  const [dbScansByStrategy, setDbScansByStrategy] = useState<Record<string, ScanDef[]>>({})
+
+  // Derive runs for the selected scan
+  const activeScanDef = scans.find(s => s.id === selectedScan)
+  const activeStrategy = activeScanDef ? (BUILTIN_SPEC_MAP[activeScanDef.id] || activeScanDef.name.toLowerCase().replace(/\s+/g, '-')) : ''
+  const runs: ScanRun[] = (dbScansByStrategy[activeStrategy] || []).map(db => ({
+    id: db.id,
+    scanId: db.id,
+    dateRange: db.name,
+    runAt: new Date(db.createdAt).toLocaleString(),
+    resultCount: db.resultCount,
+  }))
 
   useEffect(() => {
     fetch('/api/scans')
       .then(r => r.json())
       .then(data => {
-        const dbScans: ScanDef[] = (data.scans || []).filter((s: ScanDef) => s.resultCount > 0)
-        // Merge: built-ins first, then DB scans. If a DB scan's strategy matches a built-in, link them.
-        const dbNames = new Set(dbScans.map((s: ScanDef) => s.name?.toLowerCase()))
-        const list = [...BUILTIN_SCANS.filter(b => !dbNames.has(b.name.toLowerCase())), ...dbScans]
+        const dbScans: any[] = data.scans || []
+
+        // Group DB scans by strategy
+        const byStrategy: Record<string, ScanDef[]> = {}
+        for (const s of dbScans) {
+          const strat = s.strategy || 'custom'
+          if (!byStrategy[strat]) byStrategy[strat] = []
+          byStrategy[strat].push(s)
+        }
+        setDbScansByStrategy(byStrategy)
+
+        // Build deduplicated scan list: built-ins (enriched with DB totals) + any DB-only scans
+        const enrichedBuiltins = BUILTIN_SCANS.map(b => {
+          const strat = BUILTIN_SPEC_MAP[b.id] || b.name.toLowerCase()
+          const dbMatches = byStrategy[strat] || []
+          const totalSig = dbMatches.reduce((sum, d) => sum + (d.resultCount || 0), 0)
+          return { ...b, resultCount: totalSig, runs: dbMatches }
+        })
+
+        // Add DB-only scans that don't match any built-in
+        const builtinStrats = new Set(Object.values(BUILTIN_SPEC_MAP))
+        const dbOnlyScans: ScanDef[] = []
+        for (const [strat, matches] of Object.entries(byStrategy)) {
+          if (!builtinStrats.has(strat) && matches.length > 0) {
+            const totalSig = matches.reduce((sum, d) => sum + (d.resultCount || 0), 0)
+            dbOnlyScans.push({
+              id: `strategy-${strat}`,
+              name: strat.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+              type: 'spec',
+              resultCount: totalSig,
+              createdAt: matches[0].createdAt,
+              runs: matches,
+            })
+          }
+        }
+
+        const list = [...enrichedBuiltins, ...dbOnlyScans]
         setScans(list)
         if (list.length && !selectedScan) {
-          // Prefer the first scan with results
           const withResults = list.find(s => s.resultCount > 0)
           setSelectedScan(withResults ? withResults.id : list[0].id)
         }
       })
   }, [])
 
+  // When selectedScan or selectedRun changes, load signals
   useEffect(() => {
     if (!selectedScan) return
-    // Built-in scans don't have DB data — skip fetch
-    if (selectedScan.startsWith('builtin-')) {
-      setSignals([])
+
+    // If a specific run is selected, load from DB
+    if (selectedRun && !selectedRun.startsWith('r')) {
+      setLoading(true)
+      fetch(`/api/scans/${selectedRun}`)
+        .then(r => r.json())
+        .then(data => { setSignals(data.results || []); setSelectedIdx(0); setDayOffset(0); setLoading(false) })
+        .catch(() => setLoading(false))
       return
     }
-    setLoading(true)
-    fetch(`/api/scans/${selectedScan}`)
-      .then(r => r.json())
-      .then(data => { setSignals(data.results || []); setSelectedIdx(0); setDayOffset(0); setLoading(false) })
-      .catch(() => setLoading(false))
+
+    // Otherwise, load the latest run for this strategy
+    const scanDef = scans.find(s => s.id === selectedScan)
+    const strat = scanDef ? (BUILTIN_SPEC_MAP[scanDef.id] || scanDef.name.toLowerCase().replace(/\s+/g, '-')) : ''
+    const dbMatches = dbScansByStrategy[strat] || []
+    if (dbMatches.length > 0) {
+      // Load the latest run
+      const latest = dbMatches.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
+      setSelectedRun(latest.id)
+    } else {
+      setSignals([])
+    }
+  }, [selectedScan, selectedRun])
+
+  // When scan selection changes, reset run selection
+  useEffect(() => {
+    setSelectedRun('')
   }, [selectedScan])
 
   const sig = signals[selectedIdx] as Signal | undefined
@@ -962,6 +1020,7 @@ export default function ScanDashboardPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: `${TEAL}20`, color: TEAL }}>{scan.resultCount} sig</span>
+                  <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: `${GOLD}20`, color: GOLD }}>{(scan.runs?.length || 0)} runs</span>
                   <span style={{ color: MUTED, fontSize: 8 }}>{scan.type}</span>
                 </div>
               </button>
@@ -976,7 +1035,7 @@ export default function ScanDashboardPage() {
         </div>
       </div>
 
-      {/* ── Bottom half: Saved Runs ── */}
+      {/* ── Bottom half: Runs for selected scan ── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <div style={{ padding: '8px 10px', borderBottom: `1px solid ${BORDER}`, background: SURFACE2 }}>
           <div className="flex items-center justify-between">
@@ -985,6 +1044,12 @@ export default function ScanDashboardPage() {
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
+          {runs.length === 0 && (
+            <div style={{ padding: 16, textAlign: 'center' }}>
+              <p style={{ color: MUTED, fontSize: 10 }}>No runs yet</p>
+              <p style={{ color: MUTED, fontSize: 9, marginTop: 4 }}>Click Run ▶ to execute</p>
+            </div>
+          )}
           {runs.map(run => {
             const isActive = run.id === selectedRun
             return (
@@ -997,8 +1062,8 @@ export default function ScanDashboardPage() {
               onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
             >
               <div className="flex items-center justify-between">
-                <span style={{ color: isActive ? GOLD : TEXT2, fontSize: 10, fontWeight: 600 }}>{run.dateRange}</span>
-                <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: `${TEAL}20`, color: TEAL }}>{run.resultCount}</span>
+                <span style={{ color: isActive ? GOLD : TEXT2, fontSize: 10, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{run.dateRange}</span>
+                <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: `${TEAL}20`, color: TEAL }}>{run.resultCount} sig</span>
               </div>
               <div style={{ color: isActive ? GOLD : MUTED, fontSize: 8, marginTop: 2 }}>{run.runAt}</div>
             </div>

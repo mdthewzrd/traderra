@@ -656,7 +656,10 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
 // ─── Backtest Stats Panel — Multi-Tab ────────────────
 type StatsTab = 'overview' | 'performance' | 'pnl' | 'robustness'
 
-function BacktestStatsPanel({ signals, backtestResults }: { signals: Signal[]; backtestResults: BacktestResults | null }) {
+function BacktestStatsPanel({ signals, backtestResults, dark }: { signals: Signal[]; backtestResults: BacktestResults | null; dark: boolean }) {
+  const C = dark
+    ? { BG, SURFACE, SURFACE2, SURFACE3, BORDER, TEXT, TEXT2, MUTED, WHITE, RED, TEAL, VOL_UP, VOL_DN, GOLD_DIM, GOLD_BORDER }
+    : { ...LIGHT, GOLD, GOLD_DIM: LIGHT.GOLD_DIM, GOLD_BORDER: LIGHT.GOLD_BORDER }
   const [activeTab, setActiveTab] = useState<StatsTab>('overview')
 
   const sigStats = useMemo(() => {
@@ -696,81 +699,81 @@ function BacktestStatsPanel({ signals, backtestResults }: { signals: Signal[]; b
         <StatBox label="Signals" value={signals.length.toString()} icon={<Zap className="h-3 w-3" />} />
         <StatBox label="Days" value={sigStats.dates.toString()} icon={<Calendar className="h-3 w-3" />} />
         <StatBox label="Tickers" value={sigStats.tickers.toString()} icon={<Hash className="h-3 w-3" />} />
-        <StatBox label="Avg Gap%" value={`${sigStats.avgGap.toFixed(1)}%`} icon={<TrendingUp className="h-3 w-3" />} color={TEAL} />
-        <StatBox label="Avg ABS" value={sigStats.avgAbs.toFixed(3)} icon={<Target className="h-3 w-3" />} color={GOLD} />
-        <StatBox label="Avg D0 Chg" value={`${sigStats.avgD0Chg > 0 ? '+' : ''}${sigStats.avgD0Chg.toFixed(1)}%`} icon={<TrendingDown className="h-3 w-3" />} color={sigStats.avgD0Chg < 0 ? RED : TEAL} />
-        <StatBox label="% Red" value={`${sigStats.redPct.toFixed(0)}%`} icon={<Minus className="h-3 w-3" />} color={RED} />
-        <StatBox label="Close Pos" value={sigStats.avgClosePos.toFixed(2)} icon={<Target className="h-3 w-3" />} color={sigStats.avgClosePos < 0.5 ? RED : TEAL} />
+        <StatBox label="Avg Gap%" value={`${sigStats.avgGap.toFixed(1)}%`} icon={<TrendingUp className="h-3 w-3" />} color={C.TEAL} />
+        <StatBox label="Avg ABS" value={sigStats.avgAbs.toFixed(3)} icon={<Target className="h-3 w-3" />} color={C.GOLD} />
+        <StatBox label="Avg D0 Chg" value={`${sigStats.avgD0Chg > 0 ? '+' : ''}${sigStats.avgD0Chg.toFixed(1)}%`} icon={<TrendingDown className="h-3 w-3" />} color={sigStats.avgD0Chg < 0 ? C.RED : C.TEAL} />
+        <StatBox label="% Red" value={`${sigStats.redPct.toFixed(0)}%`} icon={<Minus className="h-3 w-3" />} color={C.RED} />
+        <StatBox label="Close Pos" value={sigStats.avgClosePos.toFixed(2)} icon={<Target className="h-3 w-3" />} color={sigStats.avgClosePos < 0.5 ? C.RED : C.TEAL} />
       </div>
 
       {/* ── Tab Bar ── */}
-      <div className="flex items-center gap-1" style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '4px 8px' }}>
+      <div className="flex items-center gap-1" style={{ background: C.SURFACE, border: `1px solid ${C.BORDER}`, borderRadius: 4, padding: '4px 8px' }}>
         {tabs.map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key)} style={{
             display: 'flex', alignItems: 'center', gap: 5,
             padding: '6px 14px', borderRadius: 3, fontSize: 11, fontWeight: activeTab === t.key ? 700 : 500,
-            background: activeTab === t.key ? TEAL : 'transparent',
-            color: activeTab === t.key ? '#000' : MUTED,
+            background: activeTab === t.key ? C.TEAL : 'transparent',
+            color: activeTab === t.key ? '#000' : C.MUTED,
             border: 'none', cursor: 'pointer', transition: 'all 0.15s',
           }}>{t.icon}{t.label}</button>
         ))}
-        {bt && <span style={{ color: MUTED, fontSize: 9, marginLeft: 'auto' }}>{bt.entryType} → {bt.exitType} · {bt.totalTrades} trades</span>}
+        {bt && <span style={{ color: C.MUTED, fontSize: 9, marginLeft: 'auto' }}>{bt.entryType} → {bt.exitType} · {bt.totalTrades} trades</span>}
       </div>
 
       {/* ── Tab Content ── */}
       {!bt ? (
-        <div style={{ background: SURFACE, border: `1px dashed ${BORDER}`, borderRadius: 4, padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-          <Activity className="h-4 w-4" style={{ color: MUTED, opacity: 0.4 }} />
-          <span style={{ color: MUTED, fontSize: 11 }}>Run a baseline backtest to see full stats — click <strong style={{ color: TEAL }}>Baseline</strong> above</span>
+        <div style={{ background: C.SURFACE, border: `1px dashed ${C.BORDER}`, borderRadius: 4, padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <Activity className="h-4 w-4" style={{ color: C.MUTED, opacity: 0.4 }} />
+          <span style={{ color: C.MUTED, fontSize: 11 }}>Run a baseline backtest to see full stats — click <strong style={{ color: C.TEAL }}>Baseline</strong> above</span>
         </div>
       ) : activeTab === 'overview' ? (
         <>
           {/* ── OVERVIEW TAB: Key metrics grid ── */}
-          <div style={{ background: SURFACE, border: `1px solid ${TEAL}40`, borderRadius: 4, padding: '12px 14px' }}>
+          <div style={{ background: C.SURFACE, border: `1px solid ${C.TEAL}40`, borderRadius: 4, padding: '12px 14px' }}>
             <div className="grid grid-cols-3 lg:grid-cols-6 gap-x-6 gap-y-2">
-              <MetricRow label="Total Return" value={`${bt.totalReturnPct > 0 ? '+' : ''}${bt.totalReturnPct.toFixed(1)}%`} color={bt.totalReturnPct >= 0 ? TEAL : RED} />
-              <MetricRow label="CAGR" value={`${bt.cagr > 0 ? '+' : ''}${bt.cagr.toFixed(1)}%`} color={bt.cagr >= 0 ? TEAL : RED} />
-              <MetricRow label="Total P&L" value={`$${bt.totalPnl > 0 ? '+' : ''}${(bt.totalPnl / 1000).toFixed(1)}k`} color={bt.totalPnl >= 0 ? TEAL : RED} />
+              <MetricRow label="Total Return" value={`${bt.totalReturnPct > 0 ? '+' : ''}${bt.totalReturnPct.toFixed(1)}%`} color={bt.totalReturnPct >= 0 ? C.TEAL : C.RED} />
+              <MetricRow label="CAGR" value={`${bt.cagr > 0 ? '+' : ''}${bt.cagr.toFixed(1)}%`} color={bt.cagr >= 0 ? C.TEAL : C.RED} />
+              <MetricRow label="Total P&L" value={`$${bt.totalPnl > 0 ? '+' : ''}${(bt.totalPnl / 1000).toFixed(1)}k`} color={bt.totalPnl >= 0 ? C.TEAL : C.RED} />
               <MetricRow label="Total Trades" value={bt.totalTrades.toString()} />
-              <MetricRow label="Win Rate" value={`${bt.winRate.toFixed(1)}%`} color={bt.winRate >= 50 ? TEAL : RED} />
-              <MetricRow label="Profit Factor" value={bt.profitFactor.toFixed(2)} color={bt.profitFactor >= 1.5 ? TEAL : RED} />
-              <MetricRow label="Avg R-Multiple" value={`${bt.avgRMultiple > 0 ? '+' : ''}${bt.avgRMultiple.toFixed(2)}R`} color={bt.avgRMultiple >= 0 ? TEAL : RED} />
-              <MetricRow label="Median R" value={`${bt.medianR > 0 ? '+' : ''}${bt.medianR.toFixed(2)}R`} color={bt.medianR >= 0 ? TEAL : RED} />
-              <MetricRow label="Expectancy" value={`${bt.expectancyPct > 0 ? '+' : ''}${bt.expectancyPct.toFixed(2)}%`} color={bt.expectancyPct >= 0 ? TEAL : RED} />
-              <MetricRow label="Sharpe Ratio" value={bt.sharpe.toFixed(2)} color={bt.sharpe >= 1.0 ? TEAL : RED} />
-              <MetricRow label="Sortino Ratio" value={bt.sortino.toFixed(2)} color={bt.sortino >= 1.5 ? TEAL : RED} />
-              <MetricRow label="Calmar Ratio" value={bt.calmar.toFixed(2)} color={bt.calmar >= 1.0 ? TEAL : RED} />
-              <MetricRow label="Max Drawdown" value={`-${bt.maxDrawdown.toFixed(1)}%`} color={RED} />
+              <MetricRow label="Win Rate" value={`${bt.winRate.toFixed(1)}%`} color={bt.winRate >= 50 ? C.TEAL : C.RED} />
+              <MetricRow label="Profit Factor" value={bt.profitFactor.toFixed(2)} color={bt.profitFactor >= 1.5 ? C.TEAL : C.RED} />
+              <MetricRow label="Avg R-Multiple" value={`${bt.avgRMultiple > 0 ? '+' : ''}${bt.avgRMultiple.toFixed(2)}R`} color={bt.avgRMultiple >= 0 ? C.TEAL : C.RED} />
+              <MetricRow label="Median R" value={`${bt.medianR > 0 ? '+' : ''}${bt.medianR.toFixed(2)}R`} color={bt.medianR >= 0 ? C.TEAL : C.RED} />
+              <MetricRow label="Expectancy" value={`${bt.expectancyPct > 0 ? '+' : ''}${bt.expectancyPct.toFixed(2)}%`} color={bt.expectancyPct >= 0 ? C.TEAL : C.RED} />
+              <MetricRow label="Sharpe Ratio" value={bt.sharpe.toFixed(2)} color={bt.sharpe >= 1.0 ? C.TEAL : C.RED} />
+              <MetricRow label="Sortino Ratio" value={bt.sortino.toFixed(2)} color={bt.sortino >= 1.5 ? C.TEAL : C.RED} />
+              <MetricRow label="Calmar Ratio" value={bt.calmar.toFixed(2)} color={bt.calmar >= 1.0 ? C.TEAL : C.RED} />
+              <MetricRow label="Max Drawdown" value={`-${bt.maxDrawdown.toFixed(1)}%`} color={C.RED} />
               <MetricRow label="Max DD Duration" value={`${bt.maxDDDuration} bars`} />
-              <MetricRow label="Recovery Factor" value={bt.recoveryFactor.toFixed(2)} color={bt.recoveryFactor >= 3 ? TEAL : RED} />
-              <MetricRow label="Avg Win" value={`+${bt.avgWinPct.toFixed(2)}%`} color={TEAL} />
-              <MetricRow label="Avg Loss" value={`${bt.avgLossPct.toFixed(2)}%`} color={RED} />
+              <MetricRow label="Recovery Factor" value={bt.recoveryFactor.toFixed(2)} color={bt.recoveryFactor >= 3 ? C.TEAL : C.RED} />
+              <MetricRow label="Avg Win" value={`+${bt.avgWinPct.toFixed(2)}%`} color={C.TEAL} />
+              <MetricRow label="Avg Loss" value={`${bt.avgLossPct.toFixed(2)}%`} color={C.RED} />
               <MetricRow label="Win/Loss Ratio" value={`${bt.wlRatio.toFixed(2)}x`} />
-              <MetricRow label="Best Trade" value={`+${bt.bestTrade.toFixed(2)}%`} color={TEAL} />
-              <MetricRow label="Worst Trade" value={`${bt.worstTrade.toFixed(2)}%`} color={RED} />
+              <MetricRow label="Best Trade" value={`+${bt.bestTrade.toFixed(2)}%`} color={C.TEAL} />
+              <MetricRow label="Worst Trade" value={`${bt.worstTrade.toFixed(2)}%`} color={C.RED} />
               <MetricRow label="Std Dev Returns" value={`${bt.stdDevReturns.toFixed(2)}%`} />
-              <MetricRow label="Max Consec Wins" value={bt.maxConsecWins.toString()} color={TEAL} />
-              <MetricRow label="Max Consec Loss" value={bt.maxConsecLosses.toString()} color={RED} />
-              <MetricRow label="Gross Win" value={`+${bt.grossWin.toFixed(1)}%`} color={TEAL} />
-              <MetricRow label="Gross Loss" value={`${bt.grossLoss.toFixed(1)}%`} color={RED} />
+              <MetricRow label="Max Consec Wins" value={bt.maxConsecWins.toString()} color={C.TEAL} />
+              <MetricRow label="Max Consec Loss" value={bt.maxConsecLosses.toString()} color={C.RED} />
+              <MetricRow label="Gross Win" value={`+${bt.grossWin.toFixed(1)}%`} color={C.TEAL} />
+              <MetricRow label="Gross Loss" value={`${bt.grossLoss.toFixed(1)}%`} color={C.RED} />
             </div>
           </div>
 
           {/* Day-by-day */}
           {bt.dayStats.length > 0 && (
-            <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '6px 10px' }}>
+            <div style={{ background: C.SURFACE, border: `1px solid ${C.BORDER}`, borderRadius: 4, padding: '6px 10px' }}>
               <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
-                <Clock className="h-3 w-3" style={{ color: GOLD }} />
-                <span style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Daily Breakdown</span>
+                <Clock className="h-3 w-3" style={{ color: C.GOLD }} />
+                <span style={{ color: C.GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Daily Breakdown</span>
               </div>
               <div style={{ display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 4 }}>
                 {bt.dayStats.map((d, i) => {
-                  const col = d.pnl >= 0 ? TEAL : RED
+                  const col = d.pnl >= 0 ? C.TEAL : C.RED
                   return (
-                    <div key={i} style={{ minWidth: 54, padding: '4px 6px', background: SURFACE2, borderRadius: 3, textAlign: 'center' }}>
-                      <div style={{ color: MUTED, fontSize: 8, fontWeight: 600 }}>{d.day}</div>
+                    <div key={i} style={{ minWidth: 54, padding: '4px 6px', background: C.SURFACE2, borderRadius: 3, textAlign: 'center' }}>
+                      <div style={{ color: C.MUTED, fontSize: 8, fontWeight: 600 }}>{d.day}</div>
                       <div style={{ color: col, fontSize: 12, fontWeight: 700 }}>{d.pnl >= 0 ? '+' : ''}{d.pnl.toFixed(1)}%</div>
-                      <div style={{ color: MUTED, fontSize: 7 }}>{d.count}t</div>
+                      <div style={{ color: C.MUTED, fontSize: 7 }}>{d.count}t</div>
                     </div>
                   )
                 })}
@@ -783,8 +786,8 @@ function BacktestStatsPanel({ signals, backtestResults }: { signals: Signal[]; b
           {/* ── PERFORMANCE TAB: Distribution + Monthly ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-1">
             {/* Return Distribution */}
-            <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '8px 10px' }}>
-              <div style={{ color: GOLD, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Return Distribution</div>
+            <div style={{ background: C.SURFACE, border: `1px solid ${C.BORDER}`, borderRadius: 4, padding: '8px 10px' }}>
+              <div style={{ color: C.GOLD, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Return Distribution</div>
               {(() => {
                 const buckets = { '< -5%': 0, '-5 to -2%': 0, '-2 to 0%': 0, '0 to +2%': 0, '+2 to +5%': 0, '> +5%': 0 }
                 bt.tradeReturns.forEach(r => {
@@ -798,15 +801,15 @@ function BacktestStatsPanel({ signals, backtestResults }: { signals: Signal[]; b
                 const maxB = Math.max(...Object.values(buckets), 1)
                 return Object.entries(buckets).map(([label, count]) => {
                   const pct = (count / bt.totalTrades) * 100
-                  const barCol = label.startsWith('-') || label.startsWith('<') ? RED : TEAL
+                  const barCol = label.startsWith('-') || label.startsWith('<') ? C.RED : C.TEAL
                   return (
                     <div key={label} className="flex items-center gap-1.5" style={{ marginBottom: 3 }}>
-                      <span style={{ color: MUTED, fontSize: 8, width: 56, fontFamily: 'monospace', textAlign: 'right' }}>{label}</span>
-                      <div style={{ flex: 1, height: 12, background: SURFACE3, borderRadius: 2, overflow: 'hidden' }}>
+                      <span style={{ color: C.MUTED, fontSize: 8, width: 56, fontFamily: 'monospace', textAlign: 'right' }}>{label}</span>
+                      <div style={{ flex: 1, height: 12, background: C.SURFACE3, borderRadius: 2, overflow: 'hidden' }}>
                         <div style={{ height: '100%', width: `${(count / maxB) * 100}%`, background: barCol, borderRadius: 2, minWidth: count > 0 ? 2 : 0 }} />
                       </div>
-                      <span style={{ color: TEXT2, fontSize: 8, width: 28 }}>{count}</span>
-                      <span style={{ color: MUTED, fontSize: 7, width: 30 }}>{pct.toFixed(0)}%</span>
+                      <span style={{ color: C.TEXT2, fontSize: 8, width: 28 }}>{count}</span>
+                      <span style={{ color: C.MUTED, fontSize: 7, width: 30 }}>{pct.toFixed(0)}%</span>
                     </div>
                   )
                 })
@@ -814,19 +817,19 @@ function BacktestStatsPanel({ signals, backtestResults }: { signals: Signal[]; b
             </div>
 
             {/* Monthly Breakdown */}
-            <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '8px 10px' }}>
-              <div style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Monthly Returns</div>
+            <div style={{ background: C.SURFACE, border: `1px solid ${C.BORDER}`, borderRadius: 4, padding: '8px 10px' }}>
+              <div style={{ color: C.GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Monthly Returns</div>
               {bt.monthlyStats.map((m, i) => {
-                const col = m.pnl >= 0 ? TEAL : RED
+                const col = m.pnl >= 0 ? C.TEAL : C.RED
                 const barW = Math.min(Math.abs(m.pnl) * 3, 100)
                 return (
                   <div key={i} className="flex items-center gap-1.5" style={{ marginBottom: 4 }}>
-                    <span style={{ color: GOLD, fontSize: 9, fontWeight: 600, width: 36, fontFamily: 'monospace' }}>{m.month.slice(5)}</span>
-                    <div style={{ flex: 1, height: 14, background: SURFACE3, borderRadius: 2, overflow: 'hidden', position: 'relative' }}>
+                    <span style={{ color: C.GOLD, fontSize: 9, fontWeight: 600, width: 36, fontFamily: 'monospace' }}>{m.month.slice(5)}</span>
+                    <div style={{ flex: 1, height: 14, background: C.SURFACE3, borderRadius: 2, overflow: 'hidden', position: 'relative' }}>
                       <div style={{ height: '100%', width: `${barW}%`, background: col, borderRadius: 2, opacity: 0.7 }} />
                     </div>
                     <span style={{ color: col, fontSize: 9, fontWeight: 700, width: 48, textAlign: 'right' }}>{m.pnl >= 0 ? '+' : ''}{m.pnl.toFixed(1)}%</span>
-                    <span style={{ color: MUTED, fontSize: 7, width: 24 }}>{m.count}t</span>
+                    <span style={{ color: C.MUTED, fontSize: 7, width: 24 }}>{m.count}t</span>
                   </div>
                 )
               })}
@@ -834,8 +837,8 @@ function BacktestStatsPanel({ signals, backtestResults }: { signals: Signal[]; b
           </div>
 
           {/* Trade Details Table */}
-          <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '6px 10px' }}>
-            <div style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>R-Multiple Distribution</div>
+          <div style={{ background: C.SURFACE, border: `1px solid ${C.BORDER}`, borderRadius: 4, padding: '6px 10px' }}>
+            <div style={{ color: C.GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>R-Multiple Distribution</div>
             {(() => {
               const rBuckets = { '< -2R': 0, '-2 to -1R': 0, '-1 to 0R': 0, '0 to +1R': 0, '+1 to +2R': 0, '> +2R': 0 }
               bt.tradeReturns.forEach((_, i) => {
@@ -853,14 +856,14 @@ function BacktestStatsPanel({ signals, backtestResults }: { signals: Signal[]; b
               })
               const maxR = Math.max(...Object.values(rBuckets), 1)
               return Object.entries(rBuckets).map(([label, count]) => {
-                const col = label.includes('-') ? RED : TEAL
+                const col = label.includes('-') ? C.RED : C.TEAL
                 return (
                   <div key={label} className="flex items-center gap-1.5" style={{ marginBottom: 3 }}>
-                    <span style={{ color: MUTED, fontSize: 8, width: 52, fontFamily: 'monospace', textAlign: 'right' }}>{label}</span>
-                    <div style={{ flex: 1, height: 12, background: SURFACE3, borderRadius: 2, overflow: 'hidden' }}>
+                    <span style={{ color: C.MUTED, fontSize: 8, width: 52, fontFamily: 'monospace', textAlign: 'right' }}>{label}</span>
+                    <div style={{ flex: 1, height: 12, background: C.SURFACE3, borderRadius: 2, overflow: 'hidden' }}>
                       <div style={{ height: '100%', width: `${(count / maxR) * 100}%`, background: col, borderRadius: 2, minWidth: count > 0 ? 2 : 0 }} />
                     </div>
-                    <span style={{ color: TEXT2, fontSize: 8, width: 20 }}>{count}</span>
+                    <span style={{ color: C.TEXT2, fontSize: 8, width: 20 }}>{count}</span>
                   </div>
                 )
               })
@@ -870,54 +873,54 @@ function BacktestStatsPanel({ signals, backtestResults }: { signals: Signal[]; b
       ) : activeTab === 'pnl' ? (
         <>
           {/* ── P&L / DRAWDOWN TAB: Equity curve + DD chart (canvas) ── */}
-          <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '8px 10px' }}>
-            <div style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Equity Curve (Cumulative P&L)</div>
-            <EquityChart data={bt.cumPnlSeries} color={bt.cumPnlSeries[bt.cumPnlSeries.length - 1] >= 0 ? TEAL : RED} height={130} />
+          <div style={{ background: C.SURFACE, border: `1px solid ${C.BORDER}`, borderRadius: 4, padding: '8px 10px' }}>
+            <div style={{ color: C.GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Equity Curve (Cumulative P&L)</div>
+            <EquityChart data={bt.cumPnlSeries} color={bt.cumPnlSeries[bt.cumPnlSeries.length - 1] >= 0 ? C.TEAL : C.RED} height={130} />
           </div>
-          <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '8px 10px' }}>
-            <div style={{ color: RED, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Drawdown</div>
-            <EquityChart data={bt.drawdownSeries} color={RED} height={100} inverted />
+          <div style={{ background: C.SURFACE, border: `1px solid ${C.BORDER}`, borderRadius: 4, padding: '8px 10px' }}>
+            <div style={{ color: C.RED, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Drawdown</div>
+            <EquityChart data={bt.drawdownSeries} color={C.RED} height={100} inverted />
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-1">
-            <StatBox label="Total Return" value={`${bt.totalReturnPct > 0 ? '+' : ''}${bt.totalReturnPct.toFixed(1)}%`} icon={<TrendingUp className="h-3 w-3" />} color={bt.totalReturnPct >= 0 ? TEAL : RED} />
-            <StatBox label="Max DD" value={`-${bt.maxDrawdown.toFixed(1)}%`} icon={<TrendingDown className="h-3 w-3" />} color={RED} />
-            <StatBox label="Recovery Factor" value={bt.recoveryFactor.toFixed(2)} icon={<Activity className="h-3 w-3" />} color={bt.recoveryFactor >= 3 ? TEAL : RED} />
-            <StatBox label="Calmar" value={bt.calmar.toFixed(2)} icon={<BarChart3 className="h-3 w-3" />} color={bt.calmar >= 1 ? TEAL : RED} />
+            <StatBox label="Total Return" value={`${bt.totalReturnPct > 0 ? '+' : ''}${bt.totalReturnPct.toFixed(1)}%`} icon={<TrendingUp className="h-3 w-3" />} color={bt.totalReturnPct >= 0 ? C.TEAL : C.RED} />
+            <StatBox label="Max DD" value={`-${bt.maxDrawdown.toFixed(1)}%`} icon={<TrendingDown className="h-3 w-3" />} color={C.RED} />
+            <StatBox label="Recovery Factor" value={bt.recoveryFactor.toFixed(2)} icon={<Activity className="h-3 w-3" />} color={bt.recoveryFactor >= 3 ? C.TEAL : C.RED} />
+            <StatBox label="Calmar" value={bt.calmar.toFixed(2)} icon={<BarChart3 className="h-3 w-3" />} color={bt.calmar >= 1 ? C.TEAL : C.RED} />
           </div>
         </>
       ) : activeTab === 'robustness' ? (
         <>
           {/* ── ROBUSTNESS TAB: Validation placeholders ── */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-1">
-            <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '12px 10px', textAlign: 'center' }}>
-              <Shield className="h-5 w-5 mx-auto" style={{ color: MUTED, marginBottom: 4 }} />
-              <div style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Walk-Forward Analysis</div>
-              <div style={{ color: TEXT2, fontSize: 20, fontWeight: 700, marginTop: 6 }}>—</div>
-              <div style={{ color: MUTED, fontSize: 8, marginTop: 2, lineHeight: 1.4 }}>Anchored WFO 5-fold\nIS/OOS degradation</div>
-              <div style={{ color: SURFACE3, fontSize: 7, marginTop: 6 }}>Not yet computed</div>
+            <div style={{ background: C.SURFACE, border: `1px solid ${C.BORDER}`, borderRadius: 4, padding: '12px 10px', textAlign: 'center' }}>
+              <Shield className="h-5 w-5 mx-auto" style={{ color: C.MUTED, marginBottom: 4 }} />
+              <div style={{ color: C.GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Walk-Forward Analysis</div>
+              <div style={{ color: C.TEXT2, fontSize: 20, fontWeight: 700, marginTop: 6 }}>—</div>
+              <div style={{ color: C.MUTED, fontSize: 8, marginTop: 2, lineHeight: 1.4 }}>Anchored WFO 5-fold\nIS/OOS degradation</div>
+              <div style={{ color: C.SURFACE3, fontSize: 7, marginTop: 6 }}>Not yet computed</div>
             </div>
-            <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '12px 10px', textAlign: 'center' }}>
-              <BarChart3 className="h-5 w-5 mx-auto" style={{ color: MUTED, marginBottom: 4 }} />
-              <div style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Monte Carlo Simulation</div>
-              <div style={{ color: TEXT2, fontSize: 20, fontWeight: 700, marginTop: 6 }}>—</div>
-              <div style={{ color: MUTED, fontSize: 8, marginTop: 2, lineHeight: 1.4 }}>10K permutations\n95% CI bounds</div>
-              <div style={{ color: SURFACE3, fontSize: 7, marginTop: 6 }}>Not yet computed</div>
+            <div style={{ background: C.SURFACE, border: `1px solid ${C.BORDER}`, borderRadius: 4, padding: '12px 10px', textAlign: 'center' }}>
+              <BarChart3 className="h-5 w-5 mx-auto" style={{ color: C.MUTED, marginBottom: 4 }} />
+              <div style={{ color: C.GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Monte Carlo Simulation</div>
+              <div style={{ color: C.TEXT2, fontSize: 20, fontWeight: 700, marginTop: 6 }}>—</div>
+              <div style={{ color: C.MUTED, fontSize: 8, marginTop: 2, lineHeight: 1.4 }}>10K permutations\n95% CI bounds</div>
+              <div style={{ color: C.SURFACE3, fontSize: 7, marginTop: 6 }}>Not yet computed</div>
             </div>
-            <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '12px 10px', textAlign: 'center' }}>
-              <TrendingUp className="h-5 w-5 mx-auto" style={{ color: MUTED, marginBottom: 4 }} />
-              <div style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Parameter Sensitivity</div>
-              <div style={{ color: TEXT2, fontSize: 20, fontWeight: 700, marginTop: 6 }}>—</div>
-              <div style={{ color: MUTED, fontSize: 8, marginTop: 2, lineHeight: 1.4 }}>±20% param sweep\nRobustness score</div>
-              <div style={{ color: SURFACE3, fontSize: 7, marginTop: 6 }}>Not yet computed</div>
+            <div style={{ background: C.SURFACE, border: `1px solid ${C.BORDER}`, borderRadius: 4, padding: '12px 10px', textAlign: 'center' }}>
+              <TrendingUp className="h-5 w-5 mx-auto" style={{ color: C.MUTED, marginBottom: 4 }} />
+              <div style={{ color: C.GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Parameter Sensitivity</div>
+              <div style={{ color: C.TEXT2, fontSize: 20, fontWeight: 700, marginTop: 6 }}>—</div>
+              <div style={{ color: C.MUTED, fontSize: 8, marginTop: 2, lineHeight: 1.4 }}>±20% param sweep\nRobustness score</div>
+              <div style={{ color: C.SURFACE3, fontSize: 7, marginTop: 6 }}>Not yet computed</div>
             </div>
           </div>
-          <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '8px 10px' }}>
-            <div style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Current Strategy Parameters</div>
+          <div style={{ background: C.SURFACE, border: `1px solid ${C.BORDER}`, borderRadius: 4, padding: '8px 10px' }}>
+            <div style={{ color: C.GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>Current Strategy Parameters</div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-              <div><span style={{ color: MUTED, fontSize: 8 }}>Entry</span><div style={{ color: TEXT, fontSize: 11, fontWeight: 600 }}>{bt.entryType}</div></div>
-              <div><span style={{ color: MUTED, fontSize: 8 }}>Exit</span><div style={{ color: TEXT, fontSize: 11, fontWeight: 600 }}>{bt.exitType}</div></div>
-              <div><span style={{ color: MUTED, fontSize: 8 }}>Stop</span><div style={{ color: TEXT, fontSize: 11, fontWeight: 600 }}>D0 Low (baseline)</div></div>
-              <div><span style={{ color: MUTED, fontSize: 8 }}>Duration</span><div style={{ color: TEXT, fontSize: 11, fontWeight: 600 }}>{bt.avgTradeDuration}</div></div>
+              <div><span style={{ color: C.MUTED, fontSize: 8 }}>Entry</span><div style={{ color: TEXT, fontSize: 11, fontWeight: 600 }}>{bt.entryType}</div></div>
+              <div><span style={{ color: C.MUTED, fontSize: 8 }}>Exit</span><div style={{ color: TEXT, fontSize: 11, fontWeight: 600 }}>{bt.exitType}</div></div>
+              <div><span style={{ color: C.MUTED, fontSize: 8 }}>Stop</span><div style={{ color: TEXT, fontSize: 11, fontWeight: 600 }}>D0 Low (baseline)</div></div>
+              <div><span style={{ color: C.MUTED, fontSize: 8 }}>Duration</span><div style={{ color: TEXT, fontSize: 11, fontWeight: 600 }}>{bt.avgTradeDuration}</div></div>
             </div>
           </div>
         </>
@@ -929,8 +932,8 @@ function BacktestStatsPanel({ signals, backtestResults }: { signals: Signal[]; b
 // ─── Helper components for stats ──
 function MetricRow({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div className="flex items-center justify-between" style={{ padding: '4px 0', borderBottom: `1px solid ${SURFACE3}` }}>
-      <span style={{ color: MUTED, fontSize: 11 }}>{label}</span>
+    <div className="flex items-center justify-between" style={{ padding: '4px 0', borderBottom: `1px solid ${C.SURFACE3}` }}>
+      <span style={{ color: C.MUTED, fontSize: 11 }}>{label}</span>
       <span style={{ color: color || TEXT, fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
     </div>
   )
@@ -952,7 +955,7 @@ function EquityChart({ data, color, height, inverted }: { data: number[]; color:
     const xStep = w / (data.length - 1 || 1)
     // Zero line
     const zeroY = h - ((0 - min) / range) * h
-    ctx.strokeStyle = `${SURFACE3}`; ctx.lineWidth = 0.5; ctx.setLineDash([3, 3])
+    ctx.strokeStyle = `${C.SURFACE3}`; ctx.lineWidth = 0.5; ctx.setLineDash([3, 3])
     ctx.beginPath(); ctx.moveTo(0, zeroY); ctx.lineTo(w, zeroY); ctx.stroke(); ctx.setLineDash([])
     // Fill
     ctx.beginPath()
@@ -974,16 +977,16 @@ function EquityChart({ data, color, height, inverted }: { data: number[]; color:
 // DistBar removed — not needed for backtest page
 function StatBox({ label, value, icon, color }: { label: string; value: string; icon: React.ReactNode; color?: string }) {
   return (
-    <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '6px 10px' }}>
-      <div className="flex items-center gap-1" style={{ color: MUTED, fontSize: 9 }}>{icon}{label}</div>
-      <div style={{ color: color || GOLD, fontSize: 16, fontWeight: 700, marginTop: 1 }}>{value}</div>
+    <div style={{ background: C.SURFACE, border: `1px solid ${C.BORDER}`, borderRadius: 4, padding: '6px 10px' }}>
+      <div className="flex items-center gap-1" style={{ color: C.MUTED, fontSize: 9 }}>{icon}{label}</div>
+      <div style={{ color: color || C.GOLD, fontSize: 16, fontWeight: 700, marginTop: 1 }}>{value}</div>
     </div>
   )
 }
 function Detail({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '2px 6px' }}>
-      <span style={{ color: MUTED, fontSize: 8, textTransform: 'uppercase' }}>{label} </span>
+    <div style={{ background: C.SURFACE, border: `1px solid ${C.BORDER}`, borderRadius: 3, padding: '2px 6px' }}>
+      <span style={{ color: C.MUTED, fontSize: 8, textTransform: 'uppercase' }}>{label} </span>
       <span style={{ color: color || TEXT, fontSize: 10, fontWeight: 600 }}>{value}</span>
     </div>
   )
@@ -1074,11 +1077,6 @@ export default function BacktestPage() {
   const [dayOffset, setDayOffset] = useState(0)
   const [backtestResults, setBacktestResults] = useState<BacktestResults | null>(null)
   const T = useThemeColors(dark)
-
-  // Auto-run baseline when signals load
-  useEffect(() => {
-    if (signals.length > 0 && !backtestResults) runBaselineBacktest()
-  }, [signals])
 
   // ── Baseline backtest: buy D0 open, sell D0 close ──
   const runBaselineBacktest = useCallback(() => {
@@ -1187,6 +1185,12 @@ export default function BacktestPage() {
       dayStats, monthlyStats,
     })
   }, [signals])
+
+  // Auto-run baseline when signals load
+  useEffect(() => {
+    if (signals.length > 0 && !backtestResults) runBaselineBacktest()
+  }, [signals])
+
   // Mock runs for demo
   const [runs] = useState<ScanRun[]>([
     { id: 'r1', scanId: '', dateRange: '90d', runAt: '2025-01-15 14:32', resultCount: 52 },
@@ -1238,16 +1242,16 @@ export default function BacktestPage() {
   const renderLeftSidebar = () => (
     <div style={{
       width: LEFT_W, minWidth: LEFT_W, maxWidth: LEFT_W,
-      background: SURFACE, borderRight: `1px solid ${BORDER}`,
+      background: T.SURFACE, borderRight: `1px solid ${T.BORDER}`,
       display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)',
       position: 'sticky', top: 48,
     }}>
       {/* ── Top half: Scan tree ── */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, borderBottom: `1px solid ${BORDER}` }}>
-        <div style={{ padding: '8px 10px', borderBottom: `1px solid ${BORDER}`, background: SURFACE2 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, borderBottom: `1px solid ${T.BORDER}` }}>
+        <div style={{ padding: '8px 10px', borderBottom: `1px solid ${T.BORDER}`, background: T.SURFACE2 }}>
           <div className="flex items-center justify-between">
-            <span style={{ color: GOLD, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Scans</span>
-            <span style={{ color: MUTED, fontSize: 9 }}>{scans.length}</span>
+            <span style={{ color: T.GOLD, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Scans</span>
+            <span style={{ color: T.MUTED, fontSize: 9 }}>{scans.length}</span>
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -1257,27 +1261,27 @@ export default function BacktestPage() {
               <button key={scan.id} onClick={() => setSelectedScan(scan.id)} style={{
                 display: 'block', width: '100%', textAlign: 'left',
                 padding: '8px 10px', border: 'none', cursor: 'pointer',
-                background: isActive ? GOLD_DIM : 'transparent',
-                borderLeft: isActive ? `2px solid ${GOLD}` : '2px solid transparent',
-                borderBottom: `1px solid ${BORDER}`,
+                background: isActive ? T.GOLD_DIM : 'transparent',
+                borderLeft: isActive ? `2px solid ${T.GOLD}` : '2px solid transparent',
+                borderBottom: `1px solid ${T.BORDER}`,
               }}
                 onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
                 onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
               >
-                <div style={{ color: isActive ? GOLD : TEXT, fontSize: 11, fontWeight: 600, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ color: isActive ? T.GOLD : TEXT, fontSize: 11, fontWeight: 600, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {scan.name}
                 </div>
                 <div className="flex items-center gap-2">
-                  <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: `${TEAL}20`, color: TEAL }}>{scan.resultCount} sig</span>
-                  <span style={{ color: MUTED, fontSize: 8 }}>{scan.type}</span>
+                  <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: `${T.TEAL}20`, color: T.TEAL }}>{scan.resultCount} sig</span>
+                  <span style={{ color: T.MUTED, fontSize: 8 }}>{scan.type}</span>
                 </div>
               </button>
             )
           })}
           {scans.length === 0 && (
             <div style={{ padding: 20, textAlign: 'center' }}>
-              <Search className="h-5 w-5 mx-auto mb-2" style={{ color: MUTED, opacity: 0.3 }} />
-              <p style={{ color: MUTED, fontSize: 10 }}>No saved scans</p>
+              <Search className="h-5 w-5 mx-auto mb-2" style={{ color: T.MUTED, opacity: 0.3 }} />
+              <p style={{ color: T.MUTED, fontSize: 10 }}>No saved scans</p>
             </div>
           )}
         </div>
@@ -1285,10 +1289,10 @@ export default function BacktestPage() {
 
       {/* ── Bottom half: Saved Runs ── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <div style={{ padding: '8px 10px', borderBottom: `1px solid ${BORDER}`, background: SURFACE2 }}>
+        <div style={{ padding: '8px 10px', borderBottom: `1px solid ${T.BORDER}`, background: T.SURFACE2 }}>
           <div className="flex items-center justify-between">
-            <span style={{ color: GOLD, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Runs</span>
-            <span style={{ color: MUTED, fontSize: 9 }}>{runs.length}</span>
+            <span style={{ color: T.GOLD, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Runs</span>
+            <span style={{ color: T.MUTED, fontSize: 9 }}>{runs.length}</span>
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -1296,18 +1300,18 @@ export default function BacktestPage() {
             const isActive = run.id === selectedRun
             return (
             <div key={run.id} onClick={() => setSelectedRun(run.id)} style={{
-              padding: '6px 10px', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer',
-              background: isActive ? GOLD_DIM : 'transparent',
-              borderLeft: isActive ? `2px solid ${GOLD}` : '2px solid transparent',
+              padding: '6px 10px', borderBottom: `1px solid ${T.BORDER}`, cursor: 'pointer',
+              background: isActive ? T.GOLD_DIM : 'transparent',
+              borderLeft: isActive ? `2px solid ${T.GOLD}` : '2px solid transparent',
             }}
               onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
               onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
             >
               <div className="flex items-center justify-between">
-                <span style={{ color: isActive ? GOLD : TEXT2, fontSize: 10, fontWeight: 600 }}>{run.dateRange}</span>
-                <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: `${TEAL}20`, color: TEAL }}>{run.resultCount}</span>
+                <span style={{ color: isActive ? T.GOLD : T.TEXT2, fontSize: 10, fontWeight: 600 }}>{run.dateRange}</span>
+                <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: `${T.TEAL}20`, color: T.TEAL }}>{run.resultCount}</span>
               </div>
-              <div style={{ color: isActive ? GOLD : MUTED, fontSize: 8, marginTop: 2 }}>{run.runAt}</div>
+              <div style={{ color: isActive ? T.GOLD : T.MUTED, fontSize: 8, marginTop: 2 }}>{run.runAt}</div>
             </div>
             )
           })}
@@ -1315,12 +1319,12 @@ export default function BacktestPage() {
       </div>
 
       {/* New Scan button */}
-      <div style={{ padding: 6, borderTop: `1px solid ${BORDER}` }}>
+      <div style={{ padding: 6, borderTop: `1px solid ${T.BORDER}` }}>
         <button style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
           width: '100%', padding: '6px', borderRadius: 4,
-          background: GOLD_DIM, color: GOLD, fontWeight: 600, fontSize: 10,
-          border: `1px solid ${GOLD_BORDER}`, cursor: 'pointer',
+          background: T.GOLD_DIM, color: T.GOLD, fontWeight: 600, fontSize: 10,
+          border: `1px solid ${T.GOLD_BORDER}`, cursor: 'pointer',
         }}>
           <Plus className="h-3 w-3" /> New Scan
         </button>
@@ -1332,28 +1336,28 @@ export default function BacktestPage() {
   const renderRightSidebar = () => (
     <div style={{
       width: RIGHT_W, minWidth: RIGHT_W, maxWidth: RIGHT_W,
-      background: SURFACE, borderLeft: `1px solid ${BORDER}`,
+      background: T.SURFACE, borderLeft: `1px solid ${T.BORDER}`,
       display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)',
       position: 'sticky', top: 48,
     }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <div className="px-2 py-1.5 flex items-center justify-between" style={{ borderBottom: `1px solid ${BORDER}`, background: SURFACE2 }}>
-          <span style={{ color: GOLD, fontSize: 10, fontWeight: 700 }}>SIGNALS</span>
-          <span style={{ color: MUTED, fontSize: 9 }}>{signals.length}</span>
+        <div className="px-2 py-1.5 flex items-center justify-between" style={{ borderBottom: `1px solid ${T.BORDER}`, background: T.SURFACE2 }}>
+          <span style={{ color: T.GOLD, fontSize: 10, fontWeight: 700 }}>SIGNALS</span>
+          <span style={{ color: T.MUTED, fontSize: 9 }}>{signals.length}</span>
         </div>
         <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
           <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 10 }}>
             <thead>
-              <tr style={{ background: SURFACE2, position: 'sticky', top: 0, zIndex: 2 }}>
-                <th style={{ padding: '4px 6px', textAlign: 'left', color: GOLD, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 0, background: SURFACE2, zIndex: 3, minWidth: 56 }}>Ticker</th>
-                <th style={{ padding: '4px 6px', textAlign: 'left', color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 56, background: SURFACE2, zIndex: 3, minWidth: 68, borderRight: `1px solid ${BORDER}` }}>Date</th>
-                <th style={{ padding: '4px 4px', textAlign: 'right', color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Open</th>
-                <th style={{ padding: '4px 4px', textAlign: 'right', color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Close</th>
-                <th style={{ padding: '4px 4px', textAlign: 'right', color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Gap%</th>
-                <th style={{ padding: '4px 4px', textAlign: 'right', color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>D0</th>
-                <th style={{ padding: '4px 4px', textAlign: 'right', color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Rng%</th>
-                <th style={{ padding: '4px 4px', textAlign: 'right', color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>ABS</th>
-                <th style={{ padding: '4px 4px', textAlign: 'right', color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Vol</th>
+              <tr style={{ background: T.SURFACE2, position: 'sticky', top: 0, zIndex: 2 }}>
+                <th style={{ padding: '4px 6px', textAlign: 'left', color: T.GOLD, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 0, background: T.SURFACE2, zIndex: 3, minWidth: 56 }}>Ticker</th>
+                <th style={{ padding: '4px 6px', textAlign: 'left', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 56, background: T.SURFACE2, zIndex: 3, minWidth: 68, borderRight: `1px solid ${T.BORDER}` }}>Date</th>
+                <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Open</th>
+                <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Close</th>
+                <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Gap%</th>
+                <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>D0</th>
+                <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Rng%</th>
+                <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>ABS</th>
+                <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Vol</th>
               </tr>
             </thead>
             <tbody>
@@ -1362,19 +1366,19 @@ export default function BacktestPage() {
                 const d0chg = ((s.close - s.open) / s.open * 100)
                 const rng = ((s.high - s.low) / s.open * 100)
                 return (
-                  <tr key={`${s.ticker}-${s.date}`} onClick={() => { setSelectedIdx(i); setDayOffset(0) }} style={{ cursor: 'pointer', background: isActive ? GOLD_DIM : 'transparent' }}
+                  <tr key={`${s.ticker}-${s.date}`} onClick={() => { setSelectedIdx(i); setDayOffset(0) }} style={{ cursor: 'pointer', background: isActive ? T.GOLD_DIM : 'transparent' }}
                     onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
                     onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
                   >
-                    <td style={{ padding: '3px 6px', color: isActive ? GOLD : WHITE, fontWeight: 700, fontFamily: 'monospace', position: 'sticky', left: 0, background: isActive ? GOLD_DIM : SURFACE, zIndex: 1 }}>{s.ticker}</td>
-                    <td style={{ padding: '3px 6px', color: isActive ? GOLD : MUTED, position: 'sticky', left: 56, background: isActive ? GOLD_DIM : SURFACE, zIndex: 1, borderRight: `1px solid ${BORDER}` }}>{s.date.slice(5)}</td>
-                    <td style={{ padding: '3px 4px', color: TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>${s.open?.toFixed(2)}</td>
-                    <td style={{ padding: '3px 4px', color: TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>${s.close?.toFixed(2)}</td>
-                    <td style={{ padding: '3px 4px', color: TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{(s.gap_pct || 0).toFixed(0)}%</td>
-                    <td style={{ padding: '3px 4px', color: d0chg < 0 ? RED : TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{d0chg > 0 ? '+' : ''}{d0chg.toFixed(1)}%</td>
-                    <td style={{ padding: '3px 4px', color: TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{rng.toFixed(1)}%</td>
-                    <td style={{ padding: '3px 4px', color: GOLD, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(s.pos_abs || 0).toFixed(2)}</td>
-                    <td style={{ padding: '3px 4px', color: MUTED, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{((s.volume || 0) / 1e6).toFixed(0)}M</td>
+                    <td style={{ padding: '3px 6px', color: isActive ? T.GOLD : T.WHITE, fontWeight: 700, fontFamily: 'monospace', position: 'sticky', left: 0, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1 }}>{s.ticker}</td>
+                    <td style={{ padding: '3px 6px', color: isActive ? T.GOLD : T.MUTED, position: 'sticky', left: 56, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1, borderRight: `1px solid ${T.BORDER}` }}>{s.date.slice(5)}</td>
+                    <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>${s.open?.toFixed(2)}</td>
+                    <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>${s.close?.toFixed(2)}</td>
+                    <td style={{ padding: '3px 4px', color: T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{(s.gap_pct || 0).toFixed(0)}%</td>
+                    <td style={{ padding: '3px 4px', color: d0chg < 0 ? T.RED : T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{d0chg > 0 ? '+' : ''}{d0chg.toFixed(1)}%</td>
+                    <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{rng.toFixed(1)}%</td>
+                    <td style={{ padding: '3px 4px', color: T.GOLD, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(s.pos_abs || 0).toFixed(2)}</td>
+                    <td style={{ padding: '3px 4px', color: T.MUTED, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{((s.volume || 0) / 1e6).toFixed(0)}M</td>
                   </tr>
                 )
               })}
@@ -1384,22 +1388,22 @@ export default function BacktestPage() {
       </div>
 
       {/* Chat */}
-      <div style={{ flex: 1, minHeight: 200, borderTop: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
-        <div className="px-2 py-1.5 flex items-center gap-1.5" style={{ borderBottom: `1px solid ${BORDER}`, background: SURFACE2 }}>
-          <MessageSquare className="h-3 w-3" style={{ color: GOLD }} />
-          <span style={{ color: GOLD, fontSize: 10, fontWeight: 700 }}>CHAT</span>
+      <div style={{ flex: 1, minHeight: 200, borderTop: `1px solid ${T.BORDER}`, display: 'flex', flexDirection: 'column' }}>
+        <div className="px-2 py-1.5 flex items-center gap-1.5" style={{ borderBottom: `1px solid ${T.BORDER}`, background: T.SURFACE2 }}>
+          <MessageSquare className="h-3 w-3" style={{ color: T.GOLD }} />
+          <span style={{ color: T.GOLD, fontSize: 10, fontWeight: 700 }}>CHAT</span>
         </div>
         <div className="flex-1 overflow-y-auto" style={{ padding: '6px 8px' }}>
           {chatMessages.length === 0 && (
-            <p style={{ color: MUTED, fontSize: 10, fontStyle: 'italic', padding: '8px 4px' }}>Ask about backtest results, entry systems, or signal patterns...</p>
+            <p style={{ color: T.MUTED, fontSize: 10, fontStyle: 'italic', padding: '8px 4px' }}>Ask about backtest results, entry systems, or signal patterns...</p>
           )}
           {chatMessages.map((m, i) => (
             <div key={i} style={{ marginBottom: 6 }}>
-              <div style={{ display: 'inline-block', padding: '4px 8px', borderRadius: 6, fontSize: 11, lineHeight: 1.4, background: m.role === 'user' ? GOLD_DIM : SURFACE2, color: TEXT, maxWidth: '90%', wordBreak: 'break-word' }}>{m.content}</div>
+              <div style={{ display: 'inline-block', padding: '4px 8px', borderRadius: 6, fontSize: 11, lineHeight: 1.4, background: m.role === 'user' ? T.GOLD_DIM : T.SURFACE2, color: TEXT, maxWidth: '90%', wordBreak: 'break-word' }}>{m.content}</div>
             </div>
           ))}
         </div>
-        <div style={{ padding: '4px 6px', borderTop: `1px solid ${BORDER}`, display: 'flex', gap: 4 }}>
+        <div style={{ padding: '4px 6px', borderTop: `1px solid ${T.BORDER}`, display: 'flex', gap: 4 }}>
           <input value={chatInput} onChange={e => setChatInput(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Enter' && chatInput.trim()) {
@@ -1410,9 +1414,9 @@ export default function BacktestPage() {
               }
             }}
             placeholder="Ask about backtest..."
-            style={{ flex: 1, background: BG, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '5px 8px', color: TEXT, fontSize: 11, outline: 'none' }}
+            style={{ flex: 1, background: T.BG, border: `1px solid ${T.BORDER}`, borderRadius: 3, padding: '5px 8px', color: TEXT, fontSize: 11, outline: 'none' }}
           />
-          <button style={{ padding: '4px 8px', borderRadius: 3, background: GOLD, color: '#000', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+          <button style={{ padding: '4px 8px', borderRadius: 3, background: T.GOLD, color: '#000', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
             <Send className="h-3 w-3" />
           </button>
         </div>
@@ -1421,12 +1425,12 @@ export default function BacktestPage() {
   )
   const renderCenter = () => (
     <div style={{ flex: 1, padding: 12, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <BacktestStatsPanel signals={signals} backtestResults={backtestResults} />
+      <BacktestStatsPanel signals={signals} backtestResults={backtestResults} dark={dark} />
 
       {loading ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 60 }}>
-          <Loader2 className="h-5 w-5 animate-spin" style={{ color: GOLD }} />
-          <span style={{ color: MUTED, fontSize: 12, marginLeft: 8 }}>Loading...</span>
+          <Loader2 className="h-5 w-5 animate-spin" style={{ color: T.GOLD }} />
+          <span style={{ color: T.MUTED, fontSize: 12, marginLeft: 8 }}>Loading...</span>
         </div>
       ) : sig ? (
         <>
@@ -1436,21 +1440,21 @@ export default function BacktestPage() {
             <div className="flex gap-1">
               <button onClick={() => setChartMode('single')} title="Single chart" style={{
                 padding: '3px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-                background: chartMode === 'single' ? GOLD : SURFACE,
-                color: chartMode === 'single' ? '#000' : MUTED,
-                border: `1px solid ${chartMode === 'single' ? GOLD : BORDER}`,
+                background: chartMode === 'single' ? T.GOLD : T.SURFACE,
+                color: chartMode === 'single' ? '#000' : T.MUTED,
+                border: `1px solid ${chartMode === 'single' ? T.GOLD : T.BORDER}`,
                 display: 'flex', alignItems: 'center', gap: 3,
               }}><LayoutGrid className="h-3 w-3" />Single</button>
               <button onClick={() => setChartMode('stacked')} title="Stacked" style={{
                 padding: '3px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-                background: chartMode === 'stacked' ? GOLD : SURFACE,
-                color: chartMode === 'stacked' ? '#000' : MUTED,
-                border: `1px solid ${chartMode === 'stacked' ? GOLD : BORDER}`,
+                background: chartMode === 'stacked' ? T.GOLD : T.SURFACE,
+                color: chartMode === 'stacked' ? '#000' : T.MUTED,
+                border: `1px solid ${chartMode === 'stacked' ? T.GOLD : T.BORDER}`,
                 display: 'flex', alignItems: 'center', gap: 3,
               }}><Rows3 className="h-3 w-3" />Stacked</button>
             </div>
 
-            <div style={{ width: 1, height: 18, background: BORDER }} />
+            <div style={{ width: 1, height: 18, background: T.BORDER }} />
 
             {/* TF */}
             {chartMode === 'single' && (
@@ -1458,58 +1462,58 @@ export default function BacktestPage() {
                 {(['5', '15', '60', 'D'] as Timeframe[]).map(t => (
                   <button key={t} onClick={() => setTf(t)} style={{
                     padding: '2px 12px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-                    background: tf === t ? GOLD : SURFACE, color: tf === t ? '#000' : MUTED,
-                    border: `1px solid ${tf === t ? GOLD : BORDER}`,
+                    background: tf === t ? T.GOLD : T.SURFACE, color: tf === t ? '#000' : T.MUTED,
+                    border: `1px solid ${tf === t ? T.GOLD : T.BORDER}`,
                   }}>{t === '5' ? '5m' : t === '15' ? '15m' : t === '60' ? '1H' : '1D'}</button>
                 ))}
               </div>
             )}
 
-            <div style={{ width: 1, height: 18, background: BORDER }} />
+            <div style={{ width: 1, height: 18, background: T.BORDER }} />
 
             {/* ◀ ▶ day-by-day view offset */}
-            <button onClick={() => setDayOffset(d => Math.max(0, d - 1))} style={dateBtnStyle(GOLD)} title="Back 1 day">◀</button>
-            <span style={{ fontSize: 11, fontWeight: 800, color: GOLD, fontFamily: 'monospace', minWidth: 78, textAlign: 'center' }}>
+            <button onClick={() => setDayOffset(d => Math.max(0, d - 1))} style={dateBtnStyle(T.GOLD)} title="Back 1 day">◀</button>
+            <span style={{ fontSize: 11, fontWeight: 800, color: T.GOLD, fontFamily: 'monospace', minWidth: 78, textAlign: 'center' }}>
               {dayOffset === 0 ? `D0 ${formatDateShort(sig.date)}` : `D+${dayOffset}`}
             </span>
-            <button onClick={() => setDayOffset(d => d + 1)} style={dateBtnStyle(GOLD)} title="Forward 1 day">▶</button>
+            <button onClick={() => setDayOffset(d => d + 1)} style={dateBtnStyle(T.GOLD)} title="Forward 1 day">▶</button>
             <button onClick={() => setDayOffset(0)} style={{
-              ...dateBtnStyle(GOLD, 9),
-              ...(dayOffset === 0 ? { background: GOLD, color: '#000' } : {}),
+              ...dateBtnStyle(T.GOLD, 9),
+              ...(dayOffset === 0 ? { background: T.GOLD, color: '#000' } : {}),
             }} title="Reset to D0">D0</button>
             {[3, 7, 14].map(n => (
               <button key={n} onClick={() => setDayOffset(d => d + n)}
                 style={dateBtnStyle('rgba(212,175,55,0.6)', 9, 'rgba(212,175,55,0.35)')} title={`+${n} trading days`}>+{n}d</button>
             ))}
 
-            <div style={{ width: 1, height: 18, background: BORDER }} />
+            <div style={{ width: 1, height: 18, background: T.BORDER }} />
 
             {/* Ticker */}
-            <span style={{ color: GOLD, fontSize: 16, fontWeight: 800 }}>{sig.ticker}</span>
-            <span style={{ color: MUTED, fontSize: 10 }}>{selectedIdx + 1}/{signals.length}</span>
+            <span style={{ color: T.GOLD, fontSize: 16, fontWeight: 800 }}>{sig.ticker}</span>
+            <span style={{ color: T.MUTED, fontSize: 10 }}>{selectedIdx + 1}/{signals.length}</span>
 
             {/* ↑↓ signal list nav */}
-            <button onClick={() => { setSelectedIdx(Math.max(0, selectedIdx - 1)); setDayOffset(0) }} style={dateBtnStyle(GOLD)} title="Previous signal in list">▲</button>
-            <button onClick={() => { setSelectedIdx(Math.min(signals.length - 1, selectedIdx + 1)); setDayOffset(0) }} style={dateBtnStyle(GOLD)} title="Next signal in list">▼</button>
+            <button onClick={() => { setSelectedIdx(Math.max(0, selectedIdx - 1)); setDayOffset(0) }} style={dateBtnStyle(T.GOLD)} title="Previous signal in list">▲</button>
+            <button onClick={() => { setSelectedIdx(Math.min(signals.length - 1, selectedIdx + 1)); setDayOffset(0) }} style={dateBtnStyle(T.GOLD)} title="Next signal in list">▼</button>
 
-            <div style={{ width: 1, height: 18, background: BORDER }} />
+            <div style={{ width: 1, height: 18, background: T.BORDER }} />
 
             {/* Settings */}
             <div style={{ position: 'relative' }}>
               <button onClick={() => setShowSettings(v => !v)} title="Chart Settings" style={{
                 padding: '3px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-                background: showSettings ? GOLD : SURFACE, color: showSettings ? '#000' : MUTED,
-                border: `1px solid ${showSettings ? GOLD : BORDER}`,
+                background: showSettings ? T.GOLD : T.SURFACE, color: showSettings ? '#000' : T.MUTED,
+                border: `1px solid ${showSettings ? T.GOLD : T.BORDER}`,
                 display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer',
               }}><Settings2 className="h-3 w-3" /></button>
               {showSettings && (
                 <div style={{
                   position: 'absolute', top: '100%', left: 0, zIndex: 50, marginTop: 4,
-                  background: SURFACE2, border: `1px solid ${GOLD_BORDER}`, borderRadius: 6,
+                  background: T.SURFACE2, border: `1px solid ${T.GOLD_BORDER}`, borderRadius: 6,
                   padding: 12, minWidth: 220,
                   boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
                 }}>
-                  <div style={{ color: GOLD, fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Chart Settings</div>
+                  <div style={{ color: T.GOLD, fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Chart Settings</div>
                   {([
                     ['showEma9_20', 'EMA 9/20 Bands'],
                     ['showEma72_89', 'EMA 72/89 Bands'],
@@ -1522,10 +1526,10 @@ export default function BacktestPage() {
                     ['showLegend', 'Legend'],
                   ] as [keyof ChartSettings, string][]).map(([key, label]) => (
                     <label key={key} className="flex items-center justify-between" style={{ padding: '4px 0', cursor: 'pointer' }}>
-                      <span style={{ color: TEXT2, fontSize: 11 }}>{label}</span>
+                      <span style={{ color: T.TEXT2, fontSize: 11 }}>{label}</span>
                       <div onClick={() => setChartSettings(s => ({ ...s, [key]: !s[key] }))} style={{
                         width: 32, height: 16, borderRadius: 8, position: 'relative', cursor: 'pointer',
-                        background: chartSettings[key] ? GOLD : BORDER, transition: 'background 0.15s',
+                        background: chartSettings[key] ? T.GOLD : T.BORDER, transition: 'background 0.15s',
                       }}>
                         <div style={{
                           width: 12, height: 12, borderRadius: 6, background: '#fff', position: 'absolute', top: 2,
@@ -1539,7 +1543,7 @@ export default function BacktestPage() {
             </div>
 
             {/* Charts link */}
-            <a href={`/charts-terminal.html?symbol=${sig.ticker}`} target="_blank" rel="noreferrer" style={{ color: GOLD, fontSize: 10, display: 'flex', alignItems: 'center', gap: 3, marginLeft: 'auto' }} className="hover:underline">
+            <a href={`/charts-terminal.html?symbol=${sig.ticker}`} target="_blank" rel="noreferrer" style={{ color: T.GOLD, fontSize: 10, display: 'flex', alignItems: 'center', gap: 3, marginLeft: 'auto' }} className="hover:underline">
               Charts <ExternalLink className="h-3 w-3" />
             </a>
           </div>
@@ -1559,13 +1563,13 @@ export default function BacktestPage() {
           {/* Detail pills */}
           <div className="flex flex-wrap gap-1">
             <Detail label="Open" value={`$${sig.open?.toFixed(2)}`} />
-            <Detail label="High" value={`$${sig.high?.toFixed(2)}`} color={TEAL} />
-            <Detail label="Low" value={`$${sig.low?.toFixed(2)}`} color={RED} />
+            <Detail label="High" value={`$${sig.high?.toFixed(2)}`} color={T.TEAL} />
+            <Detail label="Low" value={`$${sig.low?.toFixed(2)}`} color={T.RED} />
             <Detail label="Close" value={`$${sig.close?.toFixed(2)}`} />
             <Detail label="Vol" value={`${((sig.volume || 0) / 1e6).toFixed(1)}M`} />
-            <Detail label="Gap" value={`${(sig.gap_pct || 0).toFixed(1)}%`} color={TEAL} />
+            <Detail label="Gap" value={`${(sig.gap_pct || 0).toFixed(1)}%`} color={T.TEAL} />
             <Detail label="ABS" value={(sig.pos_abs || 0).toFixed(3)} />
-            <Detail label="D0 Chg" value={`${((sig.close - sig.open) / sig.open * 100).toFixed(1)}%`} color={sig.close < sig.open ? RED : TEAL} />
+            <Detail label="D0 Chg" value={`${((sig.close - sig.open) / sig.open * 100).toFixed(1)}%`} color={sig.close < sig.open ? T.RED : T.TEAL} />
             <Detail label="Range" value={`${((sig.high - sig.low) / sig.open * 100).toFixed(1)}%`} />
           </div>
         </>
@@ -1577,20 +1581,20 @@ export default function BacktestPage() {
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* Top bar */}
       <div style={{
-        height: 48, background: SURFACE, borderBottom: `1px solid ${BORDER}`,
+        height: 48, background: T.SURFACE, borderBottom: `1px solid ${T.BORDER}`,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px',
         position: 'sticky', top: 0, zIndex: 40,
       }}>
         <div className="flex items-center gap-3">
-          <Activity className="h-4 w-4" style={{ color: GOLD }} />
-          <span style={{ color: GOLD, fontSize: 14, fontWeight: 800 }}>Backtest Workshop</span>
-          {activeScan && <span style={{ color: MUTED, fontSize: 11 }}>· {activeScan.name}</span>}
+          <Activity className="h-4 w-4" style={{ color: T.GOLD }} />
+          <span style={{ color: T.GOLD, fontSize: 14, fontWeight: 800 }}>Backtest Workshop</span>
+          {activeScan && <span style={{ color: T.MUTED, fontSize: 11 }}>· {activeScan.name}</span>}
         </div>
         <div className="flex items-center gap-1">
           <a href="/scanner" title="Scanner" style={{
             display: 'flex', alignItems: 'center', gap: 4,
             padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-            background: SURFACE2, color: GOLD, border: `1px solid ${GOLD_BORDER}`, cursor: 'pointer',
+            background: T.SURFACE2, color: T.GOLD, border: `1px solid ${T.GOLD_BORDER}`, cursor: 'pointer',
             textDecoration: 'none',
           }}>
             <Search className="h-3 w-3" /> Scanner
@@ -1598,7 +1602,7 @@ export default function BacktestPage() {
           <a href="/charts-terminal.html" target="_blank" rel="noreferrer" title="Open Charts" style={{
             display: 'flex', alignItems: 'center', gap: 4,
             padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-            background: SURFACE2, color: GOLD, border: `1px solid ${GOLD_BORDER}`, cursor: 'pointer',
+            background: T.SURFACE2, color: T.GOLD, border: `1px solid ${T.GOLD_BORDER}`, cursor: 'pointer',
             textDecoration: 'none',
           }}>
             <BarChart3 className="h-3 w-3" /> Charts
@@ -1606,7 +1610,7 @@ export default function BacktestPage() {
           <button onClick={() => setShowRunModal(true)} style={{
             display: 'flex', alignItems: 'center', gap: 4,
             padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-            background: GOLD, color: '#000', border: 'none', cursor: 'pointer',
+            background: T.GOLD, color: '#000', border: 'none', cursor: 'pointer',
           }}>
             <Play className="h-3 w-3" /> Run Scan
           </button>
@@ -1620,14 +1624,14 @@ export default function BacktestPage() {
           <button style={{
             display: 'flex', alignItems: 'center', gap: 4,
             padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-            background: GOLD_DIM, color: GOLD, border: `1px solid ${GOLD_BORDER}`, cursor: 'pointer',
+            background: T.GOLD_DIM, color: T.GOLD, border: `1px solid ${T.GOLD_BORDER}`, cursor: 'pointer',
           }}>
             <Save className="h-3 w-3" /> Save
           </button>
           <button onClick={() => setDark(d => !d)} title={dark ? 'Light mode' : 'Dark mode'} style={{
             display: 'flex', alignItems: 'center', gap: 4,
             padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-            background: GOLD_DIM, color: GOLD, border: `1px solid ${GOLD_BORDER}`, cursor: 'pointer',
+            background: T.GOLD_DIM, color: T.GOLD, border: `1px solid ${T.GOLD_BORDER}`, cursor: 'pointer',
           }}>
             {dark ? <Sun className="h-3 w-3" /> : <Moon className="h-3 w-3" />}
           </button>

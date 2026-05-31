@@ -12,10 +12,10 @@ import {
 
 // ─── Built-in Scans (shared with SCAN tab) ─────────────
 const BUILTIN_SCANS: ScanDef[] = [
-  { id: 'builtin-backside-b', name: 'Backside B', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString() },
-  { id: 'builtin-gap-up', name: 'Gap Up', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString() },
-  { id: 'builtin-high-tight-flag', name: 'High Tight Flag', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString() },
-  { id: 'builtin-aparascan', name: 'Aparascan', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString() },
+  { id: 'builtin-backside-b', name: 'Backside B', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['backside-b'], filters: ['am-push'] },
+  { id: 'builtin-gap-up', name: 'Gap Up', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['gap-up'] },
+  { id: 'builtin-high-tight-flag', name: 'High Tight Flag', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['htf'] },
+  { id: 'builtin-aparascan', name: 'Aparascan', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['aparascan'] },
 ]
 
 const BUILTIN_SPEC_MAP: Record<string, string> = {
@@ -47,6 +47,8 @@ interface ScanDef {
   type: string
   resultCount: number
   createdAt: string
+  tags?: string[]
+  filters?: string[]  // available filter toggles for this scan (e.g. 'am-push')
   runs?: ScanRun[]
 }
 
@@ -56,6 +58,7 @@ interface ScanRun {
   dateRange: string
   runAt: string
   resultCount: number
+  tags?: string[]
 }
 
 type Timeframe = '5' | '15' | '60' | 'D'
@@ -670,114 +673,36 @@ function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffs
 
 // ─── Stats (unchanged, compact) ─────────────────────────
 function StatsPanel({ signals }: { signals: Signal[] }) {
-  const stats = useMemo(() => {
-    if (!signals.length) return null
-    const gaps = signals.map(s => s.gap_pct || 0)
-    const abses = signals.map(s => s.pos_abs || 0)
-    const vols = signals.map(s => s.volume || 0)
-    const closes = signals.map(s => s.close)
-    const avgGap = gaps.reduce((a, b) => a + b, 0) / gaps.length
-    const minGap = Math.min(...gaps), maxGap = Math.max(...gaps)
-    const avgAbs = abses.reduce((a, b) => a + b, 0) / abses.length
-    const dates = new Set(signals.map(s => s.date)).size
-    const tickers = new Set(signals.map(s => s.ticker)).size
-    const byDate: Record<string, number> = {}
-    signals.forEach(s => { byDate[s.date] = (byDate[s.date] || 0) + 1 })
-    const maxPerDay = Math.max(...Object.values(byDate))
-    const avgPerDay = signals.length / dates
-    const freq: Record<string, number> = {}
-    signals.forEach(s => { freq[s.ticker] = (freq[s.ticker] || 0) + 1 })
-    const topTickers = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 5)
-    const gapBuckets = { '<50': 0, '50-100': 0, '100-200': 0, '>200': 0 }
-    gaps.forEach(g => { if (g < 50) gapBuckets['<50']++; else if (g < 100) gapBuckets['50-100']++; else if (g < 200) gapBuckets['100-200']++; else gapBuckets['>200']++ })
-    const absBuckets = { '<0.25': 0, '0.25-0.50': 0, '0.50-0.75': 0, '>0.75': 0 }
-    abses.forEach(a => { if (a < 0.25) absBuckets['<0.25']++; else if (a < 0.5) absBuckets['0.25-0.50']++; else if (a <= 0.75) absBuckets['0.50-0.75']++; else absBuckets['>0.75']++ })
-    const d0Chg = signals.map(s => ((s.close - s.open) / s.open) * 100)
-    const avgD0Chg = d0Chg.reduce((a, b) => a + b, 0) / d0Chg.length
-    const redPct = d0Chg.filter(c => c < 0).length / d0Chg.length * 100
-    const d0Range = signals.map(s => ((s.high - s.low) / s.open) * 100)
-    const avgD0Range = d0Range.reduce((a, b) => a + b, 0) / d0Range.length
-    const rangeVsGap = signals.map(s => (((s.high - s.low) / s.open) * 100) / (s.gap_pct || 1))
-    const avgRangeVsGap = rangeVsGap.reduce((a, b) => a + b, 0) / rangeVsGap.length
-    const closePosRange = signals.map(s => { const r = s.high - s.low; return r > 0 ? (s.close - s.low) / r : 0.5 })
-    const avgClosePos = closePosRange.reduce((a, b) => a + b, 0) / closePosRange.length
-    const reversalPct = signals.filter(s => (s.gap_pct || 0) > 0 && ((s.close - s.open) / s.open * 100) < 0).length / signals.length * 100
-    const firstHourReversal = signals.filter(s => s.close < s.open).length / signals.length * 100
-    return { avgGap, minGap, maxGap, avgAbs, dates, tickers, topTickers, avgPerDay, maxPerDay, gapBuckets, absBuckets, minClose: Math.min(...closes), maxClose: Math.max(...closes), totalVol: vols.reduce((a, b) => a + b, 0), avgD0Chg, redPct, avgD0Range, avgRangeVsGap, avgClosePos, reversalPct, firstHourReversal }
-  }, [signals])
-  if (!stats) return null
+  if (!signals.length) return null
+  const dates = new Set(signals.map(s => s.date)).size
+  const tickers = new Set(signals.map(s => s.ticker)).size
+  const avgD0Chg = signals.reduce((s, x) => s + ((x.close - x.open) / x.open * 100), 0) / signals.length
+  const avgRange = signals.reduce((s, x) => s + ((x.high - x.low) / x.open * 100), 0) / signals.length
+  const wins = signals.filter(s => s.close > s.open).length
   return (
-    <div className="space-y-1.5">
-      <div className="grid grid-cols-3 lg:grid-cols-6 gap-1">
-        <StatBox label="Signals" value={signals.length.toString()} icon={<Zap className="h-3 w-3" />} />
-        <StatBox label="Days" value={stats.dates.toString()} icon={<Calendar className="h-3 w-3" />} />
-        <StatBox label="Tickers" value={stats.tickers.toString()} icon={<Hash className="h-3 w-3" />} />
-        <StatBox label="Avg/Day" value={stats.avgPerDay.toFixed(1)} icon={<Layers className="h-3 w-3" />} color={TEAL} />
-        <StatBox label="Max/Day" value={stats.maxPerDay.toString()} icon={<Activity className="h-3 w-3" />} />
-        <StatBox label="Total Vol" value={`$${(stats.totalVol / 1e9).toFixed(1)}B`} icon={<DollarSign className="h-3 w-3" />} />
-      </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-1">
-        <StatBox label="Avg Gap%" value={`${stats.avgGap.toFixed(1)}%`} icon={<TrendingUp className="h-3 w-3" />} color={TEAL} />
-        <StatBox label="Gap Range" value={`${stats.minGap.toFixed(0)}-${stats.maxGap.toFixed(0)}%`} icon={<ArrowUpRight className="h-3 w-3" />} />
-        <StatBox label="Avg ABS" value={stats.avgAbs.toFixed(3)} icon={<Target className="h-3 w-3" />} color={GOLD} />
-        <StatBox label="Price" value={`$${stats.minClose.toFixed(0)}-$${stats.maxClose.toFixed(0)}`} icon={<DollarSign className="h-3 w-3" />} />
-      </div>
-      <div style={{ background: SURFACE, border: `1px solid ${GOLD_BORDER}`, borderRadius: 4, padding: '6px 10px' }}>
-        <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
-          <TrendingDown className="h-3 w-3" style={{ color: RED }} />
-          <span style={{ color: RED, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Short & Mean Reversion</span>
-        </div>
-        <div className="grid grid-cols-2 lg:grid-cols-7 gap-1">
-          <StatBox label="Avg D0 Chg" value={`${stats.avgD0Chg > 0 ? '+' : ''}${stats.avgD0Chg.toFixed(1)}%`} icon={<TrendingDown className="h-3 w-3" />} color={stats.avgD0Chg < 0 ? RED : TEAL} />
-          <StatBox label="% Red" value={`${stats.redPct.toFixed(0)}%`} icon={<Minus className="h-3 w-3" />} color={RED} />
-          <StatBox label="Range%" value={`${stats.avgD0Range.toFixed(1)}%`} icon={<Activity className="h-3 w-3" />} color={GOLD} />
-          <StatBox label="Rng/Gap" value={`${stats.avgRangeVsGap.toFixed(2)}x`} icon={<BarChart3 className="h-3 w-3" />} />
-          <StatBox label="Close Pos" value={stats.avgClosePos.toFixed(2)} icon={<Target className="h-3 w-3" />} color={stats.avgClosePos < 0.5 ? RED : TEAL} />
-          <StatBox label="Reversal" value={`${stats.reversalPct.toFixed(0)}%`} icon={<TrendingDown className="h-3 w-3" />} color={RED} />
-          <StatBox label="1H Rev" value={`${stats.firstHourReversal.toFixed(0)}%`} icon={<Clock className="h-3 w-3" />} color={GOLD} />
-        </div>
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-1">
-        <DistBar title="Gap Dist" buckets={stats.gapBuckets} total={signals.length} color={TEAL} />
-        <DistBar title="ABS Position" buckets={stats.absBuckets} total={signals.length} color={GOLD} />
-        <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: 8 }}>
-          <div style={{ color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Top Tickers</div>
-          {stats.topTickers.map(([ticker, count]) => (
-            <div key={ticker} className="flex items-center justify-between" style={{ marginBottom: 2 }}>
-              <span style={{ color: GOLD, fontSize: 10, fontWeight: 700, fontFamily: 'monospace' }}>{ticker}</span>
-              <span style={{ color: TEXT2, fontSize: 10 }}>{count}x</span>
-            </div>
-          ))}
-        </div>
-      </div>
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '4px 8px', background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4 }}>
+      <StatPill label="Signals" value={String(signals.length)} color={GOLD} />
+      <StatPill label="Days" value={String(dates)} />
+      <StatPill label="Tickers" value={String(tickers)} />
+      <StatPill label="Avg D0" value={`${avgD0Chg > 0 ? '+' : ''}${avgD0Chg.toFixed(1)}%`} color={avgD0Chg > 0 ? TEAL : RED} />
+      <StatPill label="Avg Rng" value={`${avgRange.toFixed(1)}%`} />
+      <StatPill label="Green" value={`${(wins/signals.length*100).toFixed(0)}%`} color={TEAL} />
+      {signals[0]?.am_ext_atr != null && (
+        <StatPill label="Avg Ext" value={`${(signals.reduce((s,x) => s + (x.am_ext_atr || 0), 0) / signals.length).toFixed(2)}x ATR`} color={GOLD} />
+      )}
     </div>
   )
 }
 
-function DistBar({ title, buckets, total, color }: { title: string; buckets: Record<string, number>; total: number; color: string }) {
+function StatPill({ label, value, color = TEXT2 }: { label: string; value: string; color?: string }) {
   return (
-    <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: 8 }}>
-      <div style={{ color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>{title}</div>
-      {Object.entries(buckets).map(([label, count]) => (
-        <div key={label} className="flex items-center gap-1.5" style={{ marginBottom: 3 }}>
-          <span style={{ color: TEXT2, fontSize: 9, width: 40, fontFamily: 'monospace' }}>{label}</span>
-          <div style={{ flex: 1, height: 10, background: SURFACE3, borderRadius: 2, overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${(count / total) * 100}%`, background: color, borderRadius: 2, minWidth: count > 0 ? 2 : 0 }} />
-          </div>
-          <span style={{ color: MUTED, fontSize: 9, width: 16, textAlign: 'right' }}>{count}</span>
-        </div>
-      ))}
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
+      <span style={{ color: MUTED, fontSize: 9, fontWeight: 600 }}>{label}</span>
+      <span style={{ color, fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
     </div>
   )
 }
-function StatBox({ label, value, icon, color }: { label: string; value: string; icon: React.ReactNode; color?: string }) {
-  return (
-    <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '4px 8px' }}>
-      <div className="flex items-center gap-1" style={{ color: MUTED, fontSize: 8 }}>{icon}{label}</div>
-      <div style={{ color: color || GOLD, fontSize: 13, fontWeight: 700 }}>{value}</div>
-    </div>
-  )
-}
+
 function Detail({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '2px 6px' }}>
@@ -811,10 +736,12 @@ function dateBtnStyle(color: string = GOLD, fontSize: number = 11, borderColor: 
 }
 
 // ─── Run Modal ──────────────────────────────────────────
-function RunModal({ scan, onClose, onRun }: { scan: ScanDef | undefined; onClose: () => void; onRun: (range: string) => void }) {
+function RunModal({ scan, onClose, onRun }: { scan: ScanDef | undefined; onClose: () => void; onRun: (range: string, filters: string[]) => void }) {
   const [range, setRange] = useState('90')
   const [running, setRunning] = useState(false)
+  const [activeFilters, setActiveFilters] = useState<string[]>([])
   if (!scan) return null
+  const availableFilters = scan.filters || []
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)' }} onClick={onClose}>
       <div style={{ background: SURFACE2, border: `1px solid ${GOLD_BORDER}`, borderRadius: 8, padding: 24, width: 360, maxWidth: '90vw' }} onClick={e => e.stopPropagation()}>
@@ -835,7 +762,26 @@ function RunModal({ scan, onClose, onRun }: { scan: ScanDef | undefined; onClose
             ))}
           </div>
         </div>
-        <button disabled={running} onClick={() => { setRunning(true); onRun(range) }} style={{
+        {/* Filter toggles */}
+        {availableFilters.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ color: MUTED, fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, display: 'block', marginBottom: 6 }}>Filters</label>
+            <div className="flex gap-1 flex-wrap">
+              {availableFilters.map(f => {
+                const isOn = activeFilters.includes(f)
+                return (
+                  <button key={f} onClick={() => setActiveFilters(prev => isOn ? prev.filter(x => x !== f) : [...prev, f])} style={{
+                    padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 700,
+                    background: isOn ? `${GOLD}30` : SURFACE, color: isOn ? GOLD : MUTED,
+                    border: `1px solid ${isOn ? GOLD : BORDER}`,
+                    cursor: 'pointer', transition: 'all 0.15s',
+                  }}>{f}</button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+        <button disabled={running} onClick={() => { setRunning(true); onRun(range, activeFilters) }} style={{
           width: '100%', padding: '10px', borderRadius: 4, fontSize: 12, fontWeight: 700,
           background: running ? MUTED : GOLD, color: running ? TEXT : '#000',
           border: 'none', cursor: running ? 'wait' : 'pointer',
@@ -884,6 +830,7 @@ export default function ScanDashboardPage() {
     dateRange: db.name,
     runAt: new Date(db.createdAt).toLocaleString(),
     resultCount: db.resultCount,
+    tags: db.tags ? (typeof db.tags === 'string' ? JSON.parse(db.tags) : db.tags) : [],
   }))
 
   useEffect(() => {
@@ -1022,6 +969,9 @@ export default function ScanDashboardPage() {
                   <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: `${TEAL}20`, color: TEAL }}>{scan.resultCount} sig</span>
                   <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: `${GOLD}20`, color: GOLD }}>{(scan.runs?.length || 0)} runs</span>
                   <span style={{ color: MUTED, fontSize: 8 }}>{scan.type}</span>
+                  {(scan.tags || []).map(tag => (
+                    <span key={tag} style={{ fontSize: 7, padding: '1px 3px', borderRadius: 2, background: `${GOLD}15`, color: GOLD, fontWeight: 600 }}>{tag}</span>
+                  ))}
                 </div>
               </button>
             )
@@ -1065,7 +1015,12 @@ export default function ScanDashboardPage() {
                 <span style={{ color: isActive ? GOLD : TEXT2, fontSize: 10, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{run.dateRange}</span>
                 <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: `${TEAL}20`, color: TEAL }}>{run.resultCount} sig</span>
               </div>
-              <div style={{ color: isActive ? GOLD : MUTED, fontSize: 8, marginTop: 2 }}>{run.runAt}</div>
+              <div className="flex items-center gap-1" style={{ marginTop: 2 }}>
+                {(run.tags || []).map(tag => (
+                  <span key={tag} style={{ fontSize: 7, padding: '0px 3px', borderRadius: 2, background: `${GOLD}12`, color: isActive ? GOLD : 'rgba(212,175,55,0.6)', fontWeight: 600 }}>{tag}</span>
+                ))}
+                <span style={{ color: isActive ? GOLD : MUTED, fontSize: 7, marginLeft: 'auto' }}>{run.runAt}</span>
+              </div>
             </div>
             )
           })}
@@ -1387,12 +1342,18 @@ export default function ScanDashboardPage() {
       </div>
 
       {/* Run Modal */}
-      {showRunModal && <RunModal scan={activeScan} onClose={() => setShowRunModal(false)} onRun={async (range) => {
+      {showRunModal && <RunModal scan={activeScan} onClose={() => setShowRunModal(false)} onRun={async (range, filters) => {
         if (!activeScan) return
         const days = parseInt(range)
         const to = new Date()
         const from = new Date(to.getTime() - days * 86400000)
-        const specName = BUILTIN_SPEC_MAP[activeScan.id] || activeScan.name.toLowerCase().replace(/\s+/g, '-')
+        // Base spec name
+        let specName = BUILTIN_SPEC_MAP[activeScan.id] || activeScan.name.toLowerCase().replace(/\s+/g, '-')
+        // If AM Push filter is active, use the push variant
+        if (filters.includes('am-push') && specName === 'backside-b') {
+          specName = 'backside-b-push'
+        }
+        const runTags = filters.length > 0 ? [...filters] : ['plain']
         try {
           const res = await fetch('/api/scans/run', {
             method: 'POST',
@@ -1415,7 +1376,22 @@ export default function ScanDashboardPage() {
             setSignals(newSignals)
             setSelectedIdx(0)
             setDayOffset(0)
-            // Update the scan's resultCount in the list
+            // Save run to DB with tags
+            try {
+              await fetch('/api/scans', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  name: `${activeScan.name} ${from.toISOString().slice(0, 10)} — ${to.toISOString().slice(0, 10)}`,
+                  strategy: BUILTIN_SPEC_MAP[activeScan.id] || activeScan.name.toLowerCase().replace(/\s+/g, '-'),  // always the base strategy so runs group under the parent scan
+                  type: 'builtin',
+                  tags: runTags,
+                  results: newSignals,
+                  dateRange: JSON.stringify({ from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) }),
+                }),
+              })
+            } catch {}
+            // Refresh scans from DB to pick up the new run
             setScans(prev => prev.map(s => s.id === activeScan.id ? { ...s, resultCount: newSignals.length } : s))
           }
         } catch (err: any) {

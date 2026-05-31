@@ -1176,7 +1176,7 @@ export default function BacktestPage() {
     let fetched = 0
     toFetch.forEach(s => {
       const date = s.date
-      const nextDay = new Date(date); nextDay.setDate(nextDay.getDate() + 1)
+      const nextDay = new Date(date + 'T12:00:00'); nextDay.setDate(nextDay.getDate() + 1)
       const url = `/api/chart-data/bars?symbol=${encodeURIComponent(s.ticker)}&tf=15&from=${date}&to=${nextDay.toISOString().slice(0, 10)}`
       fetch(url)
         .then(r => r.json())
@@ -1631,7 +1631,7 @@ export default function BacktestPage() {
                           borderLeft: `1px solid ${T.BORDER}`,
                           color: passes ? T.TEAL : T.RED,
                           fontSize: 10, fontWeight: 700,
-                        }}>{passes ? '✓' : '✗'}</td>
+                        }}>{passes ? '✓' : ''}</td>
                       )
                     })}
                   </tr>

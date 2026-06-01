@@ -964,8 +964,18 @@ function RunModal({ scan, onClose, onRun }: { scan: ScanDef | undefined; onClose
   const [range, setRange] = useState('90')
   const [running, setRunning] = useState(false)
   const [activeFilters, setActiveFilters] = useState<string[]>([])
+  const [customMode, setCustomMode] = useState(false)
+  const [customFrom, setCustomFrom] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 90); return d.toISOString().slice(0, 10)
+  })
+  const [customTo, setCustomTo] = useState(() => new Date().toISOString().slice(0, 10))
   if (!scan) return null
   const availableFilters = scan.filters || []
+  const inputStyle = {
+    background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 3,
+    padding: '6px 8px', color: TEXT, fontSize: 11, width: '100%',
+    fontFamily: 'monospace', outline: 'none',
+  }
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)' }} onClick={onClose}>
       <div style={{ background: SURFACE2, border: `1px solid ${GOLD_BORDER}`, borderRadius: 8, padding: 24, width: 360, maxWidth: '90vw' }} onClick={e => e.stopPropagation()}>
@@ -976,15 +986,38 @@ function RunModal({ scan, onClose, onRun }: { scan: ScanDef | undefined; onClose
         <div style={{ color: TEXT, fontSize: 12, marginBottom: 16 }}>{scan.name}</div>
         <div style={{ marginBottom: 16 }}>
           <label style={{ color: MUTED, fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, display: 'block', marginBottom: 6 }}>Date Range</label>
-          <div className="flex gap-1">
-            {['7', '14', '30', '60', '90', '180', '365'].map(d => (
-              <button key={d} onClick={() => setRange(d)} style={{
+          {!customMode ? (
+            <div className="flex gap-1 flex-wrap">
+              {['7', '14', '30', '60', '90', '180', '365'].map(d => (
+                <button key={d} onClick={() => setRange(d)} style={{
+                  padding: '4px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600,
+                  background: range === d ? GOLD : SURFACE, color: range === d ? '#000' : MUTED,
+                  border: `1px solid ${range === d ? GOLD : BORDER}`,
+                }}>{d}d</button>
+              ))}
+              <button onClick={() => setCustomMode(true)} style={{
                 padding: '4px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-                background: range === d ? GOLD : SURFACE, color: range === d ? '#000' : MUTED,
-                border: `1px solid ${range === d ? GOLD : BORDER}`,
-              }}>{d}d</button>
-            ))}
-          </div>
+                background: SURFACE, color: MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer',
+              }}>Custom</button>
+            </div>
+          ) : (
+            <div>
+              <div className="flex gap-2" style={{ marginBottom: 6 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ color: MUTED, fontSize: 8, display: 'block', marginBottom: 2 }}>From</label>
+                  <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} style={inputStyle} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ color: MUTED, fontSize: 8, display: 'block', marginBottom: 2 }}>To</label>
+                  <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} style={inputStyle} />
+                </div>
+              </div>
+              <button onClick={() => setCustomMode(false)} style={{
+                padding: '2px 8px', borderRadius: 2, fontSize: 9, fontWeight: 600,
+                background: SURFACE, color: MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer',
+              }}>← Quick select</button>
+            </div>
+          )}
         </div>
         {/* Filter toggles */}
         {availableFilters.length > 0 && (
@@ -1005,7 +1038,11 @@ function RunModal({ scan, onClose, onRun }: { scan: ScanDef | undefined; onClose
             </div>
           </div>
         )}
-        <button disabled={running} onClick={() => { setRunning(true); onRun(range, activeFilters) }} style={{
+        <button disabled={running} onClick={() => {
+          setRunning(true)
+          const effectiveRange = customMode ? `custom:${customFrom}:${customTo}` : range
+          onRun(effectiveRange, activeFilters)
+        }} style={{
           width: '100%', padding: '10px', borderRadius: 4, fontSize: 12, fontWeight: 700,
           background: running ? MUTED : GOLD, color: running ? TEXT : '#000',
           border: 'none', cursor: running ? 'wait' : 'pointer',
@@ -1043,6 +1080,8 @@ export default function ScanDashboardPage() {
   const [backtestResults, setBacktestResults] = useState<BacktestResults | null>(null)
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set())
   const [btTab, setBtTab] = useState<string>('overview')
+  const [sortCol, setSortCol] = useState<string>('date')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [dayOffset, setDayOffset] = useState(0)
   const T = useThemeColors(dark)
 
@@ -1144,6 +1183,35 @@ export default function ScanDashboardPage() {
 
   const sig = signals[selectedIdx] as Signal | undefined
   const activeScan = scans.find(s => s.id === selectedScan)
+
+  // ── Sorted signals for table ──
+  const sortedSignals = useMemo(() => {
+    const sorted = [...signals]
+    sorted.sort((a, b) => {
+      let va: number | string = 0, vb: number | string = 0
+      switch (sortCol) {
+        case 'ticker': va = a.ticker; vb = b.ticker; break
+        case 'date': va = a.date; vb = b.date; break
+        case 'open': va = a.open; vb = b.open; break
+        case 'close': va = a.close; vb = b.close; break
+        case 'gap': va = a.gap_pct || 0; vb = b.gap_pct || 0; break
+        case 'd0': va = ((a.close - a.open) / a.open * 100); vb = ((b.close - b.open) / b.open * 100); break
+        case 'range': va = ((a.high - a.low) / a.open * 100); vb = ((b.high - b.low) / b.open * 100); break
+        case 'abs': va = a.pos_abs || 0; vb = b.pos_abs || 0; break
+        case 'vol': va = a.volume || 0; vb = b.volume || 0; break
+        default: va = a.date; vb = b.date
+      }
+      if (va < vb) return sortDir === 'asc' ? -1 : 1
+      if (va > vb) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+    return sorted
+  }, [signals, sortCol, sortDir])
+
+  const toggleSort = (col: string) => {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(col); setSortDir('desc') }
+  }
 
  // Reset day offset when signal changes
  // (also done inline in every setSelectedIdx call)
@@ -1369,24 +1437,25 @@ export default function ScanDashboardPage() {
           <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 10 }}>
             <thead>
               <tr style={{ background: SURFACE2, position: 'sticky', top: 0, zIndex: 2 }}>
-                <th style={{ padding: '4px 6px', textAlign: 'left', color: GOLD, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 0, background: SURFACE2, zIndex: 3, minWidth: 56 }}>Ticker</th>
-                <th style={{ padding: '4px 6px', textAlign: 'left', color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 56, background: SURFACE2, zIndex: 3, minWidth: 68, borderRight: `1px solid ${BORDER}` }}>Date</th>
-                <th style={{ padding: '4px 4px', textAlign: 'right', color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Open</th>
-                <th style={{ padding: '4px 4px', textAlign: 'right', color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Close</th>
-                <th style={{ padding: '4px 4px', textAlign: 'right', color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Gap%</th>
-                <th style={{ padding: '4px 4px', textAlign: 'right', color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>D0</th>
-                <th style={{ padding: '4px 4px', textAlign: 'right', color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Rng%</th>
-                <th style={{ padding: '4px 4px', textAlign: 'right', color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>ABS</th>
-                <th style={{ padding: '4px 4px', textAlign: 'right', color: MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Vol</th>
+                <th onClick={() => toggleSort('ticker')} style={{ padding: '4px 6px', textAlign: 'left', color: sortCol === 'ticker' ? GOLD : GOLD, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 0, background: SURFACE2, zIndex: 3, minWidth: 56, cursor: 'pointer', userSelect: 'none' }}>Tk{sortCol === 'ticker' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('date')} style={{ padding: '4px 6px', textAlign: 'left', color: sortCol === 'date' ? GOLD : MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 56, background: SURFACE2, zIndex: 3, minWidth: 68, borderRight: `1px solid ${BORDER}`, cursor: 'pointer', userSelect: 'none' }}>Date{sortCol === 'date' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('open')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'open' ? GOLD : MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Op{sortCol === 'open' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('close')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'close' ? GOLD : MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Close{sortCol === 'close' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('gap')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'gap' ? GOLD : MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Gap%{sortCol === 'gap' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('d0')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'd0' ? GOLD : MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>D0{sortCol === 'd0' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('range')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'range' ? GOLD : MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Rng%{sortCol === 'range' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('abs')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'abs' ? GOLD : MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>ABS{sortCol === 'abs' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('vol')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'vol' ? GOLD : MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Vol{sortCol === 'vol' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
               </tr>
             </thead>
             <tbody>
-              {signals.map((s, i) => {
-                const isActive = i === selectedIdx
+              {sortedSignals.map((s, i) => {
+                const realIdx = signals.indexOf(s)
+                const isActive = realIdx === selectedIdx
                 const d0chg = ((s.close - s.open) / s.open * 100)
                 const rng = ((s.high - s.low) / s.open * 100)
                 return (
-                  <tr key={`${s.ticker}-${s.date}`} onClick={() => { setSelectedIdx(i); setDayOffset(0) }} style={{ cursor: 'pointer', background: isActive ? GOLD_DIM : 'transparent' }}
+                  <tr key={`${s.ticker}-${s.date}`} onClick={() => { setSelectedIdx(realIdx); setDayOffset(0) }} style={{ cursor: 'pointer', background: isActive ? GOLD_DIM : 'transparent' }}
                     onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
                     onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
                   >
@@ -1699,9 +1768,16 @@ export default function ScanDashboardPage() {
       {/* Run Modal */}
       {showRunModal && <RunModal scan={activeScan} onClose={() => setShowRunModal(false)} onRun={async (range, filters) => {
         if (!activeScan) return
-        const days = parseInt(range)
-        const to = new Date()
-        const from = new Date(to.getTime() - days * 86400000)
+        let from: Date, to: Date
+        if (range.startsWith('custom:')) {
+          const parts = range.split(':')
+          from = new Date(parts[1])
+          to = new Date(parts[2])
+        } else {
+          const days = parseInt(range)
+          to = new Date()
+          from = new Date(to.getTime() - days * 86400000)
+        }
         // Base spec name
         let specName = BUILTIN_SPEC_MAP[activeScan.id] || activeScan.name.toLowerCase().replace(/\s+/g, '-')
         // If AM Push filter is active, use the push variant

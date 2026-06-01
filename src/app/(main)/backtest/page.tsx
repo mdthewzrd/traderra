@@ -116,7 +116,7 @@ const DATA_COLUMNS: DataColumnDef[] = [
         const h = new Date(b.time * 1000).getUTCHours()
         const m = new Date(b.time * 1000).getUTCMinutes()
         const mins = h * 60 + m
-        return mins >= 690 && mins < 960
+        return mins >= 870 && mins < 1020
       })
       if (morningBars.length < 3) return '-'
       // Find bar with highest high
@@ -137,7 +137,7 @@ const DATA_COLUMNS: DataColumnDef[] = [
         const h = new Date(b.time * 1000).getUTCHours()
         const m = new Date(b.time * 1000).getUTCMinutes()
         const mins = h * 60 + m
-        return mins >= 690 && mins < 960
+        return mins >= 870 && mins < 1020
       })
       if (morningBars.length < 3) return '-'
       const hi = Math.max(...morningBars.map(b => b.high))
@@ -152,7 +152,7 @@ const DATA_COLUMNS: DataColumnDef[] = [
         const h = new Date(b.time * 1000).getUTCHours()
         const m = new Date(b.time * 1000).getUTCMinutes()
         const mins = h * 60 + m
-        return mins >= 690 && mins < 960
+        return mins >= 870 && mins < 1020
       })
       if (morningBars.length === 0) return '-'
       const first = morningBars[0]
@@ -230,7 +230,7 @@ const FILTERS: FilterDef[] = [
         const h = new Date(b.time * 1000).getUTCHours()
         const m = new Date(b.time * 1000).getUTCMinutes()
         const mins = h * 60 + m
-        return mins >= 690 && mins < 960
+        return mins >= 870 && mins < 1020
       })
       if (morningBars.length < 3) return false
       // EMA(72) — same algo as chart's calcEMA: seed from first close
@@ -280,7 +280,7 @@ const FILTERS: FilterDef[] = [
         const h = new Date(b.time * 1000).getUTCHours()
         const m = new Date(b.time * 1000).getUTCMinutes()
         const mins = h * 60 + m
-        return mins >= 690 && mins < 960
+        return mins >= 870 && mins < 1020
       })
       if (morning15.length < 3) return false
       const lastEmaBar = morning15[0]
@@ -297,7 +297,7 @@ const FILTERS: FilterDef[] = [
         const h = new Date(b.time * 1000).getUTCHours()
         const m = new Date(b.time * 1000).getUTCMinutes()
         const mins = h * 60 + m
-        return mins >= 690 && mins < 960
+        return mins >= 870 && mins < 1020
       })
       if (morning1m.length < 5) return false
       // ── Step 3: Find 1m bars that reached near the push level ──
@@ -1727,7 +1727,7 @@ export default function BacktestPage() {
             <span style={{ color: T.MUTED, fontSize: 9 }}>{filteredSignals.length}/{signals.length}</span>
             {/* Add Column dropdown */}
             <div style={{ position: 'relative' }}>
-              <button onClick={() => setShowColumnMenu(!showColumnMenu)} style={{
+              <button onClick={() => { setShowColumnMenu(!showColumnMenu); setShowFilterMenu(false) }} style={{
                 display: 'flex', alignItems: 'center', gap: 3,
                 padding: '2px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600,
                 background: showColumnMenu ? T.GOLD : T.SURFACE,
@@ -1780,7 +1780,7 @@ export default function BacktestPage() {
             </div>
             {/* Add Filter dropdown */}
             <div style={{ position: 'relative' }}>
-              <button data-filter-btn onClick={() => setShowFilterMenu(!showFilterMenu)} style={{
+              <button data-filter-btn onClick={() => { setShowFilterMenu(!showFilterMenu); setShowColumnMenu(false) }} style={{
                 display: 'flex', alignItems: 'center', gap: 3,
                 padding: '2px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600,
                 background: showFilterMenu ? T.TEAL : T.SURFACE,

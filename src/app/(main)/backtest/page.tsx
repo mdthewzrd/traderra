@@ -104,8 +104,8 @@ interface FilterDef {
   label: string
   shortLabel: string
   description: string
-  needsBars?: '15m' // if set, this filter requires intraday bars (lazy loaded)
-  compute: (s: Signal, bars15m?: any[]) => boolean
+  needsBars?: '15m' | '1m' | 'both'
+  compute: (s: Signal, bars15m?: any[], bars1m?: any[]) => boolean
 }
 
 const FILTERS: FilterDef[] = [
@@ -205,6 +205,49 @@ const FILTERS: FilterDef[] = [
       // Check if any morning bar high hits above the band
       const morningHigh = Math.max(...morningBars.map(b => b.high))
       return morningHigh >= bandLevel
+    }
+  },
+  // ── Real Volume: 1m bars confirm the push wasn't a fake print ──
+  { key: 'pushReal', label: 'Real Volume', shortLabel: 'REAL', needsBars: 'both',
+    description: '1m bars show real volume at the push level (not a fake print)',
+    compute: (s, bars15m, bars1m) => {
+      if (!bars15m || !bars1m) return false
+      // ── Step 1: Find push level from 15m bars (same as PUSH filter) ──
+      const morning15 = bars15m.filter(b => {
+        const h = new Date(b.time * 1000).getUTCHours()
+        const m = new Date(b.time * 1000).getUTCMinutes()
+        const mins = h * 60 + m
+        return mins >= 690 && mins < 960
+      })
+      if (morning15.length < 3) return false
+      const lastEmaBar = morning15[0]
+      const k9 = 2 / (9 + 1)
+      let lastEma = lastEmaBar.close
+      const morningHigh = Math.max(...morning15.map(b => b.high))
+      const morningLow = Math.min(...morning15.map(b => b.low))
+      const ext = morningHigh - lastEma
+      const atrProxy = s.high - s.low
+      const extNormalized = atrProxy > 0 ? ext / atrProxy : 0
+      if (extNormalized < 0.5) return false // no push to validate
+      // ── Step 2: Get 1m morning bars ──
+      const morning1m = bars1m.filter(b => {
+        const h = new Date(b.time * 1000).getUTCHours()
+        const m = new Date(b.time * 1000).getUTCMinutes()
+        const mins = h * 60 + m
+        return mins >= 690 && mins < 960
+      })
+      if (morning1m.length < 5) return false
+      // ── Step 3: Find 1m bars that reached near the push level ──
+      // The push level = the morning high. Find 1m bars within 0.1% of it.
+      const pushLevel = morningHigh
+      const tolerance = pushLevel * 0.001
+      const barsAtPush = morning1m.filter(b => b.high >= pushLevel - tolerance)
+      if (barsAtPush.length === 0) return false // 15m high not confirmed on 1m = fake
+      // ── Step 4: Volume check ──
+      const avgVol = morning1m.reduce((sum, b) => sum + (b.volume || 0), 0) / morning1m.length
+      const pushVol = barsAtPush.reduce((sum, b) => sum + (b.volume || 0), 0)
+      // Real = volume at push level >= 20% of what an average bar contributes
+      return avgVol > 0 ? pushVol >= avgVol * 0.2 : pushVol > 0
     }
   },
 ]
@@ -1197,6 +1240,8 @@ export default function BacktestPage() {
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set())
   const [bars15mCache, setBars15mCache] = useState<Record<string, any[]>>({})
   const [bars15mLoading, setBars15mLoading] = useState(false)
+  const [bars1mCache, setBars1mCache] = useState<Record<string, any[]>>({})
+  const [bars1mLoading, setBars1mLoading] = useState(false)
   const [visibleFilters, setVisibleFilters] = useState<Set<string>>(new Set())
   const [showFilterMenu, setShowFilterMenu] = useState(false)
   const T = useThemeColors(dark)
@@ -1205,30 +1250,26 @@ export default function BacktestPage() {
   const filterResults = useMemo(() => {
     const results: Record<string, boolean[]> = {}
     FILTERS.forEach(f => {
-      if (f.needsBars === '15m') {
-        // Only compute if bars are loaded
-        results[f.key] = signals.map((s, i) => {
-          const cacheKey = `${s.ticker}-${s.date}`
-          const bars = bars15mCache[cacheKey]
-          return f.compute(s, bars)
-        })
-      } else {
-        results[f.key] = signals.map(s => f.compute(s))
-      }
+      results[f.key] = signals.map(s => {
+        const cacheKey = `${s.ticker}-${s.date}`
+        if (f.needsBars === '15m') return f.compute(s, bars15mCache[cacheKey])
+        if (f.needsBars === '1m') return f.compute(s, undefined, bars1mCache[cacheKey])
+        if (f.needsBars === 'both') return f.compute(s, bars15mCache[cacheKey], bars1mCache[cacheKey])
+        return f.compute(s)
+      })
     })
     return results
-  }, [signals, bars15mCache])
+  }, [signals, bars15mCache, bars1mCache])
 
-  // ── Lazy-load 15m bars when any intraday filter is visible OR active ──
+  // ── Lazy-load 15m bars when any filter needs them ──
   useEffect(() => {
-    const allIntraKeys = new Set([...activeFilters, ...visibleFilters])
-    const needsBars = Array.from(allIntraKeys).some(k => FILTERS.find(f => f.key === k)?.needsBars === '15m')
-    if (!needsBars || !signals.length) return
-    // Find signals we haven't fetched yet
-    const toFetch = signals.filter(s => {
-      const key = `${s.ticker}-${s.date}`
-      return !bars15mCache[key]
+    const allKeys = new Set([...activeFilters, ...visibleFilters])
+    const needs15m = Array.from(allKeys).some(k => {
+      const f = FILTERS.find(x => x.key === k)
+      return f?.needsBars === '15m' || f?.needsBars === 'both'
     })
+    if (!needs15m || !signals.length) return
+    const toFetch = signals.filter(s => !bars15mCache[`${s.ticker}-${s.date}`])
     if (toFetch.length === 0) return
 
     setBars15mLoading(true)
@@ -1237,30 +1278,56 @@ export default function BacktestPage() {
     const total = toFetch.length
     toFetch.forEach(s => {
       const date = s.date
-      // Fetch 15 trading days before for EMA(72) warmup on 15m (72 bars ≈ 3 trading days, use 15 for safety)
       const fromDate = new Date(date + 'T12:00:00')
-      fromDate.setDate(fromDate.getDate() - 25) // ~15-18 trading days back
+      fromDate.setDate(fromDate.getDate() - 25)
       const nextDay = new Date(date + 'T12:00:00'); nextDay.setDate(nextDay.getDate() + 1)
       const fromStr = fromDate.toISOString().slice(0, 10)
       const toStr = nextDay.toISOString().slice(0, 10)
-      const url = `/api/chart-data/bars?symbol=${encodeURIComponent(s.ticker)}&tf=15&from=${fromStr}&to=${toStr}`
-      fetch(url)
+      fetch(`/api/chart-data/bars?symbol=${encodeURIComponent(s.ticker)}&tf=15&from=${fromStr}&to=${toStr}`)
         .then(r => r.json())
         .then(data => {
           newCache[`${s.ticker}-${date}`] = data.bars || []
           fetched++
-          if (fetched === total) {
-            setBars15mCache(newCache)
-            setBars15mLoading(false)
-          }
+          if (fetched === total) { setBars15mCache(newCache); setBars15mLoading(false) }
         })
         .catch(() => {
           newCache[`${s.ticker}-${date}`] = []
           fetched++
-          if (fetched === total) {
-            setBars15mCache(newCache)
-            setBars15mLoading(false)
-          }
+          if (fetched === total) { setBars15mCache(newCache); setBars15mLoading(false) }
+        })
+    })
+  }, [activeFilters, visibleFilters, signals])
+
+  // ── Lazy-load 1m bars when REAL filter is visible/active ──
+  useEffect(() => {
+    const allKeys = new Set([...activeFilters, ...visibleFilters])
+    const needs1m = Array.from(allKeys).some(k => {
+      const f = FILTERS.find(x => x.key === k)
+      return f?.needsBars === '1m' || f?.needsBars === 'both'
+    })
+    if (!needs1m || !signals.length) return
+    const toFetch = signals.filter(s => !bars1mCache[`${s.ticker}-${s.date}`])
+    if (toFetch.length === 0) return
+
+    setBars1mLoading(true)
+    const newCache: Record<string, any[]> = { ...bars1mCache }
+    let fetched = 0
+    const total = toFetch.length
+    toFetch.forEach(s => {
+      const date = s.date
+      const nextDay = new Date(date + 'T12:00:00'); nextDay.setDate(nextDay.getDate() + 1)
+      const toStr = nextDay.toISOString().slice(0, 10)
+      fetch(`/api/chart-data/bars?symbol=${encodeURIComponent(s.ticker)}&tf=1&from=${date}&to=${toStr}`)
+        .then(r => r.json())
+        .then(data => {
+          newCache[`${s.ticker}-${date}`] = data.bars || []
+          fetched++
+          if (fetched === total) { setBars1mCache(newCache); setBars1mLoading(false) }
+        })
+        .catch(() => {
+          newCache[`${s.ticker}-${date}`] = []
+          fetched++
+          if (fetched === total) { setBars1mCache(newCache); setBars1mLoading(false) }
         })
     })
   }, [activeFilters, visibleFilters, signals])
@@ -1603,7 +1670,7 @@ export default function BacktestPage() {
                   {FILTERS.map(f => {
                     const visible = visibleFilters.has(f.key)
                     const count = filterCounts[f.key] || 0
-                    const isLoading = f.needsBars === '15m' && visible && bars15mLoading
+                    const isLoading = visible && ((f.needsBars === '15m' || f.needsBars === 'both') && bars15mLoading || (f.needsBars === '1m' || f.needsBars === 'both') && bars1mLoading)
                     return (
                       <button key={f.key} onClick={() => {
                         const next = new Set(visibleFilters)

@@ -974,7 +974,7 @@ export default function ScanDashboardPage() {
   const [runFrom, setRunFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 90); return d.toISOString().slice(0, 10) })
   const [runTo, setRunTo] = useState(() => new Date().toISOString().slice(0, 10))
   const [copied, setCopied] = useState(false)
-  const [pendingRuns, setPendingRuns] = useState<{ id: string; spec: string; label: string; startedAt: string }[]>([])
+  const [pendingRuns, setPendingRuns] = useState<{ id: string; spec: string; label: string; startedAt: string; from: string; to: string; progress?: { currentDay: string; currentIndex: number; totalDays: number; signalsSoFar: number; status: string } }[]>([])
   const knownRunIdsRef = useRef<Set<string>>(new Set())
   const [chatInput, setChatInput] = useState('')
   const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([])
@@ -1224,10 +1224,22 @@ export default function ScanDashboardPage() {
   // Auto-run backtest when signals or filters change
   useEffect(() => { if (filteredSignals.length > 0) runBaselineBacktest(filteredSignals) }, [filteredSignals])
 
-  // ── Poll DB for pending run completion ──
+  // ── Poll DB for pending run completion + progress ──
   useEffect(() => {
     if (pendingRuns.length === 0) return
     const interval = setInterval(() => {
+      // Fetch progress for all pending runs
+      Promise.all(pendingRuns.map(pending =>
+        fetch(`/api/scans/progress?spec=${pending.spec}&from=${pending.label.split(' · ')[1]?.split(' → ')[0] || ''}&to=${pending.label.split(' → ')[1] || ''}`)
+          .then(r => r.json()).catch(() => null)
+      )).then(progressData => {
+        setPendingRuns(prev => prev.map((p, i) => {
+          const prog = progressData[i]
+          return prog ? { ...p, progress: prog } : p
+        }))
+      })
+
+      // Check for completed runs in DB
       fetch('/api/scans')
         .then(r => r.json())
         .then(data => {
@@ -1244,7 +1256,6 @@ export default function ScanDashboardPage() {
             if (newRun) {
               knownRunIdsRef.current.add(newRun.id)
               anyChanged = true
-              // Load signals from the new run
               fetch(`/api/scans/${newRun.id}`).then(r => r.json()).then(d => {
                 if (d.signals) {
                   setSignals(d.signals.map((s: any) => ({ ...s, ticker: s.ticker || s.symbol || '', symbol: s.ticker || s.symbol || '' })))
@@ -1252,7 +1263,6 @@ export default function ScanDashboardPage() {
                   setDayOffset(0)
                 }
               })
-              // Don't add to stillPending — it's done
             } else {
               stillPending.push(pending)
             }
@@ -1270,7 +1280,7 @@ export default function ScanDashboardPage() {
           }
         })
         .catch(() => {})
-    }, 3000)
+    }, 2000)
     return () => clearInterval(interval)
   }, [pendingRuns])
 
@@ -1337,21 +1347,31 @@ export default function ScanDashboardPage() {
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {/* Pending runs — shown first */}
-          {pendingRuns.filter(p => activeScan ? p.spec === (BUILTIN_SPEC_MAP[activeScan.id] || '') : true).map(pending => (
+          {pendingRuns.filter(p => activeScan ? p.spec === (BUILTIN_SPEC_MAP[activeScan.id] || '') : true).map(pending => {
+            const prog = pending.progress
+            const pct = prog && prog.totalDays > 0 ? Math.round((prog.currentIndex / prog.totalDays) * 100) : 0
+            return (
             <div key={pending.id} style={{
               padding: '8px 10px', borderBottom: `1px solid ${BORDER}`,
               background: `${GOLD}08`, borderLeft: `2px solid ${GOLD}60`,
             }}>
               <div className="flex items-center gap-2">
                 <Loader2 className="h-3 w-3 animate-spin" style={{ color: GOLD, flexShrink: 0 }} />
-                <span style={{ color: GOLD, fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pending.label}</span>
+                <span style={{ color: GOLD, fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{pending.label}</span>
               </div>
-              <div className="flex items-center gap-2" style={{ marginTop: 3 }}>
-                <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 2, background: `${GOLD}20`, color: GOLD, fontWeight: 700 }}>Processing</span>
+              {/* Progress bar */}
+              <div style={{ marginTop: 6, background: SURFACE3, borderRadius: 2, height: 6, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${pct}%`, background: GOLD, borderRadius: 2, transition: 'width 0.5s ease' }} />
+              </div>
+              <div className="flex items-center justify-between" style={{ marginTop: 4 }}>
+                <span style={{ color: GOLD, fontSize: 9, fontWeight: 700 }}>{pct}%</span>
+                {prog && prog.currentDay && <span style={{ color: MUTED, fontSize: 9 }}>{prog.currentDay}</span>}
+                {prog && prog.signalsSoFar > 0 && <span style={{ color: TEAL, fontSize: 9, fontWeight: 600 }}>{prog.signalsSoFar} sig</span>}
                 <span style={{ color: MUTED, fontSize: 9, marginLeft: 'auto' }}>{pending.startedAt}</span>
               </div>
             </div>
-          ))}
+            )
+          })}
           {/* Real runs */}
           {runs.length === 0 && pendingRuns.length === 0 && (
             <div style={{ padding: 16, textAlign: 'center' }}>
@@ -1432,7 +1452,7 @@ export default function ScanDashboardPage() {
                   setCopied(true)
                   const spec = BUILTIN_SPEC_MAP[activeScan.id] || ''
                   const pendingId = `pending-${Date.now()}`
-                  setPendingRuns(prev => [...prev, { id: pendingId, spec, label: `${activeScan.name} · ${dates.from} → ${dates.to}`, startedAt: new Date().toLocaleTimeString() }])
+                  setPendingRuns(prev => [...prev, { id: pendingId, spec, label: `${activeScan.name} · ${dates.from} → ${dates.to}`, startedAt: new Date().toLocaleTimeString(), from: dates.from, to: dates.to }])
                   setTimeout(() => setCopied(false), 2000)
                   setShowRunPanel(false)
                 }} style={{ flex: 1, padding: '7px', borderRadius: 3, fontSize: 11, fontWeight: 700, background: GOLD, color: '#000', border: 'none', cursor: 'pointer' }}>

@@ -98,13 +98,24 @@ interface ChartSettings {
   showLegend: boolean
 }
 
-// Helper: filter bars to signal date + morning session (7:30-12:00 ET = 750-1020 UTC mins)
-const morningBars = (bars: any[], date: string) => bars.filter(b => {
-  const d = new Date(b.time * 1000)
-  if (d.toISOString().slice(0, 10) !== date) return false
-  const mins = d.getUTCHours() * 60 + d.getUTCMinutes()
-  return mins >= 750 && mins < 1020
-})
+// Helper: get UTC minute range for morning session given a date string
+const morningUtcRange = (date: string) => {
+  const month = parseInt(date.slice(5, 7))
+  const offset = (month >= 4 && month <= 10) ? 4 : 5
+  return { start: (7*60+30) + offset*60, end: (12*60) + offset*60 }
+}
+
+// Helper: filter bars to signal date + morning session (7:30-12:00 ET)
+// Handles EST (UTC-5, Nov-Mar) and EDT (UTC-4, Mar-Nov) automatically
+const morningBars = (bars: any[], date: string) => {
+  const { start, end } = morningUtcRange(date)
+  return bars.filter(b => {
+    const d = new Date(b.time * 1000)
+    if (d.toISOString().slice(0, 10) !== date) return false
+    const mins = d.getUTCHours() * 60 + d.getUTCMinutes()
+    return mins >= start && mins < end
+  })
+}
 
 interface DataColumnDef {
   key: string
@@ -179,27 +190,21 @@ const FILTERS: FilterDef[] = [
     description: 'Morning 7:30-12:00 ET push: ≥2 higher highs, EMA(9) extension ≥0.5 ATR on 15m',
     compute: (s, bars15m) => {
       if (!bars15m || bars15m.length < 10) return false
-      // Filter to 7:30-12:00 ET (11:30-16:00 UTC)
-      const morningBars = bars15m.filter(b => {
-        const d = new Date(b.time * 1000)
-        if (d.toISOString().slice(0, 10) !== s.date) return false
-        const minutesSinceMidnight = d.getUTCHours() * 60 + d.getUTCMinutes()
-        return minutesSinceMidnight >= 750 && minutesSinceMidnight < 1020
-      })
-      if (morningBars.length < 5) return false
+      const mb = morningBars(bars15m, s.date)
+      if (mb.length < 5) return false
       // Count higher highs
       let higherHighs = 0
-      for (let i = 1; i < morningBars.length; i++) {
-        if (morningBars[i].high > morningBars[i - 1].high) higherHighs++
+      for (let i = 1; i < mb.length; i++) {
+        if (mb[i].high > mb[i - 1].high) higherHighs++
       }
       if (higherHighs < 2) return false
       // Compute EMA(9) on 15m closes
-      const closes = morningBars.map(b => b.close)
+      const closes = mb.map(b => b.close)
       const ema: number[] = [closes[0]]
       const mult = 2 / (9 + 1)
       for (let i = 1; i < closes.length; i++) ema.push(closes[i] * mult + ema[i - 1] * (1 - mult))
       // Morning high vs last EMA value
-      const morningHigh = Math.max(...morningBars.map(b => b.high))
+      const morningHigh = Math.max(...mb.map(b => b.high))
       const lastEma = ema[ema.length - 1]
       const extension = lastEma > 0 ? (morningHigh - lastEma) / lastEma : 0
       // ATR approximation from daily signal (use high-low as proxy)
@@ -207,7 +212,7 @@ const FILTERS: FilterDef[] = [
       const extNormalized = atrProxy > 0 ? (morningHigh - lastEma) / atrProxy : 0
       if (extNormalized < 0.5) return false
       // Reject fake prints: the bar with highest high should have closed in upper half of its range
-      const pushBar = morningBars.find(b => b.high === morningHigh)
+      const pushBar = mb.find(b => b.high === morningHigh)
       if (pushBar) {
         const barRange = pushBar.high - pushBar.low
         const closePosition = barRange > 0 ? (pushBar.close - pushBar.low) / barRange : 0
@@ -221,14 +226,8 @@ const FILTERS: FilterDef[] = [
     description: 'Morning high hits EMA(72)+ATR(72)*6.9 upper dev band on 15m',
     compute: (s, bars15m) => {
       if (!bars15m || bars15m.length < 90) return false
-      // Filter to signal date only, 7:30-12:00 ET (12:30-17:00 UTC = 750-1020 mins)
-      const morningBars = bars15m.filter(b => {
-        const d = new Date(b.time * 1000)
-        if (d.toISOString().slice(0, 10) !== s.date) return false
-        const mins = d.getUTCHours() * 60 + d.getUTCMinutes()
-        return mins >= 750 && mins < 1020
-      })
-      if (morningBars.length < 3) return false
+      const mb = morningBars(bars15m, s.date)
+      if (mb.length < 3) return false
       // EMA(72) — same algo as chart's calcEMA: seed from first close
       const closes = bars15m.map(b => b.close)
       const ema72: number[] = [closes[0]]
@@ -254,7 +253,7 @@ const FILTERS: FilterDef[] = [
         }
       }
       // Get the index of the first morning bar
-      const firstMorningTime = morningBars[0].time
+      const firstMorningTime = mb[0].time
       const firstMorningIdx = bars15m.findIndex(b => b.time === firstMorningTime)
       if (firstMorningIdx < 0 || firstMorningIdx >= ema72.length) return false
       const atrVal = atrOut[firstMorningIdx]
@@ -262,7 +261,7 @@ const FILTERS: FilterDef[] = [
       // Upper band 1 = EMA(72) + ATR(72) * 6.9 — exactly as drawDevBand renders
       const bandLevel = ema72[firstMorningIdx] + atrVal * 6.9
       // Check if any morning bar high hits above the band
-      const morningHigh = Math.max(...morningBars.map(b => b.high))
+      const morningHigh = Math.max(...mb.map(b => b.high))
       return morningHigh >= bandLevel
     }
   },
@@ -274,12 +273,7 @@ const FILTERS: FilterDef[] = [
     compute: (s, bars15m, bars1m) => {
       if (!bars15m || !bars1m) return false
       // ── Step 1: Find push level from 15m morning bars (signal date only) ──
-      const morning15 = bars15m.filter(b => {
-        const d = new Date(b.time * 1000)
-        if (d.toISOString().slice(0, 10) !== s.date) return false
-        const mins = d.getUTCHours() * 60 + d.getUTCMinutes()
-        return mins >= 750 && mins < 1020
-      })
+      const morning15 = morningBars(bars15m, s.date)
       if (morning15.length < 3) return false
       const morningHigh = Math.max(...morning15.map(b => b.high))
       // Extension check (same as PUSH)
@@ -292,12 +286,7 @@ const FILTERS: FilterDef[] = [
       const extNorm = atrProxy > 0 ? (morningHigh - lastEma) / atrProxy : 0
       if (extNorm < 0.5) return false // no push to validate
       // ── Step 2: Get 1m morning bars (signal date only) ──
-      const morning1m = bars1m.filter(b => {
-        const d = new Date(b.time * 1000)
-        if (d.toISOString().slice(0, 10) !== s.date) return false
-        const mins = d.getUTCHours() * 60 + d.getUTCMinutes()
-        return mins >= 750 && mins < 1020
-      }).sort((a, b) => a.time - b.time)
+      const morning1m = morningBars(bars1m, s.date).sort((a, b) => a.time - b.time)
       if (morning1m.length < 5) return false
       // ── Step 3: Find the 1m bar that made the push high ──
       const pushLevel = morningHigh
@@ -1474,19 +1463,9 @@ export default function BacktestPage() {
       const bars1m = bars1mCache[key]
       const bars15m = bars15mCache[key]
       if (!bars1m || !bars15m) return
-      const morning1m = bars1m.filter((b: any) => {
-        const d = new Date(b.time * 1000)
-        if (d.toISOString().slice(0, 10) !== s.date) return false
-        const mins = d.getUTCHours() * 60 + d.getUTCMinutes()
-        return mins >= 750 && mins < 1020
-      }).sort((a: any, b: any) => a.time - b.time)
+      const morning1m = morningBars(bars1m, s.date).sort((a: any, b: any) => a.time - b.time)
       if (morning1m.length < 5) return
-      const morningHigh = Math.max(...bars15m.filter((b: any) => {
-        const d = new Date(b.time * 1000)
-        if (d.toISOString().slice(0, 10) !== s.date) return false
-        const mins = d.getUTCHours() * 60 + d.getUTCMinutes()
-        return mins >= 750 && mins < 1020
-      }).map((b: any) => b.high))
+      const morningHigh = Math.max(...morningBars(bars15m, s.date).map((b: any) => b.high))
       const tolerance = morningHigh * 0.002
       const barsAtPush = morning1m.filter((b: any) => b.high >= morningHigh - tolerance)
       if (barsAtPush.length === 0) return
@@ -1529,11 +1508,8 @@ export default function BacktestPage() {
           } else {
             // Find push level again
             const bars15m = bars15mCache[key]
-            const morningHigh = Math.max(...bars15m.filter((b: any) => {
-              const h = new Date(b.time * 1000).getUTCHours()
-              const m = new Date(b.time * 1000).getUTCMinutes()
-              return h * 60 + m >= 750 && h * 60 + m < 1020
-            }).map((b: any) => b.high))
+            const signalDate = key.substring(key.indexOf('-') + 1)
+            const morningHigh = Math.max(...morningBars(bars15m, signalDate).map((b: any) => b.high))
             const pushTolerance = morningHigh * 0.002
             // Check: are there real trades near the push high?
             // Ignore trades with condition codes that indicate odd lots or out-of-sequence

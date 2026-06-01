@@ -1971,8 +1971,11 @@ export default function BacktestPage() {
               <tr style={{ background: T.SURFACE2, position: 'sticky', top: 0, zIndex: 2 }}>
                 <th style={{ padding: '4px 6px', textAlign: 'left', color: T.GOLD, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 0, background: T.SURFACE2, zIndex: 3, minWidth: 56 }}>Ticker</th>
                 <th style={{ padding: '4px 6px', textAlign: 'left', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 56, background: T.SURFACE2, zIndex: 3, minWidth: 68, borderRight: `1px solid ${T.BORDER}` }}>Date</th>
-                <th style={{ padding: '4px 4px', textAlign: 'center', color: T.TEAL, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', background: `${T.TEAL}15`, minWidth: 28, borderLeft: `1px solid ${T.BORDER}` }} title="Route Start — click cells to mark valid entries">
-                  <div>RS</div>
+                <th style={{ padding: '4px 4px', textAlign: 'center', color: T.TEAL, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', background: `${T.TEAL}15`, minWidth: 44, borderLeft: `1px solid ${T.BORDER}` }} title="Route Start — click cells to mark valid entries">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                    <span>RS</span>
+                    <button onClick={() => { navigator.clipboard.writeText([...routeStarts].sort().join(', ')) }} style={{ background: 'none', border: 'none', color: T.TEAL, cursor: 'pointer', fontSize: 9, padding: 0, opacity: 0.6 }} title="Copy marked signals to clipboard">📋</button>
+                  </div>
                   <div style={{ fontSize: 7, fontWeight: 400, opacity: 0.7 }}>{routeStarts.size}/{signals.length}</div>
                 </th>
                 <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Gap%</th>

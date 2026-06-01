@@ -196,7 +196,7 @@ const FILTERS: FilterDef[] = [
         const h = new Date(b.time * 1000).getUTCHours()
         const m = new Date(b.time * 1000).getUTCMinutes()
         const minutesSinceMidnight = h * 60 + m
-        return minutesSinceMidnight >= 690 && minutesSinceMidnight < 960 // 11:30-16:00 UTC = 7:30-12:00 ET
+        return minutesSinceMidnight >= 750 && minutesSinceMidnight < 1020 // 12:30-17:00 UTC = 7:30-12:00 ET
       })
       if (morningBars.length < 5) return false
       // Count higher highs
@@ -217,7 +217,15 @@ const FILTERS: FilterDef[] = [
       // ATR approximation from daily signal (use high-low as proxy)
       const atrProxy = s.high - s.low
       const extNormalized = atrProxy > 0 ? (morningHigh - lastEma) / atrProxy : 0
-      return extNormalized >= 0.5
+      if (extNormalized < 0.5) return false
+      // Reject fake prints: the bar with highest high should have closed in upper half of its range
+      const pushBar = morningBars.find(b => b.high === morningHigh)
+      if (pushBar) {
+        const barRange = pushBar.high - pushBar.low
+        const closePosition = barRange > 0 ? (pushBar.close - pushBar.low) / barRange : 0
+        if (closePosition < 0.3) return false // closed in bottom 30% = upper wick / fake print
+      }
+      return true
     }
   },
   // ── Dev Band Upper 1 hit during morning ──

@@ -98,6 +98,14 @@ interface ChartSettings {
   showLegend: boolean
 }
 
+// Helper: filter bars to signal date + morning session (7:30-12:00 ET = 750-1020 UTC mins)
+const morningBars = (bars: any[], date: string) => bars.filter(b => {
+  const d = new Date(b.time * 1000)
+  if (d.toISOString().slice(0, 10) !== date) return false
+  const mins = d.getUTCHours() * 60 + d.getUTCMinutes()
+  return mins >= 750 && mins < 1020
+})
+
 interface DataColumnDef {
   key: string
   label: string
@@ -111,17 +119,10 @@ const DATA_COLUMNS: DataColumnDef[] = [
   { key: 'pushTime', label: 'Push High Time', shortLabel: 'P.TIME', needsBars: '15m',
     description: 'Time of the highest push during morning (ET)',
     compute: (s, bars15m) => {
-      if (!bars15m) return '-'
-      const morningBars = bars15m.filter(b => {
-        const h = new Date(b.time * 1000).getUTCHours()
-        const m = new Date(b.time * 1000).getUTCMinutes()
-        const mins = h * 60 + m
-        return mins >= 750 && mins < 1020
-      })
-      if (morningBars.length < 3) return '-'
-      // Find bar with highest high
-      let bestBar = morningBars[0]
-      for (const b of morningBars) if (b.high > bestBar.high) bestBar = b
+      const mb = morningBars(bars15m || [], s.date)
+      if (mb.length < 3) return '-'
+      let bestBar = mb[0]
+      for (const b of mb) if (b.high > bestBar.high) bestBar = b
       const d = new Date(bestBar.time * 1000)
       const etH = (d.getUTCHours() - 5 + 24) % 12 || 12
       const etM = d.getUTCMinutes()
@@ -132,30 +133,17 @@ const DATA_COLUMNS: DataColumnDef[] = [
   { key: 'pushLevel', label: 'Push High Price', shortLabel: 'P.HI', needsBars: '15m',
     description: 'Price of the highest morning push',
     compute: (s, bars15m) => {
-      if (!bars15m) return '-'
-      const morningBars = bars15m.filter(b => {
-        const h = new Date(b.time * 1000).getUTCHours()
-        const m = new Date(b.time * 1000).getUTCMinutes()
-        const mins = h * 60 + m
-        return mins >= 750 && mins < 1020
-      })
-      if (morningBars.length < 3) return '-'
-      const hi = Math.max(...morningBars.map(b => b.high))
-      return hi.toFixed(2)
+      const mb = morningBars(bars15m || [], s.date)
+      if (mb.length < 3) return '-'
+      return Math.max(...mb.map(b => b.high)).toFixed(2)
     }
   },
   { key: 'openTime', label: 'Open Direction', shortLabel: 'O.DIR', needsBars: '15m',
     description: 'First 15m bar direction (gap up = UP, gap down = DN)',
     compute: (s, bars15m) => {
-      if (!bars15m) return '-'
-      const morningBars = bars15m.filter(b => {
-        const h = new Date(b.time * 1000).getUTCHours()
-        const m = new Date(b.time * 1000).getUTCMinutes()
-        const mins = h * 60 + m
-        return mins >= 750 && mins < 1020
-      })
-      if (morningBars.length === 0) return '-'
-      const first = morningBars[0]
+      const mb = morningBars(bars15m || [], s.date)
+      if (mb.length === 0) return '-'
+      const first = mb[0]
       return first.close >= first.open ? 'UP' : 'DN'
     }
   },
@@ -193,10 +181,10 @@ const FILTERS: FilterDef[] = [
       if (!bars15m || bars15m.length < 10) return false
       // Filter to 7:30-12:00 ET (11:30-16:00 UTC)
       const morningBars = bars15m.filter(b => {
-        const h = new Date(b.time * 1000).getUTCHours()
-        const m = new Date(b.time * 1000).getUTCMinutes()
-        const minutesSinceMidnight = h * 60 + m
-        return minutesSinceMidnight >= 750 && minutesSinceMidnight < 1020 // 12:30-17:00 UTC = 7:30-12:00 ET
+        const d = new Date(b.time * 1000)
+        if (d.toISOString().slice(0, 10) !== s.date) return false
+        const minutesSinceMidnight = d.getUTCHours() * 60 + d.getUTCMinutes()
+        return minutesSinceMidnight >= 750 && minutesSinceMidnight < 1020
       })
       if (morningBars.length < 5) return false
       // Count higher highs
@@ -233,11 +221,11 @@ const FILTERS: FilterDef[] = [
     description: 'Morning high hits EMA(72)+ATR(72)*6.9 upper dev band on 15m',
     compute: (s, bars15m) => {
       if (!bars15m || bars15m.length < 90) return false
-      // Filter to 7:30-12:00 ET (11:30-16:00 UTC)
+      // Filter to signal date only, 7:30-12:00 ET (12:30-17:00 UTC = 750-1020 mins)
       const morningBars = bars15m.filter(b => {
-        const h = new Date(b.time * 1000).getUTCHours()
-        const m = new Date(b.time * 1000).getUTCMinutes()
-        const mins = h * 60 + m
+        const d = new Date(b.time * 1000)
+        if (d.toISOString().slice(0, 10) !== s.date) return false
+        const mins = d.getUTCHours() * 60 + d.getUTCMinutes()
         return mins >= 750 && mins < 1020
       })
       if (morningBars.length < 3) return false
@@ -285,11 +273,11 @@ const FILTERS: FilterDef[] = [
     description: '1m bars + tick data confirm the push high was actually traded (not a fake print)',
     compute: (s, bars15m, bars1m) => {
       if (!bars15m || !bars1m) return false
-      // ── Step 1: Find push level from 15m morning bars ──
+      // ── Step 1: Find push level from 15m morning bars (signal date only) ──
       const morning15 = bars15m.filter(b => {
-        const h = new Date(b.time * 1000).getUTCHours()
-        const m = new Date(b.time * 1000).getUTCMinutes()
-        const mins = h * 60 + m
+        const d = new Date(b.time * 1000)
+        if (d.toISOString().slice(0, 10) !== s.date) return false
+        const mins = d.getUTCHours() * 60 + d.getUTCMinutes()
         return mins >= 750 && mins < 1020
       })
       if (morning15.length < 3) return false
@@ -303,11 +291,11 @@ const FILTERS: FilterDef[] = [
       const atrProxy = s.high - s.low
       const extNorm = atrProxy > 0 ? (morningHigh - lastEma) / atrProxy : 0
       if (extNorm < 0.5) return false // no push to validate
-      // ── Step 2: Get 1m morning bars ──
+      // ── Step 2: Get 1m morning bars (signal date only) ──
       const morning1m = bars1m.filter(b => {
-        const h = new Date(b.time * 1000).getUTCHours()
-        const m = new Date(b.time * 1000).getUTCMinutes()
-        const mins = h * 60 + m
+        const d = new Date(b.time * 1000)
+        if (d.toISOString().slice(0, 10) !== s.date) return false
+        const mins = d.getUTCHours() * 60 + d.getUTCMinutes()
         return mins >= 750 && mins < 1020
       }).sort((a, b) => a.time - b.time)
       if (morning1m.length < 5) return false
@@ -1343,6 +1331,7 @@ export default function BacktestPage() {
   const [tickResults, setTickResults] = useState<Record<string, boolean>>({})
   const [visibleFilters, setVisibleFilters] = useState<Set<string>>(new Set())
   const [showFilterMenu, setShowFilterMenu] = useState(false)
+  const [hideFilters, setHideFilters] = useState<Set<string>>(new Set())
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set())
   const [showColumnMenu, setShowColumnMenu] = useState(false)
   const T = useThemeColors(dark)
@@ -1482,15 +1471,17 @@ export default function BacktestPage() {
       const bars15m = bars15mCache[key]
       if (!bars1m || !bars15m) return
       const morning1m = bars1m.filter((b: any) => {
-        const h = new Date(b.time * 1000).getUTCHours()
-        const m = new Date(b.time * 1000).getUTCMinutes()
-        return h * 60 + m >= 750 && h * 60 + m < 1020
+        const d = new Date(b.time * 1000)
+        if (d.toISOString().slice(0, 10) !== s.date) return false
+        const mins = d.getUTCHours() * 60 + d.getUTCMinutes()
+        return mins >= 750 && mins < 1020
       }).sort((a: any, b: any) => a.time - b.time)
       if (morning1m.length < 5) return
       const morningHigh = Math.max(...bars15m.filter((b: any) => {
-        const h = new Date(b.time * 1000).getUTCHours()
-        const m = new Date(b.time * 1000).getUTCMinutes()
-        return h * 60 + m >= 750 && h * 60 + m < 1020
+        const d = new Date(b.time * 1000)
+        if (d.toISOString().slice(0, 10) !== s.date) return false
+        const mins = d.getUTCHours() * 60 + d.getUTCMinutes()
+        return mins >= 750 && mins < 1020
       }).map((b: any) => b.high))
       const tolerance = morningHigh * 0.002
       const barsAtPush = morning1m.filter((b: any) => b.high >= morningHigh - tolerance)
@@ -1565,14 +1556,19 @@ export default function BacktestPage() {
   }, [filterResults, bars1mCache, bars15mCache, visibleFilters, activeFilters, signals])
 
   const filteredSignals = useMemo(() => {
-    if (activeFilters.size === 0) return signals
+    if (activeFilters.size === 0 && hideFilters.size === 0) return signals
     return signals.filter((s, i) => {
+      // Check active filters (dim mode)
       for (const key of activeFilters) {
+        if (!filterResults[key]?.[i]) return false
+      }
+      // Check hide filters (remove from table + stats)
+      for (const key of hideFilters) {
         if (!filterResults[key]?.[i]) return false
       }
       return true
     })
-  }, [signals, activeFilters, filterResults])
+  }, [signals, activeFilters, hideFilters, filterResults])
 
   // ── Filter counts (for toggle badges) ──
   const filterCounts = useMemo(() => {
@@ -2004,16 +2000,30 @@ export default function BacktestPage() {
                 {/* ── Dynamic filter columns: 3-state header click ── */}
                 {activeFilterDefs.map(f => {
                   const isFiltering = activeFilters.has(f.key)
+                  const isHiding = hideFilters.has(f.key)
                   const count = filterCounts[f.key] || 0
-                  const bg = isFiltering ? T.TEAL : `${T.TEAL}25`
-                  const fg = isFiltering ? '#000' : T.TEAL
+                  // 3 states: show (teal outline) → filter/dim (solid teal) → hide (red-orange, rows removed)
+                  let bg: string, fg: string
+                  if (isHiding) {
+                    bg = T.RED; fg = '#000'
+                  } else if (isFiltering) {
+                    bg = T.TEAL; fg = '#000'
+                  } else {
+                    bg = `${T.TEAL}25`; fg = T.TEAL
+                  }
                   return (
-                    <th key={f.key} title={`${f.description}\n${count}/${signals.length} pass\n\nClick: show \u2192 filter \u2192 show`}
+                    <th key={f.key} title={`${f.description}\n${count}/${signals.length} pass\n\nClick: show \u2192 filter (dim) \u2192 hide (remove)`}
                       onClick={() => {
-                        if (!isFiltering) {
+                        if (!isFiltering && !isHiding) {
+                          // SHOW → FILTER (dim)
                           setActiveFilters(new Set([...activeFilters, f.key]))
-                        } else {
+                        } else if (isFiltering) {
+                          // FILTER → HIDE (remove rows)
                           setActiveFilters(new Set([...activeFilters].filter(k => k !== f.key)))
+                          setHideFilters(new Set([...hideFilters, f.key]))
+                        } else {
+                          // HIDE → SHOW (just checks)
+                          setHideFilters(new Set([...hideFilters].filter(k => k !== f.key)))
                         }
                       }}
                       style={{ padding: '4px 4px', textAlign: 'center', cursor: 'pointer', color: fg, fontSize: 7, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, background: bg, borderLeft: `1px solid ${T.BORDER}`, minWidth: 30 }}>
@@ -2035,8 +2045,12 @@ export default function BacktestPage() {
             <tbody>
               {signals.map((s, i) => {
                 const isActive = i === selectedIdx
-                const d0chg = ((s.close - s.open) / s.open * 100)
+                const d0chg = s.open ? ((s.close - s.open) / s.open * 100) : 0
                 const passesAllFilters = activeFilters.size === 0 || Array.from(activeFilters).every(k => filterResults[k]?.[i])
+                // 3 states: show all checks, dim non-passing, or hide non-passing
+                // Hide row if ANY hiding filter fails it
+                const hideRow = [...hideFilters].some(k => !filterResults[k]?.[i])
+                if (hideRow) return null
                 const dimmed = activeFilters.size > 0 && !passesAllFilters
                 return (
                   <tr key={`${s.ticker}-${s.date}`} onClick={() => { setSelectedIdx(i); setDayOffset(0) }} style={{ cursor: 'pointer', background: isActive ? T.GOLD_DIM : 'transparent', opacity: dimmed ? 0.25 : 1 }}
@@ -2046,7 +2060,7 @@ export default function BacktestPage() {
                     <td style={{ padding: '3px 6px', color: isActive ? T.GOLD : T.WHITE, fontWeight: 700, fontFamily: 'monospace', position: 'sticky', left: 0, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1 }}>{s.ticker}</td>
                     <td style={{ padding: '3px 6px', color: isActive ? T.GOLD : T.MUTED, position: 'sticky', left: 56, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1, borderRight: `1px solid ${T.BORDER}` }}>{s.date.slice(5)}</td>
                     <td style={{ padding: '3px 4px', color: T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{(s.gap_pct || 0).toFixed(0)}%</td>
-                    <td style={{ padding: '3px 4px', color: d0chg < 0 ? T.RED : T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{d0chg > 0 ? '+' : ''}{d0chg.toFixed(1)}%</td>
+                    <td style={{ padding: '3px 4px', color: d0chg < 0 ? T.RED : T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{d0chg > 0 ? '+' : ''}{isNaN(d0chg) ? '0.0' : d0chg.toFixed(1)}%</td>
                     <td style={{ padding: '3px 4px', color: T.GOLD, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(s.pos_abs || 0).toFixed(2)}</td>
                     {/* Filter column cells */}
                     {activeFilterDefs.map(f => {

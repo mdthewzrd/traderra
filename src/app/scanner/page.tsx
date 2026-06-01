@@ -326,7 +326,7 @@ const TEAL = '#14b8a6'
 const VOL_UP = 'rgba(216,216,224,0.18)'
 const VOL_DN = 'rgba(239,68,68,0.25)'
 
-const LEFT_W = 240
+const LEFT_W = 320
 const RIGHT_W = 420
 
 // ─── Light mode palette ──────────────────────────────────
@@ -1274,8 +1274,8 @@ export default function ScanDashboardPage() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, borderBottom: `1px solid ${BORDER}` }}>
         <div style={{ padding: '8px 10px', borderBottom: `1px solid ${BORDER}`, background: SURFACE2 }}>
           <div className="flex items-center justify-between">
-            <span style={{ color: GOLD, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Scans</span>
-            <span style={{ color: MUTED, fontSize: 9 }}>{scans.length}</span>
+            <span style={{ color: GOLD, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Scans</span>
+            <span style={{ color: MUTED, fontSize: 10 }}>{scans.length}</span>
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -1292,15 +1292,15 @@ export default function ScanDashboardPage() {
                 onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
                 onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
               >
-                <div style={{ color: isActive ? GOLD : TEXT, fontSize: 11, fontWeight: 600, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ color: isActive ? GOLD : TEXT, fontSize: 13, fontWeight: 600, marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {scan.name}
                 </div>
                 <div className="flex items-center gap-2">
-                  <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: `${TEAL}20`, color: TEAL }}>{scan.resultCount} sig</span>
-                  <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: `${GOLD}20`, color: GOLD }}>{(scan.runs?.length || 0)} runs</span>
-                  <span style={{ color: MUTED, fontSize: 8 }}>{scan.type}</span>
+                  <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 2, background: `${TEAL}20`, color: TEAL }}>{scan.resultCount} sig</span>
+                  <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 2, background: `${GOLD}20`, color: GOLD }}>{(scan.runs?.length || 0)} runs</span>
+                  <span style={{ color: MUTED, fontSize: 9 }}>{scan.type}</span>
                   {(scan.tags || []).map(tag => (
-                    <span key={tag} style={{ fontSize: 7, padding: '1px 3px', borderRadius: 2, background: `${GOLD}15`, color: GOLD, fontWeight: 600 }}>{tag}</span>
+                    <span key={tag} style={{ fontSize: 9, padding: '1px 4px', borderRadius: 2, background: `${GOLD}15`, color: GOLD, fontWeight: 600 }}>{tag}</span>
                   ))}
                 </div>
               </button>
@@ -1309,7 +1309,7 @@ export default function ScanDashboardPage() {
           {scans.length === 0 && (
             <div style={{ padding: 20, textAlign: 'center' }}>
               <Search className="h-5 w-5 mx-auto mb-2" style={{ color: MUTED, opacity: 0.3 }} />
-              <p style={{ color: MUTED, fontSize: 10 }}>No saved scans</p>
+              <p style={{ color: MUTED, fontSize: 11 }}>No saved scans</p>
             </div>
           )}
         </div>
@@ -1319,8 +1319,8 @@ export default function ScanDashboardPage() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <div style={{ padding: '8px 10px', borderBottom: `1px solid ${BORDER}`, background: SURFACE2 }}>
           <div className="flex items-center justify-between">
-            <span style={{ color: GOLD, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Runs</span>
-            <span style={{ color: MUTED, fontSize: 9 }}>{runs.length}</span>
+            <span style={{ color: GOLD, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Runs</span>
+            <span style={{ color: MUTED, fontSize: 10 }}>{runs.length}</span>
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -1342,14 +1342,14 @@ export default function ScanDashboardPage() {
               onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
             >
               <div className="flex items-center justify-between">
-                <span style={{ color: isActive ? GOLD : TEXT2, fontSize: 10, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{run.dateRange}</span>
-                <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: `${TEAL}20`, color: TEAL }}>{run.resultCount} sig</span>
+                <span style={{ color: isActive ? GOLD : TEXT2, fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{run.dateRange}</span>
+                <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 2, background: `${TEAL}20`, color: TEAL }}>{run.resultCount} sig</span>
               </div>
               <div className="flex items-center gap-1" style={{ marginTop: 2 }}>
                 {(run.tags || []).map(tag => (
-                  <span key={tag} style={{ fontSize: 7, padding: '0px 3px', borderRadius: 2, background: `${GOLD}12`, color: isActive ? GOLD : 'rgba(212,175,55,0.6)', fontWeight: 600 }}>{tag}</span>
+                  <span key={tag} style={{ fontSize: 9, padding: '0px 4px', borderRadius: 2, background: `${GOLD}12`, color: isActive ? GOLD : 'rgba(212,175,55,0.6)', fontWeight: 600 }}>{tag}</span>
                 ))}
-                <span style={{ color: isActive ? GOLD : MUTED, fontSize: 7, marginLeft: 'auto' }}>{run.runAt}</span>
+                <span style={{ color: isActive ? GOLD : MUTED, fontSize: 9, marginLeft: 'auto' }}>{run.runAt}</span>
               </div>
             </div>
             )
@@ -1439,7 +1439,7 @@ export default function ScanDashboardPage() {
     }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <div className="px-2 py-1.5 flex items-center justify-between" style={{ borderBottom: `1px solid ${BORDER}`, background: SURFACE2 }}>
-          <span style={{ color: GOLD, fontSize: 10, fontWeight: 700 }}>SIGNALS</span>
+          <span style={{ color: GOLD, fontSize: 12, fontWeight: 700 }}>SIGNALS</span>
           <span style={{ color: MUTED, fontSize: 9 }}>{signals.length}</span>
         </div>
         <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>

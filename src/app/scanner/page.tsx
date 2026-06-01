@@ -958,104 +958,6 @@ function dateBtnStyle(color: string = GOLD, fontSize: number = 11, borderColor: 
     color,
   }
 }
-
-// ─── Run Modal ──────────────────────────────────────────
-function RunModal({ scan, onClose, onRun }: { scan: ScanDef | undefined; onClose: () => void; onRun: (range: string, filters: string[]) => void }) {
-  const [range, setRange] = useState('90')
-  const [running, setRunning] = useState(false)
-  const [activeFilters, setActiveFilters] = useState<string[]>([])
-  const [customMode, setCustomMode] = useState(false)
-  const [customFrom, setCustomFrom] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - 90); return d.toISOString().slice(0, 10)
-  })
-  const [customTo, setCustomTo] = useState(() => new Date().toISOString().slice(0, 10))
-  if (!scan) return null
-  const availableFilters = scan.filters || []
-  const inputStyle = {
-    background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 3,
-    padding: '6px 8px', color: TEXT, fontSize: 11, width: '100%',
-    fontFamily: 'monospace', outline: 'none',
-  }
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)' }} onClick={onClose}>
-      <div style={{ background: SURFACE2, border: `1px solid ${GOLD_BORDER}`, borderRadius: 8, padding: 24, width: 360, maxWidth: '90vw' }} onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
-          <h3 style={{ color: GOLD, fontSize: 14, fontWeight: 800 }}>Run Scan</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUTED }}><X className="h-4 w-4" /></button>
-        </div>
-        <div style={{ color: TEXT, fontSize: 12, marginBottom: 16 }}>{scan.name}</div>
-        <div style={{ marginBottom: 16 }}>
-          <label style={{ color: MUTED, fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, display: 'block', marginBottom: 6 }}>Date Range</label>
-          {!customMode ? (
-            <div className="flex gap-1 flex-wrap">
-              {['7', '14', '30', '60', '90', '180', '365'].map(d => (
-                <button key={d} onClick={() => setRange(d)} style={{
-                  padding: '4px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-                  background: range === d ? GOLD : SURFACE, color: range === d ? '#000' : MUTED,
-                  border: `1px solid ${range === d ? GOLD : BORDER}`,
-                }}>{d}d</button>
-              ))}
-              <button onClick={() => setCustomMode(true)} style={{
-                padding: '4px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-                background: SURFACE, color: MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer',
-              }}>Custom</button>
-            </div>
-          ) : (
-            <div>
-              <div className="flex gap-2" style={{ marginBottom: 6 }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ color: MUTED, fontSize: 8, display: 'block', marginBottom: 2 }}>From</label>
-                  <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} style={inputStyle} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ color: MUTED, fontSize: 8, display: 'block', marginBottom: 2 }}>To</label>
-                  <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} style={inputStyle} />
-                </div>
-              </div>
-              <button onClick={() => setCustomMode(false)} style={{
-                padding: '2px 8px', borderRadius: 2, fontSize: 9, fontWeight: 600,
-                background: SURFACE, color: MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer',
-              }}>← Quick select</button>
-            </div>
-          )}
-        </div>
-        {/* Filter toggles */}
-        {availableFilters.length > 0 && (
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ color: MUTED, fontSize: 10, textTransform: 'uppercase', letterSpacing: 1, display: 'block', marginBottom: 6 }}>Filters</label>
-            <div className="flex gap-1 flex-wrap">
-              {availableFilters.map(f => {
-                const isOn = activeFilters.includes(f)
-                return (
-                  <button key={f} onClick={() => setActiveFilters(prev => isOn ? prev.filter(x => x !== f) : [...prev, f])} style={{
-                    padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 700,
-                    background: isOn ? `${GOLD}30` : SURFACE, color: isOn ? GOLD : MUTED,
-                    border: `1px solid ${isOn ? GOLD : BORDER}`,
-                    cursor: 'pointer', transition: 'all 0.15s',
-                  }}>{f}</button>
-                )
-              })}
-            </div>
-          </div>
-        )}
-        <button disabled={running} onClick={() => {
-          setRunning(true)
-          const effectiveRange = customMode ? `custom:${customFrom}:${customTo}` : range
-          onRun(effectiveRange, activeFilters)
-        }} style={{
-          width: '100%', padding: '10px', borderRadius: 4, fontSize: 12, fontWeight: 700,
-          background: running ? MUTED : GOLD, color: running ? TEXT : '#000',
-          border: 'none', cursor: running ? 'wait' : 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-        }}>
-          {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-          {running ? 'Running...' : 'Run Scan'}
-        </button>
-      </div>
-    </div>
-  )
-}
-
 // ─── Main Page ──────────────────────────────────────────
 export default function ScanDashboardPage() {
   const [scans, setScans] = useState<ScanDef[]>(BUILTIN_SCANS)
@@ -1065,7 +967,14 @@ export default function ScanDashboardPage() {
   const [tf, setTf] = useState<Timeframe>('D')
   const [chartMode, setChartMode] = useState<ChartMode>('single')
   const [loading, setLoading] = useState(false)
-  const [showRunModal, setShowRunModal] = useState(false)
+  const [showRunPanel, setShowRunPanel] = useState(false)
+  const [runRange, setRunRange] = useState('90')
+  const [runFilters, setRunFilters] = useState<string[]>([])
+  const [runCustomMode, setRunCustomMode] = useState(false)
+  const [runFrom, setRunFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 90); return d.toISOString().slice(0, 10) })
+  const [runTo, setRunTo] = useState(() => new Date().toISOString().slice(0, 10))
+  const [copied, setCopied] = useState(false)
+  const [pendingRuns, setPendingRuns] = useState<string[]>([])
   const [chatInput, setChatInput] = useState('')
   const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([])
   const [selectedRun, setSelectedRun] = useState<string>('')
@@ -1311,6 +1220,48 @@ export default function ScanDashboardPage() {
   // Auto-run backtest when signals or filters change
   useEffect(() => { if (filteredSignals.length > 0) runBaselineBacktest(filteredSignals) }, [filteredSignals])
 
+  // ── Poll DB for pending run completion ──
+  useEffect(() => {
+    if (pendingRuns.length === 0) return
+    const interval = setInterval(() => {
+      fetch('/api/scans')
+        .then(r => r.json())
+        .then(data => {
+          const dbScans: any[] = data.scans || []
+          // Check if any pending spec has new results
+          let changed = false
+          for (const spec of pendingRuns) {
+            const match = dbScans.find((s: any) => s.strategy === spec)
+            if (match && match.resultCount > 0) {
+              // Found results — load them
+              setPendingRuns(prev => prev.filter(p => p !== spec))
+              fetch(`/api/scans/${match.id}`).then(r => r.json()).then(d => {
+                if (d.signals) {
+                  setSignals(d.signals.map((s: any) => ({ ...s, ticker: s.ticker || s.symbol || '', symbol: s.ticker || s.symbol || '' })))
+                  setSelectedIdx(0)
+                  setDayOffset(0)
+                }
+              })
+              changed = true
+            }
+          }
+          // Also refresh the scans list
+          if (changed) {
+            const byStrat: Record<string, any[]> = {}
+            dbScans.forEach((s: any) => { (byStrat[s.strategy] = byStrat[s.strategy] || []).push(s) })
+            const freshScans = BUILTIN_SCANS.map(builtin => {
+              const matches = byStrat[BUILTIN_SPEC_MAP[builtin.id]] || []
+              const totalSig = matches.reduce((a: number, s: any) => a + (s.resultCount || 0), 0)
+              return { ...builtin, resultCount: totalSig, runs: matches.map((m: any) => ({ id: m.id, scanId: m.id, dateRange: m.name, runAt: new Date(m.createdAt).toLocaleString(), resultCount: m.resultCount, tags: m.tags ? (typeof m.tags === 'string' ? JSON.parse(m.tags) : m.tags) : [] })) }
+            })
+            setScans(freshScans)
+          }
+        })
+        .catch(() => {})
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [pendingRuns])
+
   // ─── Left Sidebar: Scans (top) + Runs (bottom) ────
   const renderLeftSidebar = () => (
     <div style={{
@@ -1406,16 +1357,74 @@ export default function ScanDashboardPage() {
         </div>
       </div>
 
-      {/* New Scan button */}
-      <div style={{ padding: 6, borderTop: `1px solid ${BORDER}` }}>
-        <button style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-          width: '100%', padding: '6px', borderRadius: 4,
-          background: GOLD_DIM, color: GOLD, fontWeight: 600, fontSize: 10,
-          border: `1px solid ${GOLD_BORDER}`, cursor: 'pointer',
-        }}>
-          <Plus className="h-3 w-3" /> New Scan
-        </button>
+      {/* Run panel */}
+      <div style={{ borderTop: `1px solid ${BORDER}` }}>
+        {showRunPanel && activeScan ? (() => {
+          const specName = BUILTIN_SPEC_MAP[activeScan.id] || activeScan.name.toLowerCase().replace(/\s+/g, '-')
+          const effectiveSpec = runFilters.includes('am-push') && specName === 'backside-b' ? 'backside-b-push' : specName
+          const dates = runCustomMode ? { from: runFrom, to: runTo } : (() => { const d = parseInt(runRange); const t = new Date(); return { from: new Date(t.getTime() - d * 86400000).toISOString().slice(0, 10), to: t.toISOString().slice(0, 10) } })()
+          const cmd = `cd ~/.wzrd-pi-dev/projects/edge-dev/assets && PYTHONPATH=scan-engine:~/edge.dev/src ~/edge.dev/.venv/bin/python sandbox.py --spec ${effectiveSpec} --start ${dates.from} --end ${dates.to}${runFilters.length ? ' --filters ' + runFilters.join(',') : ''} --push`
+          const dateInputStyle = { background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '4px 6px', color: TEXT, fontSize: 10, width: '100%', fontFamily: 'monospace', outline: 'none' as const }
+          return (
+            <div style={{ padding: '8px 10px', background: SURFACE2, borderBottom: `1px solid ${BORDER}` }}>
+              <div style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>{activeScan.name}</div>
+              {/* Date range */}
+              {!runCustomMode ? (
+                <div className="flex gap-1 flex-wrap" style={{ marginBottom: 6 }}>
+                  {['7', '14', '30', '60', '90', '180', '365'].map(d => (
+                    <button key={d} onClick={() => setRunRange(d)} style={{ padding: '2px 5px', borderRadius: 2, fontSize: 8, fontWeight: 600, background: runRange === d ? GOLD : SURFACE, color: runRange === d ? '#000' : MUTED, border: `1px solid ${runRange === d ? GOLD : BORDER}` }}>{d}d</button>
+                  ))}
+                  <button onClick={() => setRunCustomMode(true)} style={{ padding: '2px 5px', borderRadius: 2, fontSize: 8, fontWeight: 600, background: SURFACE, color: MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer' }}>Custom</button>
+                </div>
+              ) : (
+                <div style={{ marginBottom: 6 }}>
+                  <div className="flex gap-1">
+                    <input type="date" value={runFrom} onChange={e => setRunFrom(e.target.value)} style={dateInputStyle} />
+                    <input type="date" value={runTo} onChange={e => setRunTo(e.target.value)} style={dateInputStyle} />
+                  </div>
+                  <button onClick={() => setRunCustomMode(false)} style={{ padding: '1px 5px', borderRadius: 2, fontSize: 7, fontWeight: 600, background: SURFACE, color: MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer', marginTop: 3 }}>← Quick</button>
+                </div>
+              )}
+              {/* Filters */}
+              {(activeScan.filters || []).length > 0 && (
+                <div className="flex gap-1" style={{ marginBottom: 6 }}>
+                  {activeScan.filters!.map(f => {
+                    const isOn = runFilters.includes(f)
+                    return <button key={f} onClick={() => setRunFilters(prev => isOn ? prev.filter(x => x !== f) : [...prev, f])} style={{ padding: '2px 6px', borderRadius: 2, fontSize: 8, fontWeight: 700, background: isOn ? `${GOLD}30` : SURFACE, color: isOn ? GOLD : MUTED, border: `1px solid ${isOn ? GOLD : BORDER}`, cursor: 'pointer' }}>{f}</button>
+                  })}
+                </div>
+              )}
+              {/* Command preview */}
+              <pre style={{ background: '#0a0a10', border: `1px solid ${BORDER}`, borderRadius: 3, padding: '5px 6px', fontSize: 8, fontFamily: 'monospace', color: TEAL, lineHeight: 1.4, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 60, overflowY: 'auto', marginBottom: 6 }}>{cmd}</pre>
+              {/* Actions */}
+              <div className="flex gap-1">
+                <button onClick={() => { navigator.clipboard.writeText(cmd); setCopied(true); setPendingRuns(prev => [...prev, BUILTIN_SPEC_MAP[activeScan.id] || '']); setTimeout(() => setCopied(false), 2000); setShowRunPanel(false) }} style={{ flex: 1, padding: '5px', borderRadius: 3, fontSize: 9, fontWeight: 700, background: GOLD, color: '#000', border: 'none', cursor: 'pointer' }}>
+                  {copied ? '✓ Copied!' : '📋 Copy & Track'}
+                </button>
+                <button onClick={() => setShowRunPanel(false)} style={{ padding: '5px 8px', borderRadius: 3, fontSize: 9, fontWeight: 600, background: SURFACE, color: MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer' }}>Cancel</button>
+              </div>
+            </div>
+          )
+        })() : null}
+        {/* Pending runs indicator */}
+        {pendingRuns.length > 0 && (
+          <div style={{ padding: '6px 10px', background: `${GOLD}10`, borderBottom: `1px solid ${GOLD_BORDER}`, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Loader2 className="h-3 w-3 animate-spin" style={{ color: GOLD }} />
+            <span style={{ color: GOLD, fontSize: 9, fontWeight: 600 }}>Running {pendingRuns.join(', ')}...</span>
+            <span style={{ color: MUTED, fontSize: 8, marginLeft: 'auto' }}>Polling DB</span>
+          </div>
+        )}
+        {/* Run button */}
+        <div style={{ padding: 6 }}>
+          <button onClick={() => { setShowRunPanel(!showRunPanel); if (!showRunPanel) setRunRange('90') }} style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+            width: '100%', padding: '6px', borderRadius: 4,
+            background: showRunPanel ? SURFACE : GOLD_DIM, color: showRunPanel ? MUTED : GOLD, fontWeight: 600, fontSize: 10,
+            border: `1px solid ${showRunPanel ? BORDER : GOLD_BORDER}`, cursor: 'pointer',
+          }}>
+            <Play className="h-3 w-3" /> {showRunPanel ? 'Cancel' : 'Run Scan'}
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -1734,7 +1743,7 @@ export default function ScanDashboardPage() {
           }}>
             <BarChart3 className="h-3 w-3" /> Charts
           </a>
-          <button onClick={() => setShowRunModal(true)} style={{
+          <button onClick={() => setShowRunPanel(!showRunPanel)} style={{
             display: 'flex', alignItems: 'center', gap: 4,
             padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600,
             background: GOLD, color: '#000', border: 'none', cursor: 'pointer',
@@ -1766,7 +1775,6 @@ export default function ScanDashboardPage() {
       </div>
 
       {/* Run Modal */}
-      {showRunModal && <RunModal scan={activeScan} onClose={() => setShowRunModal(false)} />}
     </div>
   )
 }

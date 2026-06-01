@@ -320,25 +320,32 @@ const FILTERS: FilterDef[] = [
       const avgVol = morning1m.reduce((sum, b) => sum + (b.volume || 0), 0) / morning1m.length
       const pushVol = barsAtPush.reduce((sum, b) => sum + (b.volume || 0), 0)
       if (avgVol > 0 && pushVol < avgVol * 0.3) return false // less than 30% avg bar vol = fake
-      // ── CHECK 3: Close position (wick vs body) ──
-      const closeScores = barsAtPush.map(b => {
+      // ── CHECK 3: Range anomaly ──
+      // Fake prints: the bar has a huge range spike (5x+ normal) but normal/low volume
+      // Real moves: wide range comes WITH high volume (actual aggressive trading)
+      const avgRange = morning1m.reduce((sum, b) => sum + (b.high - b.low), 0) / morning1m.length
+      const pushBarRanges = barsAtPush.map(b => b.high - b.low)
+      const maxPushRange = Math.max(...pushBarRanges)
+      const rangeRatio = avgRange > 0 ? maxPushRange / avgRange : 1
+      const pushBarVolumes = barsAtPush.map(b => b.volume || 0)
+      const maxPushVol = Math.max(...pushBarVolumes)
+      const volRatio = avgVol > 0 ? maxPushVol / avgVol : 1
+      // If range is 5x+ normal but volume isn't 2x+ normal, it's a quote spike not real trading
+      if (rangeRatio >= 5 && volRatio < 2) return false
+      // ── CHECK 4: Volume positioned at top of bar ──
+      // Real: the bar that made the high should have decent volume
+      // Fake: volume is there but it's all at the bottom of the bar (price never really traded at high)
+      // We can approximate this: if push bar has volume but close is in bottom 25%, and range is 3x+ normal → suspicious
+      const worstCloseScore = Math.min(...barsAtPush.map(b => {
         const range = b.high - b.low
         return range > 0 ? (b.close - b.low) / range : 0.5
-      })
-      const avgCloseScore = closeScores.reduce((a, b) => a + b, 0) / closeScores.length
-      // ── CHECK 4: Body ratio ──
-      const avgBodyRatio = barsAtPush.reduce((sum, b) => {
-        const range = b.high - b.low
-        return sum + (range > 0 ? Math.abs(b.close - b.open) / range : 0)
-      }, 0) / barsAtPush.length
-      // ── Quick pass: clearly real (close > 50%, body > 40%) ──
-      if (avgCloseScore >= 0.5 && avgBodyRatio >= 0.4) return true
-      // ── Quick fail: clearly fake (close < 25%, body < 20%, no volume) ──
-      if (avgCloseScore < 0.25 && avgBodyRatio < 0.2) return false
-      // ── SUSPICIOUS ZONE: could be real, could be wick ──
-      // These need tick-level validation (handled async by tickValidationCache)
-      // For now, return the 1m-based answer. Tick results override when loaded.
-      return avgCloseScore >= 0.4 && avgBodyRatio >= 0.3
+      }))
+      if (worstCloseScore < 0.25 && rangeRatio >= 3) return false
+      // ── Quick pass: clearly real (volume at push, range not anomalous) ──
+      if (rangeRatio < 3 || volRatio >= 2) return true
+      // ── SUSPICIOUS: wide range with ambiguous volume ──
+      // These need tick-level validation
+      return pushVol >= avgVol * 0.5
     }
   },
 ]
@@ -1496,8 +1503,11 @@ export default function BacktestPage() {
         const range = b.high - b.low
         return sum + (range > 0 ? Math.abs(b.close - b.open) / range : 0)
       }, 0) / barsAtPush.length
-      // Suspicious: passed 1m but close or body scores are marginal
-      if (avgClose < 0.5 || avgBody < 0.4) suspicious.push(i)
+      const avgBarRange = morning1m.reduce((sum: number, b: any) => sum + (b.high - b.low), 0) / morning1m.length
+      const maxPushRange = Math.max(...barsAtPush.map((b: any) => b.high - b.low))
+      const rangeRatio = avgBarRange > 0 ? maxPushRange / avgBarRange : 1
+      // Suspicious: passed 1m but has wide range bars at push, or marginal body
+      if (rangeRatio >= 3 || avgBody < 0.4) suspicious.push(i)
     })
 
     if (suspicious.length === 0) return

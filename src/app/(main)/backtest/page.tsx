@@ -1633,6 +1633,7 @@ export default function BacktestPage() {
                       </button>
                     )
                   })}
+                  <div style={{ padding: '6px 8px', color: T.MUTED, fontSize: 7, borderTop: `1px solid ${T.BORDER}` }}>{'Column header: show \u2192 filter \u2192 remove'}</div>
                 </div>
                 )
               })()}
@@ -1649,22 +1650,31 @@ export default function BacktestPage() {
                 <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Gap%</th>
                 <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>D0</th>
                 <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>ABS</th>
-                {/* ── Dynamic filter columns ── */}
+                {/* ── Dynamic filter columns: 3-state header click ── */}
                 {activeFilterDefs.map(f => {
-                  const isActive = activeFilters.has(f.key)
+                  const isFiltering = activeFilters.has(f.key)
+                  // State: show ✓ only (teal outline) → filtering (teal solid) → click removes column
                   const count = filterCounts[f.key] || 0
+                  // Color: gray if just showing, teal solid if filtering
+                  const bg = isFiltering ? T.TEAL : `${T.TEAL}25`
+                  const fg = isFiltering ? '#000' : T.TEAL
                   return (
-                    <th key={f.key} title={`${f.description}\nClick to ${isActive ? 'disable' : 'enable'} filter (${count}/${signals.length} pass)`}
+                    <th key={f.key} title={`${f.description}\n${count}/${signals.length} pass\n\nClick: show → filter → remove`}
                       onClick={() => {
-                        const next = new Set(activeFilters)
-                        isActive ? next.delete(f.key) : next.add(f.key)
-                        setActiveFilters(next)
+                        if (!isFiltering) {
+                          // SHOW → FILTER: activate the filter
+                          setActiveFilters(new Set([...activeFilters, f.key]))
+                        } else {
+                          // FILTER → OFF: remove column entirely
+                          const nv = new Set(visibleFilters); nv.delete(f.key); setVisibleFilters(nv)
+                          const na = new Set(activeFilters); na.delete(f.key); setActiveFilters(na)
+                        }
                       }}
                       style={{
                         padding: '4px 4px', textAlign: 'center', cursor: 'pointer',
-                        color: isActive ? '#000' : T.MUTED, fontSize: 7, fontWeight: 700,
+                        color: fg, fontSize: 7, fontWeight: 700,
                         textTransform: 'uppercase', letterSpacing: 0.5,
-                        background: isActive ? T.TEAL : T.SURFACE3,
+                        background: bg,
                         borderLeft: `1px solid ${T.BORDER}`,
                         minWidth: 30,
                       }}>

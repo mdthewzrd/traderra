@@ -80,6 +80,15 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
   const focusDate = useChartStore(s => s.focusDate)
   const { bars, loading } = useLiveBars(symbol, tf, focusDate)
 
+  // Fetch 2m bars for trail stop overlay when on higher TFs
+  const trailStopOn = useToolStore(s => s.tools.find((t: any) => t.indKey === 'trail_stop')?.on ?? false)
+  const { bars: bars2m } = useLiveBars(
+    (tf !== '2' && trailStopOn) ? symbol : null,
+    '2',
+    focusDate
+  )
+  const trail2mRef = useRef<(number | null)[] | null>(null)
+
   // Canvas screenshot utility
   const screenshot = useCallback(() => {
     const canvas = canvasRef.current
@@ -267,6 +276,31 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       const toolOverrides = activeTools.map((t: any) => ({ indKey: t.indKey, params: t.params, colors: t.colors }))
       const ic = computeIndicators(bars, inds, tf, toolOverrides)
 
+      // Compute 2m trail stop overlay when on higher TF
+      if (tf !== '2' && inds.trail_stop && bars2m.length > 0) {
+        const tsTool = toolOverrides.find((t: any) => t.indKey === 'trail_stop')
+        const fastP = tsTool?.params?.fast ?? 9
+        const slowP = tsTool?.params?.slow ?? 20
+        const bandMult = tsTool?.params?.band_mult ?? 1.0
+        const lookback = tsTool?.params?.lookback ?? 5
+        const ic2m = computeIndicators(bars2m, inds, '2', toolOverrides)
+        // Map 2m trail values onto current chart bars
+        // For each chart bar, find the last 2m bar within its candle
+        const mapped: (number | null)[] = []
+        for (let i = 0; i < bars.length; i++) {
+          const barEnd = bars[i].time * 1000
+          let best: number | null = null
+          for (let j = 0; j < bars2m.length; j++) {
+            if (bars2m[j].time * 1000 > barEnd) break
+            if (ic2m.trailStop && ic2m.trailStop[j] != null) best = ic2m.trailStop[j]
+          }
+          mapped.push(best)
+        }
+        trail2mRef.current = mapped
+      } else if (tf === '2') {
+        trail2mRef.current = null // 2m chart uses native trail stop
+      }
+
       // Helper: get tool color override or fall back to theme default
       const toolColor = (indKey: string, colorKey: string, fallback: string): string => {
         const tool = activeTools.find((t: any) => t.indKey === indKey)
@@ -360,11 +394,13 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
         )
       }
 
-      // Trail Stop — EMA + ATR × mult (green dashed)
-      if (panelIdx === 0 && inds.trail_stop && ic.trailStop) {
+      // Trail Stop — swing-structure + dev band (solid green)
+      if (panelIdx === 0 && inds.trail_stop) {
         const tsTool = activeTools.find((t: any) => t.indKey === 'trail_stop')
         const trailColor = tsTool?.colors?.color || '#4ade80'
-        drawLine(rc, ic.trailStop, trailColor, 1.6, false)
+        // Use 2m overlay when on higher TF, native when on 2m
+        const trailData = tf === '2' ? ic.trailStop : trail2mRef.current
+        if (trailData) drawLine(rc, trailData, trailColor, 1.6, false)
       }
 
       // Bollinger Bands

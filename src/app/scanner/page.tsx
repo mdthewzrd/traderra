@@ -395,6 +395,8 @@ function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffs
 
   // Fetch — load extra for zoom out
   useEffect(() => {
+    setLoading(true)
+    setAllBars([])
     const params = new URLSearchParams({ symbol, tf })
     const baseDate = date || new Date().toISOString().slice(0, 10)
     // from: always anchored before D0 so D0 bars are always visible
@@ -415,9 +417,9 @@ function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffs
     params.set('from', fromDate.toISOString().slice(0, 10))
     params.set('to', toStr)
     fetch(`/api/chart-data/bars?${params}`)
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error(`Bars API ${r.status}`); return r.json() })
       .then(data => { setAllBars(data.bars || []); setLoading(false) })
-      .catch(() => setLoading(false))
+      .catch(() => { setAllBars([]); setLoading(false) })
   }, [symbol, tf, date, dayOffset])
 
   // Compute visible bars — default puts D0 at right edge, manualZoom from wheel

@@ -280,7 +280,7 @@ const FILTERS: FilterDef[] = [
   },
   // ── Real Volume: multi-factor fake print detection using 1m bars ──
   { key: 'pushReal', label: 'Real Volume', shortLabel: 'REAL', needsBars: 'both',
-    description: '1m bars confirm real volume at push level with 4 checks: volume, close, body size, price retention',
+    description: '1m bars confirm the push high was actually traded (not a fake print / zero-liquidity wick)',
     compute: (s, bars15m, bars1m) => {
       if (!bars15m || !bars1m) return false
       // ── Step 1: Find push level from 15m morning bars ──
@@ -315,13 +315,13 @@ const FILTERS: FilterDef[] = [
       const tolerance = pushLevel * 0.002 // within 0.2% of push high
       const barsAtPush = morning1m.filter(b => b.high >= pushLevel - tolerance)
       if (barsAtPush.length === 0) return false // 15m high not confirmed on 1m = instant fake
-      // ── CHECK 1: Volume Concentration ──
-      // Real pushes have volume at the push level >= 2x the average 1m bar volume
-      // (the "emotional intensity" test — genuine buying concentrates volume at breakout)
+      // ── CHECK 1: Was there real volume at the push level? ──
+      // Fake prints: the 15m bar shows a high but 1m bars at that level have negligible volume
+      // Real moves: actual shares were transacted near the high
+      // We don't penalize high volume — news/genuine breakouts should have abnormal volume
       const avgVol = morning1m.reduce((sum, b) => sum + (b.volume || 0), 0) / morning1m.length
       const pushVol = barsAtPush.reduce((sum, b) => sum + (b.volume || 0), 0)
-      const volRatio = avgVol > 0 ? pushVol / (avgVol * barsAtPush.length) : 0
-      const passesVol = volRatio >= 1.5 // push bars have 1.5x+ average concentration
+      const passesVolume = avgVol > 0 ? pushVol >= avgVol * 0.5 : pushVol > 0
       // ── CHECK 2: Close Position (body vs wick) ──
       // Real buying: bars at push close in upper 50% of their range (body near high, not wick)
       const closeScores = barsAtPush.map(b => {
@@ -348,7 +348,7 @@ const FILTERS: FilterDef[] = [
         passesRetention = holding >= Math.ceil(holdBars.length * 0.5) // majority hold above midpoint
       }
       // ── VERDICT: need at least 3 of 4 checks ──
-      const checks = [passesVol, passesClose, passesBody, passesRetention]
+      const checks = [passesVolume, passesClose, passesBody, passesRetention]
       const passCount = checks.filter(Boolean).length
       return passCount >= 3
     }

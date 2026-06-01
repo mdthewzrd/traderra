@@ -278,9 +278,11 @@ const FILTERS: FilterDef[] = [
       return morningHigh >= bandLevel
     }
   },
-  // ── Real Volume: multi-factor fake print detection using 1m bars ──
+  // ── Real Volume: tiered fake print detection ──
+  // Tier 1 (sync, 1m bars): quick check for obvious fakes
+  // Tier 2 (async, tick data): only fetched for suspicious signals
   { key: 'pushReal', label: 'Real Volume', shortLabel: 'REAL', needsBars: 'both',
-    description: '1m bars confirm the push high was actually traded (not a fake print / zero-liquidity wick)',
+    description: '1m bars + tick data confirm the push high was actually traded (not a fake print)',
     compute: (s, bars15m, bars1m) => {
       if (!bars15m || !bars1m) return false
       // ── Step 1: Find push level from 15m morning bars ──
@@ -292,7 +294,6 @@ const FILTERS: FilterDef[] = [
       })
       if (morning15.length < 3) return false
       const morningHigh = Math.max(...morning15.map(b => b.high))
-      const morningLow = Math.min(...morning15.map(b => b.low))
       // Extension check (same as PUSH)
       const closes15 = morning15.map(b => b.close)
       const ema9: number[] = [closes15[0]]
@@ -310,47 +311,34 @@ const FILTERS: FilterDef[] = [
         return mins >= 750 && mins < 1020
       }).sort((a, b) => a.time - b.time)
       if (morning1m.length < 5) return false
-      // ── Step 3: Find 1m bars near the push high ──
+      // ── CHECK 1: 1m bar confirms the high ──
       const pushLevel = morningHigh
-      const tolerance = pushLevel * 0.002 // within 0.2% of push high
+      const tolerance = pushLevel * 0.002
       const barsAtPush = morning1m.filter(b => b.high >= pushLevel - tolerance)
-      if (barsAtPush.length === 0) return false // 15m high not confirmed on 1m = instant fake
-      // ── CHECK 1: Was there real volume at the push level? ──
-      // Fake prints: the 15m bar shows a high but 1m bars at that level have negligible volume
-      // Real moves: actual shares were transacted near the high
-      // We don't penalize high volume — news/genuine breakouts should have abnormal volume
+      if (barsAtPush.length === 0) return false // 15m high not on 1m = instant fake
+      // ── CHECK 2: Volume at push level ──
       const avgVol = morning1m.reduce((sum, b) => sum + (b.volume || 0), 0) / morning1m.length
       const pushVol = barsAtPush.reduce((sum, b) => sum + (b.volume || 0), 0)
-      const passesVolume = avgVol > 0 ? pushVol >= avgVol * 0.5 : pushVol > 0
-      // ── CHECK 2: Close Position (body vs wick) ──
-      // Real buying: bars at push close in upper 50% of their range (body near high, not wick)
+      if (avgVol > 0 && pushVol < avgVol * 0.3) return false // less than 30% avg bar vol = fake
+      // ── CHECK 3: Close position (wick vs body) ──
       const closeScores = barsAtPush.map(b => {
         const range = b.high - b.low
         return range > 0 ? (b.close - b.low) / range : 0.5
       })
       const avgCloseScore = closeScores.reduce((a, b) => a + b, 0) / closeScores.length
-      const passesClose = avgCloseScore >= 0.45 // average close position >= 45% of range
-      // ── CHECK 3: Body-to-ATR ratio ──
-      // Real pushes have 1m bodies (|close - open|) that are meaningful vs average range
-      const avgRange = morning1m.reduce((sum, b) => sum + (b.high - b.low), 0) / morning1m.length
-      const avgBodyAtPush = barsAtPush.reduce((sum, b) => sum + Math.abs(b.close - b.open), 0) / barsAtPush.length
-      const bodyRatio = avgRange > 0 ? avgBodyAtPush / avgRange : 0
-      const passesBody = bodyRatio >= 0.4 // body is at least 40% of avg bar range
-      // ── CHECK 4: Price Retention ──
-      // After the push high, do subsequent bars hold above the push midpoint?
-      // Fake prints: price immediately reverses. Real: buying sustains.
-      const pushBarIdx = morning1m.findIndex(b => b.high >= pushLevel - tolerance)
-      const holdBars = morning1m.slice(pushBarIdx + 1, Math.min(pushBarIdx + 5, morning1m.length))
-      let passesRetention = true
-      if (holdBars.length >= 2) {
-        const pushMid = (pushLevel + morningLow) / 2
-        const holding = holdBars.filter(b => b.low > pushMid).length
-        passesRetention = holding >= Math.ceil(holdBars.length * 0.5) // majority hold above midpoint
-      }
-      // ── VERDICT: need at least 3 of 4 checks ──
-      const checks = [passesVolume, passesClose, passesBody, passesRetention]
-      const passCount = checks.filter(Boolean).length
-      return passCount >= 3
+      // ── CHECK 4: Body ratio ──
+      const avgBodyRatio = barsAtPush.reduce((sum, b) => {
+        const range = b.high - b.low
+        return sum + (range > 0 ? Math.abs(b.close - b.open) / range : 0)
+      }, 0) / barsAtPush.length
+      // ── Quick pass: clearly real (close > 50%, body > 40%) ──
+      if (avgCloseScore >= 0.5 && avgBodyRatio >= 0.4) return true
+      // ── Quick fail: clearly fake (close < 25%, body < 20%, no volume) ──
+      if (avgCloseScore < 0.25 && avgBodyRatio < 0.2) return false
+      // ── SUSPICIOUS ZONE: could be real, could be wick ──
+      // These need tick-level validation (handled async by tickValidationCache)
+      // For now, return the 1m-based answer. Tick results override when loaded.
+      return avgCloseScore >= 0.4 && avgBodyRatio >= 0.3
     }
   },
 ]
@@ -1345,6 +1333,7 @@ export default function BacktestPage() {
   const [bars15mLoading, setBars15mLoading] = useState(false)
   const [bars1mCache, setBars1mCache] = useState<Record<string, any[]>>({})
   const [bars1mLoading, setBars1mLoading] = useState(false)
+  const [tickResults, setTickResults] = useState<Record<string, boolean>>({})
   const [visibleFilters, setVisibleFilters] = useState<Set<string>>(new Set())
   const [showFilterMenu, setShowFilterMenu] = useState(false)
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set())
@@ -1370,16 +1359,22 @@ export default function BacktestPage() {
   const filterResults = useMemo(() => {
     const results: Record<string, boolean[]> = {}
     FILTERS.forEach(f => {
-      results[f.key] = signals.map(s => {
+      results[f.key] = signals.map((s, i) => {
         const cacheKey = `${s.ticker}-${s.date}`
-        if (f.needsBars === '15m') return f.compute(s, bars15mCache[cacheKey])
-        if (f.needsBars === '1m') return f.compute(s, undefined, bars1mCache[cacheKey])
-        if (f.needsBars === 'both') return f.compute(s, bars15mCache[cacheKey], bars1mCache[cacheKey])
-        return f.compute(s)
+        let result
+        if (f.needsBars === '15m') result = f.compute(s, bars15mCache[cacheKey])
+        else if (f.needsBars === '1m') result = f.compute(s, undefined, bars1mCache[cacheKey])
+        else if (f.needsBars === 'both') result = f.compute(s, bars15mCache[cacheKey], bars1mCache[cacheKey])
+        else result = f.compute(s)
+        // Tier 2 override: tick data can override pushReal for suspicious signals
+        if (f.key === 'pushReal' && tickResults[cacheKey] !== undefined) {
+          result = tickResults[cacheKey]
+        }
+        return result
       })
     })
     return results
-  }, [signals, bars15mCache, bars1mCache])
+  }, [signals, bars15mCache, bars1mCache, tickResults])
 
   // ── Lazy-load 15m bars when any filter needs them ──
   useEffect(() => {
@@ -1459,6 +1454,106 @@ export default function BacktestPage() {
   }, [activeFilters, visibleFilters, signals])
 
   // ── Filtered signals (based on active filters) ──
+  // ── Tier 2: Tick validation for suspicious signals ──
+  // Only fetches tick data for signals where 1m analysis is in the suspicious zone
+  useEffect(() => {
+    if (!visibleFilters.has('pushReal') && !activeFilters.has('pushReal')) return
+    if (Object.keys(bars1mCache).length === 0) return // wait for 1m bars to load first
+
+    // Find signals where 1m result is suspicious (not clearly pass or clearly fail)
+    const suspicious: number[] = []
+    signals.forEach((s, i) => {
+      const key = `${s.ticker}-${s.date}`
+      if (tickResults[key] !== undefined) return // already validated
+      const result = filterResults['pushReal']?.[i]
+      if (result === undefined || result === null) return // no data yet
+      // We want to validate the ones that PASSED 1m (they might be fake)
+      // Skip the ones that already failed (they're already rejected)
+      if (!result) return
+      // Check if it's in the suspicious zone (close score 0.3-0.5, body 0.25-0.4)
+      const bars1m = bars1mCache[key]
+      const bars15m = bars15mCache[key]
+      if (!bars1m || !bars15m) return
+      const morning1m = bars1m.filter((b: any) => {
+        const h = new Date(b.time * 1000).getUTCHours()
+        const m = new Date(b.time * 1000).getUTCMinutes()
+        return h * 60 + m >= 750 && h * 60 + m < 1020
+      }).sort((a: any, b: any) => a.time - b.time)
+      if (morning1m.length < 5) return
+      const morningHigh = Math.max(...bars15m.filter((b: any) => {
+        const h = new Date(b.time * 1000).getUTCHours()
+        const m = new Date(b.time * 1000).getUTCMinutes()
+        return h * 60 + m >= 750 && h * 60 + m < 1020
+      }).map((b: any) => b.high))
+      const tolerance = morningHigh * 0.002
+      const barsAtPush = morning1m.filter((b: any) => b.high >= morningHigh - tolerance)
+      if (barsAtPush.length === 0) return
+      const avgClose = barsAtPush.reduce((sum: number, b: any) => {
+        const range = b.high - b.low
+        return sum + (range > 0 ? (b.close - b.low) / range : 0.5)
+      }, 0) / barsAtPush.length
+      const avgBody = barsAtPush.reduce((sum: number, b: any) => {
+        const range = b.high - b.low
+        return sum + (range > 0 ? Math.abs(b.close - b.open) / range : 0)
+      }, 0) / barsAtPush.length
+      // Suspicious: passed 1m but close or body scores are marginal
+      if (avgClose < 0.5 || avgBody < 0.4) suspicious.push(i)
+    })
+
+    if (suspicious.length === 0) return
+
+    // Fetch tick data for suspicious signals
+    const newResults = { ...tickResults }
+    let pending = suspicious.length
+    suspicious.forEach(i => {
+      const s = signals[i]
+      const key = `${s.ticker}-${s.date}`
+      // Convert date to nanosecond timestamp range for the morning session
+      // 7:30 ET = 12:30 UTC
+      const dateObj = new Date(s.date + 'T12:30:00Z')
+      const fromNs = dateObj.getTime() * 1_000_000
+      dateObj.setUTCHours(17) // noon ET = 17:00 UTC
+      const toNs = dateObj.getTime() * 1_000_000
+
+      fetch(`/api/chart-data/trades?symbol=${encodeURIComponent(s.ticker)}&from=${fromNs}&to=${toNs}&limit=50000`)
+        .then(r => r.json())
+        .then(data => {
+          const trades = data.trades || []
+          if (trades.length === 0) {
+            newResults[key] = false // no trades at all = fake
+          } else {
+            // Find push level again
+            const bars15m = bars15mCache[key]
+            const morningHigh = Math.max(...bars15m.filter((b: any) => {
+              const h = new Date(b.time * 1000).getUTCHours()
+              const m = new Date(b.time * 1000).getUTCMinutes()
+              return h * 60 + m >= 750 && h * 60 + m < 1020
+            }).map((b: any) => b.high))
+            const pushTolerance = morningHigh * 0.002
+            // Check: are there real trades near the push high?
+            // Ignore trades with condition codes that indicate odd lots or out-of-sequence
+            const realTradesAtPush = trades.filter((t: any) => {
+              if (t.price < morningHigh - pushTolerance) return false
+              // Filter out condition codes: @ = odd lot, I = odd lot, Z = out of sequence
+              const conds = t.condition || []
+              if (conds.includes('@') || conds.includes('I') || conds.includes('Z')) return false
+              return t.size > 0 // must have actual shares
+            })
+            // Real if: at least 5 trades or 100 shares traded near the push high
+            const totalShares = realTradesAtPush.reduce((sum: number, t: any) => sum + t.size, 0)
+            newResults[key] = realTradesAtPush.length >= 5 || totalShares >= 100
+          }
+          pending--
+          if (pending === 0) setTickResults(newResults)
+        })
+        .catch(() => {
+          newResults[key] = true // on error, trust the 1m result
+          pending--
+          if (pending === 0) setTickResults(newResults)
+        })
+    })
+  }, [filterResults, bars1mCache, bars15mCache, visibleFilters, activeFilters, signals])
+
   const filteredSignals = useMemo(() => {
     if (activeFilters.size === 0) return signals
     return signals.filter((s, i) => {

@@ -860,9 +860,9 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
 }
 
 // ─── Backtest Stats Panel — Multi-Tab ────────────────
-type StatsTab = 'overview' | 'performance' | 'pnl' | 'robustness' | 'chart'
+type StatsTab = 'overview' | 'performance' | 'pnl' | 'robustness'
 
-function BacktestStatsPanel({ signals, backtestResults, dark, selectedIdx }: { signals: Signal[]; backtestResults: BacktestResults | null; dark: boolean; selectedIdx: number }) {
+function BacktestStatsPanel({ signals, backtestResults, dark }: { signals: Signal[]; backtestResults: BacktestResults | null; dark: boolean }) {
   const C = dark
     ? { BG, SURFACE, SURFACE2, SURFACE3, BORDER, TEXT, TEXT2, MUTED, WHITE, RED, TEAL, GOLD, VOL_UP, VOL_DN, GOLD_DIM, GOLD_BORDER }
     : { ...LIGHT, GOLD, GOLD_DIM: LIGHT.GOLD_DIM, GOLD_BORDER: LIGHT.GOLD_BORDER }
@@ -893,7 +893,6 @@ function BacktestStatsPanel({ signals, backtestResults, dark, selectedIdx }: { s
   const bt = backtestResults
   const tabs: { key: StatsTab; label: string; icon: React.ReactNode }[] = [
     { key: 'overview', label: 'Overview', icon: <Zap className="h-3 w-3" /> },
-    { key: 'chart', label: 'Chart View', icon: <BarChart3 className="h-3 w-3" /> },
     { key: 'performance', label: 'Performance', icon: <Activity className="h-3 w-3" /> },
     { key: 'pnl', label: 'P&L / Drawdown', icon: <TrendingUp className="h-3 w-3" /> },
     { key: 'robustness', label: 'Robustness', icon: <Shield className="h-3 w-3" /> },
@@ -1131,16 +1130,6 @@ function BacktestStatsPanel({ signals, backtestResults, dark, selectedIdx }: { s
             </div>
           </div>
         </>
-      ) : activeTab === 'chart' ? (
-        <div style={{ background: C.SURFACE, border: `1px solid ${C.BORDER}`, borderRadius: 4, overflow: 'hidden' }}>
-          {signals[selectedIdx] && (
-            <iframe
-              src={`https://s.tradingview.com/widgetembed/?frameElementId=tradingview&symbol=${encodeURIComponent(signals[selectedIdx].ticker)}&interval=15&theme=dark&style=1&locale=en&toolbar_bg=${C.BG.replace('#','')}&enable_publishing=false&hide_top_toolbar=false&hide_side_toolbar=false&allow_symbol_change=true`}
-              style={{ width: '100%', height: 420, border: 'none' }}
-              title={`${signals[selectedIdx].ticker} chart`}
-            />
-          )}
-        </div>
       ) : null}
     </div>
   )
@@ -1279,6 +1268,7 @@ export default function BacktestPage() {
   const [selectedIdx, setSelectedIdx] = useState(0)
   const [tf, setTf] = useState<Timeframe>('D')
   const [chartMode, setChartMode] = useState<ChartMode>('single')
+  const [viewMode, setViewMode] = useState<'stat' | 'chart'>('stat')
   const [loading, setLoading] = useState(false)
   const [showRunModal, setShowRunModal] = useState(false)
   const [selectedRun, setSelectedRun] = useState<string>('r1')
@@ -2114,8 +2104,37 @@ export default function BacktestPage() {
 
   const renderCenter = () => (
     <div style={{ flex: 1, padding: 12, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <BacktestStatsPanel signals={filteredSignals} backtestResults={backtestResults} dark={dark} selectedIdx={selectedIdx} />
+      {/* ── View toggle ── */}
+      <div className="flex gap-1">
+        <button onClick={() => setViewMode('stat')} style={{
+          padding: '4px 12px', borderRadius: 3, fontSize: 11, fontWeight: 700,
+          background: viewMode === 'stat' ? T.GOLD : T.SURFACE,
+          color: viewMode === 'stat' ? '#000' : T.MUTED,
+          border: `1px solid ${viewMode === 'stat' ? T.GOLD : T.BORDER}`,
+        }}>Stat View</button>
+        <button onClick={() => setViewMode('chart')} style={{
+          padding: '4px 12px', borderRadius: 3, fontSize: 11, fontWeight: 700,
+          background: viewMode === 'chart' ? T.TEAL : T.SURFACE,
+          color: viewMode === 'chart' ? '#000' : T.MUTED,
+          border: `1px solid ${viewMode === 'chart' ? T.TEAL : T.BORDER}`,
+        }}>Chart View</button>
+      </div>
+      {viewMode === 'stat' ? (
+        <>
+          <BacktestStatsPanel signals={filteredSignals} backtestResults={backtestResults} dark={dark} />
+          {renderChartSection()}
+        </>
+      ) : (
+        <>
+          {renderChartSection()}
+          <BacktestStatsPanel signals={filteredSignals} backtestResults={backtestResults} dark={dark} />
+        </>
+      )}
+    </div>
+  )
 
+  const renderChartSection = () => (
+    <>
       {loading ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 60 }}>
           <Loader2 className="h-5 w-5 animate-spin" style={{ color: T.GOLD }} />
@@ -2263,7 +2282,7 @@ export default function BacktestPage() {
           </div>
         </>
       ) : null}
-    </div>
+    </>
   )
 
   return (

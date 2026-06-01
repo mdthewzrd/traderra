@@ -446,3 +446,10 @@ model ProjectEntry {
   @@index([type])
   @@index([createdAt])
 }
+
+
+model BtKV {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

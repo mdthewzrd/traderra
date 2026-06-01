@@ -1292,52 +1292,64 @@ export default function BacktestPage() {
   const [dark, setDark] = useState(true)
   const [dayOffset, setDayOffset] = useState(0)
   const [backtestResults, setBacktestResults] = useState<BacktestResults | null>(null)
-  // ── Persisted state helpers ──
-  const loadLS = <T,>(key: string, fallback: T): T => {
-    if (typeof window === 'undefined') return fallback
-    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback } catch { return fallback }
-  }
-  const saveLS = (key: string, val: any) => { try { localStorage.setItem(key, JSON.stringify(val)) } catch {} }
-
-  const [activeFilters, setActiveFilters] = useState<Set<string>>(() => new Set(loadLS<string[]>('backtest-af', [])))
+  // ── Persisted state: init empty, hydrate from localStorage in useEffect ──
+  const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set())
   const [bars15mCache, setBars15mCache] = useState<Record<string, any[]>>({})
   const [bars15mLoading, setBars15mLoading] = useState(false)
   const [bars1mCache, setBars1mCache] = useState<Record<string, any[]>>({})
   const [bars1mLoading, setBars1mLoading] = useState(false)
   const [tickResults, setTickResults] = useState<Record<string, boolean>>({})
-  const [visibleFilters, setVisibleFilters] = useState<Set<string>>(() => new Set(loadLS<string[]>('backtest-vf', [])))
+  const [visibleFilters, setVisibleFilters] = useState<Set<string>>(new Set())
   const [showFilterMenu, setShowFilterMenu] = useState(false)
-  const [hideFilters, setHideFilters] = useState<Set<string>>(() => new Set(loadLS<string[]>('backtest-hf', [])))
-  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(() => new Set(loadLS<string[]>('backtest-vc', [])))
-  // Route Start marks
-  const [routeStarts, setRouteStarts] = useState<Set<string>>(() => new Set(loadLS<string[]>('backtest-rs', [])))
+  const [hideFilters, setHideFilters] = useState<Set<string>>(new Set())
+  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set())
+  const [routeStarts, setRouteStarts] = useState<Set<string>>(new Set())
+  const DEFAULT_WIDTHS: Record<string, number> = { ticker: 56, date: 68, rs: 44, gap: 44, d0: 40, abs: 40 }
+  const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS)
+
+  // ── Hydrate from localStorage on mount ──
+  useEffect(() => {
+    const load = <T,>(key: string, fallback: T): T => {
+      try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback } catch { return fallback }
+    }
+    setActiveFilters(new Set(load<string[]>('backtest-af', [])))
+    setVisibleFilters(new Set(load<string[]>('backtest-vf', [])))
+    setHideFilters(new Set(load<string[]>('backtest-hf', [])))
+    setVisibleColumns(new Set(load<string[]>('backtest-vc', [])))
+    setRouteStarts(new Set(load<string[]>('backtest-rs', [])))
+    const cw = load<Record<string, number>>('backtest-cw', DEFAULT_WIDTHS)
+    if (cw && Object.keys(cw).length > 0) setColWidths(cw)
+  }, [])
   const toggleRS = (key: string) => {
     setRouteStarts(prev => {
       const next = new Set(prev)
       next.has(key) ? next.delete(key) : next.add(key)
-      saveLS('backtest-rs', [...next])
+      try { localStorage.setItem('backtest-rs', JSON.stringify([...next])) } catch {}
       fetch('/api/backtest/rs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ marks: [...next] }) }).catch(() => {})
       return next
     })
   }
   // ── Sync RS marks to server on load ──
   useEffect(() => {
-    if (routeStarts.size > 0) {
-      fetch('/api/backtest/rs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ marks: [...routeStarts] }) }).catch(() => {})
+    const saved = localStorage.getItem('backtest-rs')
+    if (saved) {
+      try {
+        const marks = JSON.parse(saved)
+        if (marks.length > 0) fetch('/api/backtest/rs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ marks }) }).catch(() => {})
+      } catch {}
     }
   }, [])
   const [showColumnMenu, setShowColumnMenu] = useState(false)
   const T = useThemeColors(dark)
 
   // ── Persist state changes ──
+  const saveLS = (key: string, val: any) => { try { localStorage.setItem(key, JSON.stringify(val)) } catch {} }
   useEffect(() => { saveLS('backtest-af', [...activeFilters]) }, [activeFilters])
   useEffect(() => { saveLS('backtest-vf', [...visibleFilters]) }, [visibleFilters])
   useEffect(() => { saveLS('backtest-hf', [...hideFilters]) }, [hideFilters])
   useEffect(() => { saveLS('backtest-vc', [...visibleColumns]) }, [visibleColumns])
 
   // ── Column resize ──
-  const DEFAULT_WIDTHS: Record<string, number> = { ticker: 56, date: 68, rs: 44, gap: 44, d0: 40, abs: 40 }
-  const [colWidths, setColWidths] = useState<Record<string, number>>(() => loadLS('backtest-cw', DEFAULT_WIDTHS))
   const resizingRef = useRef<{ colId: string; startX: number; startW: number } | null>(null)
   const onResizeStart = (colId: string, e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation()

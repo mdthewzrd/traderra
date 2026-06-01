@@ -2143,7 +2143,7 @@ export default function BacktestPage() {
       ) : sig ? (
         <>
           {/* ── Single toolbar row ── */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap" style={{ position: 'sticky', top: 0, zIndex: 10, background: T.SURFACE, padding: '4px 0' }}>
             {/* Single / Stacked */}
             <div className="flex gap-1">
               <button onClick={() => setChartMode('single')} title="Single chart" style={{

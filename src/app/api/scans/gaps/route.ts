@@ -1,8 +1,5 @@
+import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
-
 // GET /api/scans/gaps?scanId=...&from=...&to=...
 // Returns which trading days in the range have NOT been scanned yet
 export async function GET(request: NextRequest) {

@@ -1,8 +1,6 @@
+import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
 import { getAuthUserId } from '@/lib/auth-helpers'
-
-const prisma = new PrismaClient()
 
 // GET /api/lab/projects — list all projects for current user (or all if no auth)
 export async function GET(request: NextRequest) {

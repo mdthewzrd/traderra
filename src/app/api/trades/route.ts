@@ -1,9 +1,7 @@
+import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { getAuthUserId } from '@/lib/auth-helpers'
-import { PrismaClient } from '@prisma/client'
 import { TraderraTrade } from '@/utils/csv-parser'
-
-const prisma = new PrismaClient()
 
 // Force recompilation - debugging statistics dashboard data issue - update
 

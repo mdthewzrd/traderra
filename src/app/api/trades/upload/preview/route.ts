@@ -1,9 +1,7 @@
+import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { PrismaClient } from '@prisma/client'
 import { detectBrokerFormat, parseCSV, convertTraderVueToTraderra, parseDASCSV, convertDASToTraderra, type TraderraTrade } from '@/utils/csv-parser'
-
-const prisma = new PrismaClient()
 
 /**
  * POST /api/trades/upload/preview

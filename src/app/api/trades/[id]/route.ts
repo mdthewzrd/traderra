@@ -1,9 +1,6 @@
+import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
-
 // DELETE /api/trades/[id] - Delete a specific trade
 export async function DELETE(
   request: NextRequest,

@@ -1,8 +1,5 @@
+import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
-
 // POST /api/scans/cache — upsert signals into the cache after a scan run
 // Body: { scanId, signals[], scannedDates?, runLabel? }
 // Creates a ScanRun record automatically

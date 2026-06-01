@@ -1,10 +1,7 @@
+import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { createHash } from 'crypto'
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
-
 /**
  * Generate a hash from trade data for duplicate detection
  */

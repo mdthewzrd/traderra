@@ -1,8 +1,5 @@
+import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
-
 // GET /api/scans/[id]/signals — get cached signals with optional date filter
 export async function GET(
   request: NextRequest,

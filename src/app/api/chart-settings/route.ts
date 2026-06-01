@@ -1,9 +1,6 @@
+import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUserId } from '@/lib/auth-helpers'
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
-
 // GET /api/chart-settings — load saved chart settings
 export async function GET(request: NextRequest) {
   try {

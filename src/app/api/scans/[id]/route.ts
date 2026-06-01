@@ -1,8 +1,5 @@
+import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
-
 // GET /api/scans/[id] — get full scan including results + code
 export async function GET(
   _request: NextRequest,

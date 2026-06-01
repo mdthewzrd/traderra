@@ -278,12 +278,12 @@ const FILTERS: FilterDef[] = [
       return morningHigh >= bandLevel
     }
   },
-  // ── Real Volume: 1m bars confirm the push wasn't a fake print ──
+  // ── Real Volume: multi-factor fake print detection using 1m bars ──
   { key: 'pushReal', label: 'Real Volume', shortLabel: 'REAL', needsBars: 'both',
-    description: '1m bars show real volume at the push level (not a fake print)',
+    description: '1m bars confirm real volume at push level with 4 checks: volume, close, body size, price retention',
     compute: (s, bars15m, bars1m) => {
       if (!bars15m || !bars1m) return false
-      // ── Step 1: Find push level from 15m bars (same as PUSH filter) ──
+      // ── Step 1: Find push level from 15m morning bars ──
       const morning15 = bars15m.filter(b => {
         const h = new Date(b.time * 1000).getUTCHours()
         const m = new Date(b.time * 1000).getUTCMinutes()
@@ -291,34 +291,66 @@ const FILTERS: FilterDef[] = [
         return mins >= 750 && mins < 1020
       })
       if (morning15.length < 3) return false
-      const lastEmaBar = morning15[0]
-      const k9 = 2 / (9 + 1)
-      let lastEma = lastEmaBar.close
       const morningHigh = Math.max(...morning15.map(b => b.high))
       const morningLow = Math.min(...morning15.map(b => b.low))
-      const ext = morningHigh - lastEma
+      // Extension check (same as PUSH)
+      const closes15 = morning15.map(b => b.close)
+      const ema9: number[] = [closes15[0]]
+      const k9 = 2 / (9 + 1)
+      for (let i = 1; i < closes15.length; i++) ema9.push(closes15[i] * k9 + ema9[i - 1] * (1 - k9))
+      const lastEma = ema9[ema9.length - 1]
       const atrProxy = s.high - s.low
-      const extNormalized = atrProxy > 0 ? ext / atrProxy : 0
-      if (extNormalized < 0.5) return false // no push to validate
+      const extNorm = atrProxy > 0 ? (morningHigh - lastEma) / atrProxy : 0
+      if (extNorm < 0.5) return false // no push to validate
       // ── Step 2: Get 1m morning bars ──
       const morning1m = bars1m.filter(b => {
         const h = new Date(b.time * 1000).getUTCHours()
         const m = new Date(b.time * 1000).getUTCMinutes()
         const mins = h * 60 + m
         return mins >= 750 && mins < 1020
-      })
+      }).sort((a, b) => a.time - b.time)
       if (morning1m.length < 5) return false
-      // ── Step 3: Find 1m bars that reached near the push level ──
-      // The push level = the morning high. Find 1m bars within 0.1% of it.
+      // ── Step 3: Find 1m bars near the push high ──
       const pushLevel = morningHigh
-      const tolerance = pushLevel * 0.001
+      const tolerance = pushLevel * 0.002 // within 0.2% of push high
       const barsAtPush = morning1m.filter(b => b.high >= pushLevel - tolerance)
-      if (barsAtPush.length === 0) return false // 15m high not confirmed on 1m = fake
-      // ── Step 4: Volume check ──
+      if (barsAtPush.length === 0) return false // 15m high not confirmed on 1m = instant fake
+      // ── CHECK 1: Volume Concentration ──
+      // Real pushes have volume at the push level >= 2x the average 1m bar volume
+      // (the "emotional intensity" test — genuine buying concentrates volume at breakout)
       const avgVol = morning1m.reduce((sum, b) => sum + (b.volume || 0), 0) / morning1m.length
       const pushVol = barsAtPush.reduce((sum, b) => sum + (b.volume || 0), 0)
-      // Real = volume at push level >= 20% of what an average bar contributes
-      return avgVol > 0 ? pushVol >= avgVol * 0.2 : pushVol > 0
+      const volRatio = avgVol > 0 ? pushVol / (avgVol * barsAtPush.length) : 0
+      const passesVol = volRatio >= 1.5 // push bars have 1.5x+ average concentration
+      // ── CHECK 2: Close Position (body vs wick) ──
+      // Real buying: bars at push close in upper 50% of their range (body near high, not wick)
+      const closeScores = barsAtPush.map(b => {
+        const range = b.high - b.low
+        return range > 0 ? (b.close - b.low) / range : 0.5
+      })
+      const avgCloseScore = closeScores.reduce((a, b) => a + b, 0) / closeScores.length
+      const passesClose = avgCloseScore >= 0.45 // average close position >= 45% of range
+      // ── CHECK 3: Body-to-ATR ratio ──
+      // Real pushes have 1m bodies (|close - open|) that are meaningful vs average range
+      const avgRange = morning1m.reduce((sum, b) => sum + (b.high - b.low), 0) / morning1m.length
+      const avgBodyAtPush = barsAtPush.reduce((sum, b) => sum + Math.abs(b.close - b.open), 0) / barsAtPush.length
+      const bodyRatio = avgRange > 0 ? avgBodyAtPush / avgRange : 0
+      const passesBody = bodyRatio >= 0.4 // body is at least 40% of avg bar range
+      // ── CHECK 4: Price Retention ──
+      // After the push high, do subsequent bars hold above the push midpoint?
+      // Fake prints: price immediately reverses. Real: buying sustains.
+      const pushBarIdx = morning1m.findIndex(b => b.high >= pushLevel - tolerance)
+      const holdBars = morning1m.slice(pushBarIdx + 1, Math.min(pushBarIdx + 5, morning1m.length))
+      let passesRetention = true
+      if (holdBars.length >= 2) {
+        const pushMid = (pushLevel + morningLow) / 2
+        const holding = holdBars.filter(b => b.low > pushMid).length
+        passesRetention = holding >= Math.ceil(holdBars.length * 0.5) // majority hold above midpoint
+      }
+      // ── VERDICT: need at least 3 of 4 checks ──
+      const checks = [passesVol, passesClose, passesBody, passesRetention]
+      const passCount = checks.filter(Boolean).length
+      return passCount >= 3
     }
   },
 ]

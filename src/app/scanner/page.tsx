@@ -1766,70 +1766,7 @@ export default function ScanDashboardPage() {
       </div>
 
       {/* Run Modal */}
-      {showRunModal && <RunModal scan={activeScan} onClose={() => setShowRunModal(false)} onRun={async (range, filters) => {
-        if (!activeScan) return
-        let from: Date, to: Date
-        if (range.startsWith('custom:')) {
-          const parts = range.split(':')
-          from = new Date(parts[1])
-          to = new Date(parts[2])
-        } else {
-          const days = parseInt(range)
-          to = new Date()
-          from = new Date(to.getTime() - days * 86400000)
-        }
-        // Base spec name
-        let specName = BUILTIN_SPEC_MAP[activeScan.id] || activeScan.name.toLowerCase().replace(/\s+/g, '-')
-        // If AM Push filter is active, use the push variant
-        if (filters.includes('am-push') && specName === 'backside-b') {
-          specName = 'backside-b-push'
-        }
-        const runTags = filters.length > 0 ? [...filters] : ['plain']
-        try {
-          const res = await fetch('/api/scans/run', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              spec: specName,
-              from: from.toISOString().slice(0, 10),
-              to: to.toISOString().slice(0, 10),
-            }),
-          })
-          const data = await res.json()
-          if (data.error) {
-            alert(`Error: ${data.error}`)
-          } else {
-            const newSignals = (data.signals || []).map((s: any) => ({
-              ...s,
-              ticker: s.ticker || s.symbol || '',
-              symbol: s.ticker || s.symbol || '',
-            }))
-            setSignals(newSignals)
-            setSelectedIdx(0)
-            setDayOffset(0)
-            // Save run to DB with tags
-            try {
-              await fetch('/api/scans', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  name: `${activeScan.name} ${from.toISOString().slice(0, 10)} — ${to.toISOString().slice(0, 10)}`,
-                  strategy: BUILTIN_SPEC_MAP[activeScan.id] || activeScan.name.toLowerCase().replace(/\s+/g, '-'),  // always the base strategy so runs group under the parent scan
-                  type: 'builtin',
-                  tags: runTags,
-                  results: newSignals,
-                  dateRange: JSON.stringify({ from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) }),
-                }),
-              })
-            } catch {}
-            // Refresh scans from DB to pick up the new run
-            setScans(prev => prev.map(s => s.id === activeScan.id ? { ...s, resultCount: newSignals.length } : s))
-          }
-        } catch (err: any) {
-          alert(`Failed: ${err.message}`)
-        }
-        setShowRunModal(false)
-      }} />}
+      {showRunModal && <RunModal scan={activeScan} onClose={() => setShowRunModal(false)} />}
     </div>
   )
 }

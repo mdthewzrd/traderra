@@ -135,23 +135,103 @@ export function calcVWAP(data: CalcBar[], intraday: boolean): (number | null)[] 
 }
 
 /**
- * Trail Stop - EMA + ATR * mult.
- * Simple stop level for visualization. Ratchet logic will be added
- * when route start anchoring is implemented.
+ * Trail Stop (short) \u2014 swing-structure trailing stop.
+ *
+ * After EMA(fast) crosses below EMA(slow), starts at the highest high
+ * from the prior bullish period. Then stair-steps down:
+ * - Trail sits at a swing high (flat line)
+ * - When a lower swing high forms, it becomes the "pending" next level
+ * - Trail only steps down when the swing low between current and pending breaks
+ * - Never steps back up
  */
 export function calcTrailStop(
   data: CalcBar[],
-  ema: (number | null)[],
-  atr: (number | null)[],
-  mult: number,
+  emaFast: (number | null)[],
+  emaSlow: (number | null)[],
+  lookback: number = 5,
 ): (number | null)[] {
-  const out: (number | null)[] = []
-  for (let i = 0; i < data.length; i++) {
-    if (ema[i] == null || atr[i] == null) { out.push(null); continue }
-    out.push(ema[i]! + atr[i]! * mult)
+  const n = data.length
+  const out: (number | null)[] = new Array(n).fill(null)
+
+  function isSwHigh(i: number): boolean {
+    if (i < lookback || i >= n - lookback) return false
+    const h = data[i].high
+    for (let j = i - lookback; j <= i + lookback; j++) {
+      if (j !== i && data[j].high >= h) return false
+    }
+    return true
   }
+  function isSwLow(i: number): boolean {
+    if (i < lookback || i >= n - lookback) return false
+    const l = data[i].low
+    for (let j = i - lookback; j <= i + lookback; j++) {
+      if (j !== i && data[j].low <= l) return false
+    }
+    return true
+  }
+
+  let trailActive = false
+  let trailLevel = 0
+  let pendingSwHigh = 0
+  let triggerSwLow = Infinity
+
+  for (let i = 1; i < n; i++) {
+    if (emaFast[i] == null || emaSlow[i] == null) continue
+
+    const fast = emaFast[i]!
+    const slow = emaSlow[i]!
+    const pf = emaFast[i - 1]
+    const ps = emaSlow[i - 1]
+
+    // Bearish crossover: fast crosses below slow
+    if (pf != null && ps != null && pf >= ps && fast < slow) {
+      trailActive = true
+      let hh = data[i].high
+      for (let j = i - 1; j >= 0; j--) {
+        if (emaFast[j] == null || emaSlow[j] == null) break
+        if (emaFast[j]! < emaSlow[j]!) break
+        hh = Math.max(hh, data[j].high)
+      }
+      trailLevel = hh
+      pendingSwHigh = 0
+      triggerSwLow = Infinity
+    }
+
+    // Bullish crossover: reset
+    if (pf != null && ps != null && pf <= ps && fast > slow) {
+      trailActive = false
+    }
+
+    if (!trailActive) continue
+
+    // Confirmed swing detection at bar (i - lookback)
+    const ci = i - lookback
+    if (ci >= lookback) {
+      if (isSwHigh(ci)) {
+        const sh = data[ci].high
+        if (sh < trailLevel) {
+          pendingSwHigh = sh
+          triggerSwLow = Infinity
+        }
+      }
+      if (isSwLow(ci)) {
+        triggerSwLow = Math.min(triggerSwLow, data[ci].low)
+      }
+    }
+
+    // Swing low broken -> step down to pending swing high
+    if (pendingSwHigh > 0 && triggerSwLow < Infinity && data[i].close < triggerSwLow) {
+      trailLevel = pendingSwHigh
+      pendingSwHigh = 0
+      triggerSwLow = Infinity
+    }
+
+    out[i] = trailLevel
+  }
+
   return out
 }
+
 
 /**
  * Cached indicator computation.
@@ -231,7 +311,7 @@ export function computeIndicators(
   }
 
   // ATR deps
-  if (inds.db_upper || inds.dev_s_9_20 || inds.dev_l_9_20 || inds.trail_stop) ensureATR(9)
+  if (inds.db_upper || inds.dev_s_9_20 || inds.dev_l_9_20) ensureATR(9)
   if (inds.db_low1 || inds.db_low2 || inds.dev_s_9_20 || inds.dev_l_9_20) ensureATR(20)
   if (inds.db_72_89) { ensureATR(72); ensureATR(89) }
 
@@ -257,15 +337,15 @@ export function computeIndicators(
     cache.volSma = calcVolSMA(data, vt?.params?.period ?? 20)
   }
 
-  // Trail Stop — ratcheting short trailing stop
+  // Trail Stop — swing-structure trailing stop
   if (inds.trail_stop) {
     const tsTool = toolMap['trail_stop']
-    const emaPeriod = tsTool?.params?.ema ?? 9
-    const atrPeriod = tsTool?.params?.atr ?? 9
-    const mult = tsTool?.params?.mult ?? 1.5
-    ensureEMA(emaPeriod)
-    ensureATR(atrPeriod)
-    cache.trailStop = calcTrailStop(data, cache.ema[emaPeriod]!, cache.atr[atrPeriod]!, mult)
+    const fastPeriod = tsTool?.params?.fast ?? 9
+    const slowPeriod = tsTool?.params?.slow ?? 20
+    const lookback = tsTool?.params?.lookback ?? 5
+    ensureEMA(fastPeriod)
+    ensureEMA(slowPeriod)
+    cache.trailStop = calcTrailStop(data, cache.ema[fastPeriod]!, cache.ema[slowPeriod]!, lookback)
   }
 
   return cache

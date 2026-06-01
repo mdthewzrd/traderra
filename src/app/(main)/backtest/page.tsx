@@ -1705,13 +1705,14 @@ export default function BacktestPage() {
     fetch('/api/scans')
       .then(r => r.json())
       .then(data => {
-        // Workshop page: only show the main Backside B scan
-        const list = (data.scans || []).filter((s: ScanDef) => s.id === 'cmpsmjxn20000ju04vg9pzyzb')
-        if (list.length === 0) {
-          // Fallback: any scan with >30 results
-          const fallback = (data.scans || []).filter((s: ScanDef) => s.resultCount > 30)
-          list.push(...fallback)
+        // Show best scan per strategy (most results), so partial re-runs don't clutter
+        const all = (data.scans || []) as ScanDef[]
+        const byStrategy = new Map<string, ScanDef>()
+        for (const s of all) {
+          const existing = byStrategy.get(s.strategy)
+          if (!existing || s.resultCount > existing.resultCount) byStrategy.set(s.strategy, s)
         }
+        const list = [...byStrategy.values()].filter(s => s.resultCount > 0)
         setScans(list)
         // Auto-select the main Backside B scan (has the most results)
         const mainScan = list.find((s: ScanDef) => s.id === 'cmpsmjxn20000ju04vg9pzyzb')
@@ -1779,7 +1780,7 @@ export default function BacktestPage() {
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {scans.filter(s => s.resultCount > 0).map(scan => {
+          {scans.map(scan => {
             const isActive = scan.id === selectedScan
             return (
               <button key={scan.id} onClick={() => setSelectedScan(scan.id)} style={{

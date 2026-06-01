@@ -1232,14 +1232,19 @@ export default function ScanDashboardPage() {
         .then(r => r.json())
         .then(data => {
           const dbScans: any[] = data.scans || []
-          // Check if any pending spec has new results
+          const byStrat: Record<string, any[]> = {}
+          dbScans.forEach((s: any) => { (byStrat[s.strategy] = byStrat[s.strategy] || []).push(s) })
+
           let changed = false
-          for (const spec of pendingRuns) {
-            const match = dbScans.find((s: any) => s.strategy === spec)
-            if (match && match.resultCount > 0) {
-              // Found results — load them
+          for (const spec of [...pendingRuns]) {
+            const matches = byStrat[spec] || []
+            // Find a NEW run (ID we haven't seen before)
+            const newRun = matches.find((m: any) => !knownRunIdsRef.current.has(m.id))
+            if (newRun) {
+              knownRunIdsRef.current.add(newRun.id)
               setPendingRuns(prev => prev.filter(p => p !== spec))
-              fetch(`/api/scans/${match.id}`).then(r => r.json()).then(d => {
+              // Load the new run's signals
+              fetch(`/api/scans/${newRun.id}`).then(r => r.json()).then(d => {
                 if (d.signals) {
                   setSignals(d.signals.map((s: any) => ({ ...s, ticker: s.ticker || s.symbol || '', symbol: s.ticker || s.symbol || '' })))
                   setSelectedIdx(0)
@@ -1249,10 +1254,8 @@ export default function ScanDashboardPage() {
               changed = true
             }
           }
-          // Also refresh the scans list
+          // Refresh scans list with new runs
           if (changed) {
-            const byStrat: Record<string, any[]> = {}
-            dbScans.forEach((s: any) => { (byStrat[s.strategy] = byStrat[s.strategy] || []).push(s) })
             const freshScans = BUILTIN_SCANS.map(builtin => {
               const matches = byStrat[BUILTIN_SPEC_MAP[builtin.id]] || []
               const totalSig = matches.reduce((a: number, s: any) => a + (s.resultCount || 0), 0)

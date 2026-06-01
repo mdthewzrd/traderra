@@ -8,7 +8,7 @@ import {
   ArrowUpRight, Hash, DollarSign, Target, Layers,
   Clock, TrendingDown, Minus, Play, Rows3,
   LayoutGrid, X, Settings2, Save, Sun, Moon, Shield,
-  MessageSquare, Send
+  MessageSquare, Send, Columns3
 } from 'lucide-react'
 
 // ─── Types ──────────────────────────────────────────────
@@ -98,7 +98,70 @@ interface ChartSettings {
   showLegend: boolean
 }
 
-// ─── Filter Definitions ──────────────────────────
+interface DataColumnDef {
+  key: string
+  label: string
+  shortLabel: string
+  description: string
+  needsBars?: '15m' | '1m' | 'both'
+  compute: (s: Signal, bars15m?: any[], bars1m?: any[]) => string
+}
+
+const DATA_COLUMNS: DataColumnDef[] = [
+  { key: 'pushTime', label: 'Push High Time', shortLabel: 'P.TIME', needsBars: '15m',
+    description: 'Time of the highest push during morning (ET)',
+    compute: (s, bars15m) => {
+      if (!bars15m) return '-'
+      const morningBars = bars15m.filter(b => {
+        const h = new Date(b.time * 1000).getUTCHours()
+        const m = new Date(b.time * 1000).getUTCMinutes()
+        const mins = h * 60 + m
+        return mins >= 690 && mins < 960
+      })
+      if (morningBars.length < 3) return '-'
+      // Find bar with highest high
+      let bestBar = morningBars[0]
+      for (const b of morningBars) if (b.high > bestBar.high) bestBar = b
+      const d = new Date(bestBar.time * 1000)
+      const etH = (d.getUTCHours() - 5 + 24) % 12 || 12
+      const etM = d.getUTCMinutes()
+      const ampm = ((d.getUTCHours() - 5 + 24) % 24) < 12 ? 'a' : 'p'
+      return `${etH}:${String(etM).padStart(2, '0')}${ampm}`
+    }
+  },
+  { key: 'pushLevel', label: 'Push High Price', shortLabel: 'P.HI', needsBars: '15m',
+    description: 'Price of the highest morning push',
+    compute: (s, bars15m) => {
+      if (!bars15m) return '-'
+      const morningBars = bars15m.filter(b => {
+        const h = new Date(b.time * 1000).getUTCHours()
+        const m = new Date(b.time * 1000).getUTCMinutes()
+        const mins = h * 60 + m
+        return mins >= 690 && mins < 960
+      })
+      if (morningBars.length < 3) return '-'
+      const hi = Math.max(...morningBars.map(b => b.high))
+      return hi.toFixed(2)
+    }
+  },
+  { key: 'openTime', label: 'Open Direction', shortLabel: 'O.DIR', needsBars: '15m',
+    description: 'First 15m bar direction (gap up = UP, gap down = DN)',
+    compute: (s, bars15m) => {
+      if (!bars15m) return '-'
+      const morningBars = bars15m.filter(b => {
+        const h = new Date(b.time * 1000).getUTCHours()
+        const m = new Date(b.time * 1000).getUTCMinutes()
+        const mins = h * 60 + m
+        return mins >= 690 && mins < 960
+      })
+      if (morningBars.length === 0) return '-'
+      const first = morningBars[0]
+      return first.close >= first.open ? 'UP' : 'DN'
+    }
+  },
+]
+
+
 interface FilterDef {
   key: string
   label: string
@@ -1244,7 +1307,24 @@ export default function BacktestPage() {
   const [bars1mLoading, setBars1mLoading] = useState(false)
   const [visibleFilters, setVisibleFilters] = useState<Set<string>>(new Set())
   const [showFilterMenu, setShowFilterMenu] = useState(false)
+  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set())
+  const [showColumnMenu, setShowColumnMenu] = useState(false)
   const T = useThemeColors(dark)
+
+  // ── Data column values ──
+  const dataColumnResults = useMemo(() => {
+    const results: Record<string, string[]> = {}
+    DATA_COLUMNS.forEach(col => {
+      results[col.key] = signals.map(s => {
+        const ck = `${s.ticker}-${s.date}`
+        if (col.needsBars === '15m') return col.compute(s, bars15mCache[ck])
+        if (col.needsBars === '1m') return col.compute(s, undefined, bars1mCache[ck])
+        if (col.needsBars === 'both') return col.compute(s, bars15mCache[ck], bars1mCache[ck])
+        return col.compute(s)
+      })
+    })
+    return results
+  }, [signals, bars15mCache, bars1mCache])
 
   // ── Compute filter results for all signals (instant for daily, lazy for intraday) ──
   const filterResults = useMemo(() => {
@@ -1267,6 +1347,9 @@ export default function BacktestPage() {
     const needs15m = Array.from(allKeys).some(k => {
       const f = FILTERS.find(x => x.key === k)
       return f?.needsBars === '15m' || f?.needsBars === 'both'
+    }) || Array.from(visibleColumns).some(k => {
+      const c = DATA_COLUMNS.find(x => x.key === k)
+      return c?.needsBars === '15m' || c?.needsBars === 'both'
     })
     if (!needs15m || !signals.length) return
     const toFetch = signals.filter(s => !bars15mCache[`${s.ticker}-${s.date}`])
@@ -1304,6 +1387,9 @@ export default function BacktestPage() {
     const needs1m = Array.from(allKeys).some(k => {
       const f = FILTERS.find(x => x.key === k)
       return f?.needsBars === '1m' || f?.needsBars === 'both'
+    }) || Array.from(visibleColumns).some(k => {
+      const c = DATA_COLUMNS.find(x => x.key === k)
+      return c?.needsBars === '1m' || c?.needsBars === 'both'
     })
     if (!needs1m || !signals.length) return
     const toFetch = signals.filter(s => !bars1mCache[`${s.ticker}-${s.date}`])
@@ -1639,6 +1725,59 @@ export default function BacktestPage() {
           <span style={{ color: T.GOLD, fontSize: 10, fontWeight: 700 }}>SIGNALS</span>
           <div className="flex items-center gap-2">
             <span style={{ color: T.MUTED, fontSize: 9 }}>{filteredSignals.length}/{signals.length}</span>
+            {/* Add Column dropdown */}
+            <div style={{ position: 'relative' }}>
+              <button onClick={() => setShowColumnMenu(!showColumnMenu)} style={{
+                display: 'flex', alignItems: 'center', gap: 3,
+                padding: '2px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600,
+                background: showColumnMenu ? T.GOLD : T.SURFACE,
+                color: showColumnMenu ? '#000' : T.MUTED,
+                border: `1px solid ${showColumnMenu ? T.GOLD : T.BORDER}`,
+                cursor: 'pointer',
+              }}>
+                <Columns3 className="h-3 w-3" />+ Col
+              </button>
+              {showColumnMenu && <div onClick={() => setShowColumnMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />}
+              {showColumnMenu && (() => {
+                return (
+                <div style={{
+                  position: 'fixed', right: 100, top: 48, zIndex: 100,
+                  width: 260, background: T.SURFACE, border: `1px solid ${T.BORDER}`,
+                  borderRadius: 4, boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+                  maxHeight: 320, overflowY: 'auto',
+                }}>
+                  <div style={{ padding: '6px 8px', borderBottom: `1px solid ${T.BORDER}` }}>
+                    <span style={{ color: T.GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Data Columns</span>
+                  </div>
+                  {DATA_COLUMNS.map(col => {
+                    const vis = visibleColumns.has(col.key)
+                    return (
+                      <button key={col.key} onClick={() => {
+                        const next = new Set(visibleColumns)
+                        vis ? next.delete(col.key) : next.add(col.key)
+                        setVisibleColumns(next)
+                        setShowColumnMenu(false)
+                      }} style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        width: '100%', padding: '6px 10px', border: 'none', cursor: 'pointer',
+                        background: vis ? `${T.GOLD}15` : 'transparent',
+                        borderBottom: `1px solid ${T.BORDER}`, textAlign: 'left',
+                      }}>
+                        <div style={{ width: 14, height: 14, borderRadius: 3, border: `2px solid ${vis ? T.GOLD : T.BORDER}`, background: vis ? T.GOLD : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          {vis && <span style={{ color: '#000', fontSize: 10, fontWeight: 700 }}>\u2713</span>}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ color: vis ? T.TEXT : T.MUTED, fontSize: 10, fontWeight: 600 }}>{col.shortLabel} \u2014 {col.label}</div>
+                          <div style={{ color: T.MUTED, fontSize: 8 }}>{col.description}</div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                  <div style={{ padding: '6px 8px', color: T.MUTED, fontSize: 7, borderTop: `1px solid ${T.BORDER}` }}>Click column header to remove</div>
+                </div>
+                )
+              })()}
+            </div>
             {/* Add Filter dropdown */}
             <div style={{ position: 'relative' }}>
               <button data-filter-btn onClick={() => setShowFilterMenu(!showFilterMenu)} style={{
@@ -1720,36 +1859,33 @@ export default function BacktestPage() {
                 {/* ── Dynamic filter columns: 3-state header click ── */}
                 {activeFilterDefs.map(f => {
                   const isFiltering = activeFilters.has(f.key)
-                  // State: show ✓ only (teal outline) → filtering (teal solid) → click removes column
                   const count = filterCounts[f.key] || 0
-                  // Color: gray if just showing, teal solid if filtering
                   const bg = isFiltering ? T.TEAL : `${T.TEAL}25`
                   const fg = isFiltering ? '#000' : T.TEAL
                   return (
-                    <th key={f.key} title={`${f.description}\n${count}/${signals.length} pass\n\nClick: show → filter → remove`}
+                    <th key={f.key} title={`${f.description}\n${count}/${signals.length} pass\n\nClick: show \u2192 filter \u2192 remove`}
                       onClick={() => {
                         if (!isFiltering) {
-                          // SHOW → FILTER: activate the filter
                           setActiveFilters(new Set([...activeFilters, f.key]))
                         } else {
-                          // FILTER → OFF: remove column entirely
                           const nv = new Set(visibleFilters); nv.delete(f.key); setVisibleFilters(nv)
                           const na = new Set(activeFilters); na.delete(f.key); setActiveFilters(na)
                         }
                       }}
-                      style={{
-                        padding: '4px 4px', textAlign: 'center', cursor: 'pointer',
-                        color: fg, fontSize: 7, fontWeight: 700,
-                        textTransform: 'uppercase', letterSpacing: 0.5,
-                        background: bg,
-                        borderLeft: `1px solid ${T.BORDER}`,
-                        minWidth: 30,
-                      }}>
+                      style={{ padding: '4px 4px', textAlign: 'center', cursor: 'pointer', color: fg, fontSize: 7, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, background: bg, borderLeft: `1px solid ${T.BORDER}`, minWidth: 30 }}>
                       <div>{f.shortLabel}</div>
                       <div style={{ fontSize: 7, fontWeight: 400, opacity: 0.7 }}>{count}</div>
                     </th>
                   )
                 })}
+                {/* ── Data columns ── */}
+                {DATA_COLUMNS.filter(c => visibleColumns.has(c.key)).map(col => (
+                  <th key={col.key} title={`${col.description}\nClick to remove`} onClick={() => {
+                    const next = new Set(visibleColumns); next.delete(col.key); setVisibleColumns(next)
+                  }} style={{ padding: '4px 4px', textAlign: 'center', cursor: 'pointer', color: T.GOLD, fontSize: 7, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, background: `${T.GOLD}15`, borderLeft: `1px solid ${T.BORDER}`, minWidth: 38 }}>
+                    {col.shortLabel}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -1777,9 +1913,18 @@ export default function BacktestPage() {
                           borderLeft: `1px solid ${T.BORDER}`,
                           color: passes ? T.TEAL : T.RED,
                           fontSize: 10, fontWeight: 700,
-                        }}>{passes ? '✓' : ''}</td>
+                        }}>{passes ? '\u2713' : ''}</td>
                       )
                     })}
+                    {/* Data column cells */}
+                    {DATA_COLUMNS.filter(c => visibleColumns.has(c.key)).map(col => (
+                      <td key={col.key} style={{
+                        padding: '3px 4px', textAlign: 'center',
+                        borderLeft: `1px solid ${T.BORDER}`,
+                        color: T.GOLD, fontSize: 9, fontWeight: 600,
+                        fontVariantNumeric: 'tabular-nums',
+                      }}>{dataColumnResults[col.key]?.[i] || '-'}</td>
+                    ))}
                   </tr>
                 )
               })}

@@ -365,7 +365,8 @@ function barETDate(b: any): string {
       return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' })
         .format(new Date(b.time * 1000))
     } catch {
-      return new Date(b.time * 1000 - 5 * 3600000).toISOString().slice(0, 10)
+      const d = new Date(b.time * 1000 - 5 * 3600000)
+      return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
     }
   }
   return ''
@@ -418,7 +419,7 @@ function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffs
     params.set('to', toStr)
     fetch(`/api/chart-data/bars?${params}`)
       .then(r => { if (!r.ok) throw new Error(`Bars API ${r.status}`); return r.json() })
-      .then(data => { setAllBars(data.bars || []); setLoading(false) })
+      .then(data => { setAllBars((data.bars || []).filter((b: any) => b.time != null)); setLoading(false) })
       .catch(() => { setAllBars([]); setLoading(false) })
   }, [symbol, tf, date, dayOffset])
 
@@ -741,11 +742,13 @@ function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffs
         let cumVP = 0, cumV = 0, lastMktDay: string | null = null
         const vwapVals: number[] = []
         for (let i = 0; i < bars.length; i++) {
+          // Skip bars with invalid timestamps
+          if (!bars[i].time || typeof bars[i].time !== 'number') { vwapVals.push(NaN); continue }
           // Determine market day in ET (bars after 7pm UTC belong to prev day)
-          const ts = (bars[i].time || 0) * 1000
+          const ts = bars[i].time * 1000
           const utcH = new Date(ts).getUTCHours()
           const etDate = new Date(ts - (utcH < 5 ? 86400000 : 0))
-          const mktDay = etDate.toISOString().slice(0, 10)
+          const mktDay = isNaN(etDate.getTime()) ? '' : etDate.toISOString().slice(0, 10)
           if (mktDay !== lastMktDay) { cumVP = 0; cumV = 0; lastMktDay = mktDay }
           const typical = (bars[i].high + bars[i].low + bars[i].close) / 3
           cumVP += typical * (bars[i].volume || 0)

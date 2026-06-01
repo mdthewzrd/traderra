@@ -1320,6 +1320,12 @@ export default function BacktestPage() {
       return next
     })
   }
+  // ── Sync RS marks to server on load ──
+  useEffect(() => {
+    if (routeStarts.size > 0) {
+      fetch('/api/backtest/rs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ marks: [...routeStarts] }) }).catch(() => {})
+    }
+  }, [])
   const [showColumnMenu, setShowColumnMenu] = useState(false)
   const T = useThemeColors(dark)
 

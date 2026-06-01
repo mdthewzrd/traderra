@@ -1101,7 +1101,6 @@ export default function ScanDashboardPage() {
     setSelectedRun('')
   }, [selectedScan])
 
-  const sig = signals[selectedIdx] as Signal | undefined
   const activeScan = scans.find(s => s.id === selectedScan)
 
   // ── Sorted signals for table ──
@@ -1128,6 +1127,8 @@ export default function ScanDashboardPage() {
     return sorted
   }, [signals, sortCol, sortDir])
 
+  const sig = sortedSignals[selectedIdx] as Signal | undefined
+
   const toggleSort = (col: string) => {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortCol(col); setSortDir('desc') }
@@ -1149,12 +1150,12 @@ export default function ScanDashboardPage() {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
       if (e.key === 'ArrowLeft') { e.preventDefault(); setDayOffset(d => Math.max(0, d - 1)) }
       if (e.key === 'ArrowRight') { e.preventDefault(); setDayOffset(d => d + 1) }
-      if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedIdx(Math.max(0, selectedIdx - 1)); setDayOffset(0) }
-      if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedIdx(Math.min(signals.length - 1, selectedIdx + 1)); setDayOffset(0) }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedIdx(prev => Math.max(0, prev - 1)); setDayOffset(0) }
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedIdx(prev => Math.min(signals.length - 1, prev + 1)); setDayOffset(0) }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [selectedIdx, signals.length])
+  }, [signals.length])
 
   // ── Filtered signals for backtest mode ──
   const filteredSignals = useMemo(() => {
@@ -1524,12 +1525,11 @@ export default function ScanDashboardPage() {
             </thead>
             <tbody>
               {sortedSignals.map((s, i) => {
-                const realIdx = signals.indexOf(s)
-                const isActive = realIdx === selectedIdx
+                const isActive = i === selectedIdx
                 const d0chg = ((s.close - s.open) / s.open * 100)
                 const rng = ((s.high - s.low) / s.open * 100)
                 return (
-                  <tr ref={isActive ? activeRowRef : undefined} key={`${s.ticker}-${s.date}`} onClick={() => { setSelectedIdx(realIdx); setDayOffset(0) }} style={{ cursor: 'pointer', background: isActive ? T.GOLD_DIM : 'transparent' }}
+                  <tr ref={isActive ? activeRowRef : undefined} key={`${s.ticker}-${s.date}`} onClick={() => { setSelectedIdx(i); setDayOffset(0) }} style={{ cursor: 'pointer', background: isActive ? T.GOLD_DIM : 'transparent' }}
                     onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
                     onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
                   >
@@ -1686,11 +1686,11 @@ export default function ScanDashboardPage() {
 
             {/* Ticker */}
             <span style={{ color: GOLD, fontSize: 16, fontWeight: 800 }}>{sig.ticker}</span>
-            <span style={{ color: T.MUTED, fontSize: 10 }}>{selectedIdx + 1}/{signals.length}</span>
+            <span style={{ color: T.MUTED, fontSize: 10 }}>{selectedIdx + 1}/{sortedSignals.length}</span>
 
             {/* ↑↓ signal list nav */}
-            <button onClick={() => { setSelectedIdx(Math.max(0, selectedIdx - 1)); setDayOffset(0) }} style={dateBtnStyle(GOLD)} title="Previous signal in list">▲</button>
-            <button onClick={() => { setSelectedIdx(Math.min(signals.length - 1, selectedIdx + 1)); setDayOffset(0) }} style={dateBtnStyle(GOLD)} title="Next signal in list">▼</button>
+            <button onClick={() => { setSelectedIdx(prev => Math.max(0, prev - 1)); setDayOffset(0) }} style={dateBtnStyle(GOLD)} title="Previous signal in list">▲</button>
+            <button onClick={() => { setSelectedIdx(prev => Math.min(sortedSignals.length - 1, prev + 1)); setDayOffset(0) }} style={dateBtnStyle(GOLD)} title="Next signal in list">▼</button>
 
             <div style={{ width: 1, height: 18, background: T.BORDER }} />
 

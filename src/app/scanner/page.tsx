@@ -126,20 +126,22 @@ const FILTERS: FilterDef[] = [
 type StatsTab = 'overview' | 'performance' | 'pnl' | 'robustness'
 
 // ─── Shared UI Components (must be before BacktestStatsPanel) ──
-function StatBox({ label, value, icon, color }: { label: string; value: string; icon: React.ReactNode; color?: string }) {
+function StatBox({ label, value, icon, color, dark: isDark = true }: { label: string; value: string; icon: React.ReactNode; color?: string; dark?: boolean }) {
+  const t = isDark ? { SURFACE, BORDER, MUTED } : { SURFACE: LIGHT.SURFACE, BORDER: LIGHT.BORDER, MUTED: LIGHT.MUTED }
   return (
-    <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '6px 10px' }}>
-      <div className="flex items-center gap-1" style={{ color: MUTED, fontSize: 9 }}>{icon}{label}</div>
+    <div style={{ background: t.SURFACE, border: `1px solid ${t.BORDER}`, borderRadius: 4, padding: '6px 10px' }}>
+      <div className="flex items-center gap-1" style={{ color: t.MUTED, fontSize: 9 }}>{icon}{label}</div>
       <div style={{ color: color || GOLD, fontSize: 16, fontWeight: 700, marginTop: 1 }}>{value}</div>
     </div>
   )
 }
 
-function Detail({ label, value, color }: { label: string; value: string; color?: string }) {
+function Detail({ label, value, color, dark: isDark = true }: { label: string; value: string; color?: string; dark?: boolean }) {
+  const t = isDark ? { SURFACE, BORDER, MUTED, TEXT } : { SURFACE: LIGHT.SURFACE, BORDER: LIGHT.BORDER, MUTED: LIGHT.MUTED, TEXT: LIGHT.TEXT }
   return (
-    <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '2px 6px' }}>
-      <span style={{ color: MUTED, fontSize: 8, textTransform: 'uppercase' }}>{label} </span>
-      <span style={{ color: color || TEXT, fontSize: 10, fontWeight: 600 }}>{value}</span>
+    <div style={{ background: t.SURFACE, border: `1px solid ${t.BORDER}`, borderRadius: 3, padding: '2px 6px' }}>
+      <span style={{ color: t.MUTED, fontSize: 8, textTransform: 'uppercase' }}>{label} </span>
+      <span style={{ color: color || t.TEXT, fontSize: 10, fontWeight: 600 }}>{value}</span>
     </div>
   )
 }
@@ -904,33 +906,37 @@ function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffs
 }
 
 // ─── Stats (unchanged, compact) ─────────────────────────
-function StatsPanel({ signals }: { signals: Signal[] }) {
+function StatsPanel({ signals, dark }: { signals: Signal[]; dark: boolean }) {
   if (!signals.length) return null
+  const C = dark
+    ? { SURFACE, BORDER, TEXT2, MUTED, TEAL, RED, GOLD }
+    : { SURFACE: LIGHT.SURFACE, BORDER: LIGHT.BORDER, TEXT2: LIGHT.TEXT2, MUTED: LIGHT.MUTED, TEAL: LIGHT.TEAL, RED: LIGHT.RED, GOLD }
   const dates = new Set(signals.map(s => s.date)).size
   const tickers = new Set(signals.map(s => s.ticker)).size
   const avgD0Chg = signals.reduce((s, x) => s + ((x.close - x.open) / x.open * 100), 0) / signals.length
   const avgRange = signals.reduce((s, x) => s + ((x.high - x.low) / x.open * 100), 0) / signals.length
   const wins = signals.filter(s => s.close > s.open).length
   return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '4px 8px', background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4 }}>
-      <StatPill label="Signals" value={String(signals.length)} color={GOLD} />
-      <StatPill label="Days" value={String(dates)} />
-      <StatPill label="Tickers" value={String(tickers)} />
-      <StatPill label="Avg D0" value={`${avgD0Chg > 0 ? '+' : ''}${avgD0Chg.toFixed(1)}%`} color={avgD0Chg > 0 ? TEAL : RED} />
-      <StatPill label="Avg Rng" value={`${avgRange.toFixed(1)}%`} />
-      <StatPill label="Green" value={`${(wins/signals.length*100).toFixed(0)}%`} color={TEAL} />
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '4px 8px', background: C.SURFACE, border: `1px solid ${C.BORDER}`, borderRadius: 4 }}>
+      <StatPill label="Signals" value={String(signals.length)} color={C.GOLD} dark={dark} />
+      <StatPill label="Days" value={String(dates)} dark={dark} />
+      <StatPill label="Tickers" value={String(tickers)} dark={dark} />
+      <StatPill label="Avg D0" value={`${avgD0Chg > 0 ? '+' : ''}${avgD0Chg.toFixed(1)}%`} color={avgD0Chg > 0 ? C.TEAL : C.RED} dark={dark} />
+      <StatPill label="Avg Rng" value={`${avgRange.toFixed(1)}%`} dark={dark} />
+      <StatPill label="Green" value={`${(wins/signals.length*100).toFixed(0)}%`} color={C.TEAL} dark={dark} />
       {signals[0]?.am_ext_atr != null && (
-        <StatPill label="Avg Ext" value={`${(signals.reduce((s,x) => s + (x.am_ext_atr || 0), 0) / signals.length).toFixed(2)}x ATR`} color={GOLD} />
+        <StatPill label="Avg Ext" value={`${(signals.reduce((s,x) => s + (x.am_ext_atr || 0), 0) / signals.length).toFixed(2)}x ATR`} color={C.GOLD} dark={dark} />
       )}
     </div>
   )
 }
 
-function StatPill({ label, value, color = TEXT2 }: { label: string; value: string; color?: string }) {
+function StatPill({ label, value, color, dark }: { label: string; value: string; color?: string; dark: boolean }) {
+  const C = dark ? { MUTED, TEXT2 } : { MUTED: LIGHT.MUTED, TEXT2: LIGHT.TEXT2 }
   return (
     <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
-      <span style={{ color: MUTED, fontSize: 9, fontWeight: 600 }}>{label}</span>
-      <span style={{ color, fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+      <span style={{ color: C.MUTED, fontSize: 9, fontWeight: 600 }}>{label}</span>
+      <span style={{ color: color || C.TEXT2, fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{value}</span>
     </div>
   )
 }
@@ -1257,8 +1263,9 @@ export default function ScanDashboardPage() {
               knownRunIdsRef.current.add(newRun.id)
               anyChanged = true
               fetch(`/api/scans/${newRun.id}`).then(r => r.json()).then(d => {
-                if (d.signals) {
-                  setSignals(d.signals.map((s: any) => ({ ...s, ticker: s.ticker || s.symbol || '', symbol: s.ticker || s.symbol || '' })))
+                const sigs = d.results || d.signals || []
+                if (sigs.length) {
+                  setSignals(sigs.map((s: any) => ({ ...s, ticker: s.ticker || s.symbol || '', symbol: s.ticker || s.symbol || '' })))
                   setSelectedIdx(0)
                   setDayOffset(0)
                 }
@@ -1288,16 +1295,16 @@ export default function ScanDashboardPage() {
   const renderLeftSidebar = () => (
     <div style={{
       width: LEFT_W, minWidth: LEFT_W, maxWidth: LEFT_W,
-      background: SURFACE, borderRight: `1px solid ${BORDER}`,
+      background: T.SURFACE, borderRight: `1px solid ${BORDER}`,
       display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)',
       position: 'sticky', top: 48,
     }}>
       {/* ── Top half: Scan tree ── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, borderBottom: `1px solid ${BORDER}` }}>
-        <div style={{ padding: '8px 10px', borderBottom: `1px solid ${BORDER}`, background: SURFACE2 }}>
+        <div style={{ padding: '8px 10px', borderBottom: `1px solid ${BORDER}`, background: T.SURFACE2 }}>
           <div className="flex items-center justify-between">
             <span style={{ color: GOLD, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Scans</span>
-            <span style={{ color: MUTED, fontSize: 10 }}>{scans.length}</span>
+            <span style={{ color: T.MUTED, fontSize: 10 }}>{scans.length}</span>
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -1307,20 +1314,20 @@ export default function ScanDashboardPage() {
               <button key={scan.id} onClick={() => setSelectedScan(scan.id)} style={{
                 display: 'block', width: '100%', textAlign: 'left',
                 padding: '8px 10px', border: 'none', cursor: 'pointer',
-                background: isActive ? GOLD_DIM : 'transparent',
+                background: isActive ? T.GOLD_DIM : 'transparent',
                 borderLeft: isActive ? `2px solid ${GOLD}` : '2px solid transparent',
                 borderBottom: `1px solid ${BORDER}`,
               }}
                 onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
                 onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
               >
-                <div style={{ color: isActive ? GOLD : TEXT, fontSize: 13, fontWeight: 600, marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ color: isActive ? GOLD : T.TEXT, fontSize: 13, fontWeight: 600, marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {scan.name}
                 </div>
                 <div className="flex items-center gap-2">
-                  <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 2, background: `${TEAL}20`, color: TEAL }}>{scan.resultCount} sig</span>
+                  <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 2, background: `${T.TEAL}20`, color: T.TEAL }}>{scan.resultCount} sig</span>
                   <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 2, background: `${GOLD}20`, color: GOLD }}>{(scan.runs?.length || 0)} runs</span>
-                  <span style={{ color: MUTED, fontSize: 9 }}>{scan.type}</span>
+                  <span style={{ color: T.MUTED, fontSize: 9 }}>{scan.type}</span>
                   {(scan.tags || []).map(tag => (
                     <span key={tag} style={{ fontSize: 9, padding: '1px 4px', borderRadius: 2, background: `${GOLD}15`, color: GOLD, fontWeight: 600 }}>{tag}</span>
                   ))}
@@ -1330,8 +1337,8 @@ export default function ScanDashboardPage() {
           })}
           {scans.length === 0 && (
             <div style={{ padding: 20, textAlign: 'center' }}>
-              <Search className="h-5 w-5 mx-auto mb-2" style={{ color: MUTED, opacity: 0.3 }} />
-              <p style={{ color: MUTED, fontSize: 11 }}>No saved scans</p>
+              <Search className="h-5 w-5 mx-auto mb-2" style={{ color: T.MUTED, opacity: 0.3 }} />
+              <p style={{ color: T.MUTED, fontSize: 11 }}>No saved scans</p>
             </div>
           )}
         </div>
@@ -1339,10 +1346,10 @@ export default function ScanDashboardPage() {
 
       {/* ── Bottom half: Runs for selected scan ── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <div style={{ padding: '8px 10px', borderBottom: `1px solid ${BORDER}`, background: SURFACE2 }}>
+        <div style={{ padding: '8px 10px', borderBottom: `1px solid ${BORDER}`, background: T.SURFACE2 }}>
           <div className="flex items-center justify-between">
             <span style={{ color: GOLD, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Runs</span>
-            <span style={{ color: MUTED, fontSize: 10 }}>{runs.length}</span>
+            <span style={{ color: T.MUTED, fontSize: 10 }}>{runs.length}</span>
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -1360,14 +1367,14 @@ export default function ScanDashboardPage() {
                 <span style={{ color: GOLD, fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{pending.label}</span>
               </div>
               {/* Progress bar */}
-              <div style={{ marginTop: 6, background: SURFACE3, borderRadius: 2, height: 6, overflow: 'hidden' }}>
+              <div style={{ marginTop: 6, background: T.SURFACE3, borderRadius: 2, height: 6, overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: `${pct}%`, background: GOLD, borderRadius: 2, transition: 'width 0.5s ease' }} />
               </div>
               <div className="flex items-center justify-between" style={{ marginTop: 4 }}>
                 <span style={{ color: GOLD, fontSize: 9, fontWeight: 700 }}>{pct}%</span>
-                {prog && prog.currentDay && <span style={{ color: MUTED, fontSize: 9 }}>{prog.currentDay}</span>}
-                {prog && prog.signalsSoFar > 0 && <span style={{ color: TEAL, fontSize: 9, fontWeight: 600 }}>{prog.signalsSoFar} sig</span>}
-                <span style={{ color: MUTED, fontSize: 9, marginLeft: 'auto' }}>{pending.startedAt}</span>
+                {prog && prog.currentDay && <span style={{ color: T.MUTED, fontSize: 9 }}>{prog.currentDay}</span>}
+                {prog && prog.signalsSoFar > 0 && <span style={{ color: T.TEAL, fontSize: 9, fontWeight: 600 }}>{prog.signalsSoFar} sig</span>}
+                <span style={{ color: T.MUTED, fontSize: 9, marginLeft: 'auto' }}>{pending.startedAt}</span>
               </div>
             </div>
             )
@@ -1375,8 +1382,8 @@ export default function ScanDashboardPage() {
           {/* Real runs */}
           {runs.length === 0 && pendingRuns.length === 0 && (
             <div style={{ padding: 16, textAlign: 'center' }}>
-              <p style={{ color: MUTED, fontSize: 10 }}>No runs yet</p>
-              <p style={{ color: MUTED, fontSize: 9, marginTop: 4 }}>Click Run ▶ to execute</p>
+              <p style={{ color: T.MUTED, fontSize: 10 }}>No runs yet</p>
+              <p style={{ color: T.MUTED, fontSize: 9, marginTop: 4 }}>Click Run ▶ to execute</p>
             </div>
           )}
           {runs.map(run => {
@@ -1384,21 +1391,21 @@ export default function ScanDashboardPage() {
             return (
             <div key={run.id} onClick={() => setSelectedRun(run.id)} style={{
               padding: '6px 10px', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer',
-              background: isActive ? GOLD_DIM : 'transparent',
+              background: isActive ? T.GOLD_DIM : 'transparent',
               borderLeft: isActive ? `2px solid ${GOLD}` : '2px solid transparent',
             }}
               onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
               onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
             >
               <div className="flex items-center justify-between">
-                <span style={{ color: isActive ? GOLD : TEXT2, fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{run.dateRange}</span>
-                <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 2, background: `${TEAL}20`, color: TEAL }}>{run.resultCount} sig</span>
+                <span style={{ color: isActive ? GOLD : T.TEXT2, fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{run.dateRange}</span>
+                <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 2, background: `${T.TEAL}20`, color: T.TEAL }}>{run.resultCount} sig</span>
               </div>
               <div className="flex items-center gap-1" style={{ marginTop: 2 }}>
                 {(run.tags || []).map(tag => (
                   <span key={tag} style={{ fontSize: 9, padding: '0px 4px', borderRadius: 2, background: `${GOLD}12`, color: isActive ? GOLD : 'rgba(212,175,55,0.6)', fontWeight: 600 }}>{tag}</span>
                 ))}
-                <span style={{ color: isActive ? GOLD : MUTED, fontSize: 9, marginLeft: 'auto' }}>{run.runAt}</span>
+                <span style={{ color: isActive ? GOLD : T.MUTED, fontSize: 9, marginLeft: 'auto' }}>{run.runAt}</span>
               </div>
             </div>
             )
@@ -1413,17 +1420,17 @@ export default function ScanDashboardPage() {
           const effectiveSpec = runFilters.includes('am-push') && specName === 'backside-b' ? 'backside-b-push' : specName
           const dates = runCustomMode ? { from: runFrom, to: runTo } : (() => { const d = parseInt(runRange); const t = new Date(); return { from: new Date(t.getTime() - d * 86400000).toISOString().slice(0, 10), to: t.toISOString().slice(0, 10) } })()
           const cmd = `cd ~/.wzrd-pi-dev/projects/edge-dev/assets && PYTHONPATH=scan-engine:~/edge.dev/src ~/edge.dev/.venv/bin/python sandbox.py --spec ${effectiveSpec} --start ${dates.from} --end ${dates.to}${runFilters.length ? ' --filters ' + runFilters.join(',') : ''} --push`
-          const dateInputStyle = { background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '6px 8px', color: TEXT, fontSize: 11, width: '100%', fontFamily: 'monospace', outline: 'none' as const }
+          const dateInputStyle = { background: T.SURFACE, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '6px 8px', color: T.TEXT, fontSize: 11, width: '100%', fontFamily: 'monospace', outline: 'none' as const }
           return (
-            <div style={{ padding: '12px 14px', background: SURFACE2, borderBottom: `1px solid ${BORDER}` }}>
+            <div style={{ padding: '12px 14px', background: T.SURFACE2, borderBottom: `1px solid ${BORDER}` }}>
               <div style={{ color: GOLD, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>{activeScan.name}</div>
               {/* Date range */}
               {!runCustomMode ? (
                 <div className="flex gap-1 flex-wrap" style={{ marginBottom: 8 }}>
                   {['7', '14', '30', '60', '90', '180', '365'].map(d => (
-                    <button key={d} onClick={() => setRunRange(d)} style={{ padding: '4px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: runRange === d ? GOLD : SURFACE, color: runRange === d ? '#000' : MUTED, border: `1px solid ${runRange === d ? GOLD : BORDER}` }}>{d}d</button>
+                    <button key={d} onClick={() => setRunRange(d)} style={{ padding: '4px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: runRange === d ? GOLD : T.SURFACE, color: runRange === d ? '#000' : T.MUTED, border: `1px solid ${runRange === d ? GOLD : BORDER}` }}>{d}d</button>
                   ))}
-                  <button onClick={() => setRunCustomMode(true)} style={{ padding: '4px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: SURFACE, color: MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer' }}>Custom</button>
+                  <button onClick={() => setRunCustomMode(true)} style={{ padding: '4px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: T.SURFACE, color: T.MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer' }}>Custom</button>
                 </div>
               ) : (
                 <div style={{ marginBottom: 8 }}>
@@ -1431,7 +1438,7 @@ export default function ScanDashboardPage() {
                     <input type="date" value={runFrom} onChange={e => setRunFrom(e.target.value)} style={dateInputStyle} />
                     <input type="date" value={runTo} onChange={e => setRunTo(e.target.value)} style={dateInputStyle} />
                   </div>
-                  <button onClick={() => setRunCustomMode(false)} style={{ padding: '2px 6px', borderRadius: 2, fontSize: 9, fontWeight: 600, background: SURFACE, color: MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer', marginTop: 4 }}>← Quick</button>
+                  <button onClick={() => setRunCustomMode(false)} style={{ padding: '2px 6px', borderRadius: 2, fontSize: 9, fontWeight: 600, background: T.SURFACE, color: T.MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer', marginTop: 4 }}>← Quick</button>
                 </div>
               )}
               {/* Filters */}
@@ -1439,12 +1446,12 @@ export default function ScanDashboardPage() {
                 <div className="flex gap-1" style={{ marginBottom: 8 }}>
                   {activeScan.filters!.map(f => {
                     const isOn = runFilters.includes(f)
-                    return <button key={f} onClick={() => setRunFilters(prev => isOn ? prev.filter(x => x !== f) : [...prev, f])} style={{ padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: isOn ? `${GOLD}30` : SURFACE, color: isOn ? GOLD : MUTED, border: `1px solid ${isOn ? GOLD : BORDER}`, cursor: 'pointer' }}>{f}</button>
+                    return <button key={f} onClick={() => setRunFilters(prev => isOn ? prev.filter(x => x !== f) : [...prev, f])} style={{ padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: isOn ? `${GOLD}30` : T.SURFACE, color: isOn ? GOLD : T.MUTED, border: `1px solid ${isOn ? GOLD : BORDER}`, cursor: 'pointer' }}>{f}</button>
                   })}
                 </div>
               )}
               {/* Command preview */}
-              <pre style={{ background: '#0a0a10', border: `1px solid ${BORDER}`, borderRadius: 4, padding: '8px 10px', fontSize: 9, fontFamily: 'monospace', color: TEAL, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 80, overflowY: 'auto', marginBottom: 8 }}>{cmd}</pre>
+              <pre style={{ background: '#0a0a10', border: `1px solid ${BORDER}`, borderRadius: 4, padding: '8px 10px', fontSize: 9, fontFamily: 'monospace', color: T.TEAL, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 80, overflowY: 'auto', marginBottom: 8 }}>{cmd}</pre>
               {/* Actions */}
               <div className="flex gap-1">
                 <button onClick={() => {
@@ -1458,7 +1465,7 @@ export default function ScanDashboardPage() {
                 }} style={{ flex: 1, padding: '7px', borderRadius: 3, fontSize: 11, fontWeight: 700, background: GOLD, color: '#000', border: 'none', cursor: 'pointer' }}>
                   {copied ? '✓ Copied!' : '📋 Copy & Run'}
                 </button>
-                <button onClick={() => setShowRunPanel(false)} style={{ padding: '7px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: SURFACE, color: MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer' }}>Cancel</button>
+                <button onClick={() => setShowRunPanel(false)} style={{ padding: '7px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: T.SURFACE, color: T.MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer' }}>Cancel</button>
               </div>
             </div>
           )
@@ -1468,7 +1475,7 @@ export default function ScanDashboardPage() {
           <button onClick={() => { setShowRunPanel(!showRunPanel); if (!showRunPanel) setRunRange('90') }} style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
             width: '100%', padding: '8px', borderRadius: 4,
-            background: showRunPanel ? SURFACE : GOLD_DIM, color: showRunPanel ? MUTED : GOLD, fontWeight: 700, fontSize: 11,
+            background: showRunPanel ? T.SURFACE : T.GOLD_DIM, color: showRunPanel ? T.MUTED : GOLD, fontWeight: 700, fontSize: 11,
             border: `1px solid ${showRunPanel ? BORDER : GOLD_BORDER}`, cursor: 'pointer',
           }}>
             <Play className="h-3.5 w-3.5" /> {showRunPanel ? 'Cancel' : 'Run Scan'}
@@ -1482,28 +1489,28 @@ export default function ScanDashboardPage() {
   const renderRightSidebar = () => (
     <div style={{
       width: RIGHT_W, minWidth: RIGHT_W, maxWidth: RIGHT_W,
-      background: SURFACE, borderLeft: `1px solid ${BORDER}`,
+      background: T.SURFACE, borderLeft: `1px solid ${BORDER}`,
       display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)',
       position: 'sticky', top: 48,
     }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <div className="px-2 py-1.5 flex items-center justify-between" style={{ borderBottom: `1px solid ${BORDER}`, background: SURFACE2 }}>
+        <div className="px-2 py-1.5 flex items-center justify-between" style={{ borderBottom: `1px solid ${BORDER}`, background: T.SURFACE2 }}>
           <span style={{ color: GOLD, fontSize: 12, fontWeight: 700 }}>SIGNALS</span>
-          <span style={{ color: MUTED, fontSize: 9 }}>{signals.length}</span>
+          <span style={{ color: T.MUTED, fontSize: 9 }}>{signals.length}</span>
         </div>
         <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
           <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 10 }}>
             <thead>
-              <tr style={{ background: SURFACE2, position: 'sticky', top: 0, zIndex: 2 }}>
-                <th onClick={() => toggleSort('ticker')} style={{ padding: '4px 6px', textAlign: 'left', color: sortCol === 'ticker' ? GOLD : GOLD, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 0, background: SURFACE2, zIndex: 3, minWidth: 56, cursor: 'pointer', userSelect: 'none' }}>Tk{sortCol === 'ticker' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                <th onClick={() => toggleSort('date')} style={{ padding: '4px 6px', textAlign: 'left', color: sortCol === 'date' ? GOLD : MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 56, background: SURFACE2, zIndex: 3, minWidth: 68, borderRight: `1px solid ${BORDER}`, cursor: 'pointer', userSelect: 'none' }}>Date{sortCol === 'date' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                <th onClick={() => toggleSort('open')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'open' ? GOLD : MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Op{sortCol === 'open' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                <th onClick={() => toggleSort('close')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'close' ? GOLD : MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Close{sortCol === 'close' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                <th onClick={() => toggleSort('gap')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'gap' ? GOLD : MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Gap%{sortCol === 'gap' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                <th onClick={() => toggleSort('d0')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'd0' ? GOLD : MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>D0{sortCol === 'd0' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                <th onClick={() => toggleSort('range')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'range' ? GOLD : MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Rng%{sortCol === 'range' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                <th onClick={() => toggleSort('abs')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'abs' ? GOLD : MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>ABS{sortCol === 'abs' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                <th onClick={() => toggleSort('vol')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'vol' ? GOLD : MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Vol{sortCol === 'vol' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+              <tr style={{ background: T.SURFACE2, position: 'sticky', top: 0, zIndex: 2 }}>
+                <th onClick={() => toggleSort('ticker')} style={{ padding: '4px 6px', textAlign: 'left', color: sortCol === 'ticker' ? GOLD : GOLD, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 0, background: T.SURFACE2, zIndex: 3, minWidth: 56, cursor: 'pointer', userSelect: 'none' }}>Tk{sortCol === 'ticker' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('date')} style={{ padding: '4px 6px', textAlign: 'left', color: sortCol === 'date' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 56, background: T.SURFACE2, zIndex: 3, minWidth: 68, borderRight: `1px solid ${BORDER}`, cursor: 'pointer', userSelect: 'none' }}>Date{sortCol === 'date' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('open')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'open' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Op{sortCol === 'open' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('close')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'close' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Close{sortCol === 'close' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('gap')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'gap' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Gap%{sortCol === 'gap' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('d0')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'd0' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>D0{sortCol === 'd0' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('range')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'range' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Rng%{sortCol === 'range' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('abs')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'abs' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>ABS{sortCol === 'abs' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('vol')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'vol' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Vol{sortCol === 'vol' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
               </tr>
             </thead>
             <tbody>
@@ -1513,19 +1520,19 @@ export default function ScanDashboardPage() {
                 const d0chg = ((s.close - s.open) / s.open * 100)
                 const rng = ((s.high - s.low) / s.open * 100)
                 return (
-                  <tr key={`${s.ticker}-${s.date}`} onClick={() => { setSelectedIdx(realIdx); setDayOffset(0) }} style={{ cursor: 'pointer', background: isActive ? GOLD_DIM : 'transparent' }}
+                  <tr key={`${s.ticker}-${s.date}`} onClick={() => { setSelectedIdx(realIdx); setDayOffset(0) }} style={{ cursor: 'pointer', background: isActive ? T.GOLD_DIM : 'transparent' }}
                     onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
                     onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
                   >
-                    <td style={{ padding: '3px 6px', color: isActive ? GOLD : WHITE, fontWeight: 700, fontFamily: 'monospace', position: 'sticky', left: 0, background: isActive ? GOLD_DIM : SURFACE, zIndex: 1 }}>{s.ticker}</td>
-                    <td style={{ padding: '3px 6px', color: isActive ? GOLD : MUTED, position: 'sticky', left: 56, background: isActive ? GOLD_DIM : SURFACE, zIndex: 1, borderRight: `1px solid ${BORDER}` }}>{s.date.slice(5)}</td>
-                    <td style={{ padding: '3px 4px', color: TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>${s.open?.toFixed(2)}</td>
-                    <td style={{ padding: '3px 4px', color: TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>${s.close?.toFixed(2)}</td>
-                    <td style={{ padding: '3px 4px', color: TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{(s.gap_pct || 0).toFixed(0)}%</td>
-                    <td style={{ padding: '3px 4px', color: d0chg < 0 ? RED : TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{d0chg > 0 ? '+' : ''}{d0chg.toFixed(1)}%</td>
-                    <td style={{ padding: '3px 4px', color: TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{rng.toFixed(1)}%</td>
+                    <td style={{ padding: '3px 6px', color: isActive ? GOLD : T.WHITE, fontWeight: 700, fontFamily: 'monospace', position: 'sticky', left: 0, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1 }}>{s.ticker}</td>
+                    <td style={{ padding: '3px 6px', color: isActive ? GOLD : T.MUTED, position: 'sticky', left: 56, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1, borderRight: `1px solid ${BORDER}` }}>{s.date.slice(5)}</td>
+                    <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>${s.open?.toFixed(2)}</td>
+                    <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>${s.close?.toFixed(2)}</td>
+                    <td style={{ padding: '3px 4px', color: T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{(s.gap_pct || 0).toFixed(0)}%</td>
+                    <td style={{ padding: '3px 4px', color: d0chg < 0 ? T.RED : T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{d0chg > 0 ? '+' : ''}{d0chg.toFixed(1)}%</td>
+                    <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{rng.toFixed(1)}%</td>
                     <td style={{ padding: '3px 4px', color: GOLD, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(s.pos_abs || 0).toFixed(2)}</td>
-                    <td style={{ padding: '3px 4px', color: MUTED, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{((s.volume || 0) / 1e6).toFixed(0)}M</td>
+                    <td style={{ padding: '3px 4px', color: T.MUTED, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{((s.volume || 0) / 1e6).toFixed(0)}M</td>
                   </tr>
                 )
               })}
@@ -1536,17 +1543,17 @@ export default function ScanDashboardPage() {
 
       {/* Chat */}
       <div style={{ height: '35%', minHeight: 140, borderTop: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
-        <div className="px-2 py-1.5 flex items-center gap-1.5" style={{ borderBottom: `1px solid ${BORDER}`, background: SURFACE2 }}>
+        <div className="px-2 py-1.5 flex items-center gap-1.5" style={{ borderBottom: `1px solid ${BORDER}`, background: T.SURFACE2 }}>
           <MessageSquare className="h-3 w-3" style={{ color: GOLD }} />
           <span style={{ color: GOLD, fontSize: 10, fontWeight: 700 }}>CHAT</span>
         </div>
         <div className="flex-1 overflow-y-auto" style={{ padding: '6px 8px' }}>
           {chatMessages.length === 0 && (
-            <p style={{ color: MUTED, fontSize: 10, fontStyle: 'italic', padding: '8px 4px' }}>Ask about signals, patterns, or scan params...</p>
+            <p style={{ color: T.MUTED, fontSize: 10, fontStyle: 'italic', padding: '8px 4px' }}>Ask about signals, patterns, or scan params...</p>
           )}
           {chatMessages.map((m, i) => (
             <div key={i} style={{ marginBottom: 6 }}>
-              <div style={{ display: 'inline-block', padding: '4px 8px', borderRadius: 6, fontSize: 11, lineHeight: 1.4, background: m.role === 'user' ? GOLD_DIM : SURFACE2, color: TEXT, maxWidth: '90%', wordBreak: 'break-word' }}>{m.content}</div>
+              <div style={{ display: 'inline-block', padding: '4px 8px', borderRadius: 6, fontSize: 11, lineHeight: 1.4, background: m.role === 'user' ? T.GOLD_DIM : T.SURFACE2, color: T.TEXT, maxWidth: '90%', wordBreak: 'break-word' }}>{m.content}</div>
             </div>
           ))}
         </div>
@@ -1561,7 +1568,7 @@ export default function ScanDashboardPage() {
               }
             }}
             placeholder="Ask about signals..."
-            style={{ flex: 1, background: BG, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '5px 8px', color: TEXT, fontSize: 11, outline: 'none' }}
+            style={{ flex: 1, background: T.BG, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '5px 8px', color: T.TEXT, fontSize: 11, outline: 'none' }}
           />
           <button style={{ padding: '4px 8px', borderRadius: 3, background: GOLD, color: '#000', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
             <Send className="h-3 w-3" />
@@ -1575,7 +1582,7 @@ export default function ScanDashboardPage() {
   const renderCenter = () => (
     <div style={{ flex: 1, padding: 12, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
       {pageMode === 'scanner' ? (
-        <StatsPanel signals={signals} />
+        <StatsPanel signals={signals} dark={dark} />
       ) : (
         <>
           {/* Backtest mode: filter toggles + stats */}
@@ -1590,7 +1597,7 @@ export default function ScanDashboardPage() {
                   return next
                 })} title={f.description} style={{
                   padding: '2px 6px', borderRadius: 2, fontSize: 8, fontWeight: 700,
-                  background: isOn ? `${GOLD}30` : SURFACE2, color: isOn ? GOLD : MUTED,
+                  background: isOn ? `${GOLD}30` : T.SURFACE2, color: isOn ? GOLD : T.MUTED,
                   border: `1px solid ${isOn ? GOLD : BORDER}`, cursor: 'pointer',
                 }}>{f.shortLabel} <span style={{ fontWeight: 400, fontSize: 7 }}>{count}</span></button>
               )
@@ -1598,10 +1605,10 @@ export default function ScanDashboardPage() {
             {activeFilters.size > 0 && (
               <button onClick={() => setActiveFilters(new Set())} style={{
                 padding: '2px 6px', borderRadius: 2, fontSize: 8, fontWeight: 700,
-                background: `${RED}20`, color: RED, border: `1px solid ${RED}40`, cursor: 'pointer',
+                background: `${T.RED}20`, color: T.RED, border: `1px solid ${T.RED}40`, cursor: 'pointer',
               }}>Clear</button>
             )}
-            <span style={{ color: MUTED, fontSize: 8, marginLeft: 4 }}>{filteredSignals.length}/{signals.length} signals</span>
+            <span style={{ color: T.MUTED, fontSize: 8, marginLeft: 4 }}>{filteredSignals.length}/{signals.length} signals</span>
           </div>
           <BacktestStatsPanel signals={filteredSignals} bt={backtestResults} dark={dark} />
         </>
@@ -1610,7 +1617,7 @@ export default function ScanDashboardPage() {
       {loading ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 60 }}>
           <Loader2 className="h-5 w-5 animate-spin" style={{ color: GOLD }} />
-          <span style={{ color: MUTED, fontSize: 12, marginLeft: 8 }}>Loading...</span>
+          <span style={{ color: T.MUTED, fontSize: 12, marginLeft: 8 }}>Loading...</span>
         </div>
       ) : sig ? (
         <>
@@ -1620,15 +1627,15 @@ export default function ScanDashboardPage() {
             <div className="flex gap-1">
               <button onClick={() => setChartMode('single')} title="Single chart" style={{
                 padding: '3px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-                background: chartMode === 'single' ? GOLD : SURFACE,
-                color: chartMode === 'single' ? '#000' : MUTED,
+                background: chartMode === 'single' ? GOLD : T.SURFACE,
+                color: chartMode === 'single' ? '#000' : T.MUTED,
                 border: `1px solid ${chartMode === 'single' ? GOLD : BORDER}`,
                 display: 'flex', alignItems: 'center', gap: 3,
               }}><LayoutGrid className="h-3 w-3" />Single</button>
               <button onClick={() => setChartMode('stacked')} title="Stacked" style={{
                 padding: '3px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-                background: chartMode === 'stacked' ? GOLD : SURFACE,
-                color: chartMode === 'stacked' ? '#000' : MUTED,
+                background: chartMode === 'stacked' ? GOLD : T.SURFACE,
+                color: chartMode === 'stacked' ? '#000' : T.MUTED,
                 border: `1px solid ${chartMode === 'stacked' ? GOLD : BORDER}`,
                 display: 'flex', alignItems: 'center', gap: 3,
               }}><Rows3 className="h-3 w-3" />Stacked</button>
@@ -1642,7 +1649,7 @@ export default function ScanDashboardPage() {
                 {(['5', '15', '60', 'D'] as Timeframe[]).map(t => (
                   <button key={t} onClick={() => setTf(t)} style={{
                     padding: '2px 12px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-                    background: tf === t ? GOLD : SURFACE, color: tf === t ? '#000' : MUTED,
+                    background: tf === t ? GOLD : T.SURFACE, color: tf === t ? '#000' : T.MUTED,
                     border: `1px solid ${tf === t ? GOLD : BORDER}`,
                   }}>{t === '5' ? '5m' : t === '15' ? '15m' : t === '60' ? '1H' : '1D'}</button>
                 ))}
@@ -1670,7 +1677,7 @@ export default function ScanDashboardPage() {
 
             {/* Ticker */}
             <span style={{ color: GOLD, fontSize: 16, fontWeight: 800 }}>{sig.ticker}</span>
-            <span style={{ color: MUTED, fontSize: 10 }}>{selectedIdx + 1}/{signals.length}</span>
+            <span style={{ color: T.MUTED, fontSize: 10 }}>{selectedIdx + 1}/{signals.length}</span>
 
             {/* ↑↓ signal list nav */}
             <button onClick={() => { setSelectedIdx(Math.max(0, selectedIdx - 1)); setDayOffset(0) }} style={dateBtnStyle(GOLD)} title="Previous signal in list">▲</button>
@@ -1682,14 +1689,14 @@ export default function ScanDashboardPage() {
             <div style={{ position: 'relative' }}>
               <button onClick={() => setShowSettings(v => !v)} title="Chart Settings" style={{
                 padding: '3px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-                background: showSettings ? GOLD : SURFACE, color: showSettings ? '#000' : MUTED,
+                background: showSettings ? GOLD : T.SURFACE, color: showSettings ? '#000' : T.MUTED,
                 border: `1px solid ${showSettings ? GOLD : BORDER}`,
                 display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer',
               }}><Settings2 className="h-3 w-3" /></button>
               {showSettings && (
                 <div style={{
                   position: 'absolute', top: '100%', left: 0, zIndex: 50, marginTop: 4,
-                  background: SURFACE2, border: `1px solid ${GOLD_BORDER}`, borderRadius: 6,
+                  background: T.SURFACE2, border: `1px solid ${GOLD_BORDER}`, borderRadius: 6,
                   padding: 12, minWidth: 220,
                   boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
                 }}>
@@ -1706,7 +1713,7 @@ export default function ScanDashboardPage() {
                     ['showLegend', 'Legend'],
                   ] as [keyof ChartSettings, string][]).map(([key, label]) => (
                     <label key={key} className="flex items-center justify-between" style={{ padding: '4px 0', cursor: 'pointer' }}>
-                      <span style={{ color: TEXT2, fontSize: 11 }}>{label}</span>
+                      <span style={{ color: T.TEXT2, fontSize: 11 }}>{label}</span>
                       <div onClick={() => setChartSettings(s => ({ ...s, [key]: !s[key] }))} style={{
                         width: 32, height: 16, borderRadius: 8, position: 'relative', cursor: 'pointer',
                         background: chartSettings[key] ? GOLD : BORDER, transition: 'background 0.15s',
@@ -1743,13 +1750,13 @@ export default function ScanDashboardPage() {
           {/* Detail pills */}
           <div className="flex flex-wrap gap-1">
             <Detail label="Open" value={`$${sig.open?.toFixed(2)}`} />
-            <Detail label="High" value={`$${sig.high?.toFixed(2)}`} color={TEAL} />
-            <Detail label="Low" value={`$${sig.low?.toFixed(2)}`} color={RED} />
+            <Detail label="High" value={`$${sig.high?.toFixed(2)}`} color={T.TEAL} />
+            <Detail label="Low" value={`$${sig.low?.toFixed(2)}`} color={T.RED} />
             <Detail label="Close" value={`$${sig.close?.toFixed(2)}`} />
             <Detail label="Vol" value={`${((sig.volume || 0) / 1e6).toFixed(1)}M`} />
-            <Detail label="Gap" value={`${(sig.gap_pct || 0).toFixed(1)}%`} color={TEAL} />
+            <Detail label="Gap" value={`${(sig.gap_pct || 0).toFixed(1)}%`} color={T.TEAL} />
             <Detail label="ABS" value={(sig.pos_abs || 0).toFixed(3)} />
-            <Detail label="D0 Chg" value={`${((sig.close - sig.open) / sig.open * 100).toFixed(1)}%`} color={sig.close < sig.open ? RED : TEAL} />
+            <Detail label="D0 Chg" value={`${((sig.close - sig.open) / sig.open * 100).toFixed(1)}%`} color={sig.close < sig.open ? T.RED : T.TEAL} />
             <Detail label="Range" value={`${((sig.high - sig.low) / sig.open * 100).toFixed(1)}%`} />
           </div>
         </>
@@ -1761,33 +1768,33 @@ export default function ScanDashboardPage() {
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* Top bar */}
       <div style={{
-        height: 48, background: SURFACE, borderBottom: `1px solid ${BORDER}`,
+        height: 48, background: T.SURFACE, borderBottom: `1px solid ${BORDER}`,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px',
         position: 'sticky', top: 0, zIndex: 40,
       }}>
         <div className="flex items-center gap-3">
           <Search className="h-4 w-4" style={{ color: GOLD }} />
-          <div className="flex gap-1" style={{ background: SURFACE2, padding: 2, borderRadius: 4, border: `1px solid ${BORDER}` }}>
+          <div className="flex gap-1" style={{ background: T.SURFACE2, padding: 2, borderRadius: 4, border: `1px solid ${BORDER}` }}>
             <button onClick={() => setPageMode('scanner')} style={{
               padding: '3px 12px', borderRadius: 3, fontSize: 10, fontWeight: 700,
               background: pageMode === 'scanner' ? GOLD : 'transparent',
-              color: pageMode === 'scanner' ? '#000' : MUTED,
+              color: pageMode === 'scanner' ? '#000' : T.MUTED,
               border: 'none', cursor: 'pointer',
             }}>Scanner</button>
             <button onClick={() => setPageMode('backtest')} style={{
               padding: '3px 12px', borderRadius: 3, fontSize: 10, fontWeight: 700,
               background: pageMode === 'backtest' ? GOLD : 'transparent',
-              color: pageMode === 'backtest' ? '#000' : MUTED,
+              color: pageMode === 'backtest' ? '#000' : T.MUTED,
               border: 'none', cursor: 'pointer',
             }}>Backtest</button>
           </div>
-          {activeScan && <span style={{ color: MUTED, fontSize: 11 }}>· {activeScan.name}</span>}
+          {activeScan && <span style={{ color: T.MUTED, fontSize: 11 }}>· {activeScan.name}</span>}
         </div>
         <div className="flex items-center gap-1">
           <a href="/charts-terminal.html" target="_blank" rel="noreferrer" title="Open Charts" style={{
             display: 'flex', alignItems: 'center', gap: 4,
             padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-            background: SURFACE2, color: GOLD, border: `1px solid ${GOLD_BORDER}`, cursor: 'pointer',
+            background: T.SURFACE2, color: GOLD, border: `1px solid ${GOLD_BORDER}`, cursor: 'pointer',
             textDecoration: 'none',
           }}>
             <BarChart3 className="h-3 w-3" /> Charts
@@ -1802,14 +1809,14 @@ export default function ScanDashboardPage() {
           <button style={{
             display: 'flex', alignItems: 'center', gap: 4,
             padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-            background: GOLD_DIM, color: GOLD, border: `1px solid ${GOLD_BORDER}`, cursor: 'pointer',
+            background: T.GOLD_DIM, color: GOLD, border: `1px solid ${GOLD_BORDER}`, cursor: 'pointer',
           }}>
             <Save className="h-3 w-3" /> Save
           </button>
           <button onClick={() => setDark(d => !d)} title={dark ? 'Light mode' : 'Dark mode'} style={{
             display: 'flex', alignItems: 'center', gap: 4,
             padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-            background: GOLD_DIM, color: GOLD, border: `1px solid ${GOLD_BORDER}`, cursor: 'pointer',
+            background: T.GOLD_DIM, color: GOLD, border: `1px solid ${GOLD_BORDER}`, cursor: 'pointer',
           }}>
             {dark ? <Sun className="h-3 w-3" /> : <Moon className="h-3 w-3" />}
           </button>

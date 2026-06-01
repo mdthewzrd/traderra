@@ -860,9 +860,9 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
 }
 
 // ─── Backtest Stats Panel — Multi-Tab ────────────────
-type StatsTab = 'overview' | 'performance' | 'pnl' | 'robustness'
+type StatsTab = 'overview' | 'performance' | 'pnl' | 'robustness' | 'chart'
 
-function BacktestStatsPanel({ signals, backtestResults, dark }: { signals: Signal[]; backtestResults: BacktestResults | null; dark: boolean }) {
+function BacktestStatsPanel({ signals, backtestResults, dark, selectedIdx }: { signals: Signal[]; backtestResults: BacktestResults | null; dark: boolean; selectedIdx: number }) {
   const C = dark
     ? { BG, SURFACE, SURFACE2, SURFACE3, BORDER, TEXT, TEXT2, MUTED, WHITE, RED, TEAL, GOLD, VOL_UP, VOL_DN, GOLD_DIM, GOLD_BORDER }
     : { ...LIGHT, GOLD, GOLD_DIM: LIGHT.GOLD_DIM, GOLD_BORDER: LIGHT.GOLD_BORDER }
@@ -896,6 +896,7 @@ function BacktestStatsPanel({ signals, backtestResults, dark }: { signals: Signa
     { key: 'performance', label: 'Performance', icon: <Activity className="h-3 w-3" /> },
     { key: 'pnl', label: 'P&L / Drawdown', icon: <TrendingUp className="h-3 w-3" /> },
     { key: 'robustness', label: 'Robustness', icon: <Shield className="h-3 w-3" /> },
+    { key: 'chart', label: 'Chart View', icon: <BarChart3 className="h-3 w-3" /> },
   ]
 
   return (
@@ -1130,6 +1131,16 @@ function BacktestStatsPanel({ signals, backtestResults, dark }: { signals: Signa
             </div>
           </div>
         </>
+      ) : activeTab === 'chart' ? (
+        <div style={{ background: C.SURFACE, border: `1px solid ${C.BORDER}`, borderRadius: 4, overflow: 'hidden' }}>
+          {signals[selectedIdx] && (
+            <iframe
+              src={`https://s.tradingview.com/widgetembed/?frameElementId=tradingview&symbol=${encodeURIComponent(signals[selectedIdx].ticker)}&interval=15&theme=dark&style=1&locale=en&toolbar_bg=${C.BG.replace('#','')}&enable_publishing=false&hide_top_toolbar=false&hide_side_toolbar=false&allow_symbol_change=true`}
+              style={{ width: '100%', height: 420, border: 'none' }}
+              title={`${signals[selectedIdx].ticker} chart`}
+            />
+          )}
+        </div>
       ) : null}
     </div>
   )
@@ -2103,7 +2114,7 @@ export default function BacktestPage() {
 
   const renderCenter = () => (
     <div style={{ flex: 1, padding: 12, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <BacktestStatsPanel signals={filteredSignals} backtestResults={backtestResults} dark={dark} />
+      <BacktestStatsPanel signals={filteredSignals} backtestResults={backtestResults} dark={dark} selectedIdx={selectedIdx} />
 
       {loading ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 60 }}>

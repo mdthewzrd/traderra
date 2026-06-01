@@ -417,8 +417,10 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
         const b = allBars[i]
         let bd = ''
         if (typeof b.time === 'number') {
-          // Convert to ET date
-          const etMs = b.time * 1000 - 4 * 3600000
+          // Convert to ET date (DST-aware)
+          const utcMonth = new Date(b.time * 1000).getUTCMonth() + 1
+          const etOff = (utcMonth >= 4 && utcMonth <= 10) ? -4 : -5
+          const etMs = b.time * 1000 + etOff * 3600000
           const etD = new Date(etMs)
           bd = isNaN(etD.getTime()) ? '' : etD.toISOString().slice(0, 10)
         } else if (typeof b.time === 'string') {
@@ -517,12 +519,17 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
           dateStr = parts.length === 3 ? `${parts[1]}/${parts[2]}/${parts[0]}` : barTime
         } else if (typeof barTime === 'number') {
           const d = new Date(barTime * 1000)
-          const dd = String(d.getDate()).padStart(2, '0')
-          const mm = String(d.getMonth() + 1).padStart(2, '0')
-          const yyyy = d.getFullYear()
+          // Convert UTC → ET (DST-aware)
+          const utcMonth = d.getUTCMonth() + 1 // 1-12
+          const etOffset = (utcMonth >= 4 && utcMonth <= 10) ? -4 : -5 // EDT Apr-Oct, EST Nov-Mar
+          const etMs = d.getTime() + etOffset * 3600000
+          const etD = new Date(etMs)
+          const dd = String(etD.getUTCDate()).padStart(2, '0')
+          const mm = String(etD.getUTCMonth() + 1).padStart(2, '0')
+          const yyyy = etD.getUTCFullYear()
           dateStr = `${dd}/${mm}/${yyyy}`
-          const hh = String(d.getHours()).padStart(2, '0')
-          const min = String(d.getMinutes()).padStart(2, '0')
+          const hh = String(etD.getUTCHours()).padStart(2, '0')
+          const min = String(etD.getUTCMinutes()).padStart(2, '0')
           timeStr = `${hh}:${min}`
         }
         // Build label: date time O H L C V
@@ -587,7 +594,9 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
         let barDate = ''
         if (typeof b.time === 'number') {
           const d = new Date(b.time * 1000)
-          const etDate = new Date(d.getTime() - 4 * 3600000)
+          const utcMonth = d.getUTCMonth() + 1
+          const etOff = (utcMonth >= 4 && utcMonth <= 10) ? -4 : -5
+          const etDate = new Date(d.getTime() + etOff * 3600000)
           barDate = isNaN(etDate.getTime()) ? '' : etDate.toISOString().slice(0, 10)
         } else if (typeof b.time === 'string') {
           barDate = b.time.slice(0, 10)

@@ -1613,14 +1613,17 @@ export default function BacktestPage() {
     // Grade filter
     if (gradeFilter) result = result.filter(s => grades[`${s.ticker}-${s.date}`] === gradeFilter)
     if (activeFilters.size === 0 && hideFilters.size === 0) return result
-    return signals.filter((s, i) => {
+    // Filter by grade, then by active/hide filters
+    return result.filter((s, i) => {
+      // Find original index in signals array for filterResults lookup
+      const origIdx = signals.indexOf(s)
       // Check active filters (dim mode)
       for (const key of activeFilters) {
-        if (!filterResults[key]?.[i]) return false
+        if (!filterResults[key]?.[origIdx]) return false
       }
       // Check hide filters (remove from table + stats)
       for (const key of hideFilters) {
-        if (!filterResults[key]?.[i]) return false
+        if (!filterResults[key]?.[origIdx]) return false
       }
       return true
     })
@@ -2132,8 +2135,11 @@ export default function BacktestPage() {
                 const d0chg = s.open ? ((s.close - s.open) / s.open * 100) : 0
                 const passesAllFilters = activeFilters.size === 0 || Array.from(activeFilters).every(k => filterResults[k]?.[i])
                 // 3 states: show all checks, dim non-passing, or hide non-passing
-                // Hide row if ANY hiding filter fails it
-                const hideRow = [...hideFilters].some(k => !filterResults[k]?.[i])
+                // Hide row if grade filter doesn't match, or ANY hiding filter fails it
+                const gradeKey = `${s.ticker}-${s.date}`
+                const hideByGrade = gradeFilter && grades[gradeKey] !== gradeFilter
+                const hideByFilter = [...hideFilters].some(k => !filterResults[k]?.[i])
+                const hideRow = hideByGrade || hideByFilter
                 if (hideRow) return null
                 const dimmed = activeFilters.size > 0 && !passesAllFilters
                 return (

@@ -1217,9 +1217,10 @@ export default function BacktestPage() {
     return results
   }, [signals, bars15mCache])
 
-  // ── Lazy-load 15m bars when an intraday filter is toggled ──
+  // ── Lazy-load 15m bars when any intraday filter is visible OR active ──
   useEffect(() => {
-    const needsBars = Array.from(activeFilters).some(k => FILTERS.find(f => f.key === k)?.needsBars === '15m')
+    const allIntraKeys = new Set([...activeFilters, ...visibleFilters])
+    const needsBars = Array.from(allIntraKeys).some(k => FILTERS.find(f => f.key === k)?.needsBars === '15m')
     if (!needsBars || !signals.length) return
     // Find signals we haven't fetched yet
     const toFetch = signals.filter(s => {
@@ -1231,16 +1232,22 @@ export default function BacktestPage() {
     setBars15mLoading(true)
     const newCache: Record<string, any[]> = { ...bars15mCache }
     let fetched = 0
+    const total = toFetch.length
     toFetch.forEach(s => {
       const date = s.date
+      // Fetch 15 trading days before for EMA(72) warmup on 15m (72 bars ≈ 3 trading days, use 15 for safety)
+      const fromDate = new Date(date + 'T12:00:00')
+      fromDate.setDate(fromDate.getDate() - 25) // ~15-18 trading days back
       const nextDay = new Date(date + 'T12:00:00'); nextDay.setDate(nextDay.getDate() + 1)
-      const url = `/api/chart-data/bars?symbol=${encodeURIComponent(s.ticker)}&tf=15&from=${date}&to=${nextDay.toISOString().slice(0, 10)}`
+      const fromStr = fromDate.toISOString().slice(0, 10)
+      const toStr = nextDay.toISOString().slice(0, 10)
+      const url = `/api/chart-data/bars?symbol=${encodeURIComponent(s.ticker)}&tf=15&from=${fromStr}&to=${toStr}`
       fetch(url)
         .then(r => r.json())
         .then(data => {
           newCache[`${s.ticker}-${date}`] = data.bars || []
           fetched++
-          if (fetched === toFetch.length) {
+          if (fetched === total) {
             setBars15mCache(newCache)
             setBars15mLoading(false)
           }
@@ -1248,13 +1255,13 @@ export default function BacktestPage() {
         .catch(() => {
           newCache[`${s.ticker}-${date}`] = []
           fetched++
-          if (fetched === toFetch.length) {
+          if (fetched === total) {
             setBars15mCache(newCache)
             setBars15mLoading(false)
           }
         })
     })
-  }, [activeFilters, signals])
+  }, [activeFilters, visibleFilters, signals])
 
   // ── Filtered signals (based on active filters) ──
   const filteredSignals = useMemo(() => {

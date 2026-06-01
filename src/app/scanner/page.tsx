@@ -925,6 +925,15 @@ function Detail({ label, value, color }: { label: string; value: string; color?:
   )
 }
 
+function StatBox({ label, value, icon, color }: { label: string; value: string; icon: React.ReactNode; color?: string }) {
+  return (
+    <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '6px 10px' }}>
+      <div className="flex items-center gap-1" style={{ color: MUTED, fontSize: 9 }}>{icon}{label}</div>
+      <div style={{ color: color || GOLD, fontSize: 16, fontWeight: 700, marginTop: 1 }}>{value}</div>
+    </div>
+  )
+}
+
 // ─── Helpers ────────────────────────────────────────────
 function formatDateShort(dateStr: string): string {
   const d = new Date(dateStr + 'T12:00:00')

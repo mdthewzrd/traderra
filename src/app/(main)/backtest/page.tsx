@@ -270,7 +270,7 @@ const FILTERS: FilterDef[] = [
   // Tier 1 (sync, 1m bars): quick check for obvious fakes
   // Tier 2 (async, tick data): only fetched for suspicious signals
   { key: 'pushReal', label: 'Real Volume', shortLabel: 'REAL', needsBars: 'both',
-    description: '1m bars + tick data confirm the push high was actually traded (not a fake print)',
+    description: '1m bars confirm push was a real move (not a fake print). Key test: if the spike bar snaps back to normal range instantly, it\'s fake. If elevated range persists, it was a real catalyst.',
     compute: (s, bars15m, bars1m) => {
       if (!bars15m || !bars1m) return false
       // ── Step 1: Find push level from 15m morning bars (signal date only) ──
@@ -299,41 +299,45 @@ const FILTERS: FilterDef[] = [
         return mins >= 750 && mins < 1020
       }).sort((a, b) => a.time - b.time)
       if (morning1m.length < 5) return false
-      // ── CHECK 1: 1m bar confirms the high ──
+      // ── Step 3: Find the 1m bar that made the push high ──
       const pushLevel = morningHigh
       const tolerance = pushLevel * 0.002
       const barsAtPush = morning1m.filter(b => b.high >= pushLevel - tolerance)
       if (barsAtPush.length === 0) return false // 15m high not on 1m = instant fake
-      // ── CHECK 2: Volume at push level ──
+      // Find the bar index in the morning1m array for before/after comparison
+      const pushBarIdx = morning1m.findIndex(b => b.high >= pushLevel - tolerance)
+      // ── CORE CHECK: Before vs After range comparison ──
+      // Get 3 bars before the push bar and 3 bars after
+      const beforeBars = morning1m.slice(Math.max(0, pushBarIdx - 3), pushBarIdx)
+      const afterBars = morning1m.slice(pushBarIdx + 1, pushBarIdx + 4)
+      const pushBar = morning1m[pushBarIdx]
+      // Average range of context bars (before + after)
+      const contextBars = [...beforeBars, ...afterBars]
+      if (contextBars.length < 3) return true // not enough context to judge, give benefit of doubt
+      const contextAvgRange = contextBars.reduce((sum, b) => sum + (b.high - b.low), 0) / contextBars.length
+      const pushRange = pushBar.high - pushBar.low
+      const rangeRatio = contextAvgRange > 0 ? pushRange / contextAvgRange : 1
+      // ── Instant pass: push bar range is normal or only slightly elevated ──
+      // If the bar at the high isn't a huge outlier, the move was gradual/real
+      if (rangeRatio < 3) return true
+      // ── THE KEY TEST ──
+      // rangeRatio >= 3: the push bar is 3x+ the surrounding bars' range
+      // Now check: do AFTER bars stay elevated, or snap back to normal?
+      if (afterBars.length >= 2) {
+        const afterAvgRange = afterBars.reduce((sum, b) => sum + (b.high - b.low), 0) / afterBars.length
+        const afterRatio = contextAvgRange > 0 ? afterAvgRange / contextAvgRange : 1
+        // After bars snap back to near-normal (< 1.5x context avg) = fake print
+        // The spike was isolated — nobody was actually trading at that level
+        if (afterRatio < 1.5) return false
+        // After bars stay elevated (>= 1.5x) = real catalyst/news move
+        // The wide range was sustained by actual trading
+        return true
+      }
+      // Not enough after bars — check volume instead
       const avgVol = morning1m.reduce((sum, b) => sum + (b.volume || 0), 0) / morning1m.length
-      const pushVol = barsAtPush.reduce((sum, b) => sum + (b.volume || 0), 0)
-      if (avgVol > 0 && pushVol < avgVol * 0.3) return false // less than 30% avg bar vol = fake
-      // ── CHECK 3: Range anomaly ──
-      // Fake prints: the bar has a huge range spike (5x+ normal) but normal/low volume
-      // Real moves: wide range comes WITH high volume (actual aggressive trading)
-      const avgRange = morning1m.reduce((sum, b) => sum + (b.high - b.low), 0) / morning1m.length
-      const pushBarRanges = barsAtPush.map(b => b.high - b.low)
-      const maxPushRange = Math.max(...pushBarRanges)
-      const rangeRatio = avgRange > 0 ? maxPushRange / avgRange : 1
-      const pushBarVolumes = barsAtPush.map(b => b.volume || 0)
-      const maxPushVol = Math.max(...pushBarVolumes)
-      const volRatio = avgVol > 0 ? maxPushVol / avgVol : 1
-      // If range is 5x+ normal but volume isn't 2x+ normal, it's a quote spike not real trading
-      if (rangeRatio >= 5 && volRatio < 2) return false
-      // ── CHECK 4: Volume positioned at top of bar ──
-      // Real: the bar that made the high should have decent volume
-      // Fake: volume is there but it's all at the bottom of the bar (price never really traded at high)
-      // We can approximate this: if push bar has volume but close is in bottom 25%, and range is 3x+ normal → suspicious
-      const worstCloseScore = Math.min(...barsAtPush.map(b => {
-        const range = b.high - b.low
-        return range > 0 ? (b.close - b.low) / range : 0.5
-      }))
-      if (worstCloseScore < 0.25 && rangeRatio >= 3) return false
-      // ── Quick pass: clearly real (volume at push, range not anomalous) ──
-      if (rangeRatio < 3 || volRatio >= 2) return true
-      // ── SUSPICIOUS: wide range with ambiguous volume ──
-      // These need tick-level validation
-      return pushVol >= avgVol * 0.5
+      const pushVol = pushBar.volume || 0
+      // Huge range spike + low volume = fake. High volume = might be real.
+      return avgVol > 0 && pushVol >= avgVol * 1.5
     }
   },
 ]

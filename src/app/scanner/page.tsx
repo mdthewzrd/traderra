@@ -974,7 +974,7 @@ export default function ScanDashboardPage() {
   const [runFrom, setRunFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 90); return d.toISOString().slice(0, 10) })
   const [runTo, setRunTo] = useState(() => new Date().toISOString().slice(0, 10))
   const [copied, setCopied] = useState(false)
-  const [pendingRuns, setPendingRuns] = useState<string[]>([])
+  const [pendingRuns, setPendingRuns] = useState<{ id: string; spec: string; label: string; startedAt: string }[]>([])
   const knownRunIdsRef = useRef<Set<string>>(new Set())
   const [chatInput, setChatInput] = useState('')
   const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([])
@@ -1235,15 +1235,16 @@ export default function ScanDashboardPage() {
           const byStrat: Record<string, any[]> = {}
           dbScans.forEach((s: any) => { (byStrat[s.strategy] = byStrat[s.strategy] || []).push(s) })
 
-          let changed = false
-          for (const spec of [...pendingRuns]) {
-            const matches = byStrat[spec] || []
-            // Find a NEW run (ID we haven't seen before)
+          const stillPending: typeof pendingRuns = []
+          let anyChanged = false
+
+          for (const pending of pendingRuns) {
+            const matches = byStrat[pending.spec] || []
             const newRun = matches.find((m: any) => !knownRunIdsRef.current.has(m.id))
             if (newRun) {
               knownRunIdsRef.current.add(newRun.id)
-              setPendingRuns(prev => prev.filter(p => p !== spec))
-              // Load the new run's signals
+              anyChanged = true
+              // Load signals from the new run
               fetch(`/api/scans/${newRun.id}`).then(r => r.json()).then(d => {
                 if (d.signals) {
                   setSignals(d.signals.map((s: any) => ({ ...s, ticker: s.ticker || s.symbol || '', symbol: s.ticker || s.symbol || '' })))
@@ -1251,11 +1252,15 @@ export default function ScanDashboardPage() {
                   setDayOffset(0)
                 }
               })
-              changed = true
+              // Don't add to stillPending — it's done
+            } else {
+              stillPending.push(pending)
             }
           }
-          // Refresh scans list with new runs
-          if (changed) {
+
+          setPendingRuns(stillPending)
+
+          if (anyChanged) {
             const freshScans = BUILTIN_SCANS.map(builtin => {
               const matches = byStrat[BUILTIN_SPEC_MAP[builtin.id]] || []
               const totalSig = matches.reduce((a: number, s: any) => a + (s.resultCount || 0), 0)
@@ -1331,7 +1336,24 @@ export default function ScanDashboardPage() {
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {runs.length === 0 && (
+          {/* Pending runs — shown first */}
+          {pendingRuns.filter(p => activeScan ? p.spec === (BUILTIN_SPEC_MAP[activeScan.id] || '') : true).map(pending => (
+            <div key={pending.id} style={{
+              padding: '8px 10px', borderBottom: `1px solid ${BORDER}`,
+              background: `${GOLD}08`, borderLeft: `2px solid ${GOLD}60`,
+            }}>
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-3 w-3 animate-spin" style={{ color: GOLD, flexShrink: 0 }} />
+                <span style={{ color: GOLD, fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pending.label}</span>
+              </div>
+              <div className="flex items-center gap-2" style={{ marginTop: 3 }}>
+                <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 2, background: `${GOLD}20`, color: GOLD, fontWeight: 700 }}>Processing</span>
+                <span style={{ color: MUTED, fontSize: 9, marginLeft: 'auto' }}>{pending.startedAt}</span>
+              </div>
+            </div>
+          ))}
+          {/* Real runs */}
+          {runs.length === 0 && pendingRuns.length === 0 && (
             <div style={{ padding: 16, textAlign: 'center' }}>
               <p style={{ color: MUTED, fontSize: 10 }}>No runs yet</p>
               <p style={{ color: MUTED, fontSize: 9, marginTop: 4 }}>Click Run ▶ to execute</p>
@@ -1371,65 +1393,65 @@ export default function ScanDashboardPage() {
           const effectiveSpec = runFilters.includes('am-push') && specName === 'backside-b' ? 'backside-b-push' : specName
           const dates = runCustomMode ? { from: runFrom, to: runTo } : (() => { const d = parseInt(runRange); const t = new Date(); return { from: new Date(t.getTime() - d * 86400000).toISOString().slice(0, 10), to: t.toISOString().slice(0, 10) } })()
           const cmd = `cd ~/.wzrd-pi-dev/projects/edge-dev/assets && PYTHONPATH=scan-engine:~/edge.dev/src ~/edge.dev/.venv/bin/python sandbox.py --spec ${effectiveSpec} --start ${dates.from} --end ${dates.to}${runFilters.length ? ' --filters ' + runFilters.join(',') : ''} --push`
-          const dateInputStyle = { background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '4px 6px', color: TEXT, fontSize: 10, width: '100%', fontFamily: 'monospace', outline: 'none' as const }
+          const dateInputStyle = { background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '6px 8px', color: TEXT, fontSize: 11, width: '100%', fontFamily: 'monospace', outline: 'none' as const }
           return (
-            <div style={{ padding: '8px 10px', background: SURFACE2, borderBottom: `1px solid ${BORDER}` }}>
-              <div style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>{activeScan.name}</div>
+            <div style={{ padding: '12px 14px', background: SURFACE2, borderBottom: `1px solid ${BORDER}` }}>
+              <div style={{ color: GOLD, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>{activeScan.name}</div>
               {/* Date range */}
               {!runCustomMode ? (
-                <div className="flex gap-1 flex-wrap" style={{ marginBottom: 6 }}>
+                <div className="flex gap-1 flex-wrap" style={{ marginBottom: 8 }}>
                   {['7', '14', '30', '60', '90', '180', '365'].map(d => (
-                    <button key={d} onClick={() => setRunRange(d)} style={{ padding: '2px 5px', borderRadius: 2, fontSize: 8, fontWeight: 600, background: runRange === d ? GOLD : SURFACE, color: runRange === d ? '#000' : MUTED, border: `1px solid ${runRange === d ? GOLD : BORDER}` }}>{d}d</button>
+                    <button key={d} onClick={() => setRunRange(d)} style={{ padding: '4px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: runRange === d ? GOLD : SURFACE, color: runRange === d ? '#000' : MUTED, border: `1px solid ${runRange === d ? GOLD : BORDER}` }}>{d}d</button>
                   ))}
-                  <button onClick={() => setRunCustomMode(true)} style={{ padding: '2px 5px', borderRadius: 2, fontSize: 8, fontWeight: 600, background: SURFACE, color: MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer' }}>Custom</button>
+                  <button onClick={() => setRunCustomMode(true)} style={{ padding: '4px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: SURFACE, color: MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer' }}>Custom</button>
                 </div>
               ) : (
-                <div style={{ marginBottom: 6 }}>
-                  <div className="flex gap-1">
+                <div style={{ marginBottom: 8 }}>
+                  <div className="flex gap-2">
                     <input type="date" value={runFrom} onChange={e => setRunFrom(e.target.value)} style={dateInputStyle} />
                     <input type="date" value={runTo} onChange={e => setRunTo(e.target.value)} style={dateInputStyle} />
                   </div>
-                  <button onClick={() => setRunCustomMode(false)} style={{ padding: '1px 5px', borderRadius: 2, fontSize: 7, fontWeight: 600, background: SURFACE, color: MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer', marginTop: 3 }}>← Quick</button>
+                  <button onClick={() => setRunCustomMode(false)} style={{ padding: '2px 6px', borderRadius: 2, fontSize: 9, fontWeight: 600, background: SURFACE, color: MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer', marginTop: 4 }}>← Quick</button>
                 </div>
               )}
               {/* Filters */}
               {(activeScan.filters || []).length > 0 && (
-                <div className="flex gap-1" style={{ marginBottom: 6 }}>
+                <div className="flex gap-1" style={{ marginBottom: 8 }}>
                   {activeScan.filters!.map(f => {
                     const isOn = runFilters.includes(f)
-                    return <button key={f} onClick={() => setRunFilters(prev => isOn ? prev.filter(x => x !== f) : [...prev, f])} style={{ padding: '2px 6px', borderRadius: 2, fontSize: 8, fontWeight: 700, background: isOn ? `${GOLD}30` : SURFACE, color: isOn ? GOLD : MUTED, border: `1px solid ${isOn ? GOLD : BORDER}`, cursor: 'pointer' }}>{f}</button>
+                    return <button key={f} onClick={() => setRunFilters(prev => isOn ? prev.filter(x => x !== f) : [...prev, f])} style={{ padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: isOn ? `${GOLD}30` : SURFACE, color: isOn ? GOLD : MUTED, border: `1px solid ${isOn ? GOLD : BORDER}`, cursor: 'pointer' }}>{f}</button>
                   })}
                 </div>
               )}
               {/* Command preview */}
-              <pre style={{ background: '#0a0a10', border: `1px solid ${BORDER}`, borderRadius: 3, padding: '5px 6px', fontSize: 8, fontFamily: 'monospace', color: TEAL, lineHeight: 1.4, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 60, overflowY: 'auto', marginBottom: 6 }}>{cmd}</pre>
+              <pre style={{ background: '#0a0a10', border: `1px solid ${BORDER}`, borderRadius: 4, padding: '8px 10px', fontSize: 9, fontFamily: 'monospace', color: TEAL, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 80, overflowY: 'auto', marginBottom: 8 }}>{cmd}</pre>
               {/* Actions */}
               <div className="flex gap-1">
-                <button onClick={() => { navigator.clipboard.writeText(cmd); setCopied(true); setPendingRuns(prev => [...prev, BUILTIN_SPEC_MAP[activeScan.id] || '']); setTimeout(() => setCopied(false), 2000); setShowRunPanel(false) }} style={{ flex: 1, padding: '5px', borderRadius: 3, fontSize: 9, fontWeight: 700, background: GOLD, color: '#000', border: 'none', cursor: 'pointer' }}>
-                  {copied ? '✓ Copied!' : '📋 Copy & Track'}
+                <button onClick={() => {
+                  navigator.clipboard.writeText(cmd)
+                  setCopied(true)
+                  const spec = BUILTIN_SPEC_MAP[activeScan.id] || ''
+                  const pendingId = `pending-${Date.now()}`
+                  setPendingRuns(prev => [...prev, { id: pendingId, spec, label: `${activeScan.name} · ${dates.from} → ${dates.to}`, startedAt: new Date().toLocaleTimeString() }])
+                  setTimeout(() => setCopied(false), 2000)
+                  setShowRunPanel(false)
+                }} style={{ flex: 1, padding: '7px', borderRadius: 3, fontSize: 11, fontWeight: 700, background: GOLD, color: '#000', border: 'none', cursor: 'pointer' }}>
+                  {copied ? '✓ Copied!' : '📋 Copy & Run'}
                 </button>
-                <button onClick={() => setShowRunPanel(false)} style={{ padding: '5px 8px', borderRadius: 3, fontSize: 9, fontWeight: 600, background: SURFACE, color: MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer' }}>Cancel</button>
+                <button onClick={() => setShowRunPanel(false)} style={{ padding: '7px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: SURFACE, color: MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer' }}>Cancel</button>
               </div>
             </div>
           )
         })() : null}
-        {/* Pending runs indicator */}
-        {pendingRuns.length > 0 && (
-          <div style={{ padding: '6px 10px', background: `${GOLD}10`, borderBottom: `1px solid ${GOLD_BORDER}`, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Loader2 className="h-3 w-3 animate-spin" style={{ color: GOLD }} />
-            <span style={{ color: GOLD, fontSize: 9, fontWeight: 600 }}>Running {pendingRuns.join(', ')}...</span>
-            <span style={{ color: MUTED, fontSize: 8, marginLeft: 'auto' }}>Polling DB</span>
-          </div>
-        )}
         {/* Run button */}
-        <div style={{ padding: 6 }}>
+        <div style={{ padding: 8 }}>
           <button onClick={() => { setShowRunPanel(!showRunPanel); if (!showRunPanel) setRunRange('90') }} style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-            width: '100%', padding: '6px', borderRadius: 4,
-            background: showRunPanel ? SURFACE : GOLD_DIM, color: showRunPanel ? MUTED : GOLD, fontWeight: 600, fontSize: 10,
+            width: '100%', padding: '8px', borderRadius: 4,
+            background: showRunPanel ? SURFACE : GOLD_DIM, color: showRunPanel ? MUTED : GOLD, fontWeight: 700, fontSize: 11,
             border: `1px solid ${showRunPanel ? BORDER : GOLD_BORDER}`, cursor: 'pointer',
           }}>
-            <Play className="h-3 w-3" /> {showRunPanel ? 'Cancel' : 'Run Scan'}
+            <Play className="h-3.5 w-3.5" /> {showRunPanel ? 'Cancel' : 'Run Scan'}
           </button>
         </div>
       </div>

@@ -893,10 +893,10 @@ function BacktestStatsPanel({ signals, backtestResults, dark, selectedIdx }: { s
   const bt = backtestResults
   const tabs: { key: StatsTab; label: string; icon: React.ReactNode }[] = [
     { key: 'overview', label: 'Overview', icon: <Zap className="h-3 w-3" /> },
+    { key: 'chart', label: 'Chart View', icon: <BarChart3 className="h-3 w-3" /> },
     { key: 'performance', label: 'Performance', icon: <Activity className="h-3 w-3" /> },
     { key: 'pnl', label: 'P&L / Drawdown', icon: <TrendingUp className="h-3 w-3" /> },
     { key: 'robustness', label: 'Robustness', icon: <Shield className="h-3 w-3" /> },
-    { key: 'chart', label: 'Chart View', icon: <BarChart3 className="h-3 w-3" /> },
   ]
 
   return (

@@ -1295,13 +1295,13 @@ export default function ScanDashboardPage() {
   const renderLeftSidebar = () => (
     <div style={{
       width: LEFT_W, minWidth: LEFT_W, maxWidth: LEFT_W,
-      background: T.SURFACE, borderRight: `1px solid ${BORDER}`,
+      background: T.SURFACE, borderRight: `1px solid ${T.BORDER}`,
       display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)',
       position: 'sticky', top: 48,
     }}>
       {/* ── Top half: Scan tree ── */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, borderBottom: `1px solid ${BORDER}` }}>
-        <div style={{ padding: '8px 10px', borderBottom: `1px solid ${BORDER}`, background: T.SURFACE2 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, borderBottom: `1px solid ${T.BORDER}` }}>
+        <div style={{ padding: '8px 10px', borderBottom: `1px solid ${T.BORDER}`, background: T.SURFACE2 }}>
           <div className="flex items-center justify-between">
             <span style={{ color: GOLD, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Scans</span>
             <span style={{ color: T.MUTED, fontSize: 10 }}>{scans.length}</span>
@@ -1316,7 +1316,7 @@ export default function ScanDashboardPage() {
                 padding: '8px 10px', border: 'none', cursor: 'pointer',
                 background: isActive ? T.GOLD_DIM : 'transparent',
                 borderLeft: isActive ? `2px solid ${GOLD}` : '2px solid transparent',
-                borderBottom: `1px solid ${BORDER}`,
+                borderBottom: `1px solid ${T.BORDER}`,
               }}
                 onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
                 onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
@@ -1346,7 +1346,7 @@ export default function ScanDashboardPage() {
 
       {/* ── Bottom half: Runs for selected scan ── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <div style={{ padding: '8px 10px', borderBottom: `1px solid ${BORDER}`, background: T.SURFACE2 }}>
+        <div style={{ padding: '8px 10px', borderBottom: `1px solid ${T.BORDER}`, background: T.SURFACE2 }}>
           <div className="flex items-center justify-between">
             <span style={{ color: GOLD, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Runs</span>
             <span style={{ color: T.MUTED, fontSize: 10 }}>{runs.length}</span>
@@ -1359,7 +1359,7 @@ export default function ScanDashboardPage() {
             const pct = prog && prog.totalDays > 0 ? Math.round((prog.currentIndex / prog.totalDays) * 100) : 0
             return (
             <div key={pending.id} style={{
-              padding: '8px 10px', borderBottom: `1px solid ${BORDER}`,
+              padding: '8px 10px', borderBottom: `1px solid ${T.BORDER}`,
               background: `${GOLD}08`, borderLeft: `2px solid ${GOLD}60`,
             }}>
               <div className="flex items-center gap-2">
@@ -1390,7 +1390,7 @@ export default function ScanDashboardPage() {
             const isActive = run.id === selectedRun
             return (
             <div key={run.id} onClick={() => setSelectedRun(run.id)} style={{
-              padding: '6px 10px', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer',
+              padding: '6px 10px', borderBottom: `1px solid ${T.BORDER}`, cursor: 'pointer',
               background: isActive ? T.GOLD_DIM : 'transparent',
               borderLeft: isActive ? `2px solid ${GOLD}` : '2px solid transparent',
             }}
@@ -1414,23 +1414,23 @@ export default function ScanDashboardPage() {
       </div>
 
       {/* Run panel */}
-      <div style={{ borderTop: `1px solid ${BORDER}` }}>
+      <div style={{ borderTop: `1px solid ${T.BORDER}` }}>
         {showRunPanel && activeScan ? (() => {
           const specName = BUILTIN_SPEC_MAP[activeScan.id] || activeScan.name.toLowerCase().replace(/\s+/g, '-')
           const effectiveSpec = runFilters.includes('am-push') && specName === 'backside-b' ? 'backside-b-push' : specName
           const dates = runCustomMode ? { from: runFrom, to: runTo } : (() => { const d = parseInt(runRange); const t = new Date(); return { from: new Date(t.getTime() - d * 86400000).toISOString().slice(0, 10), to: t.toISOString().slice(0, 10) } })()
           const cmd = `cd ~/.wzrd-pi-dev/projects/edge-dev/assets && PYTHONPATH=scan-engine:~/edge.dev/src ~/edge.dev/.venv/bin/python sandbox.py --spec ${effectiveSpec} --start ${dates.from} --end ${dates.to}${runFilters.length ? ' --filters ' + runFilters.join(',') : ''} --push`
-          const dateInputStyle = { background: T.SURFACE, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '6px 8px', color: T.TEXT, fontSize: 11, width: '100%', fontFamily: 'monospace', outline: 'none' as const }
+          const dateInputStyle = { background: T.SURFACE, border: `1px solid ${T.BORDER}`, borderRadius: 3, padding: '6px 8px', color: T.TEXT, fontSize: 11, width: '100%', fontFamily: 'monospace', outline: 'none' as const }
           return (
-            <div style={{ padding: '12px 14px', background: T.SURFACE2, borderBottom: `1px solid ${BORDER}` }}>
+            <div style={{ padding: '12px 14px', background: T.SURFACE2, borderBottom: `1px solid ${T.BORDER}` }}>
               <div style={{ color: GOLD, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>{activeScan.name}</div>
               {/* Date range */}
               {!runCustomMode ? (
                 <div className="flex gap-1 flex-wrap" style={{ marginBottom: 8 }}>
                   {['7', '14', '30', '60', '90', '180', '365'].map(d => (
-                    <button key={d} onClick={() => setRunRange(d)} style={{ padding: '4px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: runRange === d ? GOLD : T.SURFACE, color: runRange === d ? '#000' : T.MUTED, border: `1px solid ${runRange === d ? GOLD : BORDER}` }}>{d}d</button>
+                    <button key={d} onClick={() => setRunRange(d)} style={{ padding: '4px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: runRange === d ? GOLD : T.SURFACE, color: runRange === d ? '#000' : T.MUTED, border: `1px solid ${runRange === d ? GOLD : T.BORDER}` }}>{d}d</button>
                   ))}
-                  <button onClick={() => setRunCustomMode(true)} style={{ padding: '4px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: T.SURFACE, color: T.MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer' }}>Custom</button>
+                  <button onClick={() => setRunCustomMode(true)} style={{ padding: '4px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: T.SURFACE, color: T.MUTED, border: `1px solid ${T.BORDER}`, cursor: 'pointer' }}>Custom</button>
                 </div>
               ) : (
                 <div style={{ marginBottom: 8 }}>
@@ -1438,7 +1438,7 @@ export default function ScanDashboardPage() {
                     <input type="date" value={runFrom} onChange={e => setRunFrom(e.target.value)} style={dateInputStyle} />
                     <input type="date" value={runTo} onChange={e => setRunTo(e.target.value)} style={dateInputStyle} />
                   </div>
-                  <button onClick={() => setRunCustomMode(false)} style={{ padding: '2px 6px', borderRadius: 2, fontSize: 9, fontWeight: 600, background: T.SURFACE, color: T.MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer', marginTop: 4 }}>← Quick</button>
+                  <button onClick={() => setRunCustomMode(false)} style={{ padding: '2px 6px', borderRadius: 2, fontSize: 9, fontWeight: 600, background: T.SURFACE, color: T.MUTED, border: `1px solid ${T.BORDER}`, cursor: 'pointer', marginTop: 4 }}>← Quick</button>
                 </div>
               )}
               {/* Filters */}
@@ -1446,12 +1446,12 @@ export default function ScanDashboardPage() {
                 <div className="flex gap-1" style={{ marginBottom: 8 }}>
                   {activeScan.filters!.map(f => {
                     const isOn = runFilters.includes(f)
-                    return <button key={f} onClick={() => setRunFilters(prev => isOn ? prev.filter(x => x !== f) : [...prev, f])} style={{ padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: isOn ? `${GOLD}30` : T.SURFACE, color: isOn ? GOLD : T.MUTED, border: `1px solid ${isOn ? GOLD : BORDER}`, cursor: 'pointer' }}>{f}</button>
+                    return <button key={f} onClick={() => setRunFilters(prev => isOn ? prev.filter(x => x !== f) : [...prev, f])} style={{ padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: isOn ? `${GOLD}30` : T.SURFACE, color: isOn ? GOLD : T.MUTED, border: `1px solid ${isOn ? GOLD : T.BORDER}`, cursor: 'pointer' }}>{f}</button>
                   })}
                 </div>
               )}
               {/* Command preview */}
-              <pre style={{ background: '#0a0a10', border: `1px solid ${BORDER}`, borderRadius: 4, padding: '8px 10px', fontSize: 9, fontFamily: 'monospace', color: T.TEAL, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 80, overflowY: 'auto', marginBottom: 8 }}>{cmd}</pre>
+              <pre style={{ background: '#0a0a10', border: `1px solid ${T.BORDER}`, borderRadius: 4, padding: '8px 10px', fontSize: 9, fontFamily: 'monospace', color: T.TEAL, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 80, overflowY: 'auto', marginBottom: 8 }}>{cmd}</pre>
               {/* Actions */}
               <div className="flex gap-1">
                 <button onClick={() => {
@@ -1465,7 +1465,7 @@ export default function ScanDashboardPage() {
                 }} style={{ flex: 1, padding: '7px', borderRadius: 3, fontSize: 11, fontWeight: 700, background: GOLD, color: '#000', border: 'none', cursor: 'pointer' }}>
                   {copied ? '✓ Copied!' : '📋 Copy & Run'}
                 </button>
-                <button onClick={() => setShowRunPanel(false)} style={{ padding: '7px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: T.SURFACE, color: T.MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer' }}>Cancel</button>
+                <button onClick={() => setShowRunPanel(false)} style={{ padding: '7px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: T.SURFACE, color: T.MUTED, border: `1px solid ${T.BORDER}`, cursor: 'pointer' }}>Cancel</button>
               </div>
             </div>
           )
@@ -1476,7 +1476,7 @@ export default function ScanDashboardPage() {
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
             width: '100%', padding: '8px', borderRadius: 4,
             background: showRunPanel ? T.SURFACE : T.GOLD_DIM, color: showRunPanel ? T.MUTED : GOLD, fontWeight: 700, fontSize: 11,
-            border: `1px solid ${showRunPanel ? BORDER : GOLD_BORDER}`, cursor: 'pointer',
+            border: `1px solid ${showRunPanel ? T.BORDER : T.GOLD_BORDER}`, cursor: 'pointer',
           }}>
             <Play className="h-3.5 w-3.5" /> {showRunPanel ? 'Cancel' : 'Run Scan'}
           </button>
@@ -1489,12 +1489,12 @@ export default function ScanDashboardPage() {
   const renderRightSidebar = () => (
     <div style={{
       width: RIGHT_W, minWidth: RIGHT_W, maxWidth: RIGHT_W,
-      background: T.SURFACE, borderLeft: `1px solid ${BORDER}`,
+      background: T.SURFACE, borderLeft: `1px solid ${T.BORDER}`,
       display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)',
       position: 'sticky', top: 48,
     }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <div className="px-2 py-1.5 flex items-center justify-between" style={{ borderBottom: `1px solid ${BORDER}`, background: T.SURFACE2 }}>
+        <div className="px-2 py-1.5 flex items-center justify-between" style={{ borderBottom: `1px solid ${T.BORDER}`, background: T.SURFACE2 }}>
           <span style={{ color: GOLD, fontSize: 12, fontWeight: 700 }}>SIGNALS</span>
           <span style={{ color: T.MUTED, fontSize: 9 }}>{signals.length}</span>
         </div>
@@ -1503,7 +1503,7 @@ export default function ScanDashboardPage() {
             <thead>
               <tr style={{ background: T.SURFACE2, position: 'sticky', top: 0, zIndex: 2 }}>
                 <th onClick={() => toggleSort('ticker')} style={{ padding: '4px 6px', textAlign: 'left', color: sortCol === 'ticker' ? GOLD : GOLD, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 0, background: T.SURFACE2, zIndex: 3, minWidth: 56, cursor: 'pointer', userSelect: 'none' }}>Tk{sortCol === 'ticker' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                <th onClick={() => toggleSort('date')} style={{ padding: '4px 6px', textAlign: 'left', color: sortCol === 'date' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 56, background: T.SURFACE2, zIndex: 3, minWidth: 68, borderRight: `1px solid ${BORDER}`, cursor: 'pointer', userSelect: 'none' }}>Date{sortCol === 'date' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('date')} style={{ padding: '4px 6px', textAlign: 'left', color: sortCol === 'date' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 56, background: T.SURFACE2, zIndex: 3, minWidth: 68, borderRight: `1px solid ${T.BORDER}`, cursor: 'pointer', userSelect: 'none' }}>Date{sortCol === 'date' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                 <th onClick={() => toggleSort('open')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'open' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Op{sortCol === 'open' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                 <th onClick={() => toggleSort('close')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'close' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Close{sortCol === 'close' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                 <th onClick={() => toggleSort('gap')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'gap' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Gap%{sortCol === 'gap' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
@@ -1525,7 +1525,7 @@ export default function ScanDashboardPage() {
                     onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
                   >
                     <td style={{ padding: '3px 6px', color: isActive ? GOLD : T.WHITE, fontWeight: 700, fontFamily: 'monospace', position: 'sticky', left: 0, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1 }}>{s.ticker}</td>
-                    <td style={{ padding: '3px 6px', color: isActive ? GOLD : T.MUTED, position: 'sticky', left: 56, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1, borderRight: `1px solid ${BORDER}` }}>{s.date.slice(5)}</td>
+                    <td style={{ padding: '3px 6px', color: isActive ? GOLD : T.MUTED, position: 'sticky', left: 56, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1, borderRight: `1px solid ${T.BORDER}` }}>{s.date.slice(5)}</td>
                     <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>${s.open?.toFixed(2)}</td>
                     <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>${s.close?.toFixed(2)}</td>
                     <td style={{ padding: '3px 4px', color: T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{(s.gap_pct || 0).toFixed(0)}%</td>
@@ -1542,8 +1542,8 @@ export default function ScanDashboardPage() {
       </div>
 
       {/* Chat */}
-      <div style={{ height: '35%', minHeight: 140, borderTop: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
-        <div className="px-2 py-1.5 flex items-center gap-1.5" style={{ borderBottom: `1px solid ${BORDER}`, background: T.SURFACE2 }}>
+      <div style={{ height: '35%', minHeight: 140, borderTop: `1px solid ${T.BORDER}`, display: 'flex', flexDirection: 'column' }}>
+        <div className="px-2 py-1.5 flex items-center gap-1.5" style={{ borderBottom: `1px solid ${T.BORDER}`, background: T.SURFACE2 }}>
           <MessageSquare className="h-3 w-3" style={{ color: GOLD }} />
           <span style={{ color: GOLD, fontSize: 10, fontWeight: 700 }}>CHAT</span>
         </div>
@@ -1557,7 +1557,7 @@ export default function ScanDashboardPage() {
             </div>
           ))}
         </div>
-        <div style={{ padding: '4px 6px', borderTop: `1px solid ${BORDER}`, display: 'flex', gap: 4 }}>
+        <div style={{ padding: '4px 6px', borderTop: `1px solid ${T.BORDER}`, display: 'flex', gap: 4 }}>
           <input value={chatInput} onChange={e => setChatInput(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Enter' && chatInput.trim()) {
@@ -1568,7 +1568,7 @@ export default function ScanDashboardPage() {
               }
             }}
             placeholder="Ask about signals..."
-            style={{ flex: 1, background: T.BG, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '5px 8px', color: T.TEXT, fontSize: 11, outline: 'none' }}
+            style={{ flex: 1, background: T.BG, border: `1px solid ${T.BORDER}`, borderRadius: 3, padding: '5px 8px', color: T.TEXT, fontSize: 11, outline: 'none' }}
           />
           <button style={{ padding: '4px 8px', borderRadius: 3, background: GOLD, color: '#000', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
             <Send className="h-3 w-3" />
@@ -1598,7 +1598,7 @@ export default function ScanDashboardPage() {
                 })} title={f.description} style={{
                   padding: '2px 6px', borderRadius: 2, fontSize: 8, fontWeight: 700,
                   background: isOn ? `${GOLD}30` : T.SURFACE2, color: isOn ? GOLD : T.MUTED,
-                  border: `1px solid ${isOn ? GOLD : BORDER}`, cursor: 'pointer',
+                  border: `1px solid ${isOn ? GOLD : T.BORDER}`, cursor: 'pointer',
                 }}>{f.shortLabel} <span style={{ fontWeight: 400, fontSize: 7 }}>{count}</span></button>
               )
             })}
@@ -1629,19 +1629,19 @@ export default function ScanDashboardPage() {
                 padding: '3px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600,
                 background: chartMode === 'single' ? GOLD : T.SURFACE,
                 color: chartMode === 'single' ? '#000' : T.MUTED,
-                border: `1px solid ${chartMode === 'single' ? GOLD : BORDER}`,
+                border: `1px solid ${chartMode === 'single' ? GOLD : T.BORDER}`,
                 display: 'flex', alignItems: 'center', gap: 3,
               }}><LayoutGrid className="h-3 w-3" />Single</button>
               <button onClick={() => setChartMode('stacked')} title="Stacked" style={{
                 padding: '3px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600,
                 background: chartMode === 'stacked' ? GOLD : T.SURFACE,
                 color: chartMode === 'stacked' ? '#000' : T.MUTED,
-                border: `1px solid ${chartMode === 'stacked' ? GOLD : BORDER}`,
+                border: `1px solid ${chartMode === 'stacked' ? GOLD : T.BORDER}`,
                 display: 'flex', alignItems: 'center', gap: 3,
               }}><Rows3 className="h-3 w-3" />Stacked</button>
             </div>
 
-            <div style={{ width: 1, height: 18, background: BORDER }} />
+            <div style={{ width: 1, height: 18, background: T.BORDER }} />
 
             {/* TF */}
             {chartMode === 'single' && (
@@ -1650,13 +1650,13 @@ export default function ScanDashboardPage() {
                   <button key={t} onClick={() => setTf(t)} style={{
                     padding: '2px 12px', borderRadius: 3, fontSize: 10, fontWeight: 600,
                     background: tf === t ? GOLD : T.SURFACE, color: tf === t ? '#000' : T.MUTED,
-                    border: `1px solid ${tf === t ? GOLD : BORDER}`,
+                    border: `1px solid ${tf === t ? GOLD : T.BORDER}`,
                   }}>{t === '5' ? '5m' : t === '15' ? '15m' : t === '60' ? '1H' : '1D'}</button>
                 ))}
               </div>
             )}
 
-            <div style={{ width: 1, height: 18, background: BORDER }} />
+            <div style={{ width: 1, height: 18, background: T.BORDER }} />
 
             {/* ◀ ▶ day-by-day view offset */}
             <button onClick={() => setDayOffset(d => Math.max(0, d - 1))} style={dateBtnStyle(GOLD)} title="Back 1 day">◀</button>
@@ -1673,7 +1673,7 @@ export default function ScanDashboardPage() {
                 style={dateBtnStyle('rgba(212,175,55,0.6)', 9, 'rgba(212,175,55,0.35)')} title={`+${n} trading days`}>+{n}d</button>
             ))}
 
-            <div style={{ width: 1, height: 18, background: BORDER }} />
+            <div style={{ width: 1, height: 18, background: T.BORDER }} />
 
             {/* Ticker */}
             <span style={{ color: GOLD, fontSize: 16, fontWeight: 800 }}>{sig.ticker}</span>
@@ -1683,20 +1683,20 @@ export default function ScanDashboardPage() {
             <button onClick={() => { setSelectedIdx(Math.max(0, selectedIdx - 1)); setDayOffset(0) }} style={dateBtnStyle(GOLD)} title="Previous signal in list">▲</button>
             <button onClick={() => { setSelectedIdx(Math.min(signals.length - 1, selectedIdx + 1)); setDayOffset(0) }} style={dateBtnStyle(GOLD)} title="Next signal in list">▼</button>
 
-            <div style={{ width: 1, height: 18, background: BORDER }} />
+            <div style={{ width: 1, height: 18, background: T.BORDER }} />
 
             {/* Settings */}
             <div style={{ position: 'relative' }}>
               <button onClick={() => setShowSettings(v => !v)} title="Chart Settings" style={{
                 padding: '3px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600,
                 background: showSettings ? GOLD : T.SURFACE, color: showSettings ? '#000' : T.MUTED,
-                border: `1px solid ${showSettings ? GOLD : BORDER}`,
+                border: `1px solid ${showSettings ? GOLD : T.BORDER}`,
                 display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer',
               }}><Settings2 className="h-3 w-3" /></button>
               {showSettings && (
                 <div style={{
                   position: 'absolute', top: '100%', left: 0, zIndex: 50, marginTop: 4,
-                  background: T.SURFACE2, border: `1px solid ${GOLD_BORDER}`, borderRadius: 6,
+                  background: T.SURFACE2, border: `1px solid ${T.GOLD_BORDER}`, borderRadius: 6,
                   padding: 12, minWidth: 220,
                   boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
                 }}>
@@ -1716,7 +1716,7 @@ export default function ScanDashboardPage() {
                       <span style={{ color: T.TEXT2, fontSize: 11 }}>{label}</span>
                       <div onClick={() => setChartSettings(s => ({ ...s, [key]: !s[key] }))} style={{
                         width: 32, height: 16, borderRadius: 8, position: 'relative', cursor: 'pointer',
-                        background: chartSettings[key] ? GOLD : BORDER, transition: 'background 0.15s',
+                        background: chartSettings[key] ? GOLD : T.BORDER, transition: 'background 0.15s',
                       }}>
                         <div style={{
                           width: 12, height: 12, borderRadius: 6, background: '#fff', position: 'absolute', top: 2,
@@ -1749,15 +1749,15 @@ export default function ScanDashboardPage() {
 
           {/* Detail pills */}
           <div className="flex flex-wrap gap-1">
-            <Detail label="Open" value={`$${sig.open?.toFixed(2)}`} />
-            <Detail label="High" value={`$${sig.high?.toFixed(2)}`} color={T.TEAL} />
-            <Detail label="Low" value={`$${sig.low?.toFixed(2)}`} color={T.RED} />
-            <Detail label="Close" value={`$${sig.close?.toFixed(2)}`} />
-            <Detail label="Vol" value={`${((sig.volume || 0) / 1e6).toFixed(1)}M`} />
-            <Detail label="Gap" value={`${(sig.gap_pct || 0).toFixed(1)}%`} color={T.TEAL} />
-            <Detail label="ABS" value={(sig.pos_abs || 0).toFixed(3)} />
-            <Detail label="D0 Chg" value={`${((sig.close - sig.open) / sig.open * 100).toFixed(1)}%`} color={sig.close < sig.open ? T.RED : T.TEAL} />
-            <Detail label="Range" value={`${((sig.high - sig.low) / sig.open * 100).toFixed(1)}%`} />
+            <Detail label="Open" value={`$${sig.open?.toFixed(2)}`} dark={dark} />
+            <Detail label="High" value={`$${sig.high?.toFixed(2)}`} color={T.TEAL} dark={dark} />
+            <Detail label="Low" value={`$${sig.low?.toFixed(2)}`} color={T.RED} dark={dark} />
+            <Detail label="Close" value={`$${sig.close?.toFixed(2)}`} dark={dark} />
+            <Detail label="Vol" value={`${((sig.volume || 0) / 1e6).toFixed(1)}M`} dark={dark} />
+            <Detail label="Gap" value={`${(sig.gap_pct || 0).toFixed(1)}%`} color={T.TEAL} dark={dark} />
+            <Detail label="ABS" value={(sig.pos_abs || 0).toFixed(3)} dark={dark} />
+            <Detail label="D0 Chg" value={`${((sig.close - sig.open) / sig.open * 100).toFixed(1)}%`} color={sig.close < sig.open ? T.RED : T.TEAL} dark={dark} />
+            <Detail label="Range" value={`${((sig.high - sig.low) / sig.open * 100).toFixed(1)}%`} dark={dark} />
           </div>
         </>
       ) : null}
@@ -1768,13 +1768,13 @@ export default function ScanDashboardPage() {
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* Top bar */}
       <div style={{
-        height: 48, background: T.SURFACE, borderBottom: `1px solid ${BORDER}`,
+        height: 48, background: T.SURFACE, borderBottom: `1px solid ${T.BORDER}`,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px',
         position: 'sticky', top: 0, zIndex: 40,
       }}>
         <div className="flex items-center gap-3">
           <Search className="h-4 w-4" style={{ color: GOLD }} />
-          <div className="flex gap-1" style={{ background: T.SURFACE2, padding: 2, borderRadius: 4, border: `1px solid ${BORDER}` }}>
+          <div className="flex gap-1" style={{ background: T.SURFACE2, padding: 2, borderRadius: 4, border: `1px solid ${T.BORDER}` }}>
             <button onClick={() => setPageMode('scanner')} style={{
               padding: '3px 12px', borderRadius: 3, fontSize: 10, fontWeight: 700,
               background: pageMode === 'scanner' ? GOLD : 'transparent',
@@ -1794,7 +1794,7 @@ export default function ScanDashboardPage() {
           <a href="/charts-terminal.html" target="_blank" rel="noreferrer" title="Open Charts" style={{
             display: 'flex', alignItems: 'center', gap: 4,
             padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-            background: T.SURFACE2, color: GOLD, border: `1px solid ${GOLD_BORDER}`, cursor: 'pointer',
+            background: T.SURFACE2, color: GOLD, border: `1px solid ${T.GOLD_BORDER}`, cursor: 'pointer',
             textDecoration: 'none',
           }}>
             <BarChart3 className="h-3 w-3" /> Charts
@@ -1809,14 +1809,14 @@ export default function ScanDashboardPage() {
           <button style={{
             display: 'flex', alignItems: 'center', gap: 4,
             padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-            background: T.GOLD_DIM, color: GOLD, border: `1px solid ${GOLD_BORDER}`, cursor: 'pointer',
+            background: T.GOLD_DIM, color: GOLD, border: `1px solid ${T.GOLD_BORDER}`, cursor: 'pointer',
           }}>
             <Save className="h-3 w-3" /> Save
           </button>
           <button onClick={() => setDark(d => !d)} title={dark ? 'Light mode' : 'Dark mode'} style={{
             display: 'flex', alignItems: 'center', gap: 4,
             padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-            background: T.GOLD_DIM, color: GOLD, border: `1px solid ${GOLD_BORDER}`, cursor: 'pointer',
+            background: T.GOLD_DIM, color: GOLD, border: `1px solid ${T.GOLD_BORDER}`, cursor: 'pointer',
           }}>
             {dark ? <Sun className="h-3 w-3" /> : <Moon className="h-3 w-3" />}
           </button>

@@ -135,19 +135,21 @@ export function calcVWAP(data: CalcBar[], intraday: boolean): (number | null)[] 
 }
 
 /**
- * Trail Stop (short) \u2014 swing-structure trailing stop.
+ * Trail Stop (short) \u2014 swing-structure + dev band trailing stop.
  *
  * After EMA(fast) crosses below EMA(slow), starts at the highest high
  * from the prior bullish period. Then stair-steps down:
- * - Trail sits at a swing high (flat line)
- * - When a lower swing high forms, it becomes the "pending" next level
- * - Trail only steps down when the swing low between current and pending breaks
+ * - Swing structure: flat at swing highs, steps down when swing lows break
+ * - Dev band floor: EMA(fast) + ATR(fast) * mult tightens the trail aggressively
+ * - Trail = min(swing_level, dev_band_level) \u2014 whichever is tighter
  * - Never steps back up
  */
 export function calcTrailStop(
   data: CalcBar[],
   emaFast: (number | null)[],
   emaSlow: (number | null)[],
+  atrFast: (number | null)[],
+  bandMult: number = 1.0,
   lookback: number = 5,
 ): (number | null)[] {
   const n = data.length
@@ -203,6 +205,14 @@ export function calcTrailStop(
     }
 
     if (!trailActive) continue
+
+    // Dev band floor: EMA(fast) + ATR(fast) * mult
+    if (atrFast[i] != null) {
+      const bandFloor = fast + atrFast[i]! * bandMult
+      if (bandFloor < trailLevel) {
+        trailLevel = bandFloor
+      }
+    }
 
     // Confirmed swing detection at bar (i - lookback)
     const ci = i - lookback

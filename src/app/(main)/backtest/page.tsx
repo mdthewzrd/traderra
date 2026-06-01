@@ -1930,6 +1930,20 @@ export default function BacktestPage() {
           <span style={{ color: T.GOLD, fontSize: 10, fontWeight: 700 }}>SIGNALS</span>
           <div className="flex items-center gap-2">
             <span style={{ color: T.MUTED, fontSize: 9 }}>{filteredSignals.length}/{signals.length}</span>
+            {/* Grade filter */}
+            <div style={{ display: 'flex', gap: 1 }}>
+              {['All', 'A+', 'A', 'B', 'C'].map(g => {
+                const active = gradeFilter === (g === 'All' ? '' : g)
+                const gc = g === 'A+' ? T.TEAL : g === 'A' ? '#6ee7b7' : g === 'B' ? T.GOLD : g === 'C' ? T.RED : T.MUTED
+                return <button key={g} onClick={() => setGradeFilter(g === 'All' ? '' : g)} style={{
+                  padding: '1px 4px', borderRadius: 2, fontSize: 8, fontWeight: 700, cursor: 'pointer',
+                  border: `1px solid ${active ? gc : T.BORDER}`,
+                  background: active ? gc : 'transparent',
+                  color: active ? '#000' : gc,
+                  opacity: active ? 1 : 0.4,
+                }}>{g}</button>
+              })}
+            </div>
             {/* Add Column dropdown */}
             <div style={{ position: 'relative' }}>
               <button onClick={() => { setShowColumnMenu(!showColumnMenu); setShowFilterMenu(false) }} style={{
@@ -2217,17 +2231,6 @@ export default function BacktestPage() {
           color: viewMode === 'chart' ? '#000' : T.MUTED,
           border: `1px solid ${viewMode === 'chart' ? T.TEAL : T.BORDER}`,
         }}>Chart View</button>
-        <div style={{ marginLeft: 8, display: 'flex', gap: 2 }}>
-          {['All', 'A+', 'A', 'B', 'C'].map(g => (
-            <button key={g} onClick={() => setGradeFilter(g === 'All' ? '' : g)} style={{
-              padding: '2px 6px', borderRadius: 2, fontSize: 9, fontWeight: 700, cursor: 'pointer', border: '1px solid',
-              background: gradeFilter === (g === 'All' ? '' : g) ? (g === 'A+' ? T.TEAL : g === 'A' ? '#6ee7b7' : g === 'B' ? T.GOLD : g === 'C' ? T.RED : T.MUTED) : 'transparent',
-              color: gradeFilter === (g === 'All' ? '' : g) ? '#000' : (g === 'A+' ? T.TEAL : g === 'A' ? '#6ee7b7' : g === 'B' ? T.GOLD : g === 'C' ? T.RED : T.MUTED),
-              borderColor: g === 'A+' ? T.TEAL : g === 'A' ? '#6ee7b7' : g === 'B' ? T.GOLD : g === 'C' ? T.RED : T.BORDER,
-              opacity: gradeFilter === (g === 'All' ? '' : g) ? 1 : 0.5,
-            }}>{g}</button>
-          ))}
-        </div>
       </div>
       {viewMode === 'stat' ? (
         <>

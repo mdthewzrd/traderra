@@ -364,7 +364,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       if (panelIdx === 0 && inds.trail_stop && ic.trailStop) {
         const tsTool = activeTools.find((t: any) => t.indKey === 'trail_stop')
         const trailColor = tsTool?.colors?.color || '#4ade80'
-        drawLine(rc, ic.trailStop, trailColor, 1.4, true)
+        drawLine(rc, ic.trailStop, trailColor, 1.6, false)
       }
 
       // Bollinger Bands

@@ -1304,7 +1304,7 @@ export default function BacktestPage() {
   const [hideFilters, setHideFilters] = useState<Set<string>>(new Set())
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set())
   const [routeStarts, setRouteStarts] = useState<Set<string>>(new Set())
-  const DEFAULT_WIDTHS: Record<string, number> = { ticker: 56, date: 68, rs: 44, gap: 44, d0: 40, abs: 40 }
+  const DEFAULT_WIDTHS: Record<string, number> = { ticker: 56, date: 68, rs: 44, grade: 32, gap: 44, d0: 40, abs: 40 }
   const [colWidths, setColWidths] = useState<Record<string, number>>(DEFAULT_WIDTHS)
 
   // ── Hydrate from localStorage on mount ──
@@ -1319,6 +1319,7 @@ export default function BacktestPage() {
     setRouteStarts(new Set(load<string[]>('backtest-rs', [])))
     const cw = load<Record<string, number>>('backtest-cw', DEFAULT_WIDTHS)
     if (cw && Object.keys(cw).length > 0) setColWidths(cw)
+    try { const g = localStorage.getItem('backtest-grades'); if (g) setGrades(JSON.parse(g)) } catch {}
   }, [])
   const toggleRS = (key: string) => {
     setRouteStarts(prev => {
@@ -1329,17 +1330,35 @@ export default function BacktestPage() {
       return next
     })
   }
-  // ── Sync RS marks to server on load ──
+  // ── Sync marks + grades to server after hydration ──
   useEffect(() => {
-    const saved = localStorage.getItem('backtest-rs')
-    if (saved) {
+    const timer = setTimeout(() => {
       try {
-        const marks = JSON.parse(saved)
-        if (marks.length > 0) fetch('/api/backtest/rs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ marks }) }).catch(() => {})
+        const marks = JSON.parse(localStorage.getItem('backtest-rs') || '[]')
+        const gradesData = JSON.parse(localStorage.getItem('backtest-grades') || '{}')
+        if (marks.length > 0 || Object.keys(gradesData).length > 0) {
+          fetch('/api/backtest/rs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ marks, grades: gradesData }) }).catch(() => {})
+        }
       } catch {}
-    }
+    }, 1000)
+    return () => clearTimeout(timer)
   }, [])
   const [showColumnMenu, setShowColumnMenu] = useState(false)
+  const GRADES = ['A+', 'A', 'B', 'C'] as const
+  const [grades, setGrades] = useState<Record<string, string>>({})
+  const [gradeFilter, setGradeFilter] = useState<string>('')  // '', 'A+', 'A', 'B', 'C'
+  const toggleGrade = (key: string) => {
+    setGrades(prev => {
+      const current = prev[key] || ''
+      const idx = GRADES.indexOf(current as any)
+      const nextGrade = idx >= GRADES.length - 1 ? '' : GRADES[idx + 1]
+      const next = { ...prev }
+      nextGrade ? (next[key] = nextGrade) : delete next[key]
+      try { localStorage.setItem('backtest-grades', JSON.stringify(next)) } catch {}
+      fetch('/api/backtest/rs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ marks: [...routeStarts], grades: next }) }).catch(() => {})
+      return next
+    })
+  }
   const T = useThemeColors(dark)
 
   // ── Persist state changes ──
@@ -1352,13 +1371,15 @@ export default function BacktestPage() {
   // ── Column resize ──
   const resizingRef = useRef<{ colId: string; startX: number; startW: number } | null>(null)
   const onResizeStart = (colId: string, e: React.MouseEvent) => {
-    e.preventDefault(); e.stopPropagation()
-    resizingRef.current = { colId, startX: e.clientX, startW: colWidths[colId] || 38 }
+    e.stopPropagation()
+    const startW = colWidths[colId] || 38
+    resizingRef.current = { colId, startX: e.clientX, startW }
     const onMove = (ev: MouseEvent) => {
-      if (!resizingRef.current) return
-      const dx = ev.clientX - resizingRef.current.startX
-      const newW = Math.max(24, resizingRef.current.startW + dx)
-      setColWidths(prev => ({ ...prev, [resizingRef.current!.colId]: newW }))
+      const ref = resizingRef.current
+      if (!ref) return
+      const dx = ev.clientX - ref.startX
+      const newW = Math.max(24, ref.startW + dx)
+      setColWidths(prev => prev ? { ...prev, [ref.colId]: newW } : { [ref.colId]: newW })
     }
     const onUp = () => {
       document.removeEventListener('mousemove', onMove)
@@ -1587,7 +1608,11 @@ export default function BacktestPage() {
   }, [filterResults, bars1mCache, bars15mCache, visibleFilters, activeFilters, signals])
 
   const filteredSignals = useMemo(() => {
-    if (activeFilters.size === 0 && hideFilters.size === 0) return signals
+    if (activeFilters.size === 0 && hideFilters.size === 0 && !gradeFilter) return signals
+    let result = signals
+    // Grade filter
+    if (gradeFilter) result = result.filter(s => grades[`${s.ticker}-${s.date}`] === gradeFilter)
+    if (activeFilters.size === 0 && hideFilters.size === 0) return result
     return signals.filter((s, i) => {
       // Check active filters (dim mode)
       for (const key of activeFilters) {
@@ -1599,7 +1624,7 @@ export default function BacktestPage() {
       }
       return true
     })
-  }, [signals, activeFilters, hideFilters, filterResults])
+  }, [signals, activeFilters, hideFilters, filterResults, gradeFilter, grades])
 
   // ── Filter counts (for toggle badges) ──
   const filterCounts = useMemo(() => {
@@ -2038,6 +2063,7 @@ export default function BacktestPage() {
                   <div style={{ fontSize: 7, fontWeight: 400, opacity: 0.7 }}>{routeStarts.size}/{signals.length}</div>
                   <ResizeHandle colId="rs" />
                 </th>
+                <th style={{ padding: '4px 3px', textAlign: 'center', color: T.GOLD, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', background: `${T.GOLD}10`, width: colWidths.grade, minWidth: 24, position: 'relative' }} title="Grade — click to cycle: A+ → A → B → C → clear">Gr<ResizeHandle colId="grade" /></th>
                 <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', width: colWidths.gap, minWidth: 24, position: 'relative' }}>Gap%<ResizeHandle colId="gap" /></th>
                 <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', width: colWidths.d0, minWidth: 24, position: 'relative' }}>D0<ResizeHandle colId="d0" /></th>
                 <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', width: colWidths.abs, minWidth: 24, position: 'relative' }}>ABS<ResizeHandle colId="abs" /></th>
@@ -2104,6 +2130,7 @@ export default function BacktestPage() {
                     <td style={{ padding: '3px 6px', color: isActive ? T.GOLD : T.WHITE, fontWeight: 700, fontFamily: 'monospace', position: 'sticky', left: 0, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1, width: colWidths.ticker }}>{s.ticker}</td>
                     <td style={{ padding: '3px 6px', color: isActive ? T.GOLD : T.MUTED, position: 'sticky', left: colWidths.ticker, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1, borderRight: `1px solid ${T.BORDER}`, width: colWidths.date }}>{s.date.slice(5)}</td>
                     <td onClick={(e) => { e.stopPropagation(); toggleRS(`${s.ticker}-${s.date}`) }} style={{ padding: '3px 4px', textAlign: 'center', borderLeft: `1px solid ${T.BORDER}`, cursor: 'pointer', color: routeStarts.has(`${s.ticker}-${s.date}`) ? T.TEAL : T.BORDER, fontSize: 12, fontWeight: 700, userSelect: 'none', background: routeStarts.has(`${s.ticker}-${s.date}`) ? `${T.TEAL}15` : 'transparent', width: colWidths.rs }}>{routeStarts.has(`${s.ticker}-${s.date}`) ? '✓' : ''}</td>
+                    <td onClick={(e) => { e.stopPropagation(); toggleGrade(`${s.ticker}-${s.date}`) }} style={{ padding: '3px 2px', textAlign: 'center', cursor: 'pointer', userSelect: 'none', width: colWidths.grade, fontSize: 10, fontWeight: 700, color: grades[`${s.ticker}-${s.date}`] === 'A+' ? T.TEAL : grades[`${s.ticker}-${s.date}`] === 'A' ? '#6ee7b7' : grades[`${s.ticker}-${s.date}`] === 'B' ? T.GOLD : grades[`${s.ticker}-${s.date}`] === 'C' ? T.RED : T.BORDER, background: grades[`${s.ticker}-${s.date}`] ? `${grades[`${s.ticker}-${s.date}`] === 'C' ? T.RED : grades[`${s.ticker}-${s.date}`] === 'B' ? T.GOLD : T.TEAL}10` : 'transparent' }}>{grades[`${s.ticker}-${s.date}`] || ''}</td>
                     <td style={{ padding: '3px 4px', color: T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums', width: colWidths.gap }}>{(s.gap_pct || 0).toFixed(0)}%</td>
                     <td style={{ padding: '3px 4px', color: d0chg < 0 ? T.RED : T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums', width: colWidths.d0 }}>{d0chg > 0 ? '+' : ''}{isNaN(d0chg) ? '0.0' : d0chg.toFixed(1)}%</td>
                     <td style={{ padding: '3px 4px', color: T.GOLD, textAlign: 'right', fontVariantNumeric: 'tabular-nums', width: colWidths.abs }}>{(s.pos_abs || 0).toFixed(2)}</td>
@@ -2190,6 +2217,17 @@ export default function BacktestPage() {
           color: viewMode === 'chart' ? '#000' : T.MUTED,
           border: `1px solid ${viewMode === 'chart' ? T.TEAL : T.BORDER}`,
         }}>Chart View</button>
+        <div style={{ marginLeft: 8, display: 'flex', gap: 2 }}>
+          {['All', 'A+', 'A', 'B', 'C'].map(g => (
+            <button key={g} onClick={() => setGradeFilter(g === 'All' ? '' : g)} style={{
+              padding: '2px 6px', borderRadius: 2, fontSize: 9, fontWeight: 700, cursor: 'pointer', border: '1px solid',
+              background: gradeFilter === (g === 'All' ? '' : g) ? (g === 'A+' ? T.TEAL : g === 'A' ? '#6ee7b7' : g === 'B' ? T.GOLD : g === 'C' ? T.RED : T.MUTED) : 'transparent',
+              color: gradeFilter === (g === 'All' ? '' : g) ? '#000' : (g === 'A+' ? T.TEAL : g === 'A' ? '#6ee7b7' : g === 'B' ? T.GOLD : g === 'C' ? T.RED : T.MUTED),
+              borderColor: g === 'A+' ? T.TEAL : g === 'A' ? '#6ee7b7' : g === 'B' ? T.GOLD : g === 'C' ? T.RED : T.BORDER,
+              opacity: gradeFilter === (g === 'All' ? '' : g) ? 1 : 0.5,
+            }}>{g}</button>
+          ))}
+        </div>
       </div>
       {viewMode === 'stat' ? (
         <>

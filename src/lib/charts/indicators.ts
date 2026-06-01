@@ -135,6 +135,25 @@ export function calcVWAP(data: CalcBar[], intraday: boolean): (number | null)[] 
 }
 
 /**
+ * Trail Stop - EMA + ATR * mult.
+ * Simple stop level for visualization. Ratchet logic will be added
+ * when route start anchoring is implemented.
+ */
+export function calcTrailStop(
+  data: CalcBar[],
+  ema: (number | null)[],
+  atr: (number | null)[],
+  mult: number,
+): (number | null)[] {
+  const out: (number | null)[] = []
+  for (let i = 0; i < data.length; i++) {
+    if (ema[i] == null || atr[i] == null) { out.push(null); continue }
+    out.push(ema[i]! + atr[i]! * mult)
+  }
+  return out
+}
+
+/**
  * Cached indicator computation.
  * Call computeIndicators() once per frame — returns cached results.
  */
@@ -145,6 +164,7 @@ export interface IndicatorCache {
   vwap: (number | null)[] | null
   bollinger: { upper: (number | null)[]; middle: (number | null)[]; lower: (number | null)[] } | null
   volSma: (number | null)[] | null
+  trailStop: (number | null)[] | null
 }
 
 /**
@@ -163,7 +183,7 @@ export function computeIndicators(
   tf: string,
   toolOverrides?: ToolOverride[]
 ): IndicatorCache {
-  const cache: IndicatorCache = { ema: {}, atr: {}, sma: {}, vwap: null, bollinger: null, volSma: null }
+  const cache: IndicatorCache = { ema: {}, atr: {}, sma: {}, vwap: null, bollinger: null, volSma: null, trailStop: null }
 
   const ensureEMA = (period: number) => {
     if (!cache.ema[period]) cache.ema[period] = calcEMA(data, period)
@@ -188,7 +208,13 @@ export function computeIndicators(
   const emaTool = toolMap['ema']
   const smaTool = toolMap['sma']
 
-  if (inds.ema9) ensureEMA(ema9Tool?.params?.period ?? 9)
+  if (inds.ema9 || inds.dev_s_9_20 || inds.dev_l_9_20 || inds.db_upper || inds.trail_stop) ensureEMA(ema9Tool?.params?.period ?? 9)
+  // Trail stop may use custom EMA/ATR periods — ensure they're computed
+  if (inds.trail_stop) {
+    const tsTool = toolMap['trail_stop']
+    if (tsTool?.params?.ema) ensureEMA(tsTool.params.ema)
+    if (tsTool?.params?.atr) ensureATR(tsTool.params.atr)
+  }
   if (inds.ema20 || inds.db_low1 || inds.db_low2 || inds.band_9_20 || inds.dev_s_9_20 || inds.dev_l_9_20) ensureEMA(ema20Tool?.params?.period ?? 20)
   if (inds.ema50) ensureEMA(ema50Tool?.params?.period ?? 50)
   if (inds.ema150) ensureEMA(ema150Tool?.params?.period ?? 150)
@@ -205,7 +231,7 @@ export function computeIndicators(
   }
 
   // ATR deps
-  if (inds.db_upper || inds.dev_s_9_20 || inds.dev_l_9_20) ensureATR(9)
+  if (inds.db_upper || inds.dev_s_9_20 || inds.dev_l_9_20 || inds.trail_stop) ensureATR(9)
   if (inds.db_low1 || inds.db_low2 || inds.dev_s_9_20 || inds.dev_l_9_20) ensureATR(20)
   if (inds.db_72_89) { ensureATR(72); ensureATR(89) }
 
@@ -229,6 +255,17 @@ export function computeIndicators(
   if (inds.sma_vol) {
     const vt = toolMap['sma_vol']
     cache.volSma = calcVolSMA(data, vt?.params?.period ?? 20)
+  }
+
+  // Trail Stop — ratcheting short trailing stop
+  if (inds.trail_stop) {
+    const tsTool = toolMap['trail_stop']
+    const emaPeriod = tsTool?.params?.ema ?? 9
+    const atrPeriod = tsTool?.params?.atr ?? 9
+    const mult = tsTool?.params?.mult ?? 1.5
+    ensureEMA(emaPeriod)
+    ensureATR(atrPeriod)
+    cache.trailStop = calcTrailStop(data, cache.ema[emaPeriod]!, cache.atr[atrPeriod]!, mult)
   }
 
   return cache

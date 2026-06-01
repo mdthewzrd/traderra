@@ -360,6 +360,13 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
         )
       }
 
+      // Trail Stop — EMA + ATR × mult (green dashed)
+      if (panelIdx === 0 && inds.trail_stop && ic.trailStop) {
+        const tsTool = activeTools.find((t: any) => t.indKey === 'trail_stop')
+        const trailColor = tsTool?.colors?.color || '#4ade80'
+        drawLine(rc, ic.trailStop, trailColor, 1.4, true)
+      }
+
       // Bollinger Bands
       if (inds.bollinger && ic.bollinger) {
         drawBandFill(rc, ic.bollinger.upper, ic.bollinger.lower, C.bb_fill)
@@ -773,12 +780,12 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       <div className="ph">
         <span className="ph-sym">{symbol}</span>
         <div className="tf-wrap">
-          {['1','5','15','60','D','W'].map(t => (
+          {['1','2','5','15','60','D','W'].map(t => (
             <button
               key={t}
               className={`tf-btn${tf === t ? ' active' : ''}`}
               onClick={() => useChartStore.getState().setPanelTf(panelIdx, t)}
-            >{t === '1' ? '1m' : t === '5' ? '5m' : t === '15' ? '15m' : t === '60' ? '60m' : t}</button>
+            >{t === '1' ? '1m' : t === '2' ? '2m' : t === '5' ? '5m' : t === '15' ? '15m' : t === '60' ? '60m' : t}</button>
           ))}
         </div>
         <span className="ph-ohlc" id={`ohlc-${panelIdx}`} />
@@ -801,10 +808,18 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       <div className="ind-row" id={`indrow-${panelIdx}`}>
         <span style={{ fontSize: 11, color: '#2a3050', letterSpacing: 1, marginRight: 2 }}>IND</span>
         <button className="preset-btn" onClick={() => {
+          const ts = require('@/stores/charts/toolStore').useToolStore.getState()
+          const samkeys = ['ema9','ema20','ema50','ema200','sma_vol','vwap']
+          const tools = ts.tools.map(t => ({ ...t, on: samkeys.includes(t.indKey) }))
+          ts.setTools(tools)
           require('@/stores/charts/indicatorStore').useIndicatorStore.getState().setInds({ ema9: true, ema20: true, ema50: true, ema200: true, sma_vol: true, vwap: true, vol: true })
         }}>SAM</button>
         <button className="preset-btn" onClick={() => {
-          require('@/stores/charts/indicatorStore').useIndicatorStore.getState().setInds({ band_9_20: true, band_72_89: true, dev_s_9_20: true, db_72_89: true, vwap: true, sma_vol: true, vol: true })
+          const ts = require('@/stores/charts/toolStore').useToolStore.getState()
+          const mikeys = ['vwap','band_9_20','band_72_89','dev_s_9_20','trail_stop','db_72_89','sma_vol']
+          const tools = ts.tools.map(t => ({ ...t, on: mikeys.includes(t.indKey) }))
+          ts.setTools(tools)
+          require('@/stores/charts/indicatorStore').useIndicatorStore.getState().setInds({ band_9_20: true, band_72_89: true, dev_s_9_20: true, trail_stop: true, db_72_89: true, vwap: true, sma_vol: true, vol: true })
         }}>MIKE</button>
         <span style={{ width: 1, height: 10, background: '#2a3050', margin: '0 2px' }} />
         {/* Per-panel hot tool toggle buttons */}

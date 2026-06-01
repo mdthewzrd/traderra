@@ -36,6 +36,7 @@ export const IND_CATALOG: Record<string, IndCatalogEntry> = {
   db_low2:        { label:'Dev Low 2',       group:'Dev Bands',   params:[{key:'ema',label:'EMA Period',def:20,min:1,max:200},{key:'atr',label:'ATR Period',def:20,min:1,max:200},{key:'mult',label:'Multiplier',def:2,step:0.1}], colors:[{key:'fill',label:'Fill',def:'rgba(20,120,200,.20)'},{key:'line',label:'Line',def:'rgba(30,150,220,.90)'}], legacyKeys:['db_low2'] },
   vwap:           { label:'VWAP',            group:'Overlays',    colors:[{key:'color',label:'Color',def:'#00e676'}], legacyKeys:['vwap'] },
   bollinger:      { label:'Bollinger Bands', group:'Overlays',    params:[{key:'period',label:'Period',def:20,min:1,max:500},{key:'stddev',label:'Std Dev',def:2,step:0.1}], colors:[{key:'fill',label:'Fill',def:'rgba(100,149,237,.08)'},{key:'upper',label:'Upper',def:'rgba(100,149,237,.40)'},{key:'lower',label:'Lower',def:'rgba(100,149,237,.40)'}], legacyKeys:['bollinger'] },
+  trail_stop:     { label:'Trail Stop',       group:'Dev Bands',   params:[{key:'ema',label:'EMA Period',def:9,min:1,max:200},{key:'atr',label:'ATR Period',def:9,min:1,max:200},{key:'mult',label:'Multiplier',def:1.5,step:0.1}], colors:[{key:'color',label:'Color',def:'#4ade80'}], legacyKeys:['trail_stop'] },
   sma_vol:        { label:'Volume SMA',      group:'Volume',      params:[{key:'period',label:'Period',def:20,min:1,max:200}], colors:[{key:'color',label:'Color',def:'#D4AF37'}], legacyKeys:['sma_vol'] },
 }
 
@@ -86,6 +87,7 @@ function makeDefaultTools(): ToolInstance[] {
     mk('band_9_20', true, true),
     mk('band_72_89', true, true),
     mk('dev_s_9_20', true, true),
+    mk('trail_stop', true, true),
     mk('db_72_89', true, true),
     mk('sma_vol', true, false),
   ]

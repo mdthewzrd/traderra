@@ -1343,7 +1343,7 @@ export default function BacktestPage() {
 
     // Calmar = CAGR / MaxDD
     const totalReturnPct = totalPnl
-    const tradingDays = new Set(signals.map(s => s.date)).size
+    const tradingDays = new Set(source.map(s => s.date)).size
     const yearsInSample = tradingDays / 252
     const cagr = yearsInSample > 0 ? (Math.pow(1 + totalReturnPct / 100, 1 / yearsInSample) - 1) * 100 : totalReturnPct
     const calmar = maxDd > 0 ? Math.abs(totalReturnPct / maxDd) : 0
@@ -1361,7 +1361,7 @@ export default function BacktestPage() {
 
     // Day-by-day breakdown
     const byDate: Record<string, { pnls: number[] }> = {}
-    signals.forEach((s, i) => {
+    source.forEach((s, i) => {
       if (!byDate[s.date]) byDate[s.date] = { pnls: [] }
       byDate[s.date].pnls.push(trades[i].pnlPct)
     })
@@ -1371,7 +1371,7 @@ export default function BacktestPage() {
 
     // Monthly breakdown
     const byMonth: Record<string, { pnls: number[] }> = {}
-    signals.forEach((s, i) => {
+    source.forEach((s, i) => {
       const month = s.date.slice(0, 7)
       if (!byMonth[month]) byMonth[month] = { pnls: [] }
       byMonth[month].pnls.push(trades[i].pnlPct)

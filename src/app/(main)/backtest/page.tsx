@@ -1292,31 +1292,74 @@ export default function BacktestPage() {
   const [dark, setDark] = useState(true)
   const [dayOffset, setDayOffset] = useState(0)
   const [backtestResults, setBacktestResults] = useState<BacktestResults | null>(null)
-  const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set())
+  // ── Persisted state helpers ──
+  const loadLS = <T,>(key: string, fallback: T): T => {
+    if (typeof window === 'undefined') return fallback
+    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback } catch { return fallback }
+  }
+  const saveLS = (key: string, val: any) => { try { localStorage.setItem(key, JSON.stringify(val)) } catch {} }
+
+  const [activeFilters, setActiveFilters] = useState<Set<string>>(() => new Set(loadLS<string[]>('backtest-af', [])))
   const [bars15mCache, setBars15mCache] = useState<Record<string, any[]>>({})
   const [bars15mLoading, setBars15mLoading] = useState(false)
   const [bars1mCache, setBars1mCache] = useState<Record<string, any[]>>({})
   const [bars1mLoading, setBars1mLoading] = useState(false)
   const [tickResults, setTickResults] = useState<Record<string, boolean>>({})
-  const [visibleFilters, setVisibleFilters] = useState<Set<string>>(new Set())
+  const [visibleFilters, setVisibleFilters] = useState<Set<string>>(() => new Set(loadLS<string[]>('backtest-vf', [])))
   const [showFilterMenu, setShowFilterMenu] = useState(false)
-  const [hideFilters, setHideFilters] = useState<Set<string>>(new Set())
-  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set())
-  // Route Start marks — persisted in localStorage
-  const [routeStarts, setRouteStarts] = useState<Set<string>>(() => {
-    if (typeof window === 'undefined') return new Set()
-    try { return new Set(JSON.parse(localStorage.getItem('backtest-rs') || '[]')) } catch { return new Set() }
-  })
+  const [hideFilters, setHideFilters] = useState<Set<string>>(() => new Set(loadLS<string[]>('backtest-hf', [])))
+  const [visibleColumns, setVisibleColumns] = useState<Set<string>>(() => new Set(loadLS<string[]>('backtest-vc', [])))
+  // Route Start marks
+  const [routeStarts, setRouteStarts] = useState<Set<string>>(() => new Set(loadLS<string[]>('backtest-rs', [])))
   const toggleRS = (key: string) => {
     setRouteStarts(prev => {
       const next = new Set(prev)
       next.has(key) ? next.delete(key) : next.add(key)
-      try { localStorage.setItem('backtest-rs', JSON.stringify([...next])) } catch {}
+      saveLS('backtest-rs', [...next])
       return next
     })
   }
   const [showColumnMenu, setShowColumnMenu] = useState(false)
   const T = useThemeColors(dark)
+
+  // ── Persist state changes ──
+  useEffect(() => { saveLS('backtest-af', [...activeFilters]) }, [activeFilters])
+  useEffect(() => { saveLS('backtest-vf', [...visibleFilters]) }, [visibleFilters])
+  useEffect(() => { saveLS('backtest-hf', [...hideFilters]) }, [hideFilters])
+  useEffect(() => { saveLS('backtest-vc', [...visibleColumns]) }, [visibleColumns])
+
+  // ── Column resize ──
+  const DEFAULT_WIDTHS: Record<string, number> = { ticker: 56, date: 68, rs: 44, gap: 44, d0: 40, abs: 40 }
+  const [colWidths, setColWidths] = useState<Record<string, number>>(() => loadLS('backtest-cw', DEFAULT_WIDTHS))
+  const resizingRef = useRef<{ colId: string; startX: number; startW: number } | null>(null)
+  const onResizeStart = (colId: string, e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation()
+    resizingRef.current = { colId, startX: e.clientX, startW: colWidths[colId] || 38 }
+    const onMove = (ev: MouseEvent) => {
+      if (!resizingRef.current) return
+      const dx = ev.clientX - resizingRef.current.startX
+      const newW = Math.max(24, resizingRef.current.startW + dx)
+      setColWidths(prev => ({ ...prev, [resizingRef.current!.colId]: newW }))
+    }
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      resizingRef.current = null
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+  }
+  useEffect(() => { saveLS('backtest-cw', colWidths) }, [colWidths])
+
+  // Resize handle component for th cells
+  const ResizeHandle = ({ colId }: { colId: string }) => (
+    <div
+      onMouseDown={e => onResizeStart(colId, e)}
+      style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 5, cursor: 'col-resize', background: 'transparent', zIndex: 5 }}
+      onMouseOver={e => (e.currentTarget.style.background = `${T.TEAL}40`)}
+      onMouseOut={e => (e.currentTarget.style.background = 'transparent')}
+    />
+  )
 
   // ── Data column values ──
   const dataColumnResults = useMemo(() => {
@@ -1966,21 +2009,22 @@ export default function BacktestPage() {
         </div>
 
         <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
-          <table style={{ minWidth: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 10 }}>
+          <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'separate', borderSpacing: 0, fontSize: 10 }}>
             <thead>
               <tr style={{ background: T.SURFACE2, position: 'sticky', top: 0, zIndex: 2 }}>
-                <th style={{ padding: '4px 6px', textAlign: 'left', color: T.GOLD, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 0, background: T.SURFACE2, zIndex: 3, minWidth: 56 }}>Ticker</th>
-                <th style={{ padding: '4px 6px', textAlign: 'left', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 56, background: T.SURFACE2, zIndex: 3, minWidth: 68, borderRight: `1px solid ${T.BORDER}` }}>Date</th>
-                <th style={{ padding: '4px 4px', textAlign: 'center', color: T.TEAL, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', background: `${T.TEAL}15`, minWidth: 44, borderLeft: `1px solid ${T.BORDER}` }} title="Route Start — click cells to mark valid entries">
+                <th style={{ padding: '4px 6px', textAlign: 'left', color: T.GOLD, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 0, background: T.SURFACE2, zIndex: 3, width: colWidths.ticker, minWidth: 24 }}>Ticker<ResizeHandle colId="ticker" /></th>
+                <th style={{ padding: '4px 6px', textAlign: 'left', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: colWidths.ticker, background: T.SURFACE2, zIndex: 3, width: colWidths.date, minWidth: 24, borderRight: `1px solid ${T.BORDER}` }}>Date<ResizeHandle colId="date" /></th>
+                <th style={{ padding: '4px 4px', textAlign: 'center', color: T.TEAL, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', background: `${T.TEAL}15`, width: colWidths.rs, minWidth: 24, borderLeft: `1px solid ${T.BORDER}`, position: 'relative' }} title="Route Start — click cells to mark valid entries">
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
                     <span>RS</span>
                     <button onClick={() => { navigator.clipboard.writeText([...routeStarts].sort().join(', ')) }} style={{ background: 'none', border: 'none', color: T.TEAL, cursor: 'pointer', fontSize: 9, padding: 0, opacity: 0.6 }} title="Copy marked signals to clipboard">📋</button>
                   </div>
                   <div style={{ fontSize: 7, fontWeight: 400, opacity: 0.7 }}>{routeStarts.size}/{signals.length}</div>
+                  <ResizeHandle colId="rs" />
                 </th>
-                <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Gap%</th>
-                <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>D0</th>
-                <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>ABS</th>
+                <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', width: colWidths.gap, minWidth: 24, position: 'relative' }}>Gap%<ResizeHandle colId="gap" /></th>
+                <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', width: colWidths.d0, minWidth: 24, position: 'relative' }}>D0<ResizeHandle colId="d0" /></th>
+                <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', width: colWidths.abs, minWidth: 24, position: 'relative' }}>ABS<ResizeHandle colId="abs" /></th>
                 {/* ── Dynamic filter columns: 3-state header click ── */}
                 {activeFilterDefs.map(f => {
                   const isFiltering = activeFilters.has(f.key)
@@ -2041,12 +2085,12 @@ export default function BacktestPage() {
                     onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
                     onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
                   >
-                    <td style={{ padding: '3px 6px', color: isActive ? T.GOLD : T.WHITE, fontWeight: 700, fontFamily: 'monospace', position: 'sticky', left: 0, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1 }}>{s.ticker}</td>
-                    <td style={{ padding: '3px 6px', color: isActive ? T.GOLD : T.MUTED, position: 'sticky', left: 56, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1, borderRight: `1px solid ${T.BORDER}` }}>{s.date.slice(5)}</td>
-                    <td onClick={(e) => { e.stopPropagation(); toggleRS(`${s.ticker}-${s.date}`) }} style={{ padding: '3px 4px', textAlign: 'center', borderLeft: `1px solid ${T.BORDER}`, cursor: 'pointer', color: routeStarts.has(`${s.ticker}-${s.date}`) ? T.TEAL : T.BORDER, fontSize: 12, fontWeight: 700, userSelect: 'none', background: routeStarts.has(`${s.ticker}-${s.date}`) ? `${T.TEAL}15` : 'transparent' }}>{routeStarts.has(`${s.ticker}-${s.date}`) ? '✓' : ''}</td>
-                    <td style={{ padding: '3px 4px', color: T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{(s.gap_pct || 0).toFixed(0)}%</td>
-                    <td style={{ padding: '3px 4px', color: d0chg < 0 ? T.RED : T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{d0chg > 0 ? '+' : ''}{isNaN(d0chg) ? '0.0' : d0chg.toFixed(1)}%</td>
-                    <td style={{ padding: '3px 4px', color: T.GOLD, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(s.pos_abs || 0).toFixed(2)}</td>
+                    <td style={{ padding: '3px 6px', color: isActive ? T.GOLD : T.WHITE, fontWeight: 700, fontFamily: 'monospace', position: 'sticky', left: 0, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1, width: colWidths.ticker }}>{s.ticker}</td>
+                    <td style={{ padding: '3px 6px', color: isActive ? T.GOLD : T.MUTED, position: 'sticky', left: colWidths.ticker, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1, borderRight: `1px solid ${T.BORDER}`, width: colWidths.date }}>{s.date.slice(5)}</td>
+                    <td onClick={(e) => { e.stopPropagation(); toggleRS(`${s.ticker}-${s.date}`) }} style={{ padding: '3px 4px', textAlign: 'center', borderLeft: `1px solid ${T.BORDER}`, cursor: 'pointer', color: routeStarts.has(`${s.ticker}-${s.date}`) ? T.TEAL : T.BORDER, fontSize: 12, fontWeight: 700, userSelect: 'none', background: routeStarts.has(`${s.ticker}-${s.date}`) ? `${T.TEAL}15` : 'transparent', width: colWidths.rs }}>{routeStarts.has(`${s.ticker}-${s.date}`) ? '✓' : ''}</td>
+                    <td style={{ padding: '3px 4px', color: T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums', width: colWidths.gap }}>{(s.gap_pct || 0).toFixed(0)}%</td>
+                    <td style={{ padding: '3px 4px', color: d0chg < 0 ? T.RED : T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums', width: colWidths.d0 }}>{d0chg > 0 ? '+' : ''}{isNaN(d0chg) ? '0.0' : d0chg.toFixed(1)}%</td>
+                    <td style={{ padding: '3px 4px', color: T.GOLD, textAlign: 'right', fontVariantNumeric: 'tabular-nums', width: colWidths.abs }}>{(s.pos_abs || 0).toFixed(2)}</td>
                     {/* Filter column cells */}
                     {activeFilterDefs.map(f => {
                       const passes = filterResults[f.key]?.[i]

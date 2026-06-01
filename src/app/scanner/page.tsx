@@ -1000,6 +1000,7 @@ export default function ScanDashboardPage() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [dayOffset, setDayOffset] = useState(0)
   const T = useThemeColors(dark)
+  const activeRowRef = useRef<HTMLTableRowElement>(null)
 
   // DB scan records — keyed by strategy, used as runs
   const [dbScansByStrategy, setDbScansByStrategy] = useState<Record<string, ScanDef[]>>({})

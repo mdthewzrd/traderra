@@ -2017,7 +2017,10 @@ export default function BacktestPage() {
                 <th style={{ padding: '4px 4px', textAlign: 'center', color: T.TEAL, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', background: `${T.TEAL}15`, width: colWidths.rs, minWidth: 24, borderLeft: `1px solid ${T.BORDER}`, position: 'relative' }} title="Route Start — click cells to mark valid entries">
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
                     <span>RS</span>
-                    <button onClick={() => { navigator.clipboard.writeText([...routeStarts].sort().join(', ')) }} style={{ background: 'none', border: 'none', color: T.TEAL, cursor: 'pointer', fontSize: 9, padding: 0, opacity: 0.6 }} title="Copy marked signals to clipboard">📋</button>
+                    <button onClick={() => {
+                      const text = [...routeStarts].sort().join(', ')
+                      try { navigator.clipboard.writeText(text) } catch { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta) }
+                    }} style={{ background: 'none', border: 'none', color: T.TEAL, cursor: 'pointer', fontSize: 9, padding: 0, opacity: 0.6 }} title="Copy marked signals to clipboard">📋</button>
                   </div>
                   <div style={{ fontSize: 7, fontWeight: 400, opacity: 0.7 }}>{routeStarts.size}/{signals.length}</div>
                   <ResizeHandle colId="rs" />
@@ -2069,6 +2072,11 @@ export default function BacktestPage() {
                   </th>
                 ))}
               </tr>
+              {routeStarts.size > 0 && (
+                <tr><td colSpan={99} style={{ padding: '3px 8px', fontSize: 9, color: T.TEAL, background: `${T.TEAL}08`, borderTop: `1px solid ${T.TEAL}20`, fontVariantNumeric: 'tabular-nums', lineHeight: 1.6 }}>
+                  RS: {[...routeStarts].sort().join(', ')}
+                </td></tr>
+              )}
             </thead>
             <tbody>
               {signals.map((s, i) => {

@@ -1136,9 +1136,17 @@ export default function ScanDashboardPage() {
  // Reset day offset when signal changes
  // (also done inline in every setSelectedIdx call)
 
+  // Scroll active signal row into view when selection changes
+  useEffect(() => {
+    activeRowRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [selectedIdx])
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (!signals.length) return
+      // Don't intercept arrows when user is typing in an input/textarea/select
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
       if (e.key === 'ArrowLeft') { e.preventDefault(); setDayOffset(d => Math.max(0, d - 1)) }
       if (e.key === 'ArrowRight') { e.preventDefault(); setDayOffset(d => d + 1) }
       if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedIdx(Math.max(0, selectedIdx - 1)); setDayOffset(0) }
@@ -1521,7 +1529,7 @@ export default function ScanDashboardPage() {
                 const d0chg = ((s.close - s.open) / s.open * 100)
                 const rng = ((s.high - s.low) / s.open * 100)
                 return (
-                  <tr key={`${s.ticker}-${s.date}`} onClick={() => { setSelectedIdx(realIdx); setDayOffset(0) }} style={{ cursor: 'pointer', background: isActive ? T.GOLD_DIM : 'transparent' }}
+                  <tr ref={isActive ? activeRowRef : undefined} key={`${s.ticker}-${s.date}`} onClick={() => { setSelectedIdx(realIdx); setDayOffset(0) }} style={{ cursor: 'pointer', background: isActive ? T.GOLD_DIM : 'transparent' }}
                     onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
                     onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
                   >

@@ -125,6 +125,25 @@ const FILTERS: FilterDef[] = [
 
 type StatsTab = 'overview' | 'performance' | 'pnl' | 'robustness'
 
+// ─── Shared UI Components (must be before BacktestStatsPanel) ──
+function StatBox({ label, value, icon, color }: { label: string; value: string; icon: React.ReactNode; color?: string }) {
+  return (
+    <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '6px 10px' }}>
+      <div className="flex items-center gap-1" style={{ color: MUTED, fontSize: 9 }}>{icon}{label}</div>
+      <div style={{ color: color || GOLD, fontSize: 16, fontWeight: 700, marginTop: 1 }}>{value}</div>
+    </div>
+  )
+}
+
+function Detail({ label, value, color }: { label: string; value: string; color?: string }) {
+  return (
+    <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '2px 6px' }}>
+      <span style={{ color: MUTED, fontSize: 8, textTransform: 'uppercase' }}>{label} </span>
+      <span style={{ color: color || TEXT, fontSize: 10, fontWeight: 600 }}>{value}</span>
+    </div>
+  )
+}
+
 // ─── Backtest Stats Panel ───────────────────────────────
 function BacktestStatsPanel({ signals, bt, dark }: { signals: Signal[]; bt: BacktestResults | null; dark: boolean }) {
   const [activeTab, setActiveTab] = useState<StatsTab>('overview')
@@ -916,23 +935,6 @@ function StatPill({ label, value, color = TEXT2 }: { label: string; value: strin
   )
 }
 
-function Detail({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 3, padding: '2px 6px' }}>
-      <span style={{ color: MUTED, fontSize: 8, textTransform: 'uppercase' }}>{label} </span>
-      <span style={{ color: color || TEXT, fontSize: 10, fontWeight: 600 }}>{value}</span>
-    </div>
-  )
-}
-
-function StatBox({ label, value, icon, color }: { label: string; value: string; icon: React.ReactNode; color?: string }) {
-  return (
-    <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 4, padding: '6px 10px' }}>
-      <div className="flex items-center gap-1" style={{ color: MUTED, fontSize: 9 }}>{icon}{label}</div>
-      <div style={{ color: color || GOLD, fontSize: 16, fontWeight: 700, marginTop: 1 }}>{value}</div>
-    </div>
-  )
-}
 
 // ─── Helpers ────────────────────────────────────────────
 function formatDateShort(dateStr: string): string {

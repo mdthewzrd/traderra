@@ -1197,6 +1197,8 @@ export default function BacktestPage() {
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set())
   const [bars15mCache, setBars15mCache] = useState<Record<string, any[]>>({})
   const [bars15mLoading, setBars15mLoading] = useState(false)
+  const [visibleFilters, setVisibleFilters] = useState<Set<string>>(new Set())
+  const [showFilterMenu, setShowFilterMenu] = useState(false)
   const T = useThemeColors(dark)
 
   // ── Compute filter results for all signals (instant for daily, lazy for intraday) ──
@@ -1555,9 +1557,6 @@ export default function BacktestPage() {
 
   // ─── Right Sidebar: Signals only ─────────────────
   // ── Visible filter columns (separate from active filter toggles) ──
-  const [visibleFilters, setVisibleFilters] = useState<Set<string>>(new Set())
-  const [showFilterMenu, setShowFilterMenu] = useState(false)
-
   const renderRightSidebar = () => {
     const activeFilterDefs = FILTERS.filter(f => visibleFilters.has(f.key))
     return (

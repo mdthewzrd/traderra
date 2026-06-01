@@ -1292,6 +1292,19 @@ export default function BacktestPage() {
   const [showFilterMenu, setShowFilterMenu] = useState(false)
   const [hideFilters, setHideFilters] = useState<Set<string>>(new Set())
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set())
+  // Route Start marks — persisted in localStorage
+  const [routeStarts, setRouteStarts] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set()
+    try { return new Set(JSON.parse(localStorage.getItem('backtest-rs') || '[]')) } catch { return new Set() }
+  })
+  const toggleRS = (key: string) => {
+    setRouteStarts(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      try { localStorage.setItem('backtest-rs', JSON.stringify([...next])) } catch {}
+      return next
+    })
+  }
   const [showColumnMenu, setShowColumnMenu] = useState(false)
   const T = useThemeColors(dark)
 
@@ -1948,6 +1961,10 @@ export default function BacktestPage() {
               <tr style={{ background: T.SURFACE2, position: 'sticky', top: 0, zIndex: 2 }}>
                 <th style={{ padding: '4px 6px', textAlign: 'left', color: T.GOLD, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 0, background: T.SURFACE2, zIndex: 3, minWidth: 56 }}>Ticker</th>
                 <th style={{ padding: '4px 6px', textAlign: 'left', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 56, background: T.SURFACE2, zIndex: 3, minWidth: 68, borderRight: `1px solid ${T.BORDER}` }}>Date</th>
+                <th style={{ padding: '4px 4px', textAlign: 'center', color: T.TEAL, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', background: `${T.TEAL}15`, minWidth: 28, borderLeft: `1px solid ${T.BORDER}` }} title="Route Start — click cells to mark valid entries">
+                  <div>RS</div>
+                  <div style={{ fontSize: 7, fontWeight: 400, opacity: 0.7 }}>{routeStarts.size}/{signals.length}</div>
+                </th>
                 <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>Gap%</th>
                 <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>D0</th>
                 <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>ABS</th>
@@ -2013,6 +2030,7 @@ export default function BacktestPage() {
                   >
                     <td style={{ padding: '3px 6px', color: isActive ? T.GOLD : T.WHITE, fontWeight: 700, fontFamily: 'monospace', position: 'sticky', left: 0, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1 }}>{s.ticker}</td>
                     <td style={{ padding: '3px 6px', color: isActive ? T.GOLD : T.MUTED, position: 'sticky', left: 56, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1, borderRight: `1px solid ${T.BORDER}` }}>{s.date.slice(5)}</td>
+                    <td onClick={(e) => { e.stopPropagation(); toggleRS(`${s.ticker}-${s.date}`) }} style={{ padding: '3px 4px', textAlign: 'center', borderLeft: `1px solid ${T.BORDER}`, cursor: 'pointer', color: routeStarts.has(`${s.ticker}-${s.date}`) ? T.TEAL : T.BORDER, fontSize: 12, fontWeight: 700, userSelect: 'none', background: routeStarts.has(`${s.ticker}-${s.date}`) ? `${T.TEAL}15` : 'transparent' }}>{routeStarts.has(`${s.ticker}-${s.date}`) ? '✓' : ''}</td>
                     <td style={{ padding: '3px 4px', color: T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{(s.gap_pct || 0).toFixed(0)}%</td>
                     <td style={{ padding: '3px 4px', color: d0chg < 0 ? T.RED : T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{d0chg > 0 ? '+' : ''}{isNaN(d0chg) ? '0.0' : d0chg.toFixed(1)}%</td>
                     <td style={{ padding: '3px 4px', color: T.GOLD, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(s.pos_abs || 0).toFixed(2)}</td>

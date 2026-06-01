@@ -1,20 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import fs from 'fs'
-import path from 'path'
-
-const FILE = path.join(process.cwd(), '.backtest-rs.json')
+import prisma from '@/lib/prisma'
 
 export async function GET() {
-  try {
-    const data = fs.readFileSync(FILE, 'utf-8')
-    return NextResponse.json(JSON.parse(data))
-  } catch {
-    return NextResponse.json({ marks: [] })
-  }
+  const row = await prisma.btKV.findUnique({ where: { key: 'rs-marks' } })
+  return NextResponse.json(row ? JSON.parse(row.value) : { marks: [] })
 }
 
 export async function POST(req: NextRequest) {
-  const { marks } = await req.json()
-  fs.writeFileSync(FILE, JSON.stringify({ marks, updated: new Date().toISOString() }))
+  const body = await req.json()
+  await prisma.btKV.upsert({
+    where: { key: 'rs-marks' },
+    update: { value: JSON.stringify(body) },
+    create: { key: 'rs-marks', value: JSON.stringify(body) },
+  })
   return NextResponse.json({ ok: true })
 }

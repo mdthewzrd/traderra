@@ -1635,7 +1635,7 @@ export default function BacktestPage() {
         </div>
 
         <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
-          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 10 }}>
+          <table style={{ minWidth: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 10 }}>
             <thead>
               <tr style={{ background: T.SURFACE2, position: 'sticky', top: 0, zIndex: 2 }}>
                 <th style={{ padding: '4px 6px', textAlign: 'left', color: T.GOLD, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 0, background: T.SURFACE2, zIndex: 3, minWidth: 56 }}>Ticker</th>

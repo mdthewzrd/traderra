@@ -7,7 +7,7 @@ import {
   Plus, ExternalLink, Calendar, Zap, Activity,
   ArrowUpRight, Hash, DollarSign, Target, Layers,
   Clock, TrendingDown, Minus, Send, Play, Rows3,
-  LayoutGrid, X, Settings2, Save, Sun, Moon
+  LayoutGrid, X, Settings2, Save, Sun, Moon, Shield
 } from 'lucide-react'
 
 // ─── Built-in Scans (shared with SCAN tab) ─────────────
@@ -63,6 +63,219 @@ interface ScanRun {
 
 type Timeframe = '5' | '15' | '60' | 'D'
 type ChartMode = 'single' | 'stacked'
+type PageMode = 'scanner' | 'backtest'
+
+interface BacktestResults {
+  entryType: string
+  exitType: string
+  totalTrades: number
+  winRate: number
+  profitFactor: number
+  sharpe: number
+  sortino: number
+  calmar: number
+  maxDrawdown: number
+  maxDDDuration: number
+  avgRMultiple: number
+  medianR: number
+  avgWinPct: number
+  avgLossPct: number
+  expectancy: number
+  expectancyPct: number
+  wlRatio: number
+  totalPnl: number
+  totalReturnPct: number
+  cagr: number
+  avgTradeDuration: string
+  maxConsecWins: number
+  maxConsecLosses: number
+  bestTrade: number
+  worstTrade: number
+  stdDevReturns: number
+  downsideDev: number
+  recoveryFactor: number
+  pctProfitable: number
+  grossWin: number
+  grossLoss: number
+  tradeReturns: number[]
+  cumPnlSeries: number[]
+  drawdownSeries: number[]
+  dayStats: { day: string; pnl: number; count: number }[]
+  monthlyStats: { month: string; pnl: number; count: number }[]
+}
+
+// ─── Filter Definitions (for backtest mode) ──────────────
+interface FilterDef {
+  key: string
+  label: string
+  shortLabel: string
+  description: string
+  compute: (s: Signal) => boolean
+}
+
+const FILTERS: FilterDef[] = [
+  { key: 'green', label: 'Green Candle', shortLabel: 'GRN', description: 'Close > Open', compute: (s) => s.close > s.open },
+  { key: 'closePos50', label: 'Close > Mid', shortLabel: 'C>50', description: 'Closed above midpoint of range', compute: (s) => { const r = s.high - s.low; return r > 0 ? (s.close - s.low) / r > 0.5 : false } },
+  { key: 'closePos75', label: 'Close > 75%ile', shortLabel: 'C>75', description: 'Closed in upper 25% of range', compute: (s) => { const r = s.high - s.low; return r > 0 ? (s.close - s.low) / r > 0.75 : false } },
+  { key: 'gapOver100', label: 'Gap > 100%', shortLabel: 'G>1x', description: 'Gap up more than 100%', compute: (s) => (s.gap_pct || 0) > 100 },
+  { key: 'gapOver50', label: 'Gap > 50%', shortLabel: 'G>50', description: 'Gap up more than 50%', compute: (s) => (s.gap_pct || 0) > 50 },
+  { key: 'volOver10M', label: 'Vol > 10M', shortLabel: 'V>10M', description: 'Volume over 10M', compute: (s) => (s.volume || 0) > 10e6 },
+  { key: 'rangeOver5', label: 'Range > 5%', shortLabel: 'R>5%', description: 'Intraday range > 5%', compute: (s) => { const r = s.high - s.low; return s.open > 0 ? (r / s.open) * 100 > 5 : false } },
+]
+
+type StatsTab = 'overview' | 'performance' | 'pnl' | 'robustness'
+
+// ─── Backtest Stats Panel ───────────────────────────────
+function BacktestStatsPanel({ signals, bt, dark }: { signals: Signal[]; bt: BacktestResults | null; dark: boolean }) {
+  const [activeTab, setActiveTab] = useState<StatsTab>('overview')
+  const C = dark
+    ? { SURFACE, SURFACE2, SURFACE3, BORDER, TEXT, TEXT2, MUTED, GOLD, GOLD_DIM, GOLD_BORDER, RED, TEAL }
+    : { SURFACE: LIGHT.SURFACE, SURFACE2: LIGHT.SURFACE2, SURFACE3: LIGHT.SURFACE3, BORDER: LIGHT.BORDER, TEXT: LIGHT.TEXT, TEXT2: LIGHT.TEXT2, MUTED: LIGHT.MUTED, GOLD, GOLD_DIM: LIGHT.GOLD_DIM, GOLD_BORDER: LIGHT.GOLD_BORDER, RED: LIGHT.RED, TEAL: LIGHT.TEAL }
+
+  if (!bt) return null
+  const btTabs: { key: StatsTab; label: string }[] = [
+    { key: 'overview', label: 'Overview' },
+    { key: 'performance', label: 'Performance' },
+    { key: 'pnl', label: 'P&L' },
+    { key: 'robustness', label: 'Robustness' },
+  ]
+
+  return (
+    <div style={{ background: C.SURFACE, border: `1px solid ${C.BORDER}`, borderRadius: 4 }}>
+      <div className="flex items-center gap-1" style={{ padding: '4px 6px', borderBottom: `1px solid ${C.BORDER}` }}>
+        {btTabs.map(t => (
+          <button key={t.key} onClick={() => setActiveTab(t.key)} style={{
+            padding: '3px 8px', borderRadius: 2, fontSize: 9, fontWeight: 700,
+            background: activeTab === t.key ? C.GOLD : 'transparent',
+            color: activeTab === t.key ? '#000' : C.MUTED,
+            border: 'none', cursor: 'pointer',
+          }}>{t.label}</button>
+        ))}
+      </div>
+      <div style={{ padding: '8px 10px' }}>
+        {activeTab === 'overview' && (
+          <div className="grid grid-cols-3 lg:grid-cols-7 gap-1">
+            <StatBox label="Trades" value={String(bt.totalTrades)} icon={<List className="h-3 w-3" />} />
+            <StatBox label="Win Rate" value={`${bt.winRate.toFixed(1)}%`} icon={<TrendingUp className="h-3 w-3" />} color={bt.winRate >= 50 ? C.TEAL : C.RED} />
+            <StatBox label="PF" value={bt.profitFactor.toFixed(2)} icon={<BarChart3 className="h-3 w-3" />} color={bt.profitFactor >= 1.5 ? C.TEAL : C.RED} />
+            <StatBox label="Sharpe" value={bt.sharpe.toFixed(2)} icon={<Activity className="h-3 w-3" />} color={bt.sharpe >= 1 ? C.TEAL : C.RED} />
+            <StatBox label="Avg Win" value={`${bt.avgWinPct.toFixed(2)}%`} icon={<TrendingUp className="h-3 w-3" />} color={C.TEAL} />
+            <StatBox label="Avg Loss" value={`${bt.avgLossPct.toFixed(2)}%`} icon={<TrendingDown className="h-3 w-3" />} color={C.RED} />
+            <StatBox label="Max DD" value={`-${bt.maxDrawdown.toFixed(1)}%`} icon={<TrendingDown className="h-3 w-3" />} color={C.RED} />
+          </div>
+        )}
+        {activeTab === 'performance' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-1">
+            <div style={{ background: C.SURFACE2, border: `1px solid ${C.BORDER}`, borderRadius: 4, padding: '8px 10px' }}>
+              <div style={{ color: C.GOLD, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Return Distribution</div>
+              {(() => {
+                const buckets: Record<string, number> = { '< -5%': 0, '-5 to -2%': 0, '-2 to 0%': 0, '0 to +2%': 0, '+2 to +5%': 0, '> +5%': 0 }
+                bt.tradeReturns.forEach(r => { if (r < -5) buckets['< -5%']++; else if (r < -2) buckets['-5 to -2%']++; else if (r < 0) buckets['-2 to 0%']++; else if (r < 2) buckets['0 to +2%']++; else if (r < 5) buckets['+2 to +5%']++; else buckets['> +5%']++ })
+                const maxB = Math.max(...Object.values(buckets), 1)
+                return Object.entries(buckets).map(([label, count]) => {
+                  const barCol = label.includes('-') || label.startsWith('<') ? C.RED : C.TEAL
+                  return (
+                    <div key={label} className="flex items-center gap-1.5" style={{ marginBottom: 3 }}>
+                      <span style={{ color: C.MUTED, fontSize: 8, width: 56, fontFamily: 'monospace', textAlign: 'right' }}>{label}</span>
+                      <div style={{ flex: 1, height: 12, background: C.SURFACE3, borderRadius: 2, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${(count / maxB) * 100}%`, background: barCol, borderRadius: 2, minWidth: count > 0 ? 2 : 0 }} />
+                      </div>
+                      <span style={{ color: C.TEXT2, fontSize: 8, width: 28 }}>{count}</span>
+                    </div>
+                  )
+                })
+              })()}
+            </div>
+            <div style={{ background: C.SURFACE2, border: `1px solid ${C.BORDER}`, borderRadius: 4, padding: '8px 10px' }}>
+              <div style={{ color: C.GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Monthly Returns</div>
+              {bt.monthlyStats.map((m, i) => {
+                const col = m.pnl >= 0 ? C.TEAL : C.RED
+                const barW = Math.min(Math.abs(m.pnl) * 3, 100)
+                return (
+                  <div key={i} className="flex items-center gap-1.5" style={{ marginBottom: 4 }}>
+                    <span style={{ color: C.GOLD, fontSize: 9, fontWeight: 600, width: 36, fontFamily: 'monospace' }}>{m.month.slice(5)}</span>
+                    <div style={{ flex: 1, height: 14, background: C.SURFACE3, borderRadius: 2, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${barW}%`, background: col, borderRadius: 2, opacity: 0.7 }} />
+                    </div>
+                    <span style={{ color: col, fontSize: 9, fontWeight: 700, width: 48, textAlign: 'right' }}>{m.pnl >= 0 ? '+' : ''}{m.pnl.toFixed(1)}%</span>
+                    <span style={{ color: C.MUTED, fontSize: 7, width: 24 }}>{m.count}t</span>
+                  </div>
+                )
+              })()}
+            </div>
+          </div>
+        )}
+        {activeTab === 'pnl' && (
+          <>
+            <div style={{ background: C.SURFACE2, border: `1px solid ${C.BORDER}`, borderRadius: 4, padding: '8px 10px', marginBottom: 4 }}>
+              <div style={{ color: C.GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Equity Curve</div>
+              <EquityChart data={bt.cumPnlSeries} color={bt.cumPnlSeries[bt.cumPnlSeries.length - 1] >= 0 ? C.TEAL : C.RED} height={130} />
+            </div>
+            <div style={{ background: C.SURFACE2, border: `1px solid ${C.BORDER}`, borderRadius: 4, padding: '8px 10px' }}>
+              <div style={{ color: C.RED, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Drawdown</div>
+              <EquityChart data={bt.drawdownSeries} color={C.RED} height={100} inverted />
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-1" style={{ marginTop: 4 }}>
+              <StatBox label="Total Return" value={`${bt.totalReturnPct > 0 ? '+' : ''}${bt.totalReturnPct.toFixed(1)}%`} icon={<TrendingUp className="h-3 w-3" />} color={bt.totalReturnPct >= 0 ? C.TEAL : C.RED} />
+              <StatBox label="Max DD" value={`-${bt.maxDrawdown.toFixed(1)}%`} icon={<TrendingDown className="h-3 w-3" />} color={C.RED} />
+              <StatBox label="Recovery Factor" value={bt.recoveryFactor.toFixed(2)} icon={<Activity className="h-3 w-3" />} color={bt.recoveryFactor >= 3 ? C.TEAL : C.RED} />
+              <StatBox label="Calmar" value={bt.calmar.toFixed(2)} icon={<BarChart3 className="h-3 w-3" />} color={bt.calmar >= 1 ? C.TEAL : C.RED} />
+            </div>
+          </>
+        )}
+        {activeTab === 'robustness' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-1">
+            {[
+              { icon: <Shield className="h-5 w-5" style={{ color: C.MUTED, marginBottom: 4 }} />, title: 'Walk-Forward Analysis', sub: 'Anchored WFO 5-fold\nIS/OOS degradation' },
+              { icon: <BarChart3 className="h-5 w-5" style={{ color: C.MUTED, marginBottom: 4 }} />, title: 'Monte Carlo Simulation', sub: '10K permutations\n95% CI bounds' },
+              { icon: <TrendingUp className="h-5 w-5" style={{ color: C.MUTED, marginBottom: 4 }} />, title: 'Parameter Sensitivity', sub: '±20% param sweep\nRobustness score' },
+            ].map(item => (
+              <div key={item.title} style={{ background: C.SURFACE2, border: `1px solid ${C.BORDER}`, borderRadius: 4, padding: '12px 10px', textAlign: 'center' }}>
+                <div style={{ display: 'flex', justifyContent: 'center' }}>{item.icon}</div>
+                <div style={{ color: C.GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>{item.title}</div>
+                <div style={{ color: C.TEXT2, fontSize: 20, fontWeight: 700, marginTop: 6 }}>—</div>
+                <div style={{ color: C.MUTED, fontSize: 8, marginTop: 2, lineHeight: 1.4, whiteSpace: 'pre-line' }}>{item.sub}</div>
+                <div style={{ color: C.SURFACE3, fontSize: 7, marginTop: 6 }}>Not yet computed</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function EquityChart({ data, color, height, inverted }: { data: number[]; color: string; height: number; inverted?: boolean }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !data.length) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const w = canvas.offsetWidth, h = height
+    canvas.width = w * 2; canvas.height = h * 2
+    ctx.scale(2, 2)
+    ctx.clearRect(0, 0, w, h)
+    const min = Math.min(...data), max = Math.max(...data)
+    const range = max - min || 1
+    const xStep = w / (data.length - 1 || 1)
+    const zeroY = h - ((0 - min) / range) * h
+    ctx.strokeStyle = SURFACE3; ctx.lineWidth = 0.5; ctx.setLineDash([3, 3])
+    ctx.beginPath(); ctx.moveTo(0, zeroY); ctx.lineTo(w, zeroY); ctx.stroke(); ctx.setLineDash([])
+    ctx.beginPath()
+    ctx.moveTo(0, h - ((data[0] - min) / range) * h)
+    data.forEach((v, i) => ctx.lineTo(i * xStep, h - ((v - min) / range) * h))
+    ctx.lineTo((data.length - 1) * xStep, h); ctx.lineTo(0, h); ctx.closePath()
+    const grad = ctx.createLinearGradient(0, 0, 0, h)
+    grad.addColorStop(0, color + '30'); grad.addColorStop(1, color + '05')
+    ctx.fillStyle = grad; ctx.fill()
+    ctx.beginPath()
+    ctx.moveTo(0, h - ((data[0] - min) / range) * h)
+    data.forEach((v, i) => ctx.lineTo(i * xStep, h - ((v - min) / range) * h))
+    ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke()
+  }, [data, color, height])
+  return <canvas ref={canvasRef} style={{ width: '100%', height, display: 'block' }} />
+}
 
 interface ChartSettings {
   showEma9_20: boolean
@@ -815,6 +1028,10 @@ export default function ScanDashboardPage() {
     showVolume: true, showCrosshair: true, showLegend: true,
   })
   const [dark, setDark] = useState(true)
+  const [pageMode, setPageMode] = useState<PageMode>('scanner')
+  const [backtestResults, setBacktestResults] = useState<BacktestResults | null>(null)
+  const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set())
+  const [btTab, setBtTab] = useState<string>('overview')
   const [dayOffset, setDayOffset] = useState(0)
   const T = useThemeColors(dark)
 
@@ -931,6 +1148,89 @@ export default function ScanDashboardPage() {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [selectedIdx, signals.length])
+
+  // ── Filtered signals for backtest mode ──
+  const filteredSignals = useMemo(() => {
+    if (activeFilters.size === 0) return signals
+    return signals.filter(s => {
+      for (const key of activeFilters) {
+        const f = FILTERS.find(ff => ff.key === key)
+        if (f && !f.compute(s)) return false
+      }
+      return true
+    })
+  }, [signals, activeFilters])
+
+  // ── Baseline backtest: buy D0 open, sell D0 close ──
+  const runBaselineBacktest = useCallback((sigs?: Signal[]) => {
+    const source = sigs || filteredSignals
+    if (!source.length) return
+    const trades = source.map(s => {
+      const pnlPct = ((s.close - s.open) / s.open) * 100
+      const risk = s.open - s.low
+      const rMultiple = risk > 0 ? (s.close - s.open) / risk : 0
+      return { pnlPct, rMultiple, win: pnlPct > 0, date: s.date }
+    })
+    const returns = trades.map(t => t.pnlPct)
+    const wins = trades.filter(t => t.win)
+    const losses = trades.filter(t => !t.win)
+    const totalPnl = returns.reduce((a, r) => a + r, 0)
+    const grossWin = wins.reduce((a, t) => a + t.pnlPct, 0)
+    const grossLoss = Math.abs(losses.reduce((a, t) => a + t.pnlPct, 0))
+    const winRate = (wins.length / trades.length) * 100
+    const profitFactor = grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? 999 : 0
+    const rMultiples = trades.map(t => t.rMultiple)
+    const avgRMultiple = rMultiples.reduce((a, r) => a + r, 0) / rMultiples.length
+    const sortedR = [...rMultiples].sort((a, b) => a - b)
+    const medianR = sortedR.length % 2 === 0 ? (sortedR[sortedR.length / 2 - 1] + sortedR[sortedR.length / 2]) / 2 : sortedR[Math.floor(sortedR.length / 2)]
+    const avgWinPct = wins.length > 0 ? wins.reduce((a, t) => a + t.pnlPct, 0) / wins.length : 0
+    const avgLossPct = losses.length > 0 ? losses.reduce((a, t) => a + t.pnlPct, 0) / losses.length : 0
+    const expectancyPct = (winRate / 100) * avgWinPct + ((100 - winRate) / 100) * avgLossPct
+    const wlRatio = losses.length > 0 && avgLossPct !== 0 ? Math.abs(avgWinPct / avgLossPct) : 0
+    let cumPnl = 0, peak = 0, maxDd = 0, ddStart = 0, maxDDDuration = 0
+    const cumPnlSeries: number[] = [], drawdownSeries: number[] = []
+    returns.forEach((r, i) => {
+      cumPnl += r; cumPnlSeries.push(cumPnl)
+      peak = Math.max(peak, cumPnl)
+      const dd = peak - cumPnl; drawdownSeries.push(dd)
+      if (dd > 0 && ddStart === 0) ddStart = i
+      maxDd = Math.max(maxDd, dd)
+      if (dd === 0 && ddStart > 0) { maxDDDuration = Math.max(maxDDDuration, i - ddStart); ddStart = 0 }
+    })
+    if (ddStart > 0) maxDDDuration = Math.max(maxDDDuration, returns.length - ddStart)
+    const meanReturn = returns.reduce((a, r) => a + r, 0) / returns.length
+    const stdDev = Math.sqrt(returns.reduce((a, r) => a + (r - meanReturn) ** 2, 0) / returns.length)
+    const sharpe = stdDev > 0 ? (meanReturn / stdDev) * Math.sqrt(252) : 0
+    const downsideReturns = returns.filter(r => r < 0)
+    const downsideDev = downsideReturns.length > 0 ? Math.sqrt(downsideReturns.reduce((a, r) => a + r ** 2, 0) / downsideReturns.length) : 0
+    const sortino = downsideDev > 0 ? (meanReturn / downsideDev) * Math.sqrt(252) : 0
+    const totalReturnPct = totalPnl
+    const tradingDays = new Set(source.map(s => s.date)).size
+    const yearsInSample = tradingDays / 252
+    const cagr = yearsInSample > 0 ? (Math.pow(1 + totalReturnPct / 100, 1 / yearsInSample) - 1) * 100 : totalReturnPct
+    const calmar = maxDd > 0 ? Math.abs(totalReturnPct / maxDd) : 0
+    let cWins = 0, cLosses = 0, maxCWins = 0, maxCLosses = 0
+    trades.forEach(t => { if (t.win) { cWins++; cLosses = 0; maxCWins = Math.max(maxCWins, cWins) } else { cLosses++; cWins = 0; maxCLosses = Math.max(maxCLosses, cLosses) } })
+    const recoveryFactor = maxDd > 0 ? totalPnl / maxDd : 0
+    const byMonth: Record<string, { pnls: number[] }> = {}
+    source.forEach((s, i) => { const month = s.date.slice(0, 7); if (!byMonth[month]) byMonth[month] = { pnls: [] }; byMonth[month].pnls.push(trades[i].pnlPct) })
+    const monthlyStats = Object.entries(byMonth).map(([month, d]) => ({ month, pnl: d.pnls.reduce((a, b) => a + b, 0), count: d.pnls.length }))
+    setBacktestResults({
+      entryType: 'D0 Open', exitType: 'D0 Close', totalTrades: trades.length,
+      winRate, pctProfitable: winRate, profitFactor, sharpe, sortino, calmar,
+      maxDrawdown: maxDd, maxDDDuration, avgRMultiple, medianR,
+      avgWinPct, avgLossPct, expectancy: expectancyPct, expectancyPct,
+      wlRatio, totalPnl: totalPnl * 1000, totalReturnPct, cagr,
+      avgTradeDuration: '1 day', maxConsecWins: maxCWins, maxConsecLosses: maxCLosses,
+      bestTrade: Math.max(...returns), worstTrade: Math.min(...returns),
+      stdDevReturns: stdDev, downsideDev, recoveryFactor, grossWin, grossLoss,
+      tradeReturns: returns, cumPnlSeries, drawdownSeries,
+      dayStats: [], monthlyStats,
+    })
+  }, [filteredSignals])
+
+  // Auto-run backtest when signals or filters change
+  useEffect(() => { if (filteredSignals.length > 0) runBaselineBacktest(filteredSignals) }, [filteredSignals])
 
   // ─── Left Sidebar: Scans (top) + Runs (bottom) ────
   const renderLeftSidebar = () => (
@@ -1136,7 +1436,38 @@ export default function ScanDashboardPage() {
   // ─── Center: Stats + Chart ────────────────────────
   const renderCenter = () => (
     <div style={{ flex: 1, padding: 12, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <StatsPanel signals={signals} />
+      {pageMode === 'scanner' ? (
+        <StatsPanel signals={signals} />
+      ) : (
+        <>
+          {/* Backtest mode: filter toggles + stats */}
+          <div className="flex items-center gap-1 flex-wrap">
+            {FILTERS.map(f => {
+              const isOn = activeFilters.has(f.key)
+              const count = signals.filter(s => f.compute(s)).length
+              return (
+                <button key={f.key} onClick={() => setActiveFilters(prev => {
+                  const next = new Set(prev)
+                  if (isOn) next.delete(f.key); else next.add(f.key)
+                  return next
+                })} title={f.description} style={{
+                  padding: '2px 6px', borderRadius: 2, fontSize: 8, fontWeight: 700,
+                  background: isOn ? `${GOLD}30` : SURFACE2, color: isOn ? GOLD : MUTED,
+                  border: `1px solid ${isOn ? GOLD : BORDER}`, cursor: 'pointer',
+                }}>{f.shortLabel} <span style={{ fontWeight: 400, fontSize: 7 }}>{count}</span></button>
+              )
+            })}
+            {activeFilters.size > 0 && (
+              <button onClick={() => setActiveFilters(new Set())} style={{
+                padding: '2px 6px', borderRadius: 2, fontSize: 8, fontWeight: 700,
+                background: `${RED}20`, color: RED, border: `1px solid ${RED}40`, cursor: 'pointer',
+              }}>Clear</button>
+            )}
+            <span style={{ color: MUTED, fontSize: 8, marginLeft: 4 }}>{filteredSignals.length}/{signals.length} signals</span>
+          </div>
+          <BacktestStatsPanel signals={filteredSignals} bt={backtestResults} dark={dark} />
+        </>
+      )}
 
       {loading ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 60 }}>
@@ -1298,7 +1629,20 @@ export default function ScanDashboardPage() {
       }}>
         <div className="flex items-center gap-3">
           <Search className="h-4 w-4" style={{ color: GOLD }} />
-          <span style={{ color: GOLD, fontSize: 14, fontWeight: 800 }}>Scan Dashboard</span>
+          <div className="flex gap-1" style={{ background: SURFACE2, padding: 2, borderRadius: 4, border: `1px solid ${BORDER}` }}>
+            <button onClick={() => setPageMode('scanner')} style={{
+              padding: '3px 12px', borderRadius: 3, fontSize: 10, fontWeight: 700,
+              background: pageMode === 'scanner' ? GOLD : 'transparent',
+              color: pageMode === 'scanner' ? '#000' : MUTED,
+              border: 'none', cursor: 'pointer',
+            }}>Scanner</button>
+            <button onClick={() => setPageMode('backtest')} style={{
+              padding: '3px 12px', borderRadius: 3, fontSize: 10, fontWeight: 700,
+              background: pageMode === 'backtest' ? GOLD : 'transparent',
+              color: pageMode === 'backtest' ? '#000' : MUTED,
+              border: 'none', cursor: 'pointer',
+            }}>Backtest</button>
+          </div>
           {activeScan && <span style={{ color: MUTED, fontSize: 11 }}>· {activeScan.name}</span>}
         </div>
         <div className="flex items-center gap-1">

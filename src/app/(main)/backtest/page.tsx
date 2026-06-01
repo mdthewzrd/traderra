@@ -2008,13 +2008,12 @@ export default function BacktestPage() {
                   const bg = isFiltering ? T.TEAL : `${T.TEAL}25`
                   const fg = isFiltering ? '#000' : T.TEAL
                   return (
-                    <th key={f.key} title={`${f.description}\n${count}/${signals.length} pass\n\nClick: show \u2192 filter \u2192 remove`}
+                    <th key={f.key} title={`${f.description}\n${count}/${signals.length} pass\n\nClick: show \u2192 filter \u2192 show`}
                       onClick={() => {
                         if (!isFiltering) {
                           setActiveFilters(new Set([...activeFilters, f.key]))
                         } else {
-                          const nv = new Set(visibleFilters); nv.delete(f.key); setVisibleFilters(nv)
-                          const na = new Set(activeFilters); na.delete(f.key); setActiveFilters(na)
+                          setActiveFilters(new Set([...activeFilters].filter(k => k !== f.key)))
                         }
                       }}
                       style={{ padding: '4px 4px', textAlign: 'center', cursor: 'pointer', color: fg, fontSize: 7, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, background: bg, borderLeft: `1px solid ${T.BORDER}`, minWidth: 30 }}>

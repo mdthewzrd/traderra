@@ -269,10 +269,9 @@ const FILTERS: FilterDef[] = [
   // Tier 1 (sync, 1m bars): quick check for obvious fakes
   // Tier 2 (async, tick data): only fetched for suspicious signals
   { key: 'pushReal', label: 'Real Volume', shortLabel: 'REAL', needsBars: 'both',
-    description: '1m bars confirm push was a real move (not a fake print). Key test: if the spike bar snaps back to normal range instantly, it\'s fake. If elevated range persists, it was a real catalyst.',
+    description: 'Real push: multiple 1m bars close near the morning high. Fake print: the high has zero bars closing near it — price printed but nobody traded there.',
     compute: (s, bars15m, bars1m) => {
       if (!bars15m || !bars1m) return false
-      // ── Step 1: Find push level from 15m morning bars (signal date only) ──
       const morning15 = morningBars(bars15m, s.date)
       if (morning15.length < 3) return false
       const morningHigh = Math.max(...morning15.map(b => b.high))
@@ -284,49 +283,16 @@ const FILTERS: FilterDef[] = [
       const lastEma = ema9[ema9.length - 1]
       const atrProxy = s.high - s.low
       const extNorm = atrProxy > 0 ? (morningHigh - lastEma) / atrProxy : 0
-      if (extNorm < 0.5) return false // no push to validate
-      // ── Step 2: Get 1m morning bars (signal date only) ──
-      const morning1m = morningBars(bars1m, s.date).sort((a, b) => a.time - b.time)
+      if (extNorm < 0.5) return false
+      // ── Get 1m morning bars ──
+      const morning1m = morningBars(bars1m, s.date)
       if (morning1m.length < 5) return false
-      // ── Step 3: Find the 1m bar that made the push high ──
-      const pushLevel = morningHigh
-      const tolerance = pushLevel * 0.002
-      const barsAtPush = morning1m.filter(b => b.high >= pushLevel - tolerance)
-      if (barsAtPush.length === 0) return false // 15m high not on 1m = instant fake
-      // Find the bar index in the morning1m array for before/after comparison
-      const pushBarIdx = morning1m.findIndex(b => b.high >= pushLevel - tolerance)
-      // ── CORE CHECK: Before vs After range comparison ──
-      // Get 3 bars before the push bar and 3 bars after
-      const beforeBars = morning1m.slice(Math.max(0, pushBarIdx - 3), pushBarIdx)
-      const afterBars = morning1m.slice(pushBarIdx + 1, pushBarIdx + 4)
-      const pushBar = morning1m[pushBarIdx]
-      // Average range of context bars (before + after)
-      const contextBars = [...beforeBars, ...afterBars]
-      if (contextBars.length < 3) return true // not enough context to judge, give benefit of doubt
-      const contextAvgRange = contextBars.reduce((sum, b) => sum + (b.high - b.low), 0) / contextBars.length
-      const pushRange = pushBar.high - pushBar.low
-      const rangeRatio = contextAvgRange > 0 ? pushRange / contextAvgRange : 1
-      // ── Instant pass: push bar range is normal or only slightly elevated ──
-      // If the bar at the high isn't a huge outlier, the move was gradual/real
-      if (rangeRatio < 3) return true
-      // ── THE KEY TEST ──
-      // rangeRatio >= 3: the push bar is 3x+ the surrounding bars' range
-      // Now check: do AFTER bars stay elevated, or snap back to normal?
-      if (afterBars.length >= 2) {
-        const afterAvgRange = afterBars.reduce((sum, b) => sum + (b.high - b.low), 0) / afterBars.length
-        const afterRatio = contextAvgRange > 0 ? afterAvgRange / contextAvgRange : 1
-        // After bars snap back to near-normal (< 1.5x context avg) = fake print
-        // The spike was isolated — nobody was actually trading at that level
-        if (afterRatio < 1.5) return false
-        // After bars stay elevated (>= 1.5x) = real catalyst/news move
-        // The wide range was sustained by actual trading
-        return true
-      }
-      // Not enough after bars — check volume instead
-      const avgVol = morning1m.reduce((sum, b) => sum + (b.volume || 0), 0) / morning1m.length
-      const pushVol = pushBar.volume || 0
-      // Huge range spike + low volume = fake. High volume = might be real.
-      return avgVol > 0 && pushVol >= avgVol * 1.5
+      // ── THE TEST: How many 1m bars close within 1% of the morning high? ──
+      // Real push: many bars close near the high (sustained buying)
+      // Fake print: zero bars close near the high (price spiked but immediately reversed)
+      const nearThreshold = morningHigh * 0.99
+      const nearHighCount = morning1m.filter(b => b.close >= nearThreshold).length
+      return nearHighCount > 0
     }
   },
 ]

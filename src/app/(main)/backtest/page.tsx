@@ -1705,12 +1705,19 @@ export default function BacktestPage() {
     fetch('/api/scans')
       .then(r => r.json())
       .then(data => {
-        const list = (data.scans || []).filter((s: ScanDef) => s.resultCount > 0)
+        // Workshop page: only show the main Backside B scan
+        const list = (data.scans || []).filter((s: ScanDef) => s.id === 'cmpsmjxn20000ju04vg9pzyzb')
+        if (list.length === 0) {
+          // Fallback: any scan with >30 results
+          const fallback = (data.scans || []).filter((s: ScanDef) => s.resultCount > 30)
+          list.push(...fallback)
+        }
         setScans(list)
-        // Auto-select Backside B if found
-        const backside = list.find((s: ScanDef) => s.name.toLowerCase().includes('backside'))
-        if (backside) setSelectedScan(backside.id)
-        else if (list.length && !selectedScan) setSelectedScan(list[0].id)
+        // Auto-select the main Backside B scan (has the most results)
+        const mainScan = list.find((s: ScanDef) => s.id === 'cmpsmjxn20000ju04vg9pzyzb')
+          || list.find((s: ScanDef) => s.name.toLowerCase().includes('backside') && s.resultCount > 30)
+          || list[0]
+        if (mainScan) setSelectedScan(mainScan.id)
       })
   }, [])
 
@@ -1772,7 +1779,7 @@ export default function BacktestPage() {
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {scans.map(scan => {
+          {scans.filter(s => s.resultCount > 0).map(scan => {
             const isActive = scan.id === selectedScan
             return (
               <button key={scan.id} onClick={() => setSelectedScan(scan.id)} style={{

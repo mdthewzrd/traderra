@@ -975,6 +975,7 @@ export default function ScanDashboardPage() {
   const [runTo, setRunTo] = useState(() => new Date().toISOString().slice(0, 10))
   const [copied, setCopied] = useState(false)
   const [pendingRuns, setPendingRuns] = useState<string[]>([])
+  const knownRunIdsRef = useRef<Set<string>>(new Set())
   const [chatInput, setChatInput] = useState('')
   const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([])
   const [selectedRun, setSelectedRun] = useState<string>('')
@@ -1051,6 +1052,9 @@ export default function ScanDashboardPage() {
 
         const list = [...enrichedBuiltins, ...dbOnlyScans]
         setScans(list)
+        // Track all known run IDs so we can detect new ones
+        const allRunIds = list.flatMap(s => (s.runs || []).map((r: ScanRun) => r.id))
+        knownRunIdsRef.current = new Set(allRunIds)
         if (list.length && !selectedScan) {
           const withResults = list.find(s => s.resultCount > 0)
           setSelectedScan(withResults ? withResults.id : list[0].id)

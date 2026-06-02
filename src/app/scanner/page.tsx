@@ -16,6 +16,8 @@ const BUILTIN_SCANS: ScanDef[] = [
   { id: 'builtin-gap-up', name: 'Gap Up', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['gap-up'] },
   { id: 'builtin-high-tight-flag', name: 'High Tight Flag', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['htf'] },
   { id: 'builtin-aparascan', name: 'Aparascan', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['aparascan'] },
+  { id: 'builtin-mdr-swing', name: 'MDR Swing', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['mdr-swing'] },
+  { id: 'builtin-sc-dmr', name: 'SC DMR', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['sc-dmr'] },
 ]
 
 const BUILTIN_SPEC_MAP: Record<string, string> = {
@@ -23,6 +25,8 @@ const BUILTIN_SPEC_MAP: Record<string, string> = {
   'builtin-gap-up': 'gap-up',
   'builtin-high-tight-flag': 'high-tight-flag',
   'builtin-aparascan': 'aparascan',
+  'builtin-mdr-swing': 'mdr-swing',
+  'builtin-sc-dmr': 'sc-dmr',
 }
 
 // ─── Types ──────────────────────────────────────────────

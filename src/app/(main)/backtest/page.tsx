@@ -1320,6 +1320,8 @@ export default function BacktestPage() {
   const [viewMode, setViewMode] = useState<'stat' | 'chart'>('stat')
   const [loading, setLoading] = useState(false)
   const [showRunModal, setShowRunModal] = useState(false)
+  const [showExec, setShowExec] = useState(false)
+  const [activeExec, setActiveExec] = useState<string>('pop-short')
   const [selectedRun, setSelectedRun] = useState<string>('r1')
   const [chatInput, setChatInput] = useState('')
   const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([])
@@ -2466,6 +2468,31 @@ export default function BacktestPage() {
           }}>
             <Search className="h-3 w-3" /> Scanner
           </a>
+          <div style={{ position: 'relative' }}>
+            <button onClick={() => setShowExec(!showExec)} title="Exec Strategies" style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600,
+              background: showExec ? '#4ade80' : T.SURFACE2, color: showExec ? '#000' : T.TEAL, border: `1px solid ${showExec ? '#4ade80' : T.TEAL}40`, cursor: 'pointer',
+            }}>
+              <Activity className="h-3 w-3" /> Exec
+            </button>
+            {showExec && (
+              <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 50, background: T.SURFACE, border: `1px solid ${T.BORDER}`, borderRadius: 4, padding: 4, minWidth: 160 }}>
+                {[
+                  { key: 'pop-short', label: 'Pop Short (2m 9/20)', desc: 'Short pops into upper dev band' },
+                ].map(ex => (
+                  <button key={ex.key} onClick={() => { setActiveExec(ex.key); setShowExec(false) }} style={{
+                    display: 'block', width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 3, fontSize: 10,
+                    background: activeExec === ex.key ? `${T.TEAL}20` : 'transparent',
+                    color: activeExec === ex.key ? T.TEAL : T.MUTED, border: 'none', cursor: 'pointer',
+                  }}>
+                    <div style={{ fontWeight: 600 }}>{ex.label}</div>
+                    <div style={{ fontSize: 8, opacity: 0.6 }}>{ex.desc}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <a href="/charts-terminal.html" target="_blank" rel="noreferrer" title="Open Charts" style={{
             display: 'flex', alignItems: 'center', gap: 4,
             padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600,

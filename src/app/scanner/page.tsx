@@ -1208,15 +1208,15 @@ export default function ScanDashboardPage() {
 
   // ── Filtered signals for backtest mode ──
   const filteredSignals = useMemo(() => {
-    if (activeFilters.size === 0) return signals
-    return signals.filter(s => {
+    if (activeFilters.size === 0) return sortedSignals
+    return sortedSignals.filter(s => {
       for (const key of activeFilters) {
         const f = FILTERS.find(ff => ff.key === key)
         if (f && !f.compute(s)) return false
       }
       return true
     })
-  }, [signals, activeFilters])
+  }, [sortedSignals, activeFilters])
 
   // ── Baseline backtest: buy D0 open, sell D0 close ──
   const runBaselineBacktest = useCallback((sigs?: Signal[]) => {

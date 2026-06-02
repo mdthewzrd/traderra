@@ -1,22 +1,23 @@
 import { getServerSession } from '@/lib/auth-server'
 import { redirect } from 'next/navigation'
-import ChartsTerminal from './ChartsTerminal'
+import ChartsClient from './ChartsClient'
 
 export const metadata = {
   title: 'Traderra Charts',
 }
 
 export default async function ChartsPage() {
+  const isLocal = process.env.NODE_ENV === 'development'
   const session = await getServerSession()
-  if (!session) {
+  if (!session && !isLocal) {
     redirect('/sign-in?callbackUrl=/charts')
   }
 
   return (
-    <ChartsTerminal
-      userId={session.user.id}
-      userName={session.user.name || ''}
-      userImage={session.user.image || ''}
+    <ChartsClient
+      userId={session?.user?.id || 'local-dev-user'}
+      userName={session?.user?.name || 'Mike (Local)'}
+      userImage={session?.user?.image || ''}
     />
   )
 }

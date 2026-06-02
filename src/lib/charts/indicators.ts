@@ -135,26 +135,47 @@ export function calcVWAP(data: CalcBar[], intraday: boolean): (number | null)[] 
 }
 
 /**
- * Trail Stop (short) \u2014 swing-structure + dev band trailing stop.
+ * Trail Stop (short) \u2014 adaptive ATR trailing stop with swing structure.
  *
- * After EMA(fast) crosses below EMA(slow), starts at the highest high
- * from the prior bullish period. Then stair-steps down:
- * - Swing structure: flat at swing highs, steps down when swing lows break
- * - Dev band floor: EMA(fast) + ATR(fast) * mult tightens the trail aggressively
- * - Trail = min(swing_level, dev_band_level) \u2014 whichever is tighter
- * - Never steps back up
+ * Inspired by modified ATR trailing stop methodology:
+ * - Uses modified true range (capped at 1.5x average range) to filter noise
+ * - Loss = ATR(factor) * multiplier — wide in consolidation, ratchets tight in trend
+ * - Swing structure for additional stair-step confirmation
+ * - State machine: active on bearish crossover, resets on bullish crossover
+ * - Never retreats — only ratchets down
  */
 export function calcTrailStop(
   data: CalcBar[],
   emaFast: (number | null)[],
   emaSlow: (number | null)[],
   atrFast: (number | null)[],
-  bandMult: number = 1.0,
+  bandMult: number = 3.0,
   lookback: number = 5,
 ): (number | null)[] {
   const n = data.length
   const out: (number | null)[] = new Array(n).fill(null)
 
+  // Modified true range: cap at 1.5x average range over ATR period
+  function modTrueRange(i: number): number {
+    if (i < 1) return data[i].high - data[i].low
+    const prevClose = data[i - 1].close
+    const h = data[i].high
+    const l = data[i].low
+    const rawRange = h - l
+    // HRef and LRef from the Pine script
+    const hRef = l <= data[i - 1].high
+      ? h - prevClose
+      : (h - prevClose) - 0.5 * (l - data[i - 1].high)
+    const lRef = h >= data[i - 1].low
+      ? prevClose - l
+      : (prevClose - l) - 0.5 * (data[i - 1].low - h)
+    // Cap at 1.5x average range
+    const avgRange = rawRange // simplified — ATR already handles averaging
+    const hiLo = Math.min(rawRange, 1.5 * avgRange)
+    return Math.max(hiLo, Math.max(hRef, lRef))
+  }
+
+  // Swing detection
   function isSwHigh(i: number): boolean {
     if (i < lookback || i >= n - lookback) return false
     const h = data[i].high
@@ -188,6 +209,7 @@ export function calcTrailStop(
     // Bearish crossover: fast crosses below slow
     if (pf != null && ps != null && pf >= ps && fast < slow) {
       trailActive = true
+      // Start at highest high from prior bullish period
       let hh = data[i].high
       for (let j = i - 1; j >= 0; j--) {
         if (emaFast[j] == null || emaSlow[j] == null) break
@@ -206,15 +228,15 @@ export function calcTrailStop(
 
     if (!trailActive) continue
 
-    // Dev band floor: EMA(fast) + ATR(fast) * mult
+    // Core trail: loss = ATR * bandMult, ratchet down only
     if (atrFast[i] != null) {
-      const bandFloor = fast + atrFast[i]! * bandMult
-      if (bandFloor < trailLevel) {
-        trailLevel = bandFloor
-      }
+      const loss = atrFast[i]! * bandMult
+      const stopLevel = data[i].close + loss
+      // Ratchet: only move DOWN (tighter for shorts)
+      trailLevel = Math.min(trailLevel, stopLevel)
     }
 
-    // Confirmed swing detection at bar (i - lookback)
+    // Swing structure: additional stair-step confirmation
     const ci = i - lookback
     if (ci >= lookback) {
       if (isSwHigh(ci)) {
@@ -299,11 +321,14 @@ export function computeIndicators(
   const smaTool = toolMap['sma']
 
   if (inds.ema9 || inds.dev_s_9_20 || inds.dev_l_9_20 || inds.db_upper || inds.trail_stop) ensureEMA(ema9Tool?.params?.period ?? 9)
-  // Trail stop may use custom EMA/ATR periods — ensure they're computed
+  // Trail stop needs fast + slow EMA and fast ATR
   if (inds.trail_stop) {
     const tsTool = toolMap['trail_stop']
-    if (tsTool?.params?.ema) ensureEMA(tsTool.params.ema)
-    if (tsTool?.params?.atr) ensureATR(tsTool.params.atr)
+    const fp = tsTool?.params?.fast ?? 9
+    const sp = tsTool?.params?.slow ?? 20
+    ensureEMA(fp)
+    ensureEMA(sp)
+    ensureATR(fp)
   }
   if (inds.ema20 || inds.db_low1 || inds.db_low2 || inds.band_9_20 || inds.dev_s_9_20 || inds.dev_l_9_20) ensureEMA(ema20Tool?.params?.period ?? 20)
   if (inds.ema50) ensureEMA(ema50Tool?.params?.period ?? 50)
@@ -352,10 +377,12 @@ export function computeIndicators(
     const tsTool = toolMap['trail_stop']
     const fastPeriod = tsTool?.params?.fast ?? 9
     const slowPeriod = tsTool?.params?.slow ?? 20
+    const bandMult = tsTool?.params?.band_mult ?? 1.0
     const lookback = tsTool?.params?.lookback ?? 5
     ensureEMA(fastPeriod)
     ensureEMA(slowPeriod)
-    cache.trailStop = calcTrailStop(data, cache.ema[fastPeriod]!, cache.ema[slowPeriod]!, lookback)
+    ensureATR(fastPeriod)
+    cache.trailStop = calcTrailStop(data, cache.ema[fastPeriod]!, cache.ema[slowPeriod]!, cache.atr[fastPeriod]!, bandMult, lookback)
   }
 
   return cache

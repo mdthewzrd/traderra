@@ -13,11 +13,19 @@ export async function GET() {
     const session = await auth.api.getSession({ headers: hdrs })
 
     if (!session?.session?.token) {
+      // Local dev bypass — return a dummy token
+      if (process.env.NODE_ENV === 'development') {
+        return NextResponse.json({ token: 'local-dev-token' })
+      }
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
     return NextResponse.json({ token: session.session.token })
   } catch (e: any) {
+    // Local dev fallback if auth isn't configured
+    if (process.env.NODE_ENV === 'development') {
+      return NextResponse.json({ token: 'local-dev-token' })
+    }
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }

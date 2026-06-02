@@ -16,6 +16,7 @@ import { renderSessionShading } from '@/lib/charts/render-session'
 import { renderAnnotations } from '@/lib/charts/render-annotations'
 import { renderAnnotationPreview } from '@/lib/charts/render-preview'
 import { renderBtMarkers } from '@/lib/charts/render-bt-markers'
+import { calcExecSignals, type ExecSignal } from '@/lib/charts/exec-signals'
 import { renderPivotZones } from '@/lib/charts/render-pzones'
 import { isIntraday } from '@/lib/charts/format'
 import { C } from '@/lib/charts/theme'
@@ -464,6 +465,47 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
 
       // ── Backtest markers ──
       renderBtMarkers(rc)
+      // ── Exec signals (entry/cover/stop markers) ──
+      if (panelIdx === 0 && tf === '2' && inds.trail_stop && ic.ema[9] && ic.ema[20] && ic.atr[9]) {
+        const execSigs = calcExecSignals(bars, ic.ema[9], ic.ema[20], ic.atr[9])
+        const { ctx, barW, pToY, visible } = rc
+        ctx.save()
+        ctx.beginPath(); ctx.rect(0, 0, (rc as any).chartW, (rc as any).priceH); ctx.clip()
+        for (const sig of execSigs) {
+          const visIdx = sig.barIdx - rc.viewStart
+          if (visIdx < 0 || visIdx >= visible.length) continue
+          const x = (visIdx + 0.5) * barW
+          const y = pToY(sig.price)
+          const size = 7
+          if (sig.type === 'entry') {
+            // ▼ Short wedge (red)
+            ctx.beginPath()
+            ctx.moveTo(x, y - size - 2); ctx.lineTo(x + size, y + 2); ctx.lineTo(x - size, y + 2)
+            ctx.closePath(); ctx.fillStyle = '#ff5252'; ctx.fill()
+            // Stop line above
+            if (sig.stopPrice) {
+              const sy = pToY(sig.stopPrice)
+              const halfW = Math.max(14, barW * 2.5)
+              ctx.strokeStyle = '#facc15'; ctx.lineWidth = 1.5; ctx.setLineDash([3, 2])
+              ctx.beginPath(); ctx.moveTo(x - halfW, sy); ctx.lineTo(x + halfW, sy); ctx.stroke()
+              ctx.setLineDash([])
+            }
+          } else if (sig.type === 'cover-recycle' || sig.type === 'cover-full') {
+            // ▲ Cover wedge (green)
+            ctx.beginPath()
+            ctx.moveTo(x, y + size + 2); ctx.lineTo(x + size, y - 2); ctx.lineTo(x - size, y - 2)
+            ctx.closePath()
+            ctx.fillStyle = sig.type === 'cover-recycle' ? '#4ade80' : '#00e676'
+            ctx.fill()
+          } else if (sig.type === 'stop') {
+            // ■ Stop hit (yellow dash)
+            const halfW = Math.max(14, barW * 2.5)
+            ctx.strokeStyle = '#facc15'; ctx.lineWidth = 2; ctx.setLineDash([])
+            ctx.beginPath(); ctx.moveTo(x - halfW, y); ctx.lineTo(x + halfW, y); ctx.stroke()
+          }
+        }
+        ctx.restore()
+      }
 
       // ── Live Price Line ──
       renderLivePriceLine(rc)

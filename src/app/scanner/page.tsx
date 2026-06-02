@@ -38,6 +38,7 @@ interface Signal {
   volume: number
   gap_pct?: number
   pos_abs?: number
+  signals?: string[]  // multi-signal: list of signal types
   [key: string]: any
 }
 
@@ -1108,9 +1109,48 @@ export default function ScanDashboardPage() {
 
   const activeScan = scans.find(s => s.id === selectedScan)
 
+  // ── Deduplicated signals (group multi-signal by ticker+date) ──
+  const dedupedSignals = useMemo(() => {
+    const hasMultipleSignalTypes = new Set(signals.map(s => s.signal)).size > 1
+    if (!hasMultipleSignalTypes) return signals
+    // Group by ticker+date
+    const groups = new Map<string, Signal>()
+    const signalTypes = new Set<string>()
+    for (const s of signals) {
+      signalTypes.add(s.signal)
+      const key = `${s.ticker}::${s.date}`
+      if (!groups.has(key)) {
+        groups.set(key, { ...s, signal: s.signal, signals: [s.signal] })
+      } else {
+        const existing = groups.get(key)!
+        if (!existing.signals!.includes(s.signal)) {
+          existing.signals!.push(s.signal)
+        }
+      }
+    }
+    // Add boolean columns for each signal type
+    for (const [, sig] of groups) {
+      for (const st of signalTypes) {
+        sig[`is_${st}`] = sig.signals!.includes(st)
+      }
+    }
+    return Array.from(groups.values())
+  }, [signals])
+
+  // ── Signal type columns for multi-signal scans ──
+  const signalTypeColumns = useMemo(() => {
+    const types = new Set<string>()
+    for (const s of dedupedSignals) {
+      if (s.signals) for (const st of s.signals) types.add(st)
+    }
+    return Array.from(types).sort()
+  }, [dedupedSignals])
+
+  const isMultiSignal = signalTypeColumns.length > 1
+
   // ── Sorted signals for table ──
   const sortedSignals = useMemo(() => {
-    const sorted = [...signals]
+    const sorted = [...dedupedSignals]
     sorted.sort((a, b) => {
       let va: number | string = 0, vb: number | string = 0
       switch (sortCol) {
@@ -1526,6 +1566,10 @@ export default function ScanDashboardPage() {
                 <th onClick={() => toggleSort('range')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'range' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Rng%{sortCol === 'range' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                 <th onClick={() => toggleSort('abs')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'abs' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>ABS{sortCol === 'abs' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                 <th onClick={() => toggleSort('vol')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'vol' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Vol{sortCol === 'vol' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                {/* Multi-signal type columns */}
+                {isMultiSignal && signalTypeColumns.map(st => (
+                  <th key={st} style={{ padding: '4px 3px', textAlign: 'center', color: GOLD, fontSize: 7, fontWeight: 700, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{st.replace(/_/g, ' ').replace(/^d(\d)/, 'D$1')}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -1547,6 +1591,12 @@ export default function ScanDashboardPage() {
                     <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{rng.toFixed(1)}%</td>
                     <td style={{ padding: '3px 4px', color: GOLD, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(s.pos_abs || 0).toFixed(2)}</td>
                     <td style={{ padding: '3px 4px', color: T.MUTED, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{((s.volume || 0) / 1e6).toFixed(0)}M</td>
+                    {/* Multi-signal type checkmarks */}
+                    {isMultiSignal && signalTypeColumns.map(st => (
+                      <td key={st} style={{ padding: '3px 3px', textAlign: 'center', fontSize: 9 }}>
+                        {s[`is_${st}`] ? <span style={{ color: GOLD, fontWeight: 700 }}>✓</span> : <span style={{ color: T.BORDER }}>·</span>}
+                      </td>
+                    ))}
                   </tr>
                 )
               })}
@@ -1622,7 +1672,7 @@ export default function ScanDashboardPage() {
                 background: `${T.RED}20`, color: T.RED, border: `1px solid ${T.RED}40`, cursor: 'pointer',
               }}>Clear</button>
             )}
-            <span style={{ color: T.MUTED, fontSize: 8, marginLeft: 4 }}>{filteredSignals.length}/{signals.length} signals</span>
+            <span style={{ color: T.MUTED, fontSize: 8, marginLeft: 4 }}>{filteredSignals.length}/{signals.length}{isMultiSignal ? ` (${dedupedSignals.length} rows)` : ''} signals</span>
           </div>
           <BacktestStatsPanel signals={filteredSignals} bt={backtestResults} dark={dark} />
         </>

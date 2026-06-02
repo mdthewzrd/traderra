@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { calcExecSignals, type ExecSignal } from '@/lib/charts/exec-signals'
 import {
   Search, Loader2, ChevronLeft, ChevronRight,
   BarChart3, TrendingUp, List,
@@ -789,6 +790,42 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
       }
 
       // ── Legend ──
+      // ── Exec Signals: entry/cover/stop markers (2m only) ──
+      if (tf === '2' && ema9 && ema20 && atr9) {
+        const execSigs = calcExecSignals(bars, ema9, ema20, atr9)
+        for (const sig of execSigs) {
+          const vi = sig.barIdx - startBar
+          if (vi < 0 || vi >= visibleBars.length) continue
+          const x = PAD_L + vi * barW + barW / 2
+          const y = yFor(sig.price)
+          const sz = 6
+          if (sig.type === 'entry') {
+            // ▼ Short wedge (red)
+            ctx.beginPath()
+            ctx.moveTo(x, y + sz + 2); ctx.lineTo(x - sz, y - sz + 2); ctx.lineTo(x + sz, y - sz + 2)
+            ctx.closePath(); ctx.fillStyle = '#ff5252'; ctx.fill()
+            // Stop line above
+            if (sig.stopPrice) {
+              const sy = yFor(sig.stopPrice)
+              ctx.strokeStyle = '#facc15'; ctx.lineWidth = 1.2; ctx.setLineDash([3, 2])
+              ctx.beginPath(); ctx.moveTo(x - barW * 3, sy); ctx.lineTo(x + barW * 3, sy); ctx.stroke()
+              ctx.setLineDash([])
+            }
+          } else if (sig.type === 'cover-recycle' || sig.type === 'cover-full') {
+            // ▲ Cover wedge (green)
+            ctx.beginPath()
+            ctx.moveTo(x, y - sz - 2); ctx.lineTo(x - sz, y + sz - 2); ctx.lineTo(x + sz, y + sz - 2)
+            ctx.closePath()
+            ctx.fillStyle = sig.type === 'cover-recycle' ? '#4ade80' : '#00e676'
+            ctx.fill()
+          } else if (sig.type === 'stop') {
+            // ■ Stop hit line (yellow)
+            ctx.strokeStyle = '#facc15'; ctx.lineWidth = 1.5
+            ctx.beginPath(); ctx.moveTo(x - barW * 2, y); ctx.lineTo(x + barW * 2, y); ctx.stroke()
+          }
+        }
+      }
+
       if (settings.showLegend) {
       ctx.font = '8px monospace'; ctx.textAlign = 'left'; const lx = 6, ly = 10
       ctx.fillStyle = 'rgba(34,197,94,0.7)'; ctx.fillText('9/20', lx, ly)

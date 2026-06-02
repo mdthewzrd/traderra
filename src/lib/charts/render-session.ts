@@ -8,10 +8,10 @@ import { C } from './theme'
 import { getNY, nyMins, isIntraday } from './format'
 
 // Session time boundaries (NY minutes)
-const PRE_START = (window as any).PRE_START || 4 * 60      // 4:00 AM
-const MKTOPEN = (window as any).MKTOPEN || 9 * 60 + 30     // 9:30 AM
-const MKTCLOSE = (window as any).MKTCLOSE || 16 * 60       // 4:00 PM
-const POST_END = (window as any).POST_END || 20 * 60       // 8:00 PM
+const PRE_START = (typeof window !== 'undefined' && (window as any).PRE_START) || 4 * 60      // 4:00 AM
+const MKTOPEN = (typeof window !== 'undefined' && (window as any).MKTOPEN) || 9 * 60 + 30     // 9:30 AM
+const MKTCLOSE = (typeof window !== 'undefined' && (window as any).MKTCLOSE) || 16 * 60       // 4:00 PM
+const POST_END = (typeof window !== 'undefined' && (window as any).POST_END) || 20 * 60       // 8:00 PM
 
 function getSession(ts: number): 'pre' | 'regular' | 'after' | null {
   const m = nyMins(ts)

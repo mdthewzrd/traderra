@@ -45,7 +45,7 @@ interface ScanRun {
   resultCount: number
 }
 
-type Timeframe = '2' | '5' | '15' | '60' | 'D'
+type Timeframe = '1' | '2' | '5' | '15' | '60' | 'D'
 type ChartMode = 'single' | 'stacked'
 
 interface BacktestResults {
@@ -380,7 +380,9 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
     const toDate = new Date(baseDate + 'T12:00:00')
     toDate.setDate(toDate.getDate() + dayOffset * 2 + 10)
     const toStr = toDate.toISOString().slice(0, 10)
-    if (tf === '2') {
+    if (tf === '1') {
+      fromDate.setDate(fromDate.getDate() - 2)
+    } else if (tf === '2') {
       fromDate.setDate(fromDate.getDate() - 3)
     } else if (tf === '5') {
       fromDate.setDate(fromDate.getDate() - 10)
@@ -408,7 +410,8 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
 
     // Default window width per TF
     let defaultBars = allBars.length
-    if (tf === '2') defaultBars = Math.min(allBars.length, 195)
+    if (tf === '1') defaultBars = Math.min(allBars.length, 390)
+    else if (tf === '2') defaultBars = Math.min(allBars.length, 195)
     else if (tf === '5') defaultBars = Math.min(allBars.length, 156)
     else if (tf === '15') defaultBars = Math.min(allBars.length, 104)
     else if (tf === '60') defaultBars = Math.min(allBars.length, 98)
@@ -435,7 +438,7 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
     }
 
     // Extend past D0 by dayOffset
-    const bpd = tf === '2' ? 195 : tf === '5' ? 78 : tf === '15' ? 26 : tf === '60' ? 7 : 1
+    const bpd = tf === '1' ? 390 : tf === '2' ? 195 : tf === '5' ? 78 : tf === '15' ? 26 : tf === '60' ? 7 : 1
     const endIdx = Math.min(allBars.length, d0Idx + dayOffset * bpd + 1)
     const startIdx = Math.max(0, endIdx - defaultBars)
     return allBars.slice(startIdx, endIdx)
@@ -794,7 +797,7 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
 
       // ── Legend ──
       // ── Exec Signals: entry/cover/stop markers (2m only) ──
-      if (tf === '2' && ema9 && ema20 && atr9) {
+      if (tf !== 'D' && ema9 && ema20 && atr9) {
         const execSigs = calcExecSignals(bars, ema9, ema20, atr9)
         for (const sig of execSigs) {
           const vi = sig.barIdx
@@ -884,7 +887,7 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
     mouseRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top }; draw()
   }
   const handleMouseLeave = () => { mouseRef.current = null; draw() }
-  const tfLabel = tf === '2' ? '2m' : tf === '5' ? '5m' : tf === '15' ? '15m' : tf === '60' ? '1H' : '1D'
+  const tfLabel = tf === '1' ? '1m' : tf === '2' ? '2m' : tf === '5' ? '5m' : tf === '15' ? '15m' : tf === '60' ? '1H' : '1D'
   const Th = dark
     ? { bg: BG, surface: SURFACE, border: BORDER, muted: MUTED }
     : { bg: LIGHT.BG, surface: LIGHT.SURFACE, border: LIGHT.BORDER, muted: LIGHT.MUTED }
@@ -2328,7 +2331,7 @@ export default function BacktestPage() {
             {/* TF */}
             {chartMode === 'single' && (
               <div className="flex gap-1">
-                {(['2', '5', '15', '60', 'D'] as Timeframe[]).map(t => (
+                {(['1', '2', '5', '15', '60', 'D'] as Timeframe[]).map(t => (
                   <button key={t} onClick={() => setTf(t)} style={{
                     padding: '2px 12px', borderRadius: 3, fontSize: 10, fontWeight: 600,
                     background: tf === t ? T.GOLD : T.SURFACE, color: tf === t ? '#000' : T.MUTED,

@@ -40,8 +40,13 @@ export function renderPanelSetup(p: any): RenderContext | null {
   ctx.fillRect(0, H - TIME_H, W, TIME_H)
 
   // Visible bar range
-  const maxStart = Math.max(0, data.length - viewBars)
-  const vs = Math.max(0, Math.min(viewStart, maxStart))
+  // minViewStart = warmup bar count (set by ReactChartPanel from useLiveBars). The
+  // warmup bars live in `data` so indicators SEED over them, but the chart never shows
+  // them — the leftmost VISIBLE bar is always past the cold zone, so indicators plot
+  // properly from the first visible candle.
+  const minViewStart = p.minViewStart || 0
+  const maxStart = Math.max(minViewStart, data.length - viewBars)
+  const vs = Math.max(minViewStart, Math.min(viewStart, maxStart))
   const ve = Math.min(vs + viewBars, data.length)
   const visible = data.slice(vs, ve)
   if (!visible.length) return null
@@ -87,7 +92,7 @@ export function renderPanelSetup(p: any): RenderContext | null {
   }
 
   return {
-    canvas, ctx, data, W, H, PRICE_W, TIME_H, viewStart, viewBars, cx, cy, tf, inds: pi,
+    canvas, ctx, data, W, H, PRICE_W, TIME_H, viewStart, viewBars, cx, cy, tf, panelIdx: p.panelIdx ?? 0, inds: pi,
     volFrac, priceScale: p.priceScale,
     chartW, volH, priceH, vs, ve, visible,
     barW, GAP, candleW, xCtr, xLc, xL,

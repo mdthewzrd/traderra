@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import { C, LIGHT_THEME_OVERRIDES } from '@/lib/charts/theme'
 
 /**
@@ -66,9 +67,12 @@ interface UIState {
   chartStyle: string
   setChartStyle: (v: string) => void
 
-  // Active layout
-  activeLayout: number
-  setActiveLayout: (v: number) => void
+  // Active layout — 'single' | '2h' | '3h' | '2v' | '3v'
+  activeLayout: string
+  setActiveLayout: (v: string) => void
+  // Active panel — the chart toolbar actions target (click a chart to activate it)
+  activePanel: number
+  setActivePanel: (v: number) => void
 
   // Custom indicator buttons in TopBar
   indBtns: string[]  // indKey list
@@ -79,6 +83,11 @@ interface UIState {
   // Active template name (for update button)
   activeTemplateName: string | null
   setActiveTemplateName: (v: string | null) => void
+
+  // Date range (shared between TopBar and ChartDateNav)
+  rangeStart: string
+  rangeEnd: string
+  setRange: (start: string, end: string) => void
 
   // Input settings
   zoomSens: number
@@ -91,7 +100,9 @@ interface UIState {
   setRightPad: (v: number) => void
 }
 
-export const useUIStore = create<UIState>((set) => ({
+export const useUIStore = create<UIState>()(
+  persist(
+    (set) => ({
   theme: (typeof window !== 'undefined' && localStorage.getItem('traderra-theme') === 'light') ? 'light' as const : 'dark' as const,
   toggleTheme: () => set((s) => {
     const next = s.theme === 'dark' ? 'light' : 'dark'
@@ -152,8 +163,10 @@ export const useUIStore = create<UIState>((set) => ({
   chartStyle: 'candles',
   setChartStyle: (v) => set({ chartStyle: v }),
 
-  activeLayout: 1,
+  activeLayout: 'single',
   setActiveLayout: (v) => set({ activeLayout: v }),
+  activePanel: 0,
+  setActivePanel: (v) => set({ activePanel: v }),
 
   indBtns: [] as string[],
   _hydrateIndBtns: () => {
@@ -176,6 +189,10 @@ export const useUIStore = create<UIState>((set) => ({
   activeTemplateName: null,
   setActiveTemplateName: (v) => set({ activeTemplateName: v }),
 
+  rangeStart: '',
+  rangeEnd: '',
+  setRange: (start, end) => set({ rangeStart: start, rangeEnd: end }),
+
   zoomSens: 0.15,
   trackPanSens: 0.5,
   mousePanSens: 1.0,
@@ -184,4 +201,18 @@ export const useUIStore = create<UIState>((set) => ({
   setTrackPanSens: (v) => set({ trackPanSens: v }),
   setMousePanSens: (v) => set({ mousePanSens: v }),
   setRightPad: (v) => set({ rightPad: v }),
-}))
+    }),
+    {
+      name: 'traderra-ui',
+      // sessionStorage → per-tab isolation: layout/activePanel/activeTemplate are local
+      // to each tab so multi-window/multi-tab usage doesn't force every tab to match.
+      storage: createJSONStorage(() => sessionStorage),
+      partialize: (s) => ({
+        activeLayout: s.activeLayout,
+        activePanel: s.activePanel,
+        chartStyle: s.chartStyle,
+        liveMode: s.liveMode,
+      }),
+    }
+  )
+)

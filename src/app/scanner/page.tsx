@@ -12,12 +12,52 @@ import {
 
 // ─── Built-in Scans (shared with SCAN tab) ─────────────
 const BUILTIN_SCANS: ScanDef[] = [
-  { id: 'builtin-backside-b', name: 'Backside B', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['backside-b'], filters: ['am-push'] },
-  { id: 'builtin-gap-up', name: 'Gap Up', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['gap-up'] },
-  { id: 'builtin-high-tight-flag', name: 'High Tight Flag', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['htf'] },
-  { id: 'builtin-aparascan', name: 'Aparascan', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['aparascan'] },
-  { id: 'builtin-mdr-swing', name: 'MDR Swing', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['mdr-swing'] },
-  { id: 'builtin-sc-dmr', name: 'SC DMR', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['sc-dmr'] },
+  // ── MDR Swing > Scans ──
+  { id: 'builtin-mdr-swing', name: 'MDR Swing', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['mdr-swing'], group: 'mdr-swing/scans', filters: ['am-push'] },
+  // ── MDR Swing > Backtests ──
+  { id: 'builtin-mdr-backtest', name: 'MDR Backtest', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['mdr-fixed', 'mdr-backtest'], group: 'mdr-swing/backtests', filters: ['am-push'] },
+  { id: 'builtin-mdr-signals', name: 'MDR Signals', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['mdr-signals'], group: 'mdr-swing/scans', filters: ['am-push'] },
+  // ── Standalone ──
+  { id: 'builtin-backside-b', name: 'Backside B', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['backside-b'], group: 'standalone', filters: ['am-push'] },
+  { id: 'builtin-gap-up', name: 'Gap Up', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['gap-up'], group: 'standalone' },
+  { id: 'builtin-high-tight-flag', name: 'High Tight Flag', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['htf'], group: 'standalone' },
+  { id: 'builtin-aparascan', name: 'Aparascan', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['aparascan'], group: 'standalone' },
+  { id: 'builtin-sc-dmr', name: 'SC DMR', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['sc-dmr'], group: 'standalone' },
+  { id: 'builtin-short-fbo', name: 'Short FBO', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['short-fbo'], group: 'standalone' },
+  { id: 'builtin-short-fbo-2', name: 'Short FBO 2', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['short-fbo-2'], group: 'standalone' },
+  { id: 'builtin-half-a', name: 'Half A', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['half-a'], group: 'standalone' },
+  { id: 'builtin-half-a-other', name: 'Other Half A', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['half-a-other'], group: 'standalone' },
+  // ── OG Scans ──
+  { id: 'builtin-og-scans-master', name: 'Master', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-scans-master', 'lc', 'mean-reversion'], group: 'og-scans' },
+  { id: 'builtin-og-lc-fbo', name: 'LC FBO', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-fbo', 'lc', 'fbo'], group: 'og-scans' },
+  { id: 'builtin-og-lc-frontside-d2', name: 'Frontside D2', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-frontside-d2', 'lc', 'frontside'], group: 'og-scans' },
+  { id: 'builtin-og-lc-backside-d2', name: 'Backside D2', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-backside-d2', 'lc', 'backside'], group: 'og-scans' },
+  { id: 'builtin-og-lc-frontside-d3-ext1', name: 'Frontside D3 Ext1', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-frontside-d3-ext1', 'lc', 'frontside', 'd3'], group: 'og-scans' },
+  { id: 'builtin-og-lc-frontside-d3-ext2', name: 'Frontside D3 Ext2', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-frontside-d3-ext2', 'lc', 'frontside', 'd3'], group: 'og-scans' },
+  { id: 'builtin-og-lc-frontside-d3-uptrend', name: 'Frontside D3 Uptrend', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-frontside-d3-uptrend', 'lc', 'frontside', 'd3'], group: 'og-scans' },
+  { id: 'builtin-og-lc-frontside-d4-para', name: 'Frontside D4 Para', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-frontside-d4-para', 'lc', 'frontside', 'parabolic'], group: 'og-scans' },
+  { id: 'builtin-og-lc-backside-d3-ext1', name: 'Backside D3 Ext1', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-backside-d3-ext1', 'lc', 'backside', 'd3'], group: 'og-scans' },
+  { id: 'builtin-og-lc-backside-d3-ext2', name: 'Backside D3 Ext2', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-backside-d3-ext2', 'lc', 'backside', 'd3'], group: 'og-scans' },
+  { id: 'builtin-og-lc-backside-d3', name: 'Backside D3', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-backside-d3', 'lc', 'backside', 'd3'], group: 'og-scans' },
+  { id: 'builtin-og-lc-backside-d4-para', name: 'Backside D4 Para', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-backside-d4-para', 'lc', 'backside', 'parabolic'], group: 'og-scans' },
+  { id: 'builtin-og-lc-frontside-d2-uptrend', name: 'Frontside D2 Uptrend', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-frontside-d2-uptrend', 'lc', 'frontside', 'd2'], group: 'og-scans' },
+  { id: 'builtin-frd-gap', name: 'FRD Gap', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['frd-gap', 'mean-reversion'], group: 'mikes-scans/mean-reversion' },
+  { id: 'builtin-frd-gap-lc', name: 'FRD Gap LC', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['frd-gap-lc', 'mean-reversion'], group: 'mikes-scans/mean-reversion' },
+  { id: 'builtin-d1-gap', name: 'D1 Gap', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['d1-gap', 'parabolic', 'micro-cap'], group: 'mikes-scans/parabolic' },
+]
+
+// Tree structure: project folders with subfolder groups
+const SCAN_TREE: { id: string; label: string; order: number; subfolders?: { id: string; label: string }[] }[] = [
+  { id: 'mdr-swing', label: 'MDR Swing', order: 0, subfolders: [
+    { id: 'scans', label: 'Scans' },
+    { id: 'backtests', label: 'Backtests' },
+  ]},
+  { id: 'og-scans', label: 'OG Scans', order: 1 },
+  { id: 'standalone', label: 'Standalone', order: 2 },
+  { id: 'mikes-scans', label: "Mike's Scans", order: -1, subfolders: [
+    { id: 'mean-reversion', label: 'Mean Reversion' },
+    { id: 'parabolic', label: 'Parabolic' },
+  ]},
 ]
 
 const BUILTIN_SPEC_MAP: Record<string, string> = {
@@ -26,7 +66,29 @@ const BUILTIN_SPEC_MAP: Record<string, string> = {
   'builtin-high-tight-flag': 'high-tight-flag',
   'builtin-aparascan': 'aparascan',
   'builtin-mdr-swing': 'mdr-swing',
+  'builtin-mdr-backtest': 'mdr-fixed',
+  'builtin-mdr-signals': 'mdr-signals',
   'builtin-sc-dmr': 'sc-dmr',
+  'builtin-short-fbo': 'short-fbo',
+  'builtin-short-fbo-2': 'short-fbo-2',
+  'builtin-half-a': 'half-a',
+  'builtin-half-a-other': 'half-a-other',
+  'builtin-og-scans-master': 'og-scans-master',
+  'builtin-og-lc-fbo': 'og-lc-fbo',
+  'builtin-og-lc-frontside-d2': 'og-lc-frontside-d2',
+  'builtin-og-lc-backside-d2': 'og-lc-backside-d2',
+  'builtin-og-lc-frontside-d3-ext1': 'og-lc-frontside-d3-ext1',
+  'builtin-og-lc-frontside-d3-ext2': 'og-lc-frontside-d3-ext2',
+  'builtin-og-lc-frontside-d3-uptrend': 'og-lc-frontside-d3-uptrend',
+  'builtin-og-lc-frontside-d4-para': 'og-lc-frontside-d4-para',
+  'builtin-og-lc-backside-d3-ext1': 'og-lc-backside-d3-ext1',
+  'builtin-og-lc-backside-d3-ext2': 'og-lc-backside-d3-ext2',
+  'builtin-og-lc-backside-d3': 'og-lc-backside-d3',
+  'builtin-og-lc-backside-d4-para': 'og-lc-backside-d4-para',
+  'builtin-og-lc-frontside-d2-uptrend': 'og-lc-frontside-d2-uptrend',
+  'builtin-frd-gap': 'frd-gap',
+  'builtin-frd-gap-lc': 'frd-gap-lc',
+  'builtin-d1-gap': 'd1-gap',
 }
 
 // ─── Types ──────────────────────────────────────────────
@@ -53,6 +115,7 @@ interface ScanDef {
   resultCount: number
   createdAt: string
   tags?: string[]
+  group?: string
   filters?: string[]  // available filter toggles for this scan (e.g. 'am-push')
   runs?: ScanRun[]
 }
@@ -64,6 +127,9 @@ interface ScanRun {
   runAt: string
   resultCount: number
   tags?: string[]
+  strategy?: string
+  rawParams?: Record<string, any> | null
+  rawDateRange?: { from?: string; to?: string } | null
 }
 
 type Timeframe = '5' | '15' | '60' | 'D'
@@ -306,18 +372,83 @@ function EquityChart({ data, color, height, inverted }: { data: number[]; color:
 interface ChartSettings {
   showEma9_20: boolean
   showEma72_89: boolean
-  showDevBands: boolean
+  showDevBands9_20: boolean
+  showDevBands72_89: boolean
+  showDevBands72_89Tight: boolean
   showVwap: boolean
   showPrevClose: boolean
   showAhPmShade: boolean
   showVolume: boolean
   showCrosshair: boolean
   showLegend: boolean
+  showKeyLevels: boolean
+}
+
+interface KeyLevelsParams {
+  lookLeft: number
+  lookRight: number
+  numPivots: number
+  atrLength: number
+  zoneWidth: number
+  maxZonePercent: number
+  extendRight: boolean
 }
 
 // ─── Color constants ────────────────────────────────────
 const GOLD = '#D4AF37'
 const GOLD_DIM = 'rgba(212,175,55,0.12)'
+
+// ─── Indicator Templates ────────────────────────────────────
+interface IndTemplate {
+  id: string
+  name: string
+  settings: Partial<ChartSettings>
+}
+const IND_TEMPLATES: IndTemplate[] = [
+  {
+    id: 'default',
+    name: 'Default',
+    settings: {
+      showEma9_20: false, showEma72_89: false,
+      showDevBands9_20: false, showDevBands72_89: false, showDevBands72_89Tight: false,
+      showVwap: true, showPrevClose: false, showAhPmShade: true,
+      showVolume: true, showCrosshair: true, showLegend: false,
+    },
+  },
+  {
+    id: 'mikes-bands',
+    name: "Mike's Bands",
+    settings: {
+      showEma9_20: true, showEma72_89: true,
+      showDevBands9_20: true, showDevBands72_89: true, showDevBands72_89Tight: true,
+      showVwap: true, showPrevClose: false, showAhPmShade: true,
+      showVolume: true, showCrosshair: true, showLegend: false, showKeyLevels: true,
+    },
+  },
+  {
+    id: 'clouds-only',
+    name: 'EMA Clouds',
+    settings: {
+      showEma9_20: true, showEma72_89: true,
+      showDevBands9_20: false, showDevBands72_89: false, showDevBands72_89Tight: false,
+      showVwap: true, showPrevClose: false, showAhPmShade: true,
+      showVolume: true, showCrosshair: true, showLegend: false,
+    },
+  },
+]
+
+const TEMPLATE_IND_KEYS: [keyof ChartSettings, string][] = [
+  ['showEma9_20', 'EMA 9/20 Cloud'],
+  ['showEma72_89', 'EMA 72/89 Cloud'],
+  ['showDevBands9_20', 'Dev Band 9/20'],
+  ['showDevBands72_89', 'Dev Band 72/89'],
+  ['showDevBands72_89Tight', 'Dev Band 72/89 Tight'],
+  ['showVwap', 'VWAP'],
+  ['showPrevClose', 'Prev Close'],
+  ['showAhPmShade', 'AH/PM Shade'],
+  ['showVolume', 'Volume'],
+  ['showKeyLevels', 'Key Levels'],
+]
 const GOLD_BORDER = 'rgba(212,175,55,0.3)'
 const BG = '#08080d'
 const SURFACE = '#0c0c14'
@@ -333,8 +464,13 @@ const TEAL = '#14b8a6'
 const VOL_UP = 'rgba(216,216,224,0.18)'
 const VOL_DN = 'rgba(239,68,68,0.25)'
 
-const LEFT_W = 320
-const RIGHT_W = 420
+// Resizable panel widths (defaults)
+const LEFT_W_DEFAULT = 280
+const RIGHT_W_DEFAULT = 360
+const LEFT_W_MIN = 180
+const RIGHT_W_MIN = 240
+const LEFT_W_MAX = 500
+const RIGHT_W_MAX = 600
 
 // ─── Light mode palette ──────────────────────────────────
 const LIGHT = {
@@ -378,7 +514,7 @@ function barETDate(b: any): string {
 }
 
 // ─── MiniChart with zoom & drag ─────────────────────────
-function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset = 0 }: {
+function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset = 0, entryMarker, exitMarker, centerOnDate, legMarkers, exitEpoch, klParams }: {
   symbol: string
   tf: Timeframe
   date?: string
@@ -386,6 +522,12 @@ function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffs
   settings: ChartSettings
   dark: boolean
   dayOffset?: number
+  entryMarker?: { price: number; timeInt: string; epoch?: number }
+  exitMarker?: { price: number; timeInt: string; epoch?: number }
+  centerOnDate?: boolean
+  legMarkers?: { entry?: { price: number; epoch?: number }; exit?: { price: number; epoch?: number } }[]
+  exitEpoch?: number
+  klParams?: KeyLevelsParams
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [allBars, setAllBars] = useState<any[]>([])
@@ -396,61 +538,94 @@ function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffs
   // Manual zoom from wheel — null means "compute default"
   const [manualZoom, setManualZoom] = useState<{ start: number; end: number } | null>(null)
 
-  // Clear manual zoom when inputs change
-  useEffect(() => { setManualZoom(null) }, [symbol, tf, date, dayOffset])
-
-  // Fetch — load extra for zoom out
+  // Fetch bars — simple date range
   useEffect(() => {
     setLoading(true)
     setAllBars([])
     const params = new URLSearchParams({ symbol, tf })
     const baseDate = date || new Date().toISOString().slice(0, 10)
-    // from: always anchored before D0 so D0 bars are always visible
-    // to: D0 + dayOffset (enough to see forward N trading days)
     const fromDate = new Date(baseDate + 'T12:00:00')
     const toDate = new Date(baseDate + 'T12:00:00')
-    toDate.setDate(toDate.getDate() + dayOffset * 2 + 10)
-    const toStr = toDate.toISOString().slice(0, 10)
-    if (tf === '5') {
-      fromDate.setDate(fromDate.getDate() - 10)
-    } else if (tf === '15') {
-      fromDate.setDate(fromDate.getDate() - 25)
-    } else if (tf === '60') {
-      fromDate.setDate(fromDate.getDate() - 70)
+    // Backtest: D0-3 to D0+10 (covers multi-day holds). Scan: wider range.
+    if (centerOnDate) {
+      fromDate.setDate(fromDate.getDate() - 3)
+      toDate.setDate(toDate.getDate() + 10)
     } else {
-      fromDate.setDate(fromDate.getDate() - 360)
+      toDate.setDate(toDate.getDate() + dayOffset * 2 + 10)
+      if (tf === '5') fromDate.setDate(fromDate.getDate() - 10)
+      else if (tf === '15') fromDate.setDate(fromDate.getDate() - 25)
+      else if (tf === '60') fromDate.setDate(fromDate.getDate() - 70)
+      else fromDate.setDate(fromDate.getDate() - 360)
     }
     params.set('from', fromDate.toISOString().slice(0, 10))
-    params.set('to', toStr)
+    params.set('to', toDate.toISOString().slice(0, 10))
     fetch(`/api/chart-data/bars?${params}`)
       .then(r => { if (!r.ok) throw new Error(`Bars API ${r.status}`); return r.json() })
       .then(data => { setAllBars((data.bars || []).filter((b: any) => b.time != null)); setLoading(false) })
       .catch(() => { setAllBars([]); setLoading(false) })
-  }, [symbol, tf, date, dayOffset])
+  }, [symbol, tf, date, dayOffset, centerOnDate])
 
-  // Compute visible bars — default puts D0 at right edge, manualZoom from wheel
+  // Compute visible bars
   const visibleBars = useMemo(() => {
     if (!allBars.length) return []
-
-    // If user manually zoomed, use that
     if (manualZoom) return allBars.slice(manualZoom.start, manualZoom.end)
 
-    // Default window width per TF
+    if (centerOnDate) {
+      // Find D0 start index
+      let d0Idx = -1
+      for (let i = 0; i < allBars.length; i++) {
+        if (barETDate(allBars[i]) === date) { d0Idx = i; break }
+      }
+      if (d0Idx < 0) return allBars.slice(-78)
+
+      const d0Date = barETDate(allBars[d0Idx])
+
+      // Find start of D-1 (one trading day before D0)
+      let sliceStart = d0Idx
+      for (let i = d0Idx - 1; i >= 0; i--) {
+        if (barETDate(allBars[i]) !== d0Date) {
+          sliceStart = i
+          break
+        }
+      }
+
+      // Find end: last bar of exit day (BT) or D0 (signals)
+      let sliceEnd = allBars.length
+      if (exitEpoch && exitEpoch > 0 && !isNaN(exitEpoch)) {
+        // Backtest: find end of exit day
+        const exitDateStr = barETDate({ time: exitEpoch, o: 0, h: 0, l: 0, c: 0, v: 0 } as any)
+        for (let i = d0Idx + 1; i < allBars.length; i++) {
+          const bd = barETDate(allBars[i])
+          if (bd !== exitDateStr && barETDate(allBars[i - 1]) === exitDateStr) {
+            sliceEnd = i
+            break
+          }
+        }
+      } else {
+        // Signal mode: end at D0 close (first bar of D+1)
+        for (let i = d0Idx + 1; i < allBars.length; i++) {
+          if (barETDate(allBars[i]) !== d0Date) {
+            sliceEnd = i
+            break
+          }
+        }
+      }
+      return allBars.slice(sliceStart, sliceEnd)
+    }
+
+    // SCAN MODE: default window around D0
     let defaultBars = allBars.length
     if (tf === '5') defaultBars = Math.min(allBars.length, 156)
     else if (tf === '15') defaultBars = Math.min(allBars.length, 104)
     else if (tf === '60') defaultBars = Math.min(allBars.length, 98)
     else defaultBars = Math.min(allBars.length, 120)
 
-    // Find D0 — the last bar whose ET date matches the signal date
     let d0Idx = allBars.length - 1
     if (date) {
       for (let i = allBars.length - 1; i >= 0; i--) {
         if (barETDate(allBars[i]) === date) { d0Idx = i; break }
       }
     }
-
-    // Extend past D0 by dayOffset
     const bpd = tf === '5' ? 78 : tf === '15' ? 26 : tf === '60' ? 7 : 1
     const endIdx = Math.min(allBars.length, d0Idx + dayOffset * bpd + 1)
     const startIdx = Math.max(0, endIdx - defaultBars)
@@ -517,6 +692,64 @@ function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffs
       ctx.fillStyle = color
       ctx.fillRect(x - bodyW / 2, top, bodyW, Math.max(1, bot - top))
     })
+
+    // ── Entry/Exit markers for backtest trades ──
+    const drawMarker = (barIdx: number, price: number, type: 'entry' | 'exit') => {
+      if (barIdx < 0 || barIdx >= bars.length) return
+      const x = xFor(barIdx)
+      const y = yFor(price)
+      const sz = Math.max(10, candleW * 1.2)
+      const outlineColor = dark ? 'rgba(0,0,0,0.9)' : 'rgba(255,255,255,0.95)'
+      if (type === 'entry') {
+        // Red down-pointing triangle (short entry) — draw outline first
+        ctx.fillStyle = outlineColor; ctx.beginPath()
+        ctx.moveTo(x, y + sz + 4); ctx.lineTo(x - sz / 2 - 1.5, y + 1); ctx.lineTo(x + sz / 2 + 1.5, y + 1)
+        ctx.closePath(); ctx.fill()
+        ctx.fillStyle = '#ef4444'; ctx.beginPath()
+        ctx.moveTo(x, y + sz + 2); ctx.lineTo(x - sz / 2, y + 2); ctx.lineTo(x + sz / 2, y + 2)
+        ctx.closePath(); ctx.fill()
+      } else {
+        // Green up-pointing triangle (cover/exit) — draw outline first
+        ctx.fillStyle = outlineColor; ctx.beginPath()
+        ctx.moveTo(x, y - sz - 4); ctx.lineTo(x - sz / 2 - 1.5, y - 1); ctx.lineTo(x + sz / 2 + 1.5, y - 1)
+        ctx.closePath(); ctx.fill()
+        ctx.fillStyle = '#22c55e'; ctx.beginPath()
+        ctx.moveTo(x, y - sz - 2); ctx.lineTo(x - sz / 2, y - 2); ctx.lineTo(x + sz / 2, y - 2)
+        ctx.closePath(); ctx.fill()
+      }
+    }
+    // Find bar whose epoch is closest to target (must be within 5min)
+    const findBar = (epoch: number) => {
+      let bestIdx = -1, bestDist = Infinity
+      for (let i = 0; i < bars.length; i++) {
+        const d = Math.abs(bars[i].time - epoch)
+        if (d < bestDist) { bestDist = d; bestIdx = i }
+      }
+      return bestDist <= 300 ? bestIdx : -1
+    }
+    // (marker drawing moved to end of render — after all indicators)
+    const _markerQueue: { idx: number; price: number; type: 'entry' | 'exit' }[] = []
+    if (entryMarker?.epoch) {
+      const idx = findBar(entryMarker.epoch)
+      if (idx >= 0) _markerQueue.push({ idx, price: entryMarker.price, type: 'entry' })
+    }
+    if (exitMarker?.epoch) {
+      const idx = findBar(exitMarker.epoch)
+      if (idx >= 0) _markerQueue.push({ idx, price: exitMarker.price, type: 'exit' })
+    }
+    // Per-leg markers — each leg gets its own red (short) and green (cover) wedge
+    if (legMarkers && legMarkers.length > 0) {
+      legMarkers.forEach((leg, li) => {
+        if (leg.entry?.epoch) {
+          const idx = findBar(leg.entry.epoch)
+          if (idx >= 0) _markerQueue.push({ idx, price: leg.entry!.price, type: 'entry' })
+        }
+        if (leg.exit?.epoch) {
+          const idx = findBar(leg.exit.epoch)
+          if (idx >= 0) _markerQueue.push({ idx, price: leg.exit!.price, type: 'exit' })
+        }
+      })
+    }
 
     const mouse = mouseRef.current
     if (settings.showCrosshair && mouse && mouse.x < W - PAD_R && mouse.y < CHART_H) {
@@ -594,6 +827,36 @@ function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffs
           const isD0 = date && barDate === date && isPre
           ctx.fillStyle = isD0 ? 'rgba(212,175,55,0.12)' : isPre ? 'rgba(40,40,70,0.3)' : 'rgba(50,35,35,0.3)'
           ctx.fillRect(x - bodyW, 0, bodyW * 2, CHART_H)
+        }
+      }
+    }
+
+    // ── 7:00 AM ET vertical marker (intraday) ──
+    if (tf !== 'D' && bars.length > 1) {
+      const getBarMinET7 = (b: any): number | null => {
+        if (typeof b.time === 'number') {
+          const d = new Date(b.time * 1000)
+          return (d.getUTCHours() - 5) * 60 + d.getUTCMinutes()
+        }
+        return null
+      }
+      const TARGET7 = 7 * 60 // 7:00 AM ET (chart axis uses fixed UTC-5)
+      const drawn7 = new Set<string>()
+      for (let i = 0; i < bars.length; i++) {
+        const mins = getBarMinET7(bars[i])
+        if (mins === null || mins < TARGET7) continue
+        const bd = barETDate(bars[i])
+        if (bd && !drawn7.has(bd)) {
+          drawn7.add(bd)
+          const x = xFor(i)
+          ctx.strokeStyle = 'rgba(34,197,94,0.7)'
+          ctx.lineWidth = 1
+          ctx.setLineDash([4, 4])
+          ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CHART_H); ctx.stroke()
+          ctx.setLineDash([])
+          ctx.fillStyle = 'rgba(34,197,94,0.7)'
+          ctx.font = '8px monospace'; ctx.textAlign = 'left'
+          ctx.fillText('7:00', x + 3, 20)
         }
       }
     }
@@ -708,6 +971,7 @@ function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffs
       const ema72 = calcEMA(72)
       const ema89 = calcEMA(89)
       const atr9 = calcATR(9)
+      const atr14 = calcATR(14)
       const atr20 = calcATR(20)
       const atr72 = calcATR(72)
       const atr89 = calcATR(89)
@@ -718,7 +982,7 @@ function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffs
       }
 
       // ── 9/20 Deviation Band ──
-      if (settings.showDevBands) {
+      if (settings.showDevBands9_20) {
         const s920_up1 = ema9.map((v, i) => v + atr9[i] * 0.5)
         const s920_up2 = ema9.map((v, i) => v + atr9[i] * 1.0)
         const s920_dn1 = ema20.map((v, i) => v - atr20[i] * 2.0)
@@ -732,14 +996,117 @@ function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffs
         drawEMABand(ema72, ema89, 'rgba(34,197,94,.15)', 'rgba(239,68,68,.15)', 'rgba(34,197,94,.50)', 'rgba(239,68,68,.50)')
       }
 
-      // ── 72/89 Deviation Band ──
-      if (settings.showDevBands) {
+      // ── 72/89 Deviation Band (wide: 6.9/9.6) ──
+      if (settings.showDevBands72_89) {
         const db7289_up1 = ema72.map((v, i) => v + atr72[i] * 6.9)
         const db7289_up2 = ema72.map((v, i) => v + atr72[i] * 9.6)
         const db7289_dn1 = ema89.map((v, i) => v - atr89[i] * 6.9)
         const db7289_dn2 = ema89.map((v, i) => v - atr89[i] * 9.6)
         drawBand(db7289_up1, db7289_up2, 'rgba(239,68,68,.15)', 'rgba(239,68,68,.40)')
         drawBand(db7289_dn1, db7289_dn2, 'rgba(34,197,94,.15)', 'rgba(34,197,94,.40)')
+      }
+
+      // ── 72/89 Deviation Band (tight: 3/3.3 up, 3.6/3.9 down) ──
+      if (settings.showDevBands72_89Tight) {
+        const dbt_up1 = ema72.map((v, i) => v + atr72[i] * 3.0)
+        const dbt_up2 = ema72.map((v, i) => v + atr72[i] * 3.3)
+        const dbt_dn1 = ema89.map((v, i) => v - atr89[i] * 3.6)
+        const dbt_dn2 = ema89.map((v, i) => v - atr89[i] * 3.9)
+        drawBand(dbt_up1, dbt_up2, 'rgba(239,68,68,.10)', 'rgba(239,68,68,.30)')
+        drawBand(dbt_dn1, dbt_dn2, 'rgba(34,197,94,.10)', 'rgba(34,197,94,.30)')
+      }
+
+      // ── Key Levels (Bjorgum-style pivot zones) ──
+      if (settings.showKeyLevels) {
+        const klDef = klParams || { lookLeft: 48, lookRight: 24, numPivots: 1, atrLength: 36, zoneWidth: 0.5, maxZonePercent: 1, extendRight: true }
+        const { lookLeft, lookRight, numPivots, atrLength, zoneWidth, maxZonePercent, extendRight } = klDef
+
+        // Compute pivots on FULL history, not just visible slice
+        const srcBars = allBars.length > bars.length ? allBars : bars
+        const haOpen: number[] = [], haClose: number[] = []
+        for (let i = 0; i < srcBars.length; i++) {
+          const b = srcBars[i]
+          const haC = (b.open + b.high + b.low + b.close) / 4
+          const haO = i === 0 ? (b.open + b.close) / 2 : (haOpen[i - 1] + haClose[i - 1]) / 2
+          haOpen.push(haO); haClose.push(haC)
+        }
+        const haHi = srcBars.map((_: any, i: number) => Math.max(haOpen[i], haClose[i]))
+        const haLo = srcBars.map((_: any, i: number) => Math.min(haOpen[i], haClose[i]))
+
+        const swings: { idx: number; price: number; type: 'high' | 'low' }[] = []
+        for (let i = lookLeft; i < srcBars.length - lookRight; i++) {
+          let isHigh = true, isLow = true
+          for (let j = 1; j <= lookLeft; j++) { if (haHi[i] <= haHi[i - j]) isHigh = false }
+          for (let j = 1; j <= lookRight; j++) { if (haHi[i] <= haHi[i + j]) isHigh = false }
+          for (let j = 1; j <= lookLeft; j++) { if (haLo[i] >= haLo[i - j]) isLow = false }
+          for (let j = 1; j <= lookRight; j++) { if (haLo[i] >= haLo[i + j]) isLow = false }
+          if (isHigh) swings.push({ idx: i, price: srcBars[i].high, type: 'high' })
+          if (isLow) swings.push({ idx: i, price: srcBars[i].low, type: 'low' })
+        }
+        // Cluster into zones
+        const srcAtrData: number[] = []
+        for (let i = 0; i < srcBars.length; i++) {
+          if (i < atrLength) { srcAtrData.push(srcBars[i].high - srcBars[i].low); continue }
+          const tr = Math.max(srcBars[i].high - srcBars[i].low, Math.abs(srcBars[i].high - srcBars[i - 1].close), Math.abs(srcBars[i].low - srcBars[i - 1].close))
+          srcAtrData.push((srcAtrData[i - 1] * (atrLength - 1) + tr) / atrLength)
+        }
+        const atrVal = srcAtrData[srcAtrData.length - 1] || srcBars[0].close * 0.005
+        const mergeDist = zoneWidth * atrVal
+        const maxZoneSize = srcBars[0].close * (maxZonePercent / 100)
+        const sorted = [...swings].sort((a, b) => a.price - b.price)
+        const zones: { top: number; bot: number; bull: boolean; strength: number }[] = []
+        let cs = 0
+        for (let i = 1; i <= sorted.length; i++) {
+          const gap = sorted[i] ? sorted[i].price - sorted[cs].price : Infinity
+          if (i === sorted.length || gap > mergeDist) {
+            const cl = sorted.slice(cs, i)
+            const prices = cl.map(s => s.price)
+            const zTop = Math.max(...prices)
+            const zBot = Math.min(...prices)
+            if (zTop - zBot <= maxZoneSize) {
+              const highs = cl.filter(s => s.type === 'high').length
+              const lows = cl.filter(s => s.type === 'low').length
+              zones.push({ top: zTop, bot: zBot, bull: lows >= highs, strength: cl.length })
+            }
+            cs = i
+          }
+        }
+        zones.sort((a, b) => b.strength - a.strength)
+        zones.length = Math.min(zones.length, numPivots * 2)
+
+        // Render zones across full visible width
+        if (zones.length === 0) {
+          ctx.fillStyle = 'rgba(212,175,55,0.15)'
+          ctx.fillRect(0, 0, 120, 16)
+          ctx.fillStyle = '#d4b44a'
+          ctx.font = '9px monospace'
+          ctx.fillText(`KL: ${swings.length} sw, 0 zones`, 2, 11)
+        }
+        for (const zone of zones) {
+          const yT = yFor(zone.top)
+          const yB = yFor(zone.bot)
+          if (yT > CHART_H || yB < 0) continue
+          const ct = Math.max(0, yT)
+          const cb = Math.min(CHART_H, yB)
+          const h = cb - ct
+          if (h < 1) continue
+          const alpha = Math.min(0.22, 0.04 + zone.strength * 0.03)
+          if (zone.bull) {
+            ctx.fillStyle = `rgba(34,197,94,${alpha})`
+            ctx.fillRect(0, ct, W, h)
+            ctx.strokeStyle = `rgba(34,197,94,${alpha + 0.08})`
+            ctx.lineWidth = 0.5
+            ctx.beginPath(); ctx.moveTo(0, ct); ctx.lineTo(W, ct); ctx.stroke()
+            ctx.beginPath(); ctx.moveTo(0, cb); ctx.lineTo(W, cb); ctx.stroke()
+          } else {
+            ctx.fillStyle = `rgba(239,68,68,${alpha})`
+            ctx.fillRect(0, ct, W, h)
+            ctx.strokeStyle = `rgba(239,68,68,${alpha + 0.08})`
+            ctx.lineWidth = 0.5
+            ctx.beginPath(); ctx.moveTo(0, ct); ctx.lineTo(W, ct); ctx.stroke()
+            ctx.beginPath(); ctx.moveTo(0, cb); ctx.lineTo(W, cb); ctx.stroke()
+          }
+        }
       }
 
       // ── VWAP line (5m / 15m only, resets at market day boundary) ──
@@ -799,12 +1166,15 @@ function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffs
       }
     }
 
+    // ── Draw markers ON TOP of everything ──
+    _markerQueue.forEach(m => drawMarker(m.idx, m.price, m.type))
+
     // Zoom indicator
     if (visibleBars.length < allBars.length) {
       ctx.fillStyle = `${GOLD}80`; ctx.font = '9px monospace'; ctx.textAlign = 'right'
       ctx.fillText(`${visibleBars.length}/${allBars.length}`, W - PAD_R - 4, 12)
     }
-  }, [visibleBars, allBars.length, tf, date, settings, dark, GOLD])
+  }, [visibleBars, allBars.length, tf, date, settings, dark, GOLD, entryMarker, exitMarker, legMarkers])
 
   useEffect(() => { draw() }, [draw])
 
@@ -978,6 +1348,7 @@ function dateBtnStyle(color: string = GOLD, fontSize: number = 11, borderColor: 
 export default function ScanDashboardPage() {
   const [scans, setScans] = useState<ScanDef[]>(BUILTIN_SCANS)
   const [selectedScan, setSelectedScan] = useState<string>('')
+  const [hydrated, setHydrated] = useState(false)
   const [signals, setSignals] = useState<Signal[]>([])
   const [selectedIdx, setSelectedIdx] = useState(0)
   const [tf, setTf] = useState<Timeframe>('D')
@@ -996,8 +1367,28 @@ export default function ScanDashboardPage() {
   const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([])
   const [selectedRun, setSelectedRun] = useState<string>('')
   const [showSettings, setShowSettings] = useState(false)
+  const [activeTemplate, setActiveTemplate] = useState<string | null>(null)
+  const [showTemplateMenu, setShowTemplateMenu] = useState(false)
+  const [showIndToggles, setShowIndToggles] = useState(false)
+  const [showScanParams, setShowScanParams] = useState<string | null>(null) // strategy key
+  const [scanParamSpecs, setScanParamSpecs] = useState<any[]>([]) // from /api/scans/run
+  const [scanParams, setScanParams] = useState<Record<string, any>>({}) // current values
+  const [scanRunning, setScanRunning] = useState(false)
+  const [rerunRun, setRerunRun] = useState<ScanRun | null>(null)
+  const [rerunFrom, setRerunFrom] = useState('')
+  const [rerunTo, setRerunTo] = useState('')
+  const [rerunRunning, setRerunRunning] = useState(false)
+  const [scanRange, setScanRange] = useState<'today' | '1w' | '1m' | '3m' | 'ytd' | 'custom'>('1m')
+  const [scanFromDate, setScanFromDate] = useState(new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10))
+  const [scanToDate, setScanToDate] = useState(new Date().toISOString().slice(0, 10))
+  const [activeJobs, setActiveJobs] = useState<Array<{ id: string; label: string; status: string; elapsed: number; progress?: string; signalCount?: number; error?: string; log?: string }>>([])
+  const [showKLConfig, setShowKLConfig] = useState(false)
+  const [klParams, setKlParams] = useState<KeyLevelsParams>({
+    lookLeft: 48, lookRight: 24, numPivots: 1,
+    atrLength: 36, zoneWidth: 0.5, maxZonePercent: 1, extendRight: true,
+  })
   const [chartSettings, setChartSettings] = useState<ChartSettings>({
-    showEma9_20: true, showEma72_89: true, showDevBands: true,
+    showEma9_20: false, showEma72_89: false, showDevBands9_20: false, showDevBands72_89: false, showDevBands72_89Tight: false, showKeyLevels: false,
     showVwap: true, showPrevClose: true, showAhPmShade: true,
     showVolume: true, showCrosshair: true, showLegend: true,
   })
@@ -1009,7 +1400,181 @@ export default function ScanDashboardPage() {
   const [sortCol, setSortCol] = useState<string>('date')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [dayOffset, setDayOffset] = useState(0)
+
+  // Restore persisted state after hydration
+  useEffect(() => {
+    // Fetch scan runner specs
+    fetch('/api/scans/run').then(r => r.json()).then(d => {
+      if (d.specs) {
+        setScanParamSpecs(d.specs)
+        // Set defaults
+        const defs: Record<string, any> = {}
+        for (const spec of d.specs) {
+          for (const p of spec.params) {
+            defs[`${spec.strategy}.${p.key}`] = p.default
+          }
+        }
+        setScanParams(defs)
+      }
+    }).catch(() => {})
+
+    // Poll active jobs on mount (pick up jobs from previous navigation)
+    // Live polling handled by effect below when activeJobs change
+
+    const savedScan = localStorage.getItem('scanner_selectedScan')
+    const savedIdx = localStorage.getItem('scanner_selectedIdx')
+    if (savedScan) setSelectedScan(savedScan)
+    if (savedIdx) setSelectedIdx(parseInt(savedIdx, 10) || 0)
+    setHydrated(true)
+  }, [])
+
+  // Poll active scan jobs
+  useEffect(() => {
+    if (activeJobs.length === 0) return
+    const interval = setInterval(async () => {
+      const updated = await Promise.all(activeJobs.map(async (job) => {
+        if (job.status !== 'running') return job
+        try {
+          const r = await fetch(`/api/scans/run?job=${job.id}`)
+          const d = await r.json()
+          if (d.status === 'done') {
+            // Refresh scans list + strategy map so the new run auto-loads its signals.
+            // Clearing selectedRun makes the signal effect re-pick the latest run.
+            refreshScans().then(() => setSelectedRun('')).catch(() => {})
+          }
+          return { ...job, status: d.status, elapsed: d.elapsed, progress: d.progress, signalCount: d.signalCount, error: d.error, log: d.log }
+        } catch { return job }
+      }))
+      setActiveJobs(updated.filter(j => j.status === 'running' || (j.status === 'done' && Date.now() - 0 < Infinity)))
+      // Auto-remove done/error jobs after 10s
+      setTimeout(() => setActiveJobs(prev => prev.filter(j => j.status === 'running')), 10000)
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [activeJobs.length])
+
+  useEffect(() => { if (hydrated) localStorage.setItem('scanner_selectedIdx', String(selectedIdx)) }, [selectedIdx, hydrated])
   const T = useThemeColors(dark)
+
+  // Collapsible folder group
+  const FolderGroup = ({ label, items }: { label: string; items: ScanDef[] }) => {
+    const [open, setOpen] = useState(true)
+    const totalSig = items.reduce((s, i) => s + (i.resultCount || 0), 0)
+    const totalRuns = items.reduce((s, i) => s + (i.runs?.length || 0), 0)
+    return (
+      <div>
+        <button onClick={() => setOpen(!open)} style={{
+          display: 'flex', alignItems: 'center', width: '100%', textAlign: 'left',
+          padding: '7px 10px', border: 'none', cursor: 'pointer', background: 'transparent',
+          borderBottom: `1px solid ${T.BORDER}`,
+        }}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+        >
+          <span style={{ color: GOLD, fontSize: 10, marginRight: 6, transition: 'transform 0.15s', transform: open ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-block' }}>▶</span>
+          <span style={{ color: T.TEXT2, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, flex: 1 }}>{label}</span>
+          <span style={{ color: T.MUTED, fontSize: 9, marginRight: 4 }}>{totalSig} sig</span>
+          <span style={{ color: T.MUTED, fontSize: 9 }}>{totalRuns} runs</span>
+        </button>
+        {open && items.map(scan => {
+          const isActive = scan.id === selectedScan
+          return (
+            <button key={scan.id} onClick={() => { setSelectedScan(scan.id); localStorage.setItem('scanner_selectedScan', scan.id) }} style={{
+              display: 'block', width: '100%', textAlign: 'left',
+              padding: '6px 10px 6px 22px', border: 'none', cursor: 'pointer',
+              background: isActive ? T.GOLD_DIM : 'transparent',
+              borderLeft: isActive ? `2px solid ${GOLD}` : '2px solid transparent',
+              borderBottom: `1px solid ${T.BORDER}`,
+            }}
+              onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
+              onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
+            >
+              <div className="flex items-center justify-between" style={{ width: '100%' }}>
+                <span style={{ color: isActive ? GOLD : T.TEXT, fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{scan.name}</span>
+                {scan.type === 'builtin' && (
+                  <span onClick={e => { e.stopPropagation(); setShowScanParams(showScanParams === scan.id ? null : scan.id) }}
+                    style={{ cursor: 'pointer', color: showScanParams === scan.id ? GOLD : T.MUTED, fontSize: 9, fontWeight: 700, padding: '2px 6px', border: `1px solid ${showScanParams === scan.id ? GOLD : T.BORDER}`, borderRadius: 3, background: showScanParams === scan.id ? `${GOLD}15` : 'transparent', textTransform: 'uppercase', letterSpacing: 0.5, marginLeft: 4, flexShrink: 0 }}>
+                    {showScanParams === scan.id ? '▼ Params' : '⚙ Edit'}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2" style={{ marginTop: 2 }}>
+                <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: `${T.TEAL}20`, color: T.TEAL }}>{scan.resultCount} sig</span>
+                <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: `${GOLD}20`, color: GOLD }}>{(scan.runs?.length || 0)} runs</span>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+    )
+  }
+
+  // Nested folder group (project > Scans / Backtests)
+  const NestedFolderGroup = ({ label, subfolders, grouped, projectId }: {
+    label: string
+    subfolders: { id: string; label: string }[]
+    grouped: Record<string, ScanDef[]>
+    projectId: string
+  }) => {
+    const [open, setOpen] = useState(true)
+    const totalSig = subfolders.reduce((s, sf) => s + (grouped[`${projectId}/${sf.id}`] || []).reduce((a: number, i: ScanDef) => a + (i.resultCount || 0), 0), 0)
+    const totalRuns = subfolders.reduce((s, sf) => s + (grouped[`${projectId}/${sf.id}`] || []).reduce((a: number, i: ScanDef) => a + (i.runs?.length || 0), 0), 0)
+    return (
+      <div>
+        <button onClick={() => setOpen(!open)} style={{
+          display: 'flex', alignItems: 'center', width: '100%', textAlign: 'left',
+          padding: '7px 10px', border: 'none', cursor: 'pointer', background: 'transparent',
+          borderBottom: `1px solid ${T.BORDER}`,
+        }}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+        >
+          <span style={{ color: GOLD, fontSize: 10, marginRight: 6, transition: 'transform 0.15s', transform: open ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-block' }}>▶</span>
+          <span style={{ color: GOLD, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, flex: 1 }}>{label}</span>
+          <span style={{ color: T.MUTED, fontSize: 9, marginRight: 4 }}>{totalSig} sig</span>
+          <span style={{ color: T.MUTED, fontSize: 9 }}>{totalRuns} runs</span>
+        </button>
+        {open && subfolders.map(sf => {
+          const items = grouped[`${projectId}/${sf.id}`] || []
+          if (items.length === 0) return null
+          return (
+            <div key={sf.id}>
+              <div style={{ padding: '4px 10px 4px 18px', color: T.MUTED, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, background: 'rgba(255,255,255,0.01)', borderBottom: `1px solid ${T.BORDER}` }}>{sf.label}</div>
+              {items.map(scan => {
+                const isActive = scan.id === selectedScan
+                return (
+                  <button key={scan.id} onClick={() => { setSelectedScan(scan.id); localStorage.setItem('scanner_selectedScan', scan.id) }} style={{
+                    display: 'block', width: '100%', textAlign: 'left',
+                    padding: '6px 10px 6px 28px', border: 'none', cursor: 'pointer',
+                    background: isActive ? T.GOLD_DIM : 'transparent',
+                    borderLeft: isActive ? `2px solid ${GOLD}` : '2px solid transparent',
+                    borderBottom: `1px solid ${T.BORDER}`,
+                  }}
+                    onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
+                    onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
+                  >
+                    <div className="flex items-center justify-between" style={{ width: '100%' }}>
+                      <span style={{ color: isActive ? GOLD : T.TEXT, fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{scan.name}</span>
+                      {scan.type === 'builtin' && (
+                        <span onClick={e => { e.stopPropagation(); setShowScanParams(showScanParams === scan.id ? null : scan.id) }}
+                          style={{ cursor: 'pointer', color: showScanParams === scan.id ? GOLD : T.MUTED, fontSize: 9, fontWeight: 700, padding: '2px 6px', border: `1px solid ${showScanParams === scan.id ? GOLD : T.BORDER}`, borderRadius: 3, background: showScanParams === scan.id ? `${GOLD}15` : 'transparent', textTransform: 'uppercase', letterSpacing: 0.5, marginLeft: 4, flexShrink: 0 }}>
+                          {showScanParams === scan.id ? '▼ Params' : '⚙ Edit'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2" style={{ marginTop: 2 }}>
+                      <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: `${T.TEAL}20`, color: T.TEAL }}>{scan.resultCount} sig</span>
+                      <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: `${GOLD}20`, color: GOLD }}>{(scan.runs?.length || 0)} runs</span>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
   const activeRowRef = useRef<HTMLTableRowElement>(null)
 
   // DB scan records — keyed by strategy, used as runs
@@ -1017,6 +1582,10 @@ export default function ScanDashboardPage() {
 
   // Derive runs for the selected scan
   const activeScanDef = scans.find(s => s.id === selectedScan)
+  const activeSpec = scanParamSpecs.find((s: any) => {
+    const strat = BUILTIN_SPEC_MAP[activeScanDef?.id || ''] || activeScanDef?.strategy || ''
+    return s.strategy === strat || s.strategy === strat.replace(/-lc$/, '')
+  })
   const activeStrategy = activeScanDef ? (BUILTIN_SPEC_MAP[activeScanDef.id] || activeScanDef.name.toLowerCase().replace(/\s+/g, '-')) : ''
   const runs: ScanRun[] = (dbScansByStrategy[activeStrategy] || []).map(db => ({
     id: db.id,
@@ -1025,10 +1594,16 @@ export default function ScanDashboardPage() {
     runAt: new Date(db.createdAt).toLocaleString(),
     resultCount: db.resultCount,
     tags: db.tags ? (typeof db.tags === 'string' ? JSON.parse(db.tags) : db.tags) : [],
+    strategy: db.strategy,
+    rawParams: db.params ? (typeof db.params === 'string' ? JSON.parse(db.params) : db.params) : null,
+    rawDateRange: db.dateRange ? (typeof db.dateRange === 'string' ? JSON.parse(db.dateRange) : db.dateRange) : null,
   }))
 
-  useEffect(() => {
-    fetch('/api/scans')
+  // Reusable: fetch + rebuild scans list AND strategy map (mount + after job completion)
+  // MUST rebuild dbScansByStrategy, not just setScans — the signal-loading effect
+  // depends on it to find the latest run.
+  const refreshScans = useCallback((): Promise<ScanDef[]> => {
+    return fetch('/api/scans')
       .then(r => r.json())
       .then(data => {
         const dbScans: any[] = data.scans || []
@@ -1072,11 +1647,24 @@ export default function ScanDashboardPage() {
         // Track all known run IDs so we can detect new ones
         const allRunIds = list.flatMap(s => (s.runs || []).map((r: ScanRun) => r.id))
         knownRunIdsRef.current = new Set(allRunIds)
-        if (list.length && !selectedScan) {
+        return list
+      })
+  }, [])
+
+  // Load scans on mount, then pick a default selectedScan
+  useEffect(() => {
+    refreshScans().then(list => {
+      if (list.length && !selectedScan) {
+        const saved = typeof window !== 'undefined' ? localStorage.getItem('scanner_selectedScan') : null
+        const savedExists = saved && list.some(s => s.id === saved)
+        if (savedExists) {
+          setSelectedScan(saved)
+        } else {
           const withResults = list.find(s => s.resultCount > 0)
           setSelectedScan(withResults ? withResults.id : list[0].id)
         }
-      })
+      }
+    })
   }, [])
 
   // When selectedScan or selectedRun changes, load signals
@@ -1104,7 +1692,7 @@ export default function ScanDashboardPage() {
     } else {
       setSignals([])
     }
-  }, [selectedScan, selectedRun])
+  }, [selectedScan, selectedRun, dbScansByStrategy])
 
   // When scan selection changes, reset run selection
   useEffect(() => {
@@ -1167,6 +1755,8 @@ export default function ScanDashboardPage() {
         case 'range': va = ((a.high - a.low) / a.open * 100); vb = ((b.high - b.low) / b.open * 100); break
         case 'abs': va = a.pos_abs || 0; vb = b.pos_abs || 0; break
         case 'vol': va = a.volume || 0; vb = b.volume || 0; break
+        case 'pm_high_atr': va = a.pm_high_atr ?? -99; vb = b.pm_high_atr ?? -99; break
+        case 'dev69_upper': va = (a as any).dev69_upper ?? -99; vb = (b as any).dev69_upper ?? -99; break
         default: va = a.date; vb = b.date
       }
       if (va < vb) return sortDir === 'asc' ? -1 : 1
@@ -1177,6 +1767,32 @@ export default function ScanDashboardPage() {
   }, [signals, sortCol, sortDir])
 
   const sig = sortedSignals[selectedIdx] as Signal | undefined
+
+  // Helper: convert date + time_int (HHMM) to epoch seconds in ET timezone
+  const timeStrToSec = (dateStr: string, timeInt: string) => {
+    try {
+      const ti = timeInt.padStart(4, '0')
+      const h = parseInt(ti.slice(0, 2)), m = parseInt(ti.slice(2, 4))
+      // Build as ET (America/New_York = UTC-5 or UTC-4)
+      const d = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00-05:00`)
+      return Math.floor(d.getTime() / 1000)
+    } catch { return 0 }
+  }
+
+  // Backtest detection for chart mode — markers passed as HHMM time_int, matched to bars in ScanMiniChart
+  const isBT = sig && (sig as any).entry_type != null
+  const chartDate = sig ? (isBT ? (sig as any).d0_date : ((sig as any).signal_date || sig.date)) : undefined
+  // Build per-leg markers: each leg gets its own entry (red) and exit (green)
+  const legMarkers = isBT ? (() => {
+    const rawLegs = (sig as any).legs
+    if (!rawLegs || !Array.isArray(rawLegs)) return undefined
+    return rawLegs.map((lg: any) => ({
+      entry: lg.entry_price && lg.entry_epoch ? { price: lg.entry_price, epoch: lg.entry_epoch } : undefined,
+      exit: lg.exit_price && lg.exit_epoch ? { price: lg.exit_price, epoch: lg.exit_epoch } : undefined,
+    })).filter((m: any) => m.entry || m.exit)
+  })() : undefined
+  // Top-level exit epoch — used to size the chart (show D0 through exit day)
+  const tradeExitEpoch = isBT ? Number((sig as any).exit_epoch) || undefined : undefined
 
   const toggleSort = (col: string) => {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -1222,12 +1838,23 @@ export default function ScanDashboardPage() {
   const runBaselineBacktest = useCallback((sigs?: Signal[]) => {
     const source = sigs || filteredSignals
     if (!source.length) return
-    const trades = source.map(s => {
-      const pnlPct = ((s.close - s.open) / s.open) * 100
-      const risk = s.open - s.low
-      const rMultiple = risk > 0 ? (s.close - s.open) / risk : 0
-      return { pnlPct, rMultiple, win: pnlPct > 0, date: s.date }
-    })
+    // Skip baseline for backtest trade data (no open/close/low fields)
+    const isBacktest = (source[0] as any).entry_type != null
+    let trades: { pnlPct: number; rMultiple: number; win: boolean; date: string }[]
+    if (isBacktest) {
+      trades = source.map((s: any) => {
+        const pnlPct = (s.pnl_pct || 0) * 100
+        const rMultiple = s.stop_price ? (s.exit_price - s.entry_price) / (s.entry_price - s.stop_price) : 0
+        return { pnlPct, rMultiple, win: pnlPct > 0, date: s.signal_date || s.date }
+      })
+    } else {
+      trades = source.map(s => {
+        const pnlPct = ((s.close - s.open) / s.open) * 100
+        const risk = s.open - s.low
+        const rMultiple = risk > 0 ? (s.close - s.open) / risk : 0
+        return { pnlPct, rMultiple, win: pnlPct > 0, date: s.date }
+      })
+    }
     const returns = trades.map(t => t.pnlPct)
     const wins = trades.filter(t => t.win)
     const losses = trades.filter(t => !t.win)
@@ -1262,7 +1889,7 @@ export default function ScanDashboardPage() {
     const downsideDev = downsideReturns.length > 0 ? Math.sqrt(downsideReturns.reduce((a, r) => a + r ** 2, 0) / downsideReturns.length) : 0
     const sortino = downsideDev > 0 ? (meanReturn / downsideDev) * Math.sqrt(252) : 0
     const totalReturnPct = totalPnl
-    const tradingDays = new Set(source.map(s => s.date)).size
+    const tradingDays = new Set(source.map(s => s.date || (s as any).signal_date)).size
     const yearsInSample = tradingDays / 252
     const cagr = yearsInSample > 0 ? (Math.pow(1 + totalReturnPct / 100, 1 / yearsInSample) - 1) * 100 : totalReturnPct
     const calmar = maxDd > 0 ? Math.abs(totalReturnPct / maxDd) : 0
@@ -1270,7 +1897,7 @@ export default function ScanDashboardPage() {
     trades.forEach(t => { if (t.win) { cWins++; cLosses = 0; maxCWins = Math.max(maxCWins, cWins) } else { cLosses++; cWins = 0; maxCLosses = Math.max(maxCLosses, cLosses) } })
     const recoveryFactor = maxDd > 0 ? totalPnl / maxDd : 0
     const byMonth: Record<string, { pnls: number[] }> = {}
-    source.forEach((s, i) => { const month = s.date.slice(0, 7); if (!byMonth[month]) byMonth[month] = { pnls: [] }; byMonth[month].pnls.push(trades[i].pnlPct) })
+    source.forEach((s, i) => { const month = (s.date || (s as any).signal_date).slice(0, 7); if (!byMonth[month]) byMonth[month] = { pnls: [] }; byMonth[month].pnls.push(trades[i].pnlPct) })
     const monthlyStats = Object.entries(byMonth).map(([month, d]) => ({ month, pnl: d.pnls.reduce((a, b) => a + b, 0), count: d.pnls.length }))
     setBacktestResults({
       entryType: 'D0 Open', exitType: 'D0 Close', totalTrades: trades.length,
@@ -1350,11 +1977,33 @@ export default function ScanDashboardPage() {
     return () => clearInterval(interval)
   }, [pendingRuns])
 
+  const [leftW, setLeftW] = useState(LEFT_W_DEFAULT)
+  const [rightW, setRightW] = useState(RIGHT_W_DEFAULT)
+
+  // Resize handler
+  const resizing = useRef<{ side: 'left' | 'right'; startX: number; startW: number } | null>(null)
+  const onResizeDown = (side: 'left' | 'right', e: React.MouseEvent) => {
+    e.preventDefault()
+    resizing.current = { side, startX: e.clientX, startW: side === 'left' ? leftW : rightW }
+    const onMove = (ev: MouseEvent) => {
+      if (!resizing.current) return
+      const dx = ev.clientX - resizing.current.startX
+      if (resizing.current.side === 'left') {
+        setLeftW(Math.max(LEFT_W_MIN, Math.min(LEFT_W_MAX, resizing.current.startW + dx)))
+      } else {
+        setRightW(Math.max(RIGHT_W_MIN, Math.min(RIGHT_W_MAX, resizing.current.startW - dx)))
+      }
+    }
+    const onUp = () => { resizing.current = null; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
   // ─── Left Sidebar: Scans (top) + Runs (bottom) ────
   const renderLeftSidebar = () => (
     <div style={{
-      width: LEFT_W, minWidth: LEFT_W, maxWidth: LEFT_W,
-      background: T.SURFACE, borderRight: `1px solid ${T.BORDER}`,
+      width: leftW, minWidth: leftW, maxWidth: leftW,
+      background: T.SURFACE, borderRight: 'none',
       display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)',
       position: 'sticky', top: 48,
     }}>
@@ -1367,33 +2016,41 @@ export default function ScanDashboardPage() {
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {scans.map(scan => {
-            const isActive = scan.id === selectedScan
-            return (
-              <button key={scan.id} onClick={() => setSelectedScan(scan.id)} style={{
-                display: 'block', width: '100%', textAlign: 'left',
-                padding: '8px 10px', border: 'none', cursor: 'pointer',
-                background: isActive ? T.GOLD_DIM : 'transparent',
-                borderLeft: isActive ? `2px solid ${GOLD}` : '2px solid transparent',
-                borderBottom: `1px solid ${T.BORDER}`,
-              }}
-                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
-                onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
-              >
-                <div style={{ color: isActive ? GOLD : T.TEXT, fontSize: 13, fontWeight: 600, marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {scan.name}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 2, background: `${T.TEAL}20`, color: T.TEAL }}>{scan.resultCount} sig</span>
-                  <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 2, background: `${GOLD}20`, color: GOLD }}>{(scan.runs?.length || 0)} runs</span>
-                  <span style={{ color: T.MUTED, fontSize: 9 }}>{scan.type}</span>
-                  {(scan.tags || []).map(tag => (
-                    <span key={tag} style={{ fontSize: 9, padding: '1px 4px', borderRadius: 2, background: `${GOLD}15`, color: GOLD, fontWeight: 600 }}>{tag}</span>
-                  ))}
-                </div>
-              </button>
-            )
-          })}
+          {(() => {
+            // Build nested tree from SCAN_TREE
+            const grouped: Record<string, typeof scans> = {}
+            const ungrouped: typeof scans = []
+            scans.forEach(scan => {
+              const g = (scan as any).group || (scan as any).tags?.[0] || ''
+              if (g && g.includes('/')) {
+                // Nested: 'mdr-swing/scans' or 'mdr-swing/backtests'
+                (grouped[g] = grouped[g] || []).push(scan)
+              } else {
+                const topFolder = SCAN_TREE.find(f => f.id === g)
+                if (topFolder && !topFolder.subfolders) {
+                  (grouped[g] = grouped[g] || []).push(scan)
+                } else {
+                  ungrouped.push(scan)
+                }
+              }
+            })
+            return <>
+              {SCAN_TREE.map(project => {
+                if (project.subfolders) {
+                  // Project with subfolders
+                  const hasContent = project.subfolders.some(sf => (grouped[`${project.id}/${sf.id}`] || []).length > 0)
+                  if (!hasContent) return null
+                  return <NestedFolderGroup key={project.id} label={project.label} subfolders={project.subfolders} grouped={grouped} projectId={project.id} />
+                } else {
+                  // Flat project folder
+                  const items = grouped[project.id] || []
+                  if (items.length === 0) return null
+                  return <FolderGroup key={project.id} label={project.label} items={items} />
+                }
+              })}
+              {ungrouped.length > 0 && <FolderGroup label="Other" items={ungrouped} />}
+            </>
+          })()}
           {scans.length === 0 && (
             <div style={{ padding: 20, textAlign: 'center' }}>
               <Search className="h-5 w-5 mx-auto mb-2" style={{ color: T.MUTED, opacity: 0.3 }} />
@@ -1461,16 +2118,66 @@ export default function ScanDashboardPage() {
                 <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 2, background: `${T.TEAL}20`, color: T.TEAL }}>{run.resultCount} sig</span>
               </div>
               <div className="flex items-center gap-1" style={{ marginTop: 2 }}>
-                {(run.tags || []).map(tag => (
+                {[...new Set(run.tags || [])].map(tag => (
                   <span key={tag} style={{ fontSize: 9, padding: '0px 4px', borderRadius: 2, background: `${GOLD}12`, color: isActive ? GOLD : 'rgba(212,175,55,0.6)', fontWeight: 600 }}>{tag}</span>
                 ))}
-                <span style={{ color: isActive ? GOLD : T.MUTED, fontSize: 9, marginLeft: 'auto' }}>{run.runAt}</span>
+                <button onClick={e => { e.stopPropagation(); const d = new Date(); d.setDate(d.getDate() - 30); setRerunFrom(run.rawDateRange?.from || d.toISOString().slice(0, 10)); setRerunTo(run.rawDateRange?.to || new Date().toISOString().slice(0, 10)); setRerunRun(run) }} title="Rerun with new dates" style={{ marginLeft: 'auto', fontSize: 10, padding: '0px 5px', borderRadius: 2, background: 'transparent', color: isActive ? GOLD : T.MUTED, border: `1px solid ${T.BORDER}`, cursor: 'pointer', lineHeight: 1.4, fontWeight: 700 }}>↻</button>
+                <span style={{ color: isActive ? GOLD : T.MUTED, fontSize: 9 }}>{run.runAt}</span>
               </div>
             </div>
             )
           })}
         </div>
       </div>
+
+      {/* Rerun modal */}
+      {rerunRun && (() => {
+        const strat = rerunRun.strategy || activeStrategy
+        const isRunner = scanParamSpecs.some((s: any) => s.strategy === strat)
+        const params = rerunRun.rawParams || {}
+        const di = { background: T.SURFACE, border: `1px solid ${T.BORDER}`, borderRadius: 3, padding: '6px 8px', color: T.TEXT, fontSize: 11, fontFamily: 'monospace' as const, outline: 'none' as const }
+        return (
+          <div onClick={() => setRerunRun(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: T.SURFACE, border: `1px solid ${T.BORDER}`, borderRadius: 6, padding: 16, width: 340, maxWidth: '90vw', maxHeight: '90vh', overflowY: 'auto' }}>
+              <div style={{ color: GOLD, fontSize: 12, fontWeight: 700, marginBottom: 2 }}>↻ RERUN</div>
+              <div style={{ color: T.TEXT, fontSize: 13, fontWeight: 600, marginBottom: 12 }}>{rerunRun.dateRange} <span style={{ color: T.MUTED, fontSize: 10 }}>({strat})</span></div>
+              <div style={{ color: T.MUTED, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Date Range</div>
+              <div className="flex gap-2" style={{ marginBottom: 12 }}>
+                <input type="date" value={rerunFrom} onChange={e => setRerunFrom(e.target.value)} style={{ ...di, width: '100%' }} />
+                <input type="date" value={rerunTo} onChange={e => setRerunTo(e.target.value)} style={{ ...di, width: '100%' }} />
+              </div>
+              {Object.keys(params).length > 0 && (
+                <>
+                  <div style={{ color: T.MUTED, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Params {!isRunner && <span style={{ color: T.MUTED }}>(spec run)</span>}</div>
+                  <div style={{ background: T.SURFACE2, border: `1px solid ${T.BORDER}`, borderRadius: 4, padding: 8, maxHeight: 140, overflowY: 'auto', marginBottom: 12 }}>
+                    {Object.entries(params).map(([k, v]) => (
+                      <div key={k} className="flex items-center justify-between" style={{ fontSize: 10, padding: '1px 0' }}>
+                        <span style={{ color: T.TEXT2 }}>{k}</span>
+                        <span style={{ color: T.TEAL, fontFamily: 'monospace' }}>{String(v)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+              <div className="flex gap-2">
+                <button onClick={async () => {
+                  setRerunRunning(true)
+                  try {
+                    const body = isRunner ? { runner: strat, params, from: rerunFrom, to: rerunTo } : { spec: strat, from: rerunFrom, to: rerunTo }
+                    const resp = await fetch('/api/scans/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+                    const result = await resp.json()
+                    if (result.ok && result.jobId) {
+                      setActiveJobs(prev => [...prev, { id: result.jobId, label: rerunRun.dateRange, status: 'running', elapsed: 0 }])
+                      setRerunRun(null)
+                    } else { alert(`Error: ${result.error || 'unknown'}`) }
+                  } catch (e: any) { alert(`Error: ${e.message}`) } finally { setRerunRunning(false) }
+                }} disabled={rerunRunning} style={{ flex: 1, padding: '7px', borderRadius: 3, border: 'none', background: rerunRunning ? T.BORDER : GOLD, color: rerunRunning ? T.MUTED : '#000', fontSize: 11, fontWeight: 700, cursor: rerunRunning ? 'default' : 'pointer' }}>{rerunRunning ? 'Starting...' : '▶ Rerun'}</button>
+                <button onClick={() => setRerunRun(null)} style={{ padding: '7px 12px', borderRadius: 3, border: `1px solid ${T.BORDER}`, background: 'transparent', color: T.MUTED, fontSize: 10, cursor: 'pointer' }}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Run panel */}
       <div style={{ borderTop: `1px solid ${T.BORDER}` }}>
@@ -1547,8 +2254,8 @@ export default function ScanDashboardPage() {
   // ─── Right Sidebar: Signals + Chat ────────────────
   const renderRightSidebar = () => (
     <div style={{
-      width: RIGHT_W, minWidth: RIGHT_W, maxWidth: RIGHT_W,
-      background: T.SURFACE, borderLeft: `1px solid ${T.BORDER}`,
+      width: rightW, minWidth: rightW, maxWidth: rightW,
+      background: T.SURFACE, borderLeft: 'none',
       display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)',
       position: 'sticky', top: 48,
     }}>
@@ -1560,6 +2267,24 @@ export default function ScanDashboardPage() {
         <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
           <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 10 }}>
             <thead>
+              {(() => {
+                const isBacktest = sortedSignals.length > 0 && (sortedSignals[0] as any).entry_type != null
+                if (isBacktest) return (
+                  <tr style={{ background: T.SURFACE2, position: 'sticky', top: 0, zIndex: 2 }}>
+                    <th onClick={() => toggleSort('ticker')} style={{ padding: '4px 6px', textAlign: 'left', color: GOLD, fontSize: 8, fontWeight: 700, position: 'sticky', left: 0, background: T.SURFACE2, zIndex: 3, minWidth: 52, cursor: 'pointer', userSelect: 'none' }}>Tk</th>
+                    <th onClick={() => toggleSort('signal_date')} style={{ padding: '4px 4px', textAlign: 'left', color: T.MUTED, fontSize: 8, fontWeight: 700, position: 'sticky', left: 52, background: T.SURFACE2, zIndex: 3, borderRight: `1px solid ${T.BORDER}`, cursor: 'pointer', userSelect: 'none', minWidth: 68 }}>Signal</th>
+                    <th style={{ padding: '4px 4px', textAlign: 'left', color: T.MUTED, fontSize: 8, fontWeight: 700 }}>Entry Type</th>
+                    <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700 }}>Entry$</th>
+                    <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700 }}>Stop$</th>
+                    <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700 }}>Exit$</th>
+                    <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700 }}>In→Out</th>
+                    <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700 }}>Dur</th>
+                    <th onClick={() => toggleSort('pnl_dollar')} style={{ padding: '4px 4px', textAlign: 'right', color: GOLD, fontSize: 8, fontWeight: 700, cursor: 'pointer', userSelect: 'none' }}>PnL$</th>
+                    <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700 }}>%</th>
+                    <th style={{ padding: '4px 4px', textAlign: 'left', color: T.MUTED, fontSize: 8, fontWeight: 700 }}>Exit Reason</th>
+                  </tr>
+                )
+                return (
               <tr style={{ background: T.SURFACE2, position: 'sticky', top: 0, zIndex: 2 }}>
                 <th onClick={() => toggleSort('ticker')} style={{ padding: '4px 6px', textAlign: 'left', color: sortCol === 'ticker' ? GOLD : GOLD, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 0, background: T.SURFACE2, zIndex: 3, minWidth: 56, cursor: 'pointer', userSelect: 'none' }}>Tk{sortCol === 'ticker' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                 <th onClick={() => toggleSort('date')} style={{ padding: '4px 6px', textAlign: 'left', color: sortCol === 'date' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 56, background: T.SURFACE2, zIndex: 3, minWidth: 68, borderRight: `1px solid ${T.BORDER}`, cursor: 'pointer', userSelect: 'none' }}>Date{sortCol === 'date' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
@@ -1570,14 +2295,50 @@ export default function ScanDashboardPage() {
                 <th onClick={() => toggleSort('range')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'range' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Rng%{sortCol === 'range' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                 <th onClick={() => toggleSort('abs')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'abs' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>ABS{sortCol === 'abs' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                 <th onClick={() => toggleSort('vol')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'vol' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Vol{sortCol === 'vol' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('pm_high_atr')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'pm_high_atr' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>PMΔ{sortCol === 'pm_high_atr' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th style={{ padding: '4px 4px', textAlign: 'center', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>½ATR</th>
+                <th style={{ padding: '4px 4px', textAlign: 'center', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>¼ATR</th>
+                <th style={{ padding: '4px 4px', textAlign: 'center', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>6.9</th>
+                <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>PM T</th>
                 {/* Multi-signal type columns */}
                 {isMultiSignal && signalTypeColumns.map(st => (
                   <th key={st} style={{ padding: '4px 3px', textAlign: 'center', color: GOLD, fontSize: 7, fontWeight: 700, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{st.replace(/_/g, ' ').replace(/^d(\d)/, 'D$1')}</th>
                 ))}
               </tr>
+                )
+              })()}
             </thead>
             <tbody>
-              {sortedSignals.map((s, i) => {
+              {/* Detect backtest vs scan mode */}
+              {(() => {
+                const isBacktest = sortedSignals.length > 0 && sortedSignals[0].entry_type != null
+                if (isBacktest) {
+                  // ── Backtest trade rows ──
+                  return sortedSignals.map((s: any, i: number) => {
+                    const isActive = i === selectedIdx
+                    const pnlColor = s.pnl_dollar > 0 ? T.TEAL : s.pnl_dollar < 0 ? T.RED : T.MUTED
+                    return (
+                      <tr key={`${s.ticker}-${s.signal_date}-${s.entry_type}-${i}`} onClick={() => setSelectedIdx(i)} style={{ cursor: 'pointer', background: isActive ? T.GOLD_DIM : 'transparent' }}
+                        onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
+                        onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
+                      >
+                        <td style={{ padding: '3px 4px', color: isActive ? GOLD : T.WHITE, fontWeight: 700, fontFamily: 'monospace', position: 'sticky', left: 0, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1, fontSize: 10 }}>{s.ticker}</td>
+                        <td style={{ padding: '3px 4px', color: T.MUTED, position: 'sticky', left: 52, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1, borderRight: `1px solid ${T.BORDER}`, fontSize: 9, minWidth: 68, lineHeight: 1.3 }}>{(s.signal_date || '').slice(5)}<br/><span style={{fontSize:7,color:T.BORDER}}>D0:{(s.d0_date||'').slice(5)}</span></td>
+                        <td style={{ padding: '3px 4px', color: '#a78bfa', textAlign: 'left', fontSize: 8, whiteSpace: 'nowrap' }}>{(s.entry_type||'').replace(/_/g,' ').slice(0,24)}</td>
+                        <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{s.entry_price?.toFixed(2)}</td>
+                        <td style={{ padding: '3px 4px', color: T.RED, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{s.stop_price?.toFixed(2)}</td>
+                        <td style={{ padding: '3px 4px', color: pnlColor, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{s.exit_price?.toFixed(2)}</td>
+                        <td style={{ padding: '3px 4px', color: T.MUTED, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 9 }}>{String(s.entry_time).padStart(4,'0').replace(/^(\d{2})(\d{2})$/,'$1:$2')}→{String(s.exit_time).padStart(4,'0').replace(/^(\d{2})(\d{2})$/,'$1:$2')}</td>
+                        <td style={{ padding: '3px 4px', color: T.MUTED, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 9 }}>{(() => { const m = s.entry_epoch && s.exit_epoch ? Math.round((s.exit_epoch-s.entry_epoch)/60) : null; if(m==null)return '–'; return m<60?`${m}m`:`${(m/60).toFixed(1)}h` })()}</td>
+                        <td style={{ padding: '3px 4px', color: pnlColor, textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{s.pnl_dollar > 0 ? '+' : ''}{s.pnl_dollar?.toFixed(0)}</td>
+                        <td style={{ padding: '3px 4px', color: pnlColor, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{s.pnl_pct > 0 ? '+' : ''}{((s.pnl_pct || 0) * 100).toFixed(1)}%</td>
+                        <td style={{ padding: '3px 4px', color: s.exit_reason?.includes('stop') ? T.RED : s.exit_reason?.includes('target') ? T.TEAL : T.MUTED, textAlign: 'left', fontVariantNumeric: 'tabular-nums', fontSize: 8, whiteSpace: 'nowrap' }}>{(s.exit_reason||'').replace(/_/g,' ').slice(0,26)}</td>
+                      </tr>
+                    )
+                  })
+                }
+                // ── Scan signal rows (original) ──
+                return sortedSignals.map((s, i) => {
                 const isActive = i === selectedIdx
                 const d0chg = ((s.close - s.open) / s.open * 100)
                 const rng = ((s.high - s.low) / s.open * 100)
@@ -1587,7 +2348,7 @@ export default function ScanDashboardPage() {
                     onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
                   >
                     <td style={{ padding: '3px 6px', color: isActive ? GOLD : T.WHITE, fontWeight: 700, fontFamily: 'monospace', position: 'sticky', left: 0, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1 }}>{s.ticker}</td>
-                    <td style={{ padding: '3px 6px', color: isActive ? GOLD : T.MUTED, position: 'sticky', left: 56, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1, borderRight: `1px solid ${T.BORDER}` }}>{s.date.slice(5)}</td>
+                    <td style={{ padding: '3px 6px', color: isActive ? GOLD : T.MUTED, position: 'sticky', left: 56, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1, borderRight: `1px solid ${T.BORDER}` }}>{(s.date || (s as any).signal_date || '').slice(2)}</td>
                     <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>${s.open?.toFixed(2)}</td>
                     <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>${s.close?.toFixed(2)}</td>
                     <td style={{ padding: '3px 4px', color: T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{(s.gap_pct || 0).toFixed(0)}%</td>
@@ -1595,6 +2356,11 @@ export default function ScanDashboardPage() {
                     <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{rng.toFixed(1)}%</td>
                     <td style={{ padding: '3px 4px', color: GOLD, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(s.pos_abs || 0).toFixed(2)}</td>
                     <td style={{ padding: '3px 4px', color: T.MUTED, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{((s.volume || 0) / 1e6).toFixed(0)}M</td>
+                    <td style={{ padding: '3px 4px', color: GOLD, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{s.pm_high_atr != null ? s.pm_high_atr.toFixed(2) : (s as any).pm_ext_atr != null ? ((s as any).pm_ext_atr as number).toFixed(2) : '–'}</td>
+                    <td style={{ padding: '3px 2px', textAlign: 'center', fontSize: 9, color: (s as any).pm_hit_0_5x || (s as any)['pm_hit_0.5x'] ? GOLD : T.BORDER }}>{((s as any).pm_hit_0_5x || (s as any)['pm_hit_0.5x']) ? '✓' : '–'}</td>
+                    <td style={{ padding: '3px 2px', textAlign: 'center', fontSize: 9, color: (s as any).pm_hit_0_25x || (s as any)['pm_hit_0.25x'] ? GOLD : T.BORDER }}>{((s as any).pm_hit_0_25x || (s as any)['pm_hit_0.25x']) ? '✓' : '–'}</td>
+                    <td style={{ padding: '3px 2px', textAlign: 'center', fontSize: 9, color: (s as any).dev69_3hit ? GOLD : T.BORDER }}>{(s as any).dev69_3hit ? '✓' : '–'}</td>
+                    <td style={{ padding: '3px 4px', color: s.pm_high_time ? T.TEXT2 : T.BORDER, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 9 }}>{s.pm_high_time || '–'}</td>
                     {/* Multi-signal type checkmarks */}
                     {isMultiSignal && signalTypeColumns.map(st => (
                       <td key={st} style={{ padding: '3px 3px', textAlign: 'center', fontSize: 9 }}>
@@ -1603,7 +2369,8 @@ export default function ScanDashboardPage() {
                     ))}
                   </tr>
                 )
-              })}
+              })
+              })()}
             </tbody>
           </table>
         </div>
@@ -1770,12 +2537,15 @@ export default function ScanDashboardPage() {
                 }}>
                   <div style={{ color: GOLD, fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Chart Settings</div>
                   {([
-                    ['showEma9_20', 'EMA 9/20 Bands'],
-                    ['showEma72_89', 'EMA 72/89 Bands'],
-                    ['showDevBands', 'Deviation Bands'],
+                    ['showEma9_20', 'EMA 9/20 Cloud'],
+                    ['showEma72_89', 'EMA 72/89 Cloud'],
+                    ['showDevBands9_20', 'Dev Band 9/20'],
+                    ['showDevBands72_89', 'Dev Band 72/89'],
+                    ['showDevBands72_89Tight', 'Dev Band 72/89 Tight'],
                     ['showVwap', 'VWAP Line'],
                     ['showPrevClose', 'Prev Close Line'],
                     ['showAhPmShade', 'AH/PM Shading'],
+                    ['showKeyLevels', 'Key Levels'],
                     ['showVolume', 'Volume Bars'],
                     ['showCrosshair', 'Crosshair on Hover'],
                     ['showLegend', 'Legend'],
@@ -1798,20 +2568,136 @@ export default function ScanDashboardPage() {
             </div>
 
             {/* Charts link */}
+
+            {/* Indicator Template */}
+            <div style={{ position: 'relative' }}>
+              <button onClick={() => setShowTemplateMenu(v => !v)} title="Indicator Template" style={{
+                padding: '3px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600,
+                background: showTemplateMenu ? GOLD : T.SURFACE, color: showTemplateMenu ? '#000' : T.MUTED,
+                border: `1px solid ${showTemplateMenu ? GOLD : T.BORDER}`,
+                display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer',
+              }}>📊 Indicators</button>
+              {showTemplateMenu && (
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, zIndex: 50, marginTop: 4,
+                  background: T.SURFACE2, border: `1px solid ${T.GOLD_BORDER}`, borderRadius: 6,
+                  padding: 12, minWidth: 200,
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                }}>
+                  <div style={{ color: GOLD, fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Templates</div>
+                  {IND_TEMPLATES.map(tpl => (
+                    <button key={tpl.id} onClick={() => {
+                      setActiveTemplate(tpl.id)
+                      setChartSettings(s => ({ ...s, ...tpl.settings } as ChartSettings))
+                      setShowTemplateMenu(false)
+                      setShowIndToggles(true)
+                    }} style={{
+                      display: 'block', width: '100%', textAlign: 'left', padding: '6px 8px',
+                      fontSize: 11, cursor: 'pointer', borderRadius: 3,
+                      background: activeTemplate === tpl.id ? GOLD_DIM : 'transparent',
+                      color: activeTemplate === tpl.id ? GOLD : T.TEXT, border: 'none',
+                    }}>{tpl.name}</button>
+                  ))}
+                  <div style={{ borderTop: `1px solid ${T.BORDER}`, margin: '8px 0' }} />
+                  <button onClick={() => { setActiveTemplate(null); setShowIndToggles(true) }} style={{
+                    display: 'block', width: '100%', textAlign: 'left', padding: '6px 8px',
+                    fontSize: 11, cursor: 'pointer', borderRadius: 3,
+                    background: 'transparent', color: T.MUTED, border: 'none',
+                  }}>Custom (keep current)</button>
+                </div>
+              )}
+            </div>
+
+            {/* Active template indicator toggles */}
+            {activeTemplate && (
+              <div style={{ position: 'relative' }}>
+                <button onClick={() => setShowIndToggles(v => !v)} title="Toggle Indicators" style={{
+                  padding: '3px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600,
+                  background: showIndToggles ? GOLD_DIM : T.SURFACE, color: GOLD,
+                  border: `1px solid ${T.GOLD_BORDER}`,
+                  display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer',
+                  maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>⚙ {IND_TEMPLATES.find(t => t.id === activeTemplate)?.name}</button>
+                {showIndToggles && (
+                  <div style={{
+                    position: 'absolute', top: '100%', left: 0, zIndex: 50, marginTop: 4,
+                    background: T.SURFACE2, border: `1px solid ${T.GOLD_BORDER}`, borderRadius: 6,
+                    padding: 12, minWidth: 200,
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                  }}>
+                    <div style={{ color: GOLD, fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Toggle Indicators</div>
+                    {TEMPLATE_IND_KEYS.map(([key, label]) => (
+                      <label key={key} className="flex items-center justify-between" style={{ padding: '4px 0', cursor: 'pointer' }}>
+                        <span style={{ color: T.TEXT2, fontSize: 11 }}>{label}</span>
+                        <div onClick={() => setChartSettings(s => ({ ...s, [key]: !s[key] }))} style={{
+                          width: 32, height: 16, borderRadius: 8, position: 'relative', cursor: 'pointer',
+                          background: chartSettings[key] ? GOLD : T.BORDER, transition: 'background 0.15s',
+                        }}>
+                          <div style={{
+                            width: 12, height: 12, borderRadius: 6, background: '#fff', position: 'absolute', top: 2,
+                            left: chartSettings[key] ? 18 : 2, transition: 'left 0.15s',
+                          }} />
+                        </div>
+                      </label>
+                    ))}
+                    {chartSettings.showKeyLevels && (
+                      <>
+                        <div style={{ borderTop: `1px solid ${T.BORDER}`, margin: '8px 0 4px' }} />
+                        <div style={{ color: GOLD, fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Key Levels Settings</div>
+                        {([
+                          ['lookLeft', 'Look Left', 5, 50, 1],
+                          ['lookRight', 'Look Right', 5, 50, 1],
+                          ['numPivots', 'Num Pivots', 1, 10, 1],
+                          ['atrLength', 'ATR Length', 5, 100, 1],
+                          ['zoneWidth', 'Zone Width (×ATR)', 0.1, 3.0, 0.1],
+                          ['maxZonePercent', 'Max Zone %', 1, 20, 0.5],
+                        ] as [keyof KeyLevelsParams, string, number, number, number][]).map(([key, label, min, max, step]) => (
+                          <label key={key} className="flex items-center justify-between" style={{ padding: '2px 0' }}>
+                            <span style={{ color: T.TEXT2, fontSize: 10 }}>{label}</span>
+                            <input type="number" value={klParams[key]} min={min} max={max} step={step}
+                              onChange={e => setKlParams(p => ({ ...p, [key]: parseFloat(e.target.value) || min }))}
+                              style={{
+                                width: 48, textAlign: 'center', fontSize: 10, padding: '2px 4px',
+                                background: T.SURFACE, color: T.TEXT, border: `1px solid ${T.BORDER}`, borderRadius: 3,
+                              }}
+                            />
+                          </label>
+                        ))}
+                        <label className="flex items-center justify-between" style={{ padding: '4px 0', cursor: 'pointer' }}>
+                          <span style={{ color: T.TEXT2, fontSize: 10 }}>Extend Right</span>
+                          <div onClick={() => setKlParams(p => ({ ...p, extendRight: !p.extendRight }))} style={{
+                            width: 32, height: 16, borderRadius: 8, position: 'relative', cursor: 'pointer',
+                            background: klParams.extendRight ? GOLD : T.BORDER, transition: 'background 0.15s',
+                          }}>
+                            <div style={{
+                              width: 12, height: 12, borderRadius: 6, background: '#fff', position: 'absolute', top: 2,
+                              left: klParams.extendRight ? 18 : 2, transition: 'left 0.15s',
+                            }} />
+                          </div>
+                        </label>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             <a href={`/charts-terminal.html?symbol=${sig.ticker}`} target="_blank" rel="noreferrer" style={{ color: GOLD, fontSize: 10, display: 'flex', alignItems: 'center', gap: 3, marginLeft: 'auto' }} className="hover:underline">
               Charts <ExternalLink className="h-3 w-3" />
             </a>
           </div>
 
           {/* Chart(s) */}
-          {chartMode === 'single' ? (
-            <ScanMiniChart symbol={sig.ticker} tf={tf} date={sig.date} height={580} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
+          {isBT ? (
+            <ScanMiniChart symbol={sig!.ticker} tf="5" date={chartDate} height={580} settings={chartSettings} dark={dark} centerOnDate legMarkers={legMarkers} exitEpoch={tradeExitEpoch} klParams={klParams} />
+          ) : chartMode === 'single' ? (
+            <ScanMiniChart symbol={sig!.ticker} tf={tf} date={sig!.date} height={580} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
           ) : (
             <div className="space-y-2">
-              <ScanMiniChart symbol={sig.ticker} tf="D" date={sig.date} height={360} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
-              <ScanMiniChart symbol={sig.ticker} tf="60" date={sig.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
-              <ScanMiniChart symbol={sig.ticker} tf="15" date={sig.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
-              <ScanMiniChart symbol={sig.ticker} tf="5" date={sig.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
+              <ScanMiniChart symbol={sig!.ticker} tf="D" date={sig!.date} height={360} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
+              <ScanMiniChart symbol={sig!.ticker} tf="60" date={sig!.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
+              <ScanMiniChart symbol={sig!.ticker} tf="15" date={sig!.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
+              <ScanMiniChart symbol={sig!.ticker} tf="5" date={sig!.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
             </div>
           )}
 
@@ -1894,11 +2780,176 @@ export default function ScanDashboardPage() {
       {/* Body */}
       <div style={{ display: 'flex', flex: 1 }}>
         {renderLeftSidebar()}
+        {/* Left resize handle */}
+        <div
+          onMouseDown={(e) => onResizeDown('left', e)}
+          style={{ width: 4, cursor: 'col-resize', background: 'transparent', flexShrink: 0, transition: 'background 0.15s', zIndex: 10 }}
+          onMouseOver={(e) => { (e.target as HTMLDivElement).style.background = T.BORDER }}
+          onMouseOut={(e) => { (e.target as HTMLDivElement).style.background = 'transparent' }}
+        />
         {renderCenter()}
+        {/* Right resize handle */}
+        <div
+          onMouseDown={(e) => onResizeDown('right', e)}
+          style={{ width: 4, cursor: 'col-resize', background: 'transparent', flexShrink: 0, transition: 'background 0.15s', zIndex: 10 }}
+          onMouseOver={(e) => { (e.target as HTMLDivElement).style.background = T.BORDER }}
+          onMouseOut={(e) => { (e.target as HTMLDivElement).style.background = 'transparent' }}
+        />
         {renderRightSidebar()}
       </div>
 
       {/* Run Modal */}
+
+      {/* Floating scan job badges */}
+      {activeJobs.length > 0 && (
+        <div style={{ position: 'fixed', bottom: 16, right: 16, zIndex: 200, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {activeJobs.map(job => (
+            <div key={job.id} style={{
+              background: T.SURFACE, border: `1px solid ${job.status === 'error' ? T.RED : job.status === 'done' ? T.TEAL : GOLD}`,
+              borderRadius: 6, padding: '10px 14px', minWidth: 220, maxWidth: 300, boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+            }}>
+              <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
+                <span style={{ color: job.status === 'error' ? T.RED : job.status === 'done' ? T.TEAL : GOLD, fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  {job.status === 'done' ? '✓ ' : job.status === 'error' ? '✗ ' : '⟳ '}{job.label}
+                </span>
+                <span style={{ color: T.MUTED, fontSize: 9 }}>{job.elapsed}s</span>
+              </div>
+              {job.status === 'running' && job.progress && (
+                <div style={{ color: T.TEXT2, fontSize: 9 }}>{job.progress}</div>
+              )}
+              {job.status === 'done' && (
+                <div style={{ color: T.TEAL, fontSize: 10, fontWeight: 700 }}>{job.signalCount ?? 0} signals pushed</div>
+              )}
+              {job.status === 'error' && (
+                <div style={{ color: T.RED, fontSize: 9 }}>{job.error}</div>
+              )}
+              {job.status === 'running' && (
+                <div style={{ marginTop: 4, height: 2, background: T.BORDER, borderRadius: 1, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', background: GOLD, animation: 'pulse 1.5s ease-in-out infinite', width: '40%' }} />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Scan Params Panel */}
+      {showScanParams && (() => {
+        const scan = scans.find(s => s.id === showScanParams)
+        if (!scan) return null
+        const strat = BUILTIN_SPEC_MAP[scan.id] || scan.strategy || ''
+        const spec = scanParamSpecs.find((sp: any) => sp.strategy === strat)
+        const isRunner = !!spec
+        return (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowScanParams(null)}>
+            <div style={{ background: T.SURFACE, border: `1px solid ${T.BORDER}`, borderRadius: 8, padding: 20, width: 360, maxHeight: '80vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
+              <div style={{ color: GOLD, fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>{scan.name} — Run Settings</div>
+              {/* Date range quick-select */}
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ color: T.MUTED, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Date Range</div>
+                <div className="flex flex-wrap gap-1" style={{ marginBottom: 6 }}>
+                  {([
+                    ['today', 'Today'],
+                    ['1w', '1W'],
+                    ['1m', '1M'],
+                    ['3m', '3M'],
+                    ['ytd', 'YTD'],
+                    ['custom', 'Custom'],
+                  ] as const).map(([key, lbl]) => {
+                    const active = scanRange === key
+                    return (
+                      <button key={key} onClick={() => {
+                        setScanRange(key)
+                        const today = new Date()
+                        const todayStr = today.toISOString().slice(0, 10)
+                        const ymd = (d: Date) => d.toISOString().slice(0, 10)
+                        if (key === 'today') { setScanFromDate(todayStr); setScanToDate(todayStr) }
+                        else if (key === '1w') { setScanFromDate(ymd(new Date(Date.now() - 7 * 864e5))); setScanToDate(todayStr) }
+                        else if (key === '1m') { setScanFromDate(ymd(new Date(Date.now() - 30 * 864e5))); setScanToDate(todayStr) }
+                        else if (key === '3m') { setScanFromDate(ymd(new Date(Date.now() - 90 * 864e5))); setScanToDate(todayStr) }
+                        else if (key === 'ytd') { setScanFromDate(today.getFullYear() + '-01-01'); setScanToDate(todayStr) }
+                      }} style={{
+                        padding: '3px 8px', fontSize: 9, fontWeight: 700, borderRadius: 3, cursor: 'pointer',
+                        background: active ? GOLD : 'transparent', color: active ? '#000' : T.MUTED,
+                        border: `1px solid ${active ? GOLD : T.BORDER}`, textTransform: 'uppercase', letterSpacing: 0.3,
+                      }}>{lbl}</button>
+                    )
+                  })}
+                </div>
+                {(scanRange === 'custom' || scanRange === 'today' || scanRange === '1w' || scanRange === '1m' || scanRange === '3m' || scanRange === 'ytd') && (
+                  <div className="flex items-center gap-2">
+                    <input type="date" value={scanFromDate} onChange={e => { setScanRange('custom'); setScanFromDate(e.target.value) }} style={{ flex: 1, fontSize: 9, padding: '3px 4px', background: T.SURFACE2, color: T.TEXT, border: `1px solid ${T.BORDER}`, borderRadius: 3 }} />
+                    <span style={{ color: T.MUTED, fontSize: 9 }}>→</span>
+                    <input type="date" value={scanToDate} onChange={e => { setScanRange('custom'); setScanToDate(e.target.value) }} style={{ flex: 1, fontSize: 9, padding: '3px 4px', background: T.SURFACE2, color: T.TEXT, border: `1px solid ${T.BORDER}`, borderRadius: 3 }} />
+                  </div>
+                )}
+              </div>
+              <div style={{ borderTop: `1px solid ${T.BORDER}`, margin: '4px -20px 8px', paddingTop: 8, paddingLeft: 20, paddingRight: 20 }}>
+                {isRunner && spec.params.length > 0 ? (
+                  <>
+                    <div style={{ color: T.MUTED, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Scan Parameters</div>
+                    {spec.params.map((p: any) => (
+                      <label key={p.key} className="flex items-center justify-between" style={{ padding: '4px 0' }}>
+                        <span style={{ color: T.TEXT2, fontSize: 10 }}>{p.label}</span>
+                        <input type="number" value={scanParams[`${strat}.${p.key}`] ?? p.default} min={p.min} max={p.max} step={p.step}
+                          onChange={e => setScanParams(prev => ({ ...prev, [`${strat}.${p.key}`]: parseFloat(e.target.value) || p.default }))}
+                          style={{ width: 64, textAlign: 'center', fontSize: 10, padding: '3px 4px', background: T.SURFACE2, color: T.TEXT, border: `1px solid ${T.BORDER}`, borderRadius: 3 }}
+                        />
+                      </label>
+                    ))}
+                  </>
+                ) : (
+                  <div style={{ color: T.MUTED, fontSize: 10, textAlign: 'center', padding: '8px 0' }}>No tunable parameters for this scan.<br/>Set a date range and run.</div>
+                )}
+              </div>
+              <div className="flex gap-2" style={{ marginTop: 12 }}>
+                <button onClick={async () => {
+                  setScanRunning(true)
+                  try {
+                    let resp: Response
+                    if (isRunner) {
+                      const p: Record<string, any> = {}
+                      for (const param of spec.params) {
+                        p[param.key] = scanParams[`${strat}.${param.key}`] ?? param.default
+                      }
+                      resp = await fetch('/api/scans/run', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ runner: strat, params: p, from: scanFromDate, to: scanToDate }),
+                      })
+                    } else {
+                      resp = await fetch('/api/scans/run', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ spec: strat, from: scanFromDate, to: scanToDate }),
+                      })
+                    }
+                    const result = await resp.json()
+                    if (result.ok && result.jobId) {
+                      setShowScanParams(null)
+                      setActiveJobs(prev => [...prev, { id: result.jobId, label: scan.name, status: 'running', elapsed: 0 }])
+                    } else {
+                      alert(`Error: ${result.error}\n${result.log || ''}`)
+                    }
+                  } catch (e: any) {
+                    alert(`Fetch error: ${e.message}`)
+                  } finally {
+                    setScanRunning(false)
+                  }
+                }} disabled={scanRunning} style={{
+                  flex: 1, padding: '6px 0', borderRadius: 4, border: 'none',
+                  background: scanRunning ? T.BORDER : GOLD, color: scanRunning ? T.MUTED : '#000',
+                  fontSize: 10, fontWeight: 800, cursor: scanRunning ? 'default' : 'pointer',
+                }}>{scanRunning ? 'Running...' : '▶ Run Scan'}</button>
+                <button onClick={() => setShowScanParams(null)} style={{
+                  padding: '6px 12px', borderRadius: 4, border: `1px solid ${T.BORDER}`,
+                  background: 'transparent', color: T.MUTED, fontSize: 10, cursor: 'pointer',
+                }}>Close</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

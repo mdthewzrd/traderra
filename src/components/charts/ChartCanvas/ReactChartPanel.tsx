@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect, useState, useCallback } from 'react'
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import { useLiveBars } from '@/hooks/useLiveBars'
 import { useChartStore } from '@/stores/charts/chartStore'
 import { useUIStore } from '@/stores/charts/uiStore'
@@ -18,11 +18,16 @@ import { renderAnnotationPreview } from '@/lib/charts/render-preview'
 import { renderBtMarkers } from '@/lib/charts/render-bt-markers'
 import { calcExecSignals, type ExecSignal } from '@/lib/charts/exec-signals'
 import { renderPivotZones } from '@/lib/charts/render-pzones'
+import { renderDevZones } from '@/lib/charts/render-devzones'
+import { renderAdaptiveBands } from '@/lib/charts/render-adaptive-bands'
+import { renderLinguaExec, setLinguaExecPitch } from '@/lib/charts/render-lingua-exec'
+import { renderLinguaCycle, renderAnchoredTrendline, renderConsolidation, renderRegime, renderLinguaPitchOverlay, setLinguaMtfBars, htfOf, ltfOf } from '@/lib/charts/render-lingua'
 import { isIntraday } from '@/lib/charts/format'
 import { C } from '@/lib/charts/theme'
 import { useIndicatorStore } from '@/stores/charts/indicatorStore'
 import { useDrawingStore } from '@/stores/charts/drawingStore'
 import { useToolStore } from '@/stores/charts/toolStore'
+import { ChartDateNav } from '@/components/charts/TopBar/ChartDateNav'
 import type { RenderContext } from '@/lib/charts/render-types'
 
 // Read indicator state from Zustand store
@@ -34,6 +39,7 @@ function getLiveInds(): Record<string, boolean> {
 const MIKE_DEV = {
   s_9_20: { fast: 9, slow: 20, up: [0.5, 1], dn: [2, 2.4] },
   db_72_89: { fast: 72, slow: 89, up: [6.9, 9.6], dn: [6.9, 9.6] },
+  db_72_89_tight: { fast: 72, slow: 89, up: [3, 3.3], dn: [3.6, 3.9] },
 }
 
 /**
@@ -79,16 +85,52 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
 
   // Fetch bars (with live polling when liveMode is on)
   const focusDate = useChartStore(s => s.focusDate)
-  const { bars, loading } = useLiveBars(symbol, tf, focusDate)
+  const { bars, loading, warmupBars } = useLiveBars(symbol, tf, focusDate)
 
   // Fetch 2m bars for trail stop overlay when on higher TFs
   const trailStopOn = useToolStore(s => s.tools.find((t: any) => t.indKey === 'trail_stop')?.on ?? false)
+  const linguaOn = useToolStore(s => s.tools.find((t: any) => t.indKey === 'lingua')?.on ?? false)
   const { bars: bars2m } = useLiveBars(
     (tf !== '2' && trailStopOn) ? symbol : null,
     '2',
     focusDate
   )
+  // Subscribe to Lingua params so the MTF cache re-feeds on slider drag (otherwise the
+  // drawn band updates but EC/EUPHORIC triggers stay stale until bars reload).
+  // MERGED: global lingua tool params + this panel's overrides → each chart tunes independently.
+  const linguaGlobal = useToolStore(s => s.tools.find((t: any) => t.indKey === 'lingua')?.params) || {}
+  const linguaOverride = useToolStore(s => s.panelParams[panelIdx]?.lingua)
+  const linguaParams = useMemo(() => ({ ...linguaGlobal, ...(linguaOverride || {}) }), [linguaGlobal, linguaOverride])
+  // Lingua working timeframe — parametric (default 1H). HTF confirmation auto-derives as
+  // 4× the primary (1H→4H, 30m→2H, 15m→1H). Fetch BOTH regardless of the displayed panel.
+  const mtfTf = (linguaParams?.mtfTf as string) || '60'
+  const htfTf = htfOf(mtfTf)
+  // LTF = fractal child (MTF÷4, e.g. 1H→15m). Only fetched when the 15m LEAD markers are
+  // enabled — its trendbreaks lead the 1H TB band, surfacing the top earlier.
+  const ltfTf = ltfOf(mtfTf)
+  const ltfOn = linguaOn && (((linguaParams?.tbLtfOn as number) ?? 1) !== 0)
+  const { bars: bars1h } = useLiveBars(linguaOn ? symbol : null, mtfTf, focusDate)
+  const { bars: bars4h } = useLiveBars(linguaOn ? symbol : null, htfTf, focusDate)
+  const { bars: bars15m } = useLiveBars(ltfOn ? symbol : null, ltfTf, focusDate)
   const trail2mRef = useRef<(number | null)[] | null>(null)
+
+  // Feed multi-TF bars to the Lingua renderer cache (re-feed on bar OR param change)
+  useEffect(() => { if (bars1h?.length) setLinguaMtfBars(panelIdx, 'mtf', mtfTf, bars1h) }, [bars1h, linguaParams, mtfTf, panelIdx])
+  useEffect(() => { if (bars4h?.length) setLinguaMtfBars(panelIdx, 'htf', htfTf, bars4h) }, [bars4h, linguaParams, htfTf, panelIdx])
+  useEffect(() => { if (bars15m?.length) setLinguaMtfBars(panelIdx, 'ltf', ltfTf, bars15m) }, [bars15m, linguaParams, ltfTf, panelIdx])
+
+  // ── Lingua Exec: Trend Pitch (cross-TF) — fetch pitch-TF bars, feed the exec pitch cache.
+  // pitchTf 'Active' computes on the displayed chart; any higher TF (1H/4H/D/W) is
+  // forward-filled onto the active chart's time axis inside renderLinguaExec.
+  const linguaExecOn = useToolStore(s => s.tools.find((t: any) => t.indKey === 'lingua_exec')?.on ?? false)
+  const linguaExecGlobal = useToolStore(s => s.tools.find((t: any) => t.indKey === 'lingua_exec')?.params) || {}
+  const linguaExecOverride = useToolStore(s => s.panelParams[panelIdx]?.lingua_exec)
+  const linguaExecParams = useMemo(() => ({ ...linguaExecGlobal, ...(linguaExecOverride || {}) }), [linguaExecGlobal, linguaExecOverride])
+  const _PITCH_TF: Record<string, string> = { 'Active': '0', '1H': '60', '4H': '240', 'D': 'D', 'W': 'W' }
+  const pitchTfMin = _PITCH_TF[(linguaExecParams?.pitchTf as string) || 'Active'] ?? '0'
+  const pitchFeedOn = linguaExecOn && pitchTfMin !== '0'
+  const { bars: barsPitch } = useLiveBars(pitchFeedOn ? symbol : null, pitchTfMin, focusDate)
+  useEffect(() => { if (barsPitch?.length) setLinguaExecPitch(panelIdx, barsPitch) }, [barsPitch, linguaExecParams?.pitchEma, pitchTfMin, panelIdx])
 
   // Canvas screenshot utility
   const screenshot = useCallback(() => {
@@ -185,12 +227,26 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
     canvas.style.height = size.h + 'px'
   }, [size])
 
-  // Auto-fit to latest bars
+  // Tracks whether the user has manually panned/zoomed. While false, live polls
+  // re-snap the view to the right edge (follow the market). Once true, the user's
+  // view is preserved — only clamped to valid range when bars grow/shrink.
+  const userPannedRef = useRef(false)
+  useEffect(() => { userPannedRef.current = false }, [symbol, tf, focusDate])
+  // Auto-fit to latest bars. useLiveBars fetches a WARMUP buffer (WARMUP_DAYS) before
+  // the visible window; those bars ride in `bars` so indicators seed over them, but the
+  // chart's leftmost visible bar is clamped past `warmupBars` so the cold zone is never
+  // shown — indicators plot properly from the first visible candle.
   useEffect(() => {
     if (bars.length > 0) {
-      setViewStart(Math.max(0, bars.length - viewBars))
+      if (!userPannedRef.current) {
+        // User hasn't panned — snap to right edge (follow live feed)
+        setViewStart(Math.max(warmupBars, bars.length - viewBars))
+      } else {
+        // User has panned — preserve their position, just clamp to valid range
+        setViewStart(vs => Math.max(warmupBars, Math.min(vs, bars.length - viewBars)))
+      }
     }
-  }, [bars])
+  }, [bars, warmupBars, viewBars])
 
   // ── RENDER ──
   const render = useCallback(() => {
@@ -216,9 +272,11 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
         TIME_H: 22,
         viewStart,
         viewBars,
+        minViewStart: warmupBars,
         cx: mouse.x,
         cy: mouse.y,
         tf,
+        panelIdx,
         inds,
         volFrac: 0.20,
         priceScale: 1,
@@ -395,6 +453,18 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
         )
       }
 
+      // Deviation band 72/89 tight — red upper, green lower
+      if (inds.db_72_89_tight && ic.ema[72] && ic.atr[72] && ic.ema[89] && ic.atr[89]) {
+        const d = MIKE_DEV.db_72_89_tight
+        drawDevBand(rc,
+          ic.ema[d.fast], ic.atr[d.fast],
+          ic.ema[d.slow], ic.atr[d.slow],
+          d.up, d.dn,
+          'rgba(239,68,68,.10)', 'rgba(239,68,68,.30)',
+          'rgba(34,197,94,.10)', 'rgba(34,197,94,.30)',
+        )
+      }
+
       // Trail Stop — swing-structure + dev band (solid green)
       if (panelIdx === 0 && inds.trail_stop) {
         const tsTool = activeTools.find((t: any) => t.indKey === 'trail_stop')
@@ -456,6 +526,24 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
 
       // ── Pivot Zones (pzones) ──
       if (inds.pzones) renderPivotZones(rc)
+
+      // ── Dev Zones (background shading: partial=red, extreme=orange) ──
+      if (inds.devzones) renderDevZones(rc)
+
+      // ── Adaptive Dev Band (catalyst-adaptive center via fast-EMA blend) ──
+      if (inds.adp_bands) renderAdaptiveBands(rc)
+
+      // ── Lingua Cycle (5-stage detector: 3-TF hierarchical + hysteresis) ──
+      if (inds.lingua) renderLinguaCycle(rc)
+
+      // ── Lingua Exec (50/89 regime cloud + switch wedges) ──
+      if (inds.lingua_exec) renderLinguaExec(rc)
+
+      // ── Anchored Trendline (non-repainting, separate tool) ──
+      if (inds.trendline) renderAnchoredTrendline(rc)
+      if (inds.trendline_light) renderAnchoredTrendline(rc, 'trendline_light')
+      if (inds.regime) renderRegime(rc)
+      if (inds.consolidation) renderConsolidation(rc)
 
       // ── Candles ──
       renderCandles(rc)
@@ -538,6 +626,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
 
       // ── Crosshair ──
       renderCrosshair(rc)
+      if (inds.lingua) renderLinguaPitchOverlay(rc)
 
       // ── Loading overlay ──
       if (loading) {
@@ -661,6 +750,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
 
     // Pan mode
     setDragging(true)
+    userPannedRef.current = true
     dragStart.current = { x: e.clientX, vs: viewStart }
   }, [viewStart, panelIdx])
 
@@ -695,7 +785,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       const barW = size.w > 0 ? (size.w - 70) / viewBars : 10
       const barsMoved = Math.round(dx / barW)
       const newVs = dragStart.current.vs - barsMoved
-      setViewStart(Math.max(0, Math.min(bars.length - viewBars, newVs)))
+      setViewStart(Math.max(warmupBars, Math.min(bars.length - viewBars, newVs)))
     }
 
     // Crosshair sync
@@ -706,7 +796,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       const time = rc.visible[bi]?.time
       if (time != null) useChartStore.getState().setCrosshair(time, price)
     }
-  }, [dragging, viewBars, bars.length, size.w, ohlcvTip])
+  }, [dragging, viewBars, bars.length, size.w, ohlcvTip, warmupBars])
 
   const onMouseUp = useCallback(() => {
     // Finalize drag-based annotation (highlights)
@@ -754,15 +844,26 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
     mouseRef.current = { x: -1, y: -1 }
   }, [])
 
-  const onWheel = useCallback((e: React.WheelEvent) => {
+  const onWheel = useCallback((e: WheelEvent) => {
     e.preventDefault()
+    userPannedRef.current = true
     const zoomSens = useUIStore.getState().zoomSens
     const delta = e.deltaY > 0 ? Math.round(15 * zoomSens / 0.15) : -Math.round(15 * zoomSens / 0.15)
     setViewBars(prev => Math.max(20, Math.min(bars.length || 500, prev + delta)))
   }, [bars.length])
 
+  // Attach wheel as a NON-PASSIVE native listener so preventDefault() actually works
+  // (React's onWheel is passive by default → throws 'Unable to preventDefault inside
+  // passive event listener' and fails to stop page-scroll on the chart).
+  useEffect(() => {
+    const el = canvasRef.current
+    if (!el) return
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [onWheel])
+
   // TF label
-  const tfLabel = tf === 'D' ? 'Daily' : tf === 'W' ? 'Weekly' : tf + 'm'
+  const tfLabel = tf === 'D' ? 'Daily' : tf === 'W' ? 'Weekly' : tf === '60' ? '1H' : tf === '120' ? '2H' : tf === '240' ? '4H' : tf + 'm'
 
   // Apply date range handler
   const handleApplyDateRange = useCallback((pIdx: number, allPanels = false) => {
@@ -858,12 +959,12 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       <div className="ph">
         <span className="ph-sym">{symbol}</span>
         <div className="tf-wrap">
-          {['1','2','5','15','60','D','W'].map(t => (
+          {['1','2','5','15','60','120','240','D','W'].map(t => (
             <button
               key={t}
               className={`tf-btn${tf === t ? ' active' : ''}`}
               onClick={() => useChartStore.getState().setPanelTf(panelIdx, t)}
-            >{t === '1' ? '1m' : t === '2' ? '2m' : t === '5' ? '5m' : t === '15' ? '15m' : t === '60' ? '60m' : t}</button>
+            >{({1:'1m',2:'2m',5:'5m',15:'15m',60:'1H',120:'2H',240:'4H',D:'D',W:'W'} as Record<string,string>)[t] ?? t}</button>
           ))}
         </div>
         <span className="ph-ohlc" id={`ohlc-${panelIdx}`} />
@@ -894,12 +995,27 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
         }}>SAM</button>
         <button className="preset-btn" onClick={() => {
           const ts = require('@/stores/charts/toolStore').useToolStore.getState()
-          const mikeys = ['vwap','band_9_20','band_72_89','dev_s_9_20','trail_stop','db_72_89','sma_vol']
+          const mikeys = ['vwap','band_9_20','band_72_89','dev_s_9_20','trail_stop','db_72_89','db_72_89_tight','sma_vol']
           const tools = ts.tools.map(t => ({ ...t, on: mikeys.includes(t.indKey) }))
           ts.setTools(tools)
-          require('@/stores/charts/indicatorStore').useIndicatorStore.getState().setInds({ band_9_20: true, band_72_89: true, dev_s_9_20: true, trail_stop: true, db_72_89: true, vwap: true, sma_vol: true, vol: true })
+          require('@/stores/charts/indicatorStore').useIndicatorStore.getState().setInds({ band_9_20: true, band_72_89: true, dev_s_9_20: true, trail_stop: true, db_72_89: true, db_72_89_tight: true, vwap: true, sma_vol: true, vol: true })
         }}>MIKE</button>
         <span style={{ width: 1, height: 10, background: '#2a3050', margin: '0 2px' }} />
+
+        {/* Date navigation */}
+        <ChartDateNav />
+
+        <span style={{ width: 1, height: 10, background: '#2a3050', margin: '0 2px' }} />
+
+        {/* OHLCV ticker info */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <span id="ti-sym" style={{ color: '#dde3f0', fontWeight: 700, fontSize: 12 }} />
+          <span id="ti-price" style={{ fontSize: 11 }} />
+          <span id="ti-chg" style={{ fontSize: 10 }} />
+        </div>
+
+        <div style={{ flex: 1 }} />
+
         {/* Per-panel hot tool toggle buttons */}
         <div id={`ind-hot-${panelIdx}`} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           <PanelHotButtons panelIdx={panelIdx} />
@@ -948,7 +1064,6 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
           onMouseMove={onMouseMove}
           onMouseUp={onMouseUp}
           onMouseLeave={onMouseLeave}
-          onWheel={onWheel}
           onContextMenu={(e) => e.preventDefault()}
         />
         {/* Floating OHLCV tooltip on right-click-hold */}
@@ -956,7 +1071,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
           <div style={{
             position: 'fixed', left: ohlcvTip.x, top: ohlcvTip.y,
             background: 'rgba(16,19,26,.92)', border: '1px solid #2a3050',
-            borderRadius: 4, padding: '4px 8px', fontSize: 11, fontFamily: 'monospace',
+            borderRadius: 4, padding: '4px 8px', fontSize: 11, fontFamily: 'JetBrains Mono, monospace',
             color: '#dde3f0', pointerEvents: 'none', zIndex: 800, whiteSpace: 'nowrap',
             boxShadow: '0 4px 12px rgba(0,0,0,.5)',
           }}>
@@ -1073,12 +1188,19 @@ function PanelHotButtons({ panelIdx }: { panelIdx: number }) {
     return (
       <button
         key={tool.id}
-        className={`ptog${tool.on ? ' on' : ''}`}
         style={{
-          borderColor: tool.on ? color : '#3a4a68',
-          color: tool.on ? color : '#3a4a68',
-          background: '#0a0c12',
-          opacity: tool.on ? 1 : 0.5,
+          background: tool.on ? `${color}18` : 'transparent',
+          border: `1px solid ${tool.on ? color : 'rgba(212,175,55,0.35)'}`,
+          borderRadius: 3,
+          color: tool.on ? color : 'rgba(212,175,55,0.5)',
+          cursor: 'pointer',
+          fontSize: 13,
+          fontWeight: 700,
+          fontFamily: 'JetBrains Mono, monospace',
+          padding: '2px 6px',
+          letterSpacing: 0.3,
+          lineHeight: '18px',
+          transition: 'all 0.15s',
         }}
         onClick={(e) => { e.stopPropagation(); toggleTool(tool.id) }}
         onContextMenu={(e) => { e.preventDefault(); selectTool(tool.id); useUIStore.getState().setSidebarTab('tools') }}

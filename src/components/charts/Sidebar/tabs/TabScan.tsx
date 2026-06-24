@@ -518,7 +518,7 @@ export function TabScan() {
               {/* Code tab */}
               {addTab === 'code' && (
                 <div>
-                  <textarea value={addCode} onChange={e => setAddCode(e.target.value)} placeholder="// Paste scan code here...&#10;// Must export: function scan(dayMaps, dates, filterMode) → results[]" style={{ width: '100%', height: 140, background: '#0a0c12', border: '1px solid #2a3050', color: '#dde3f0', fontFamily: 'monospace', fontSize: 11, padding: 8, borderRadius: 4, resize: 'vertical', outline: 'none' }} />
+                  <textarea value={addCode} onChange={e => setAddCode(e.target.value)} placeholder="// Paste scan code here...&#10;// Must export: function scan(dayMaps, dates, filterMode) → results[]" style={{ width: '100%', height: 140, background: '#0a0c12', border: '1px solid #2a3050', color: '#dde3f0', fontFamily: 'JetBrains Mono, monospace', fontSize: 11, padding: 8, borderRadius: 4, resize: 'vertical', outline: 'none' }} />
                   <p style={{ fontSize: 11, color: '#4a6080', marginTop: 4 }}>Python code receives date range and returns results[].</p>
                 </div>
               )}

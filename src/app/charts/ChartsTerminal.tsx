@@ -92,17 +92,17 @@ export default function ChartsTerminal({ userId, userName, userImage }: {
   )
 }
 
-/** Profile icon — lives inside the TopBar, absolute top-right */
+/** Profile icon — inline in TopBar flex layout */
 export function ProfileIcon() {
   return (
     <div
       id="profile-icon"
       style={{
-        position: 'absolute', top: 5, right: 8, cursor: 'pointer',
+        cursor: 'pointer',
         width: 26, height: 26, borderRadius: '50%', background: '#2a3050',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: 12, color: '#6a7a98', border: '1px solid #3a4a68',
-        transition: 'all .15s', zIndex: 10,
+        transition: 'all .15s', flexShrink: 0,
       }}
       onMouseOver={(e) => {
         e.currentTarget.style.borderColor = '#D4AF37'

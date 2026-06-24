@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
 
 /**
  * Chart state — panels, symbol, bars, crosshair, canvas rendering.
@@ -51,7 +52,9 @@ interface ChartState {
 
 const BAR_CACHE_TTL = 120000
 
-export const useChartStore = create<ChartState>((set, get) => ({
+export const useChartStore = create<ChartState>()(
+  persist(
+    (set, get) => ({
   symbol: 'AAPL',
   setSymbol: (s) => set({ symbol: s.toUpperCase() }),
 
@@ -97,4 +100,18 @@ export const useChartStore = create<ChartState>((set, get) => ({
     if (Date.now() - entry.ts > BAR_CACHE_TTL) return null
     return entry.bars
   },
-}))
+    }),
+    {
+      name: 'traderra-chart',
+      // sessionStorage → per-tab isolation: symbol/tf/view are local to each tab so
+      // multi-window/multi-tab usage doesn't force every tab to match.
+      storage: createJSONStorage(() => sessionStorage),
+      partialize: (s) => ({
+        symbol: s.symbol,
+        focusDate: s.focusDate,
+        panels: s.panels.map((p) => ({ tf: p.tf })),
+        toolId: s.toolId,
+      }),
+    }
+  )
+)

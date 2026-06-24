@@ -14,6 +14,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Force JetBrains Mono globally */
+*, *::before, *::after {
+  font-family: 'JetBrains Mono', monospace !important;
+}
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.6);
+  cursor: pointer;
+}
+
 @layer base {
   :root {
     /* Light theme (for reference, but Traderra uses dark) */

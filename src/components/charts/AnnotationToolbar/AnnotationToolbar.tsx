@@ -138,7 +138,7 @@ export function AnnotationToolbar() {
             <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
               <span style={{ fontSize: 10, color: '#4a6080' }}>Hex</span>
               <input type="text" defaultValue={lineColor} maxLength={7}
-                style={{ width: 70, background: '#10131a', border: '1px solid #2a3050', borderRadius: 3, color: '#dde3f0', fontSize: 11, padding: '2px 4px', fontFamily: 'monospace', textTransform: 'uppercase' }}
+                style={{ width: 70, background: '#10131a', border: '1px solid #2a3050', borderRadius: 3, color: '#dde3f0', fontSize: 11, padding: '2px 4px', fontFamily: 'JetBrains Mono, monospace', textTransform: 'uppercase' }}
                 onKeyDown={(e) => { if (e.key === 'Enter') { update({ color: (e.target as HTMLInputElement).value }); setOpenDD(null) } }}
               />
             </div>
@@ -233,7 +233,7 @@ export function AnnotationToolbar() {
           <div style={{ padding: '6px 8px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
               <span style={{ fontSize: 11, color: '#8aa0c0', fontWeight: 700, letterSpacing: 0.5 }}>OPACITY</span>
-              <span style={{ fontSize: 11, color: '#dde3f0', fontWeight: 700, fontFamily: 'monospace' }}>{opacity}%</span>
+              <span style={{ fontSize: 11, color: '#dde3f0', fontWeight: 700, fontFamily: 'JetBrains Mono, monospace' }}>{opacity}%</span>
             </div>
             <input type="range" min={5} max={100} defaultValue={opacity}
               style={{ width: '100%', accentColor: '#D4AF37', cursor: 'pointer', height: 16 }}

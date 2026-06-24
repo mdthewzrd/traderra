@@ -6,6 +6,7 @@ const ALLOWED_ORIGINS = [
   'https://traderra-charts.vercel.app',
   'http://localhost:6565',
   'http://localhost:3000',
+  'http://100.118.174.102:6565',
 ]
 
 function corsHeaders(req: NextRequest) {

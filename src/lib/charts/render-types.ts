@@ -16,6 +16,7 @@ export interface PanelState {
   cx: number           // mouse X
   cy: number           // mouse Y
   tf: string           // timeframe
+  panelIdx: number     // which chart panel this context renders (for per-panel caches)
   inds: Record<string, any>  // enabled indicators
   volFrac?: number
   priceScale?: number

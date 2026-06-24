@@ -15,6 +15,8 @@ function tfToPolygon(tf: string): { multiplier: number; timespan: string } {
     '15': { multiplier: 15, timespan: 'minute' },
     '30': { multiplier: 30, timespan: 'minute' },
     '60': { multiplier: 60, timespan: 'minute' },
+    '120': { multiplier: 120, timespan: 'minute' },
+    '240': { multiplier: 240, timespan: 'minute' },
     'D': { multiplier: 1, timespan: 'day' },
     'W': { multiplier: 1, timespan: 'week' },
     'M': { multiplier: 1, timespan: 'month' },
@@ -40,17 +42,30 @@ export async function GET(request: NextRequest) {
   const fromDate = from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
   try {
-    const url = `${POLY_BASE}/v2/aggs/ticker/${encodeURIComponent(symbol)}/range/${multiplier}/${timespan}/${fromDate}/${toDate}?adjusted=true&sort=asc&limit=50000&apiKey=${POLY_KEY}`
-    const resp = await fetch(url)
-    const data = await resp.json()
-
-    if (data.status === 'ERROR') {
-      return NextResponse.json({ error: data.error }, { status: 500 })
+    // Paginated fetch — Polygon caps each response (~880 bars on this tier) and
+    // returns a `next_url` for the remainder. Following it collects the full range;
+    // without this, wide `from`/`to` windows silently truncate to the OLDEST chunk
+    // (which is why a 220-day 1H request returned data ending in January, not today).
+    const allResults: any[] = []
+    let nextUrl: string | null =
+      `${POLY_BASE}/v2/aggs/ticker/${encodeURIComponent(symbol)}/range/${multiplier}/${timespan}/${fromDate}/${toDate}?adjusted=true&sort=asc&limit=50000&apiKey=${POLY_KEY}`
+    let pages = 0
+    while (nextUrl && pages < 25) {
+      const resp = await fetch(nextUrl)
+      const data = await resp.json()
+      if (data.status === 'ERROR') {
+        return NextResponse.json({ error: data.error }, { status: 500 })
+      }
+      allResults.push(...(data.results || []))
+      nextUrl = data.next_url ? `${data.next_url}&apiKey=${POLY_KEY}` : null
+      pages++
+      // Respect free-tier rate limits between paginated calls
+      if (nextUrl) await new Promise(r => setTimeout(r, 120))
     }
 
     // Normalize bars — convert Polygon ms timestamps to seconds for intraday,
     // or to date strings for daily+ (matching charts-engine.js convention)
-    const bars = (data.results || []).map((r: any) => ({
+    const bars = allResults.map((r: any) => ({
       time: timespan === 'day' || timespan === 'week' || timespan === 'month'
         ? new Date(r.t).toISOString().slice(0, 10)
         : Math.floor(r.t / 1000),
@@ -63,7 +78,7 @@ export async function GET(request: NextRequest) {
       n: r.n,
     }))
 
-    return NextResponse.json({ bars, symbol, tf })
+    return NextResponse.json({ bars, symbol, tf, pages })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }

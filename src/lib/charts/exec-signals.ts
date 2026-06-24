@@ -1,11 +1,11 @@
 /**
- * Execution signal calculator — Lingua entry/cover/stop logic.
+ * Execution signal calculator — Lingua pop-short logic.
  *
- * Short side execution loop:
- * 1. ENTRY: 2m 9/20 bearish cross → pop near upper 0.5x ATR band → 2m bar break → short
- * 2. COVER 30% RECYCLE: 2m lower dev band tagged → 2m bar break of lower highs → cover 30%
- * 3. COVER FULL: 5m lower dev band inner line (0.5x ATR) tagged → 2m bar break → close rest
- * 4. STOP: mini line at recent swing high or bar break of lower highs
+ * 1. ENTRY: 2m high pops into/at EMA(9)+ATR(9)×0.5 (upper 0.5 dev band)
+ *    → bar break confirms → short
+ * 2. RECYCLE: 2m price hits EMA(20)-ATR(20)×2.0 (lower 2 dev band) → cover 30%
+ * 3. COVER: 5m price hits EMA(20)-ATR(20)×2.0 (lower 2 dev band on 5m) → cover all
+ * 4. STOP: swing high above entry
  */
 
 export interface ExecSignal {
@@ -16,163 +16,131 @@ export interface ExecSignal {
   label: string
 }
 
-/**
- * Detect bar break: current bar's low breaks below prior bar's low.
- */
-function barBreak(data: { low: number }[], i: number): boolean {
-  if (i < 1) return false
-  return data[i].low < data[i - 1].low
-}
-
-/**
- * Detect bar break of lower highs: current bar low breaks below
- * the low of the most recent bar that made a lower high.
- */
-function lowerHighBreak(data: { high: number; low: number }[], i: number, lookback: number = 10): boolean {
-  if (i < 2) return false
-  // Find recent bars where high < prior bar's high (lower high)
-  for (let j = i - 1; j >= Math.max(1, i - lookback); j--) {
-    if (data[j].high < data[j - 1].high) {
-      // Current bar breaks below that lower-high bar's low
-      if (data[i].low < data[j].low) return true
-    }
-  }
-  return false
-}
-
-/**
- * Find the stop level: recent swing high within lookback bars.
- */
-function swingHighLevel(data: { high: number }[], i: number, lookback: number = 10): number {
+function swingHigh(data: { high: number }[], i: number, lookback = 10): number {
   let sh = data[i].high
-  for (let j = Math.max(0, i - lookback); j <= i; j++) {
-    sh = Math.max(sh, data[j].high)
-  }
+  for (let j = Math.max(0, i - lookback); j <= i; j++) sh = Math.max(sh, data[j].high)
   return sh
 }
 
 /**
- * Compute execution signals on 2m bars.
- *
- * Needs pre-computed EMA(9), EMA(20), ATR(9) on the 2m data,
- * and optionally 5m lower dev band values mapped to 2m timestamps.
+ * Compute exec signals on 2m bars.
+ * @param lowerBand5m  EMA(20)-ATR(20)×2.0 computed on 5m data, mapped to 2m bar indices
  */
 export function calcExecSignals(
-  data2m: { time: number; open: number; high: number; low: number; close: number; volume: number }[],
+  bars: { time: number; open: number; high: number; low: number; close: number }[],
   ema9: (number | null)[],
   ema20: (number | null)[],
   atr9: (number | null)[],
-  lowerBand5m?: (number | null)[],  // 5m lower dev band inner (0.5x), mapped to 2m timestamps
+  atr20: (number | null)[],
+  lowerBand5m?: (number | null)[],
 ): ExecSignal[] {
   const signals: ExecSignal[] = []
-  const n = data2m.length
+  const n = bars.length
 
-  // State machine
-  enum State { WAITING, TRENDING, IN_POSITION }
-  let state: State = State.WAITING
-  let trendStartIdx = 0
-  let entryCount = 0  // how many entries in current trend
-
-  // Band levels
-  const upperBand = (i: number) => ema9[i] != null && atr9[i] != null
-    ? ema9[i]! + atr9[i]! * 0.5
-    : null
-  const lowerBand = (i: number) => ema9[i] != null && atr9[i] != null
-    ? ema9[i]! - atr9[i]! * 2.0
-    : null
+  enum S { WAIT, TREND, POPPED, POSITION_2M, POSITION_5M }
+  let state: S = S.WAIT
+  let trendStart = 0
+  let popIdx = -1
+  let entryCount = 0
 
   for (let i = 1; i < n; i++) {
-    if (ema9[i] == null || ema20[i] == null) continue
+    if (ema9[i] == null || ema20[i] == null || atr9[i] == null || atr20[i] == null) continue
 
-    const fast = ema9[i]!
-    const slow = ema20[i]!
-    const pf = ema9[i - 1]
-    const ps = ema20[i - 1]
+    const e9 = ema9[i]!
+    const e20 = ema20[i]!
+    const a9 = atr9[i]!
+    const a20 = atr20[i]!
 
-    // Detect bearish crossover
-    const bearCross = pf != null && ps != null && pf >= ps && fast < slow
-    // Detect bullish crossover (trend over)
-    const bullCross = pf != null && ps != null && pf <= ps && fast > slow
+    // Band levels on 2m
+    const upper05 = e9 + a9 * 0.5   // upper 0.5 dev band
+    const lower20 = e20 - a20 * 2.0 // lower 2 dev band
 
-    // State transitions
-    if (bearCross) {
-      state = State.TRENDING
-      trendStartIdx = i
-      entryCount = 0
-    }
+    // Crossover detection
+    const pf = ema9[i - 1], ps = ema20[i - 1]
+    const bearCross = pf != null && ps != null && pf >= ps && e9 < e20
+    const bullCross = pf != null && ps != null && pf <= ps && e9 > e20
 
-    if (bullCross) {
-      state = State.WAITING
-      entryCount = 0
+    if (bullCross) { state = S.WAIT; entryCount = 0; popIdx = -1; continue }
+    if (bearCross) { state = S.TREND; trendStart = i; entryCount = 0; popIdx = -1; continue }
+
+    // ── WAIT ──
+    if (state === S.WAIT) continue
+
+    // ── TREND: look for pop into upper 0.5 dev band ──
+    if (state === S.TREND) {
+      // Price high reaches into or at the 0.5 dev band
+      if (bars[i].high >= upper05 - a9 * 0.05) {
+        state = S.POPPED
+        popIdx = i
+      }
       continue
     }
 
-    if (state !== State.TRENDING) continue
-
-    const ub = upperBand(i)
-    const lb = lowerBand(i)
-    const lb5 = lowerBand5m ? lowerBand5m[i] : null
-
-    // Check for pop into upper dev band
-    const popHit = ub != null && data2m[i].high >= ub - (atr9[i] ?? 0) * 0.1  // within 10% of ATR of the band
-
-    // ── ENTRY SIGNAL ──
-    // Price pops near upper band + bar break confirms
-    if (popHit && barBreak(data2m, i)) {
-      const stop = swingHighLevel(data2m, i, 10)
-      signals.push({
-        barIdx: i,
-        type: 'entry',
-        price: data2m[i].low,  // entry at bar break level
-        stopPrice: stop,
-        label: entryCount === 0 ? 'SHORT' : 'ADD',
-      })
-      state = State.IN_POSITION
-      entryCount++
+    // ── POPPED: wait for bar break to confirm entry ──
+    if (state === S.POPPED) {
+      if (i > popIdx && bars[i].low < bars[i - 1].low) {
+        // Bar break confirmed → entry
+        const stop = swingHigh(bars, i, 10)
+        signals.push({
+          barIdx: i, type: 'entry',
+          price: bars[i].low,
+          stopPrice: stop,
+          label: entryCount === 0 ? 'SHORT' : 'ADD',
+        })
+        state = S.POSITION_2M
+        entryCount++
+      }
+      // Price pushes higher → update pop level
+      else if (bars[i].high >= upper05 - a9 * 0.05) {
+        popIdx = i
+      }
+      // Timeout — too many bars without confirmation
+      else if (i - popIdx > 20) {
+        state = S.TREND
+        popIdx = -1
+      }
       continue
     }
 
-    if (state !== State.IN_POSITION) continue
-
-    // ── COVER 30% RECYCLE ──
-    // 2m lower dev band tagged + bar break of lower highs
-    if (lb != null && data2m[i].low <= lb && lowerHighBreak(data2m, i)) {
-      signals.push({
-        barIdx: i,
-        type: 'cover-recycle',
-        price: data2m[i].close,
-        label: 'COVER 30%',
-      })
-      // Stay in position with remaining 70%, but note we hit 2m target
+    // ── POSITION_2M: in position, monitoring 2m lower 2 dev band ──
+    if (state === S.POSITION_2M) {
+      // Check if 2m lower band hit
+      if (bars[i].low <= lower20) {
+        signals.push({
+          barIdx: i, type: 'cover-recycle',
+          price: bars[i].close,
+          label: 'COVER 30%',
+        })
+        state = S.POSITION_5M
+        continue
+      }
+      // Stop: price breaks above recent swing high
+      const sl = swingHigh(bars, i - 1, 10)
+      if (bars[i].high > sl && i > trendStart + 3) {
+        signals.push({ barIdx: i, type: 'stop', price: sl, label: 'STOP' })
+        state = S.TREND; entryCount = 0; popIdx = -1
+      }
       continue
     }
 
-    // ── COVER FULL ──
-    // 5m lower dev band tagged + bar break confirms
-    if (lb5 != null && data2m[i].low <= lb5 && lowerHighBreak(data2m, i)) {
-      signals.push({
-        barIdx: i,
-        type: 'cover-full',
-        price: data2m[i].close,
-        label: 'COVER ALL',
-      })
-      state = State.TRENDING  // reset, look for next pop
-      entryCount = 0
-      continue
-    }
-
-    // ── STOP ──
-    // If price breaks above recent swing high, stop out
-    const stopLevel = swingHighLevel(data2m, i - 1, 10)
-    if (data2m[i].high > stopLevel && i > trendStartIdx + 2) {
-      signals.push({
-        barIdx: i,
-        type: 'stop',
-        price: stopLevel,
-        label: stopLevel.toFixed(2),
-      })
-      state = State.TRENDING  // look for next pop
-      entryCount = 0
+    // ── POSITION_5M: monitoring 5m lower 2 dev band for full cover ──
+    if (state === S.POSITION_5M) {
+      const lb5 = lowerBand5m ? lowerBand5m[i] : null
+      if (lb5 != null && bars[i].low <= lb5) {
+        signals.push({
+          barIdx: i, type: 'cover-full',
+          price: bars[i].close,
+          label: 'COVER ALL',
+        })
+        state = S.TREND; entryCount = 0; popIdx = -1
+        continue
+      }
+      // Stop
+      const sl = swingHigh(bars, i - 1, 10)
+      if (bars[i].high > sl && i > trendStart + 3) {
+        signals.push({ barIdx: i, type: 'stop', price: sl, label: 'STOP' })
+        state = S.TREND; entryCount = 0; popIdx = -1
+      }
     }
   }
 

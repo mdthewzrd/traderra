@@ -313,7 +313,7 @@ export function TabAgent({ embedded }: { embedded?: boolean }) {
       rendered = rendered.replace(/`([^`]+)`/g, '<code style="background:#0d1220;padding:1px 4px;border-radius:2px;font-size:10px;">$1</code>')
 
       if (rendered.startsWith('```')) {
-        return <div key={i} style={{ background: '#0a0c12', padding: '6px 8px', borderRadius: 3, fontSize: 10, fontFamily: 'monospace', color: '#8aa0c0', margin: '2px 0', whiteSpace: 'pre-wrap', overflowX: 'auto' }}>{rendered.replace(/```/g, '')}</div>
+        return <div key={i} style={{ background: '#0a0c12', padding: '6px 8px', borderRadius: 3, fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: '#8aa0c0', margin: '2px 0', whiteSpace: 'pre-wrap', overflowX: 'auto' }}>{rendered.replace(/```/g, '')}</div>
       }
 
       return <div key={i} dangerouslySetInnerHTML={{ __html: rendered || '&nbsp;' }} style={{ lineHeight: 1.4 }} />

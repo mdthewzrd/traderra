@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useChartStore } from '@/stores/charts/chartStore'
+import { useUIStore } from '@/stores/charts/uiStore'
 
 /**
  * ChartDateNav — global date navigator for the charts TopBar.
@@ -184,8 +185,10 @@ export function ChartDateNav() {
   const focusDate = useChartStore(s => s.focusDate)
   const scanNavigate = useChartStore(s => s.scanNavigate)
   const [open, setOpen] = useState(false)
-  const [customStart, setCustomStart] = useState('')
-  const [customEnd, setCustomEnd] = useState('')
+  const customStart = useUIStore(s => s.rangeStart)
+  const customEnd = useUIStore(s => s.rangeEnd)
+  const setCustomStart = (v: string) => useUIStore.getState().setRange(v, customEnd || v)
+  const setCustomEnd = (v: string) => useUIStore.getState().setRange(customStart || v, v)
   const ref = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLDivElement>(null)
   const startInputRef = useRef<HTMLInputElement>(null)
@@ -256,21 +259,22 @@ export function ChartDateNav() {
           }
         }}
         style={{
-          background: focusDate ? 'transparent' : `${GOLD}22`,
-          border: `1px solid ${focusDate ? '#4a5580' : GOLD}`,
+          background: focusDate ? 'transparent' : `${GOLD}18`,
+          border: `1px solid ${focusDate ? 'rgba(212,175,55,0.35)' : GOLD}`,
           borderRadius: 3, cursor: 'pointer',
-          fontSize: 10, fontWeight: 800, fontFamily: 'monospace',
-          padding: '2px 7px',
-          color: focusDate ? '#4a5580' : GOLD,
-          letterSpacing: 0.5,
+          fontSize: 9, fontWeight: 700, fontFamily: 'JetBrains Mono, monospace',
+          padding: '2px 6px',
+          color: focusDate ? 'rgba(212,175,55,0.75)' : GOLD,
+          letterSpacing: 0.3,
           transition: 'all 0.15s',
+          lineHeight: '18px',
         }}
         title={focusDate ? 'Switch to live mode' : 'Currently in live mode'}
       >{focusDate ? 'LIVE' : '● LIVE'}</button>
 
       {/* Left arrow */}
       <button
-        style={{ ...btnBase, borderColor: GOLD, color: GOLD }}
+        style={btnBase}
         onClick={() => handleStep(-1)}
         title="Previous trading day"
       >◀</button>
@@ -280,11 +284,11 @@ export function ChartDateNav() {
         ref={buttonRef}
         onClick={handleOpen}
         style={{
-          fontSize: 11, fontWeight: 800, color: GOLD, fontFamily: 'monospace',
-          minWidth: 76, textAlign: 'center', cursor: 'pointer',
-          padding: '2px 6px', borderRadius: 3,
-          background: open ? 'rgba(212,175,55,0.12)' : 'transparent',
-          border: open ? `1px solid ${GOLD}` : '1px solid transparent',
+          fontSize: 9, fontWeight: 700, color: GOLD, fontFamily: 'JetBrains Mono, monospace',
+          minWidth: 68, textAlign: 'center', cursor: 'pointer',
+          padding: '2px 6px', borderRadius: 3, lineHeight: '18px',
+          background: open ? `${GOLD}18` : 'transparent',
+          border: open ? `1px solid ${GOLD}` : '1px solid rgba(212,175,55,0.35)',
           transition: 'all 0.15s',
         }}
         title={displayDate}
@@ -292,7 +296,7 @@ export function ChartDateNav() {
 
       {/* Right arrow */}
       <button
-        style={{ ...btnBase, borderColor: GOLD, color: GOLD }}
+        style={btnBase}
         onClick={() => handleStep(1)}
         title="Next trading day"
       >▶</button>
@@ -301,7 +305,7 @@ export function ChartDateNav() {
       {jumpBtns.map(n => (
         <button
           key={n}
-          style={{ ...btnBase, fontSize: 9, borderColor: 'rgba(212,175,55,0.4)', color: 'rgba(212,175,55,0.7)', padding: '2px 4px' }}
+          style={btnBase}
           onClick={() => handleStep(n)}
           title={`+${n} trading days`}
         >+{n}</button>
@@ -390,7 +394,7 @@ export function ChartDateNav() {
                       border: `1px solid ${hasRange ? GOLD : '#2a3050'}`,
                       borderRadius: 3,
                       cursor: hasRange ? 'pointer' : 'default',
-                      fontSize: 10, fontWeight: 800, fontFamily: 'monospace',
+                      fontSize: 10, fontWeight: 800, fontFamily: 'JetBrains Mono, monospace',
                       padding: '5px 0',
                       color: hasRange ? GOLD : '#2a3050',
                       letterSpacing: 0.5,
@@ -410,13 +414,17 @@ export function ChartDateNav() {
 
 const btnBase: React.CSSProperties = {
   background: 'transparent',
-  border: '1px solid',
+  border: '1px solid rgba(212,175,55,0.35)',
   borderRadius: 3,
   cursor: 'pointer',
-  fontSize: 11,
+  fontSize: 13,
   fontWeight: 700,
-  padding: '2px 6px',
-  fontFamily: 'inherit',
+  padding: '2px 5px',
+  fontFamily: 'JetBrains Mono, monospace',
+  color: 'rgba(212,175,55,0.75)',
+  letterSpacing: 0.3,
+  transition: 'all 0.15s',
+  lineHeight: '18px',
 }
 
 const dateInputStyle: React.CSSProperties = {
@@ -425,7 +433,7 @@ const dateInputStyle: React.CSSProperties = {
   borderRadius: 3,
   color: '#dde3f0',
   fontSize: 11,
-  fontFamily: 'monospace',
+  fontFamily: 'JetBrains Mono, monospace',
   padding: '3px 6px',
   width: '100%',
   outline: 'none',

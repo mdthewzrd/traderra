@@ -72,6 +72,7 @@
     "clsx": "^2.1.0",
     "cmdk": "^1.0.0",
     "date-fns": "^3.6.0",
+    "fabric": "^7.4.0",
     "framer-motion": "^11.0.0",
     "html2canvas": "^1.4.1",
     "jose": "^5.10.0",

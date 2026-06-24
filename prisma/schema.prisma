@@ -297,6 +297,7 @@ model SavedScan {
   strategy      String       @default("custom")     // e.g. "inside_day_long", "backside_b"
   code          String?                             // uploaded JS/Python source
   dateRange     String?                             // JSON { from, to } — last run range
+  params        String?                             // JSON — params used for this run (for rerun)
   filterMode    String       @default("3")
   results       String       @default("[]")         // JSON — latest run results (backward compat)
   resultCount   Int          @default(0)            // signals in latest run

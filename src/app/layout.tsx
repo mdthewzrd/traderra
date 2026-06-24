@@ -75,7 +75,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
-      <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased studio-bg min-h-screen`}>
+      <body className={`${inter.variable} ${jetbrainsMono.variable} font-mono antialiased studio-bg min-h-screen`} style={{ fontSize: 11 }}>
         <StudioTheme>
           <TraderraProvider>
             <GlobalTraderraProvider>

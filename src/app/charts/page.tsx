@@ -7,11 +7,11 @@ export const metadata = {
 }
 
 export default async function ChartsPage() {
-  const isLocal = process.env.NODE_ENV === 'development'
   const session = await getServerSession()
-  if (!session && !isLocal) {
-    redirect('/sign-in?callbackUrl=/charts')
-  }
+  // Auth bypassed for local/self-hosted — uncomment below to re-enable
+  // if (!session) {
+  //   redirect('/sign-in?callbackUrl=/charts')
+  // }
 
   return (
     <ChartsClient

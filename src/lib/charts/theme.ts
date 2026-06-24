@@ -35,6 +35,8 @@ export const C: Record<string, string> = {
   dev_l_9_20_dn_fill: 'rgba(34,197,94,.15)', dev_l_9_20_dn_line: 'rgba(34,197,94,.40)',
   db_72_89_up_fill: 'rgba(239,68,68,.15)', db_72_89_up_line: 'rgba(239,68,68,.40)',
   db_72_89_dn_fill: 'rgba(34,197,94,.15)', db_72_89_dn_line: 'rgba(34,197,94,.40)',
+  db_72_89_tight_up_fill: 'rgba(239,68,68,.10)', db_72_89_tight_up_line: 'rgba(239,68,68,.30)',
+  db_72_89_tight_dn_fill: 'rgba(34,197,94,.10)', db_72_89_tight_dn_line: 'rgba(34,197,94,.30)',
   zone_fill: 'rgba(212,175,55,.12)', zone_line: 'rgba(212,175,55,.40)',
   pz_sup_fill: 'rgba(34,197,94,.08)', pz_sup_line: 'rgba(34,197,94,.35)', pz_sup_label: '#26a69a',
   pz_res_fill: 'rgba(239,68,68,.08)', pz_res_line: 'rgba(239,68,68,.35)', pz_res_label: '#ef5350',

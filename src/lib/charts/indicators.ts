@@ -41,23 +41,22 @@ export function calcSMA(data: CalcBar[], period: number): (number | null)[] {
 export function calcATR(data: CalcBar[], period: number): (number | null)[] {
   const out: (number | null)[] = []
   if (data.length === 0) return out
-  out.push(null)
-  let sum = 0
-  for (let i = 1; i < data.length; i++) {
-    const tr = Math.max(
-      data[i].high - data[i].low,
-      Math.abs(data[i].high - data[i - 1].close),
-      Math.abs(data[i].low - data[i - 1].close)
-    )
-    sum += tr
-    if (i < period) {
-      out.push(null)
-    } else if (i === period) {
-      out.push(sum / period)
-    } else {
-      const prev = out[i - 1]!
-      out.push((prev * (period - 1) + tr) / period)
-    }
+  if (data.length === 1) { out.push(data[0].high - data[0].low); return out }
+  // Running-seed: provisional ATR from bar 1 (running avg of TRs) converging to the exact
+  // Wilder seed at bar `period`, then standard smoothing. Plots from the first candle
+  // instead of leaving a `period`-bar null gap on the left edge of the chart.
+  const tr = (i: number) => Math.max(
+    data[i].high - data[i].low,
+    Math.abs(data[i].high - data[i - 1].close),
+    Math.abs(data[i].low - data[i - 1].close)
+  )
+  out.push(data[0].high - data[0].low)
+  let a = tr(1)
+  out.push(a)
+  for (let i = 2; i < data.length; i++) {
+    if (i <= period) a = (a * (i - 1) + tr(i)) / i
+    else a = (a * (period - 1) + tr(i)) / period
+    out.push(a)
   }
   return out
 }
@@ -335,7 +334,7 @@ export function computeIndicators(
   if (inds.ema150) ensureEMA(ema150Tool?.params?.period ?? 150)
   if (inds.ema200) ensureEMA(ema200Tool?.params?.period ?? 200)
   if (inds.ema40_60) { ensureEMA(40); ensureEMA(60) }
-  if (inds.band_72_89 || inds.db_72_89) { ensureEMA(72); ensureEMA(89) }
+  if (inds.band_72_89 || inds.db_72_89 || inds.db_72_89_tight) { ensureEMA(72); ensureEMA(89) }
   if (inds.ema || emaTool) ensureEMA(emaTool?.params?.period ?? 20)
 
   // Generic EMA from tool overrides (keys like ema_50, ema_100, etc.)
@@ -348,7 +347,7 @@ export function computeIndicators(
   // ATR deps
   if (inds.db_upper || inds.dev_s_9_20 || inds.dev_l_9_20) ensureATR(9)
   if (inds.db_low1 || inds.db_low2 || inds.dev_s_9_20 || inds.dev_l_9_20) ensureATR(20)
-  if (inds.db_72_89) { ensureATR(72); ensureATR(89) }
+  if (inds.db_72_89 || inds.db_72_89_tight) { ensureATR(72); ensureATR(89) }
 
   // VWAP — only compute on 5m and 15m
   if (inds.vwap && (tf === '5' || tf === '5m' || tf === '15' || tf === '15m')) {

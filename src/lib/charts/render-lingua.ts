@@ -22,6 +22,7 @@ import type { RenderContext } from './render-types'
 import { useToolStore, getMergedToolParams } from '@/stores/charts/toolStore'
 import { drawEMABand, drawDevBand, drawLine } from './render-indicators'
 import { C } from './theme'
+import { renderPivotZones } from './render-pzones'
 
 // ── math helpers ──
 function ema(vals: number[], span: number): number[] {
@@ -216,13 +217,13 @@ function ffill(src: TFIndicators, t: number): { aop: number; dev: number; devLow
   return { aop: aop[ans], dev: dev[ans], devLow: devLow[ans] }
 }
 
-type Stage = 'CONSOLIDATION' | 'UPTREND' | 'TRENDBREAK' | 'BACKSIDE' | 'EXTREME CONT' | 'EXTREME LOWER' | 'EUPHORIC'
+type Stage = 'CONSOLIDATION' | 'UP CONS' | 'DOWN CONS' | 'UPTREND' | 'TRENDBREAK' | 'BACKSIDE' | 'EXTREME CONT' | 'EXTREME LOWER' | 'EUPHORIC'
 
 // Hierarchical classify: MTF base regime + HTF alignment splits extremes.
 // Consolidation requires BOTH 1H and 4H AoP flat (4H gates the noise — a brief 1H
 // wiggle barely moves the slow 4H oscillator, so only genuine ranges flatten both).
 // A 1H flat spot during a 4H trend = pause within the trend → inherits 4H direction.
-function classifyHier(aop_m: number, dev_m: number, devLow_m: number, dev_h: number, devLow_h: number, aop_h: number, flat: number, flatH: number, xtreme: number, euThr: number): Stage {
+function classifyHier(aop_m: number, dev_m: number, devLow_m: number, dev_h: number, devLow_h: number, aop_h: number, flat: number, flatH: number, xtreme: number, euThr: number, er: number, erOn: boolean, chopThr: number): Stage {
   if (isNaN(aop_m) || isNaN(dev_m)) return 'CONSOLIDATION'
   // UPSIDE extremes (uptrend): EC at the partial band (xtreme), EUPHORIC at the full
   // band (euThr) on BOTH TFs. Catalytic top vs recurring heartbeat. Upside-only — the
@@ -240,9 +241,18 @@ function classifyHier(aop_m: number, dev_m: number, devLow_m: number, dev_h: num
   if (!isNaN(devLow_m) && devLow_m <= -xtreme) return 'EXTREME LOWER'
   const mFlat = Math.abs(aop_m) <= flat
   const hFlat = isNaN(aop_h) ? true : Math.abs(aop_h) <= flatH
+  // CLEANLINESS dim (Efficiency Ratio): low ER = choppy (movement, little net progress).
+  // A choppy-but-directional move is noise around a mean → consolidation flavor, NOT a
+  // clean trend. Splits each directional residence stage into CLEAN (UPTREND/BACKSIDE) vs
+  // CHOPPY (UP CONS / DOWN CONS). This kills the rapid UP↔BACKSIDE flicker through chop:
+  // those oscillations now resolve to a single net-direction consolidation stage.
+  const chop = erOn && !isNaN(er) && er < chopThr
+  // Both TFs flat → consolidation regardless of cleanliness.
   if (mFlat && hFlat) return 'CONSOLIDATION'
-  if (mFlat) return (aop_h > 0 ? 'UPTREND' : 'BACKSIDE')   // 1H flat, 4H trending → pause
-  return aop_m > flat ? 'UPTREND' : 'BACKSIDE'
+  // Net direction: MTF angle if trending, else HTF angle (MTF pausing inside HTF trend).
+  const up = mFlat ? aop_h > 0 : aop_m > flat
+  if (chop) return up ? 'UP CONS' : 'DOWN CONS'
+  return up ? 'UPTREND' : 'BACKSIDE'
 }
 
 // Schmitt-trigger hysteresis: a new stage must persist before it locks in.
@@ -311,7 +321,7 @@ function applyExtremeReset(stages: Stage[], dev: number[], eSlow: number[], high
   }
   return out
 }
-const VALID_STAGES: Record<string, true> = { 'CONSOLIDATION': true, 'UPTREND': true, 'TRENDBREAK': true, 'BACKSIDE': true, 'EXTREME CONT': true, 'EXTREME LOWER': true, 'EUPHORIC': true }
+const VALID_STAGES: Record<string, true> = { 'CONSOLIDATION': true, 'UP CONS': true, 'DOWN CONS': true, 'UPTREND': true, 'TRENDBREAK': true, 'BACKSIDE': true, 'EXTREME CONT': true, 'EXTREME LOWER': true, 'EUPHORIC': true }
 
 // Trendbreak detection — the EARLY structural break. During a respected uptrend, the
 // gold eTrend (default 39) is the trend line price holds. The bar where close LOSES it
@@ -342,7 +352,7 @@ function applyTrendBreak(
       if (!isNaN(a) && a <= -flat) { inBreak = false; reclaimBars = 0; out[i] = 'BACKSIDE' }
       else if (reclaimBars >= tbReclaim) { inBreak = false; reclaimBars = 0; out[i] = 'UPTREND' }
       else out[i] = 'TRENDBREAK'
-    } else if (out[i] === 'UPTREND') {
+    } else if (out[i] === 'UPTREND' || out[i] === 'UP CONS') {
       // Build a break streak: tbConfirm consecutive qualifying closes before TRENDBREAK
       // commits. Retro-labels the whole window so the orange region starts where price
       // first lost the line, not where it "confirmed."
@@ -394,23 +404,39 @@ let _cacheSig: Record<number, string> = {}
 let _cacheMtfHyst: Record<number, Stage[]> = {}
 let _cacheRawTransitions: Record<number, number> = {}
 let _cacheHystTransitions: Record<number, number> = {}
-function computeCachedClassification(panelIdx: number, flat: number, flatH: number, xtreme: number, euThr: number, holdBars: number, tbOn: number, tbConfirm: number, tbMargin: number, tbReclaim: number): {
+function computeCachedClassification(panelIdx: number, flat: number, flatH: number, xtreme: number, euThr: number, holdBars: number, tbOn: number, tbConfirm: number, tbMargin: number, tbReclaim: number, erOn: boolean, chopThr: number): {
   mtfHyst: Stage[], rawTrans: number, hystTrans: number, n: number,
 } {
   const mtf = tfSlot(MTF, panelIdx), htf = tfSlot(HTF, panelIdx)
   const n = mtf.times.length
   // _feedGen busts the cache when MTF/HTF bars are re-fed (incl. on param change, which
   // re-runs setLinguaMtfBars via the ReactChartPanel param-subscription effect).
-  const sig = `${n}|${mtf.times[n-1]}|${htf.times.length}|${flat}|${flatH}|${xtreme}|${euThr}|${holdBars}|${tbOn}|${tbConfirm}|${tbMargin}|${tbReclaim}|${_feedGen[panelIdx] || 0}`
+  const sig = `${n}|${mtf.times[n-1]}|${htf.times.length}|${flat}|${flatH}|${xtreme}|${euThr}|${holdBars}|${tbOn}|${tbConfirm}|${tbMargin}|${tbReclaim}|${erOn}|${chopThr}|${_feedGen[panelIdx] || 0}`
   const cached = _cacheMtfHyst[panelIdx]
   if (sig === _cacheSig[panelIdx] && cached && cached.length === n) {
     return { mtfHyst: cached, rawTrans: _cacheRawTransitions[panelIdx] || 0, hystTrans: _cacheHystTransitions[panelIdx] || 0, n }
   }
   // Recompute only on signature change (bars arrived / params changed)
   const mtfRaw: Stage[] = new Array(n)
+  // EFFICIENCY RATIO (cleanliness) on MTF close — point-in-time, no look-forward. Feeds the
+  // 2D angle×cleanliness stage split. Low ER = chop → UP CONS / DOWN CONS instead of trend.
+  // Computed only when erOn (skipped entirely when off → zero overhead, old behavior).
+  const erLen = 20, erSmooth = 10
+  const erMtf: number[] = new Array(n).fill(NaN)
+  if (erOn) {
+    const erRaw: number[] = new Array(n).fill(NaN)
+    for (let i = erLen; i < n; i++) {
+      const net = Math.abs(mtf.close[i] - mtf.close[i - erLen])
+      let path = 0
+      for (let k = i - erLen + 1; k <= i; k++) path += Math.abs(mtf.close[k] - mtf.close[k - 1])
+      erRaw[i] = path > 0 ? net / path : 0
+    }
+    let se = NaN; const ea = 2 / (erSmooth + 1)
+    for (let i = 0; i < n; i++) { if (isNaN(erRaw[i])) continue; se = isNaN(se) ? erRaw[i] : se + (erRaw[i] - se) * ea; erMtf[i] = se }
+  }
   for (let i = 0; i < n; i++) {
     const h = ffill(htf, mtf.times[i])
-    mtfRaw[i] = classifyHier(mtf.aop[i], mtf.dev[i], mtf.devLow[i], h.dev, h.devLow, h.aop, flat, flatH, xtreme, euThr)
+    mtfRaw[i] = classifyHier(mtf.aop[i], mtf.dev[i], mtf.devLow[i], h.dev, h.devLow, h.aop, flat, flatH, xtreme, euThr, erMtf[i], erOn, chopThr)
   }
   const mtfHyst0 = applyHysteresis(mtfRaw, holdBars)
   // Post-extreme reset on the 1H timeline: EC/EUPHORIC/EL fires once, holds until price
@@ -477,10 +503,521 @@ function computeDisplayedTF(panelIdx: number, data: any[]) {
   return _dc[panelIdx]
 }
 
+// ── SWING TRENDLINE — hand-drawn structural trend ──
+// The MEAN break (applyTrendBreak) fires when close loses the gold eTrend EMA. This is
+// the STRUCTURAL break: a line through the significant swing pivots (lows in an uptrend,
+// highs in a downtrend), drawn exactly as a trader does by hand. Origin pivot → most
+// recent higher low, extended forward; close through the extended line = the structural
+// trendbreak. Drawn as a SEPARATE layer (cyan) so both breaks are visible at once.
+//
+// Pivot model (per user): the 3-bar fractal is the SEED concept, but a pivot only counts
+// as SIGNIFICANT (anchorable) with 5-5 confirmation — the window that filters the
+// wiggles a 3-bar would pass. A secondary min-swing filter (×ATR between consecutive
+// anchors) keeps only the "main" swing points. The line needs 3 clear pivots before its
+// break is trusted (the adaptive "wait for the trend to form" gate) — before that it is
+// drawn dashed/tentative and emits NO break.
+
+/** fractalPivots — local extrema of `src` with left/right confirmation bars.
+ *  findHigh=true → swing highs (peaks), false → swing lows (troughs). A bar qualifies if
+ *  NO neighbor in [i-left, i+right] is strictly beyond it (equal allowed → flat tops count). */
+function fractalPivots(src: number[], left: number, right: number, findHigh: boolean): { idx: number; price: number }[] {
+  const n = src.length
+  const out: { idx: number; price: number }[] = []
+  for (let i = left; i < n - right; i++) {
+    const v = src[i]
+    if (isNaN(v)) continue
+    let ok = true
+    for (let k = 1; k <= left && ok; k++)  { const x = src[i - k]; if (isNaN(x) || (findHigh ? x > v : x < v)) ok = false }
+    for (let k = 1; k <= right && ok; k++) { const x = src[i + k]; if (isNaN(x) || (findHigh ? x > v : x < v)) ok = false }
+    if (ok) out.push({ idx: i, price: v })
+  }
+  return out
+}
+
+/** confirmPivot — MODULE-LEVEL (shared by computeSwingTrendline + the anchored trendline
+ *  tool). Filters pattern-candidate pivots by a SECOND look-window: a candidate survives
+ *  only if NO bar in [idx-left, idx+right] is strictly beyond it. Pure (no closure capture)
+ *  so it hoists safely. */
+function confirmPivot(
+  cands: { idx: number; price: number }[], src: number[], findHigh: boolean,
+  left: number, right: number,
+): { idx: number; price: number }[] {
+  return cands.filter(p => {
+    for (let k = p.idx - left; k <= p.idx + right; k++) {
+      if (k === p.idx || k < 0 || k >= src.length) continue
+      if (isNaN(src[k])) continue
+      if (findHigh ? src[k] > p.price : src[k] < p.price) return false
+    }
+    return true
+  })
+}
+
+/** atrDisp — ATR (Wilder's RMA of True Range) over DISPLAYED-chart arrays. Used by the
+ *  anchored trendline tool for min-size filtering (drop micro-lines < N×ATR apart). Pure,
+ *  module-level so any displayed-data tool can reuse it. */
+function atrDisp(high: number[], low: number[], close: number[], len: number): number[] {
+  const n = close.length
+  const tr = new Array(n).fill(NaN)
+  for (let i = 1; i < n; i++) {
+    if (isNaN(high[i]) || isNaN(low[i]) || isNaN(close[i - 1])) continue
+    const pc = close[i - 1]
+    tr[i] = Math.max(high[i] - low[i], Math.abs(high[i] - pc), Math.abs(low[i] - pc))
+  }
+  const out = new Array(n).fill(NaN)
+  const k = 1 / Math.max(1, len)
+  let prev = NaN
+  for (let i = 0; i < n; i++) {
+    if (isNaN(tr[i])) continue
+    prev = isNaN(prev) ? tr[i] : tr[i] * k + prev * (1 - k)
+    out[i] = prev
+  }
+  return out
+}
+
+type TrendSeg = {
+  dir: 1 | -1                   // 1 = uptrend (support from lows), -1 = downtrend (resistance from highs)
+  from: { idx: number; price: number }
+  to: { idx: number; price: number }
+  line: number[]                // MTF-timeline values; NaN outside [from.idx, break/end]
+  breakIdx: number              // -1 if unbroken, else first closing candle through the line
+  retestIdx: number             // -1 if none, else bar where price came back & tapped the broken line
+  majorBreak: boolean           // true if a 9/20 EMA cross in the break's direction confirms it
+  main: boolean                 // the consensus MAIN trend line (Theil-Sen) — bold, the break target
+  touches: number               // # pivots respecting this line (main lines only)
+  active: boolean               // most-recent unbroken segment (highlighted at render time)
+  tentative: boolean            // most-recent pivot pair (right edge), still forming live
+  tier: number                  // 1=big (major swings, thick), 2=medium, 3=small (minor, thin)
+}
+
+type SwingResult = {
+  segments: TrendSeg[]          // EVERY trendline across the FULL chart history — uptrend legs from
+                                // rising lows + downtrend legs from falling highs. Many legs ⇒ many
+                                // lines + many breaks throughout the chart.
+  pivots: { idx: number; price: number }[]   // all significant swing pivots (for dots)
+}
+
+/** computeSwingTrendline — JD-PORT trendlines (© Joris Duyck "Trendlines - JD") across the
+ *  full chart history, on the MTF (1H) timeline. STRUCTURE-DRIVEN and decoupled from the
+ *  stage machine. Every ADJACENT pivot pair defines one trendline at the raw slope
+ *  between them; the ONLY filter is disp_select (the slope gate): FALLING highs become
+ *  resistance (dir=-1), RISING lows become support (dir=1). Because consecutive
+ *  significant pivots are naturally monotonic, the lines slope WITH the dominant move —
+ *  trend-following is emergent, not searched. No colinearity, no touch-counting. Each
+ *  line extends right from its anchor until price closes through it (debounced by
+ *  swConfirm closes); the render layer drops a colored wedge on the break candle. The
+ *  most-recent pair (right edge) is tentative/dashed. swTouchTol drives retest
+ *  for future quality scoring; swCloudFast/Slow drive the EMA-cloud band drawn in render. */
+function computeSwingTrendline(
+  panelIdx: number,
+  swOn: number, swPattern: number, swLeft: number, swRight: number, swMinSwing: number, swConfirm: number,
+  swTouches: number, swTouchTol: number, swCloudFast: number, swCloudSlow: number,
+  swBreakConfirm: number, swEmaFast: number, swEmaSlow: number, swShowBothSides: number,
+): SwingResult {
+  const empty: SwingResult = { segments: [], pivots: [] }
+  if (!swOn) return empty
+  const mtf = tfSlot(MTF, panelIdx)
+  const n = mtf.times.length
+  if (n < swLeft + swRight + 10) return empty
+
+  // 9/20 EMA CROSS CONFIRMATION for major breaks. A trendline break is only "major" when
+  // momentum confirms it: emaFast crosses emaSlow in the break's direction within a small
+  // window of the break bar. Support break (dir=1, bearish) needs the bearish cross (fast
+  // below slow); resistance break (dir=-1, bullish) needs the bullish cross (fast above
+  // slow). crossFlags[k] = +1 bullish-cross bar, -1 bearish-cross bar, 0 otherwise. The EMA
+  // cross lags price, so the window scans FORWARD from the break (default 8 bars).
+  const emaF = ema(mtf.close, Math.max(2, swEmaFast))
+  const emaS = ema(mtf.close, Math.max(3, swEmaSlow))
+  const crossFlags: number[] = new Array(n).fill(0)
+  for (let k = 1; k < n; k++) {
+    if (isNaN(emaF[k]) || isNaN(emaS[k]) || isNaN(emaF[k - 1]) || isNaN(emaS[k - 1])) continue
+    const wasBelow = emaF[k - 1] <= emaS[k - 1], isAbove = emaF[k] > emaS[k]
+    const wasAbove = emaF[k - 1] >= emaS[k - 1], isBelow = emaF[k] < emaS[k]
+    if (wasBelow && isAbove) crossFlags[k] = 1
+    else if (wasAbove && isBelow) crossFlags[k] = -1
+  }
+  const CROSS_WINDOW = 8
+
+  // (EMA cloud is drawn as a visual layer in the render block; JD's trend-following uses
+  // a slope-direction filter, not a regime gate, so no cloud computation is needed here.)
+
+  // (minSwingFilter REMOVED — it was thinning consecutive pivots and breaking the master
+  // trendline chain in choppier moves. JD connects EVERY consecutive pair; the master
+  // line emerges as overlapping near-colinear pairs, not from endpoint-thinning. The
+  // look-window confirmation alone is the significance gate, faithful to JD.)
+  // TWO-TIER pivot detection. Swing Pattern (e.g. 3-bar fractal) finds CANDIDATE pivots —
+  // it's the detection sensitivity. Look Left/Right then CONFIRMS a candidate as
+  // significant: it must remain the extreme across the wider [i-lookLeft, i+lookRight]
+  // window (no bar more extreme in that span). This mirrors how a trader reads structure:
+  // a 3-bar swing is a hint, the 5-5 window is what makes it a "main" pivot worth
+  // connecting. Both knobs now matter — pattern = how many hints, look L/R = the bar.
+  const patternSide = Math.max(1, Math.floor((swPattern - 1) / 2))
+  // confirmPivot is now module-level (hoisted out so the anchored trendline tool can share it).
+  // MULTI-SCALE pivot detection — one set per tier. detectPivots(left,right) runs the
+  // 2-tier filter (pattern candidates → look-window confirmation) at a given scale.
+  const detectPivots = (left: number, right: number) => ({
+    lows: confirmPivot(fractalPivots(mtf.low, patternSide, patternSide, false), mtf.low, false, left, right),
+    highs: confirmPivot(fractalPivots(mtf.high, patternSide, patternSide, true), mtf.high, true, left, right),
+  })
+
+  // JD-PORT TRENDLINES (© Joris Duyck "Trendlines - JD"). Connect CONSECUTIVE pivots of the
+  // same type — each adjacent pair (pivot i, pivot i+1) defines one trendline at the raw
+  // slope between them. No colinearity search, no 3-touch requirement, no regime gate. The
+  // ONLY filter is disp_select (the genius of JD's model): draw FALLING highs (resistance,
+  // slope<0) and RISING lows (support, slope>0). Consecutive pivots in a real trend are
+  // monotonic, so the lines naturally slope WITH the trend and the slope filter drops
+  // counter-trend ones — trend-following is EMERGENT, not computed. Each line extends
+  // forward from its anchor; break = close crosses the extended line (debounced). The
+  // most-recent pair draws tentative/dashed. Produces a bunch of trendlines tracking the
+  // trend, exactly as JD's indicator does. dir=1 → support from lows; dir=-1 → resistance.
+  const findTouchLines = (pv: { idx: number; price: number }[], dir: 1 | -1, tier: number): TrendSeg[] => {
+    // (real-time extension — no batch search)
+    const buildLine = (
+      A: { idx: number; price: number }, B: { idx: number; price: number },
+      toP: { idx: number; price: number }, slope: number, tentative: boolean, tier: number,
+    ): TrendSeg => {
+      const line: number[] = new Array(n).fill(NaN)
+      let breakIdx = -1, streak = 0, streakStart = -1
+      for (let k = A.idx; k < n; k++) {
+        const v = A.price + slope * (k - A.idx)
+        line[k] = v
+        if (breakIdx < 0) {
+          const cl = mtf.close[k]
+          if (!isNaN(cl)) {
+            const broken = dir === 1 ? cl < v : cl > v
+            if (broken) { if (streak === 0) streakStart = k; streak++ }
+            else { streak = 0; streakStart = -1 }
+            if (streak >= Math.max(1, swConfirm) && streakStart >= 0) breakIdx = streakStart
+          }
+        }
+      }
+      let retestIdx = -1, majorBreak = false
+      if (breakIdx >= 0) {
+        for (let k = breakIdx + 1; k < n; k++) line[k] = NaN
+        // MAJOR BREAK: scan forward for a 9/20 cross in the break's direction. dir=1
+        // (support broke, bearish) wants cross -1; dir=-1 (resistance broke, bullish) wants +1.
+        const want = dir === 1 ? -1 : 1
+        for (let k = breakIdx; k < Math.min(n, breakIdx + CROSS_WINDOW + 1); k++) {
+          if (crossFlags[k] === want) { majorBreak = true; break }
+        }
+        // RETEST: price must break AWAY from the line first, then come BACK to tap it.
+        // Right after the break price is still AT the line, so a naive scan flags every
+        // break as a retest. Fix: skip the immediate bars, require price to have moved
+        // at least 0.5 ATR away, then flag the first tight return as the retest. Tolerance
+        // is the user's Touch Tol (×ATR) param — so it's actually tunable now.
+        const RETEST_TOL = Math.max(0.02, swTouchTol)
+        const RETEST_SKIP = 3
+        let movedAway = false
+        for (let k = breakIdx + 1; k < n; k++) {
+          const v = A.price + slope * (k - A.idx)
+          const atr = mtf.atrMid[k]
+          if (isNaN(atr) || atr <= 0) continue
+          const pr = dir === 1 ? mtf.high[k] : mtf.low[k]
+          if (isNaN(pr)) continue
+          const dist = Math.abs(pr - v)
+          if (k > breakIdx + RETEST_SKIP) {
+            if (dist > 0.5 * atr) movedAway = true
+            if (movedAway && dist <= RETEST_TOL * atr) { retestIdx = k; break }
+          }
+        }
+      }
+      return { dir, from: A, to: toP, line, breakIdx, retestIdx, majorBreak, active: false, tentative, tier, main: false, touches: 0 }
+    }
+    // JD CONSECUTIVE-PAIR MODEL: every adjacent pivot pair defines one trendline. The only
+    // filter is disp_select — the slope-direction gate: falling highs (resistance) and
+    // rising lows (support). This is the trend-following core: consecutive significant
+    // pivots are naturally monotonic, so the lines slope WITH the dominant move and
+    // counter-trend pairs are silently dropped by the slope gate. No search, no
+    // colinearity, no regime map — the structure does the work.
+    const out: TrendSeg[] = []
+    for (let i = 0; i < pv.length - 1; i++) {
+      const A = pv[i], B = pv[i + 1]
+      const slope = (B.price - A.price) / (B.idx - A.idx)
+      // MIN SIZE: drop micro-lines between pivots too close in price (< swMinSwing×ATR).
+      // This is what the "Min Size" param actually controls — only pairs with a real price
+      // move become trendlines, killing the noise from tiny adjacent pivots.
+      const atrA = mtf.atrMid[A.idx]
+      if (!isNaN(atrA) && atrA > 0 && Math.abs(B.price - A.price) < swMinSwing * atrA) continue
+      const rising = slope > 0
+      if (!swShowBothSides) {
+        if (dir === 1 && !rising) continue     // support = rising lows (winning side)
+        if (dir === -1 && rising) continue     // resistance = falling highs (winning side)
+      }
+      // The most-recent pair (right edge) is tentative/dashed — still forming live.
+      const tentative = i === pv.length - 2
+      out.push(buildLine(A, B, B, slope, tentative, tier))
+    }
+    // MAIN TREND LINE — the "consistent average" the mini-trends cluster around. Theil-Sen
+    // robust regression (median of all pairwise slopes = the consensus trend direction),
+    // positioned at the median intercept. The line the most pivots respect IS the key
+    // structural trendline — the one we watch for the MAIN break. Requires ≥ swTouches
+    // respecting pivots (within Touch Tol × ATR). Drawn bold; carries a `touches` count.
+    if (pv.length >= Math.max(3, swTouches)) {
+      const slopes: number[] = []
+      for (let i = 0; i < pv.length; i++) for (let j = i + 1; j < pv.length; j++)
+        slopes.push((pv[j].price - pv[i].price) / (pv[j].idx - pv[i].idx))
+      if (slopes.length) {
+        slopes.sort((a, b) => a - b)
+        const mSlope = slopes[slopes.length >> 1]
+        const ints = pv.map(p => p.price - mSlope * p.idx).sort((a, b) => a - b)
+        const intercept = ints[ints.length >> 1]
+        const respected = pv.filter(p => {
+          const a = mtf.atrMid[p.idx]
+          const tol = (!isNaN(a) && a > 0) ? swTouchTol * a : 0
+          return Math.abs(p.price - (intercept + mSlope * p.idx)) <= Math.max(tol, 1e-9)
+        })
+        if (respected.length >= swTouches) {
+          const A = { idx: respected[0].idx, price: intercept + mSlope * respected[0].idx }
+          const last = respected[respected.length - 1]
+          const seg = buildLine(A, last, last, mSlope, false, tier)
+          seg.main = true
+          seg.touches = respected.length
+          out.push(seg)
+        }
+      }
+    }
+    return out
+  }
+  // ALL trendlines across chart history via the JD consecutive-pair model. findTouchLines
+  // connects every adjacent pivot pair per series; the slope gate keeps only trend-aligned
+  // ones. Run on 3 TIERS at different swing scales → big (major key swings, thick) +
+  // medium + small (minor swings, thin). Smaller scales = more pivots = more, shorter
+  // trendlines; the big tier gives the long-term structural lines. All drawn together = a
+  // hierarchy of trendlines following the trend at every scale.
+  // 3 TIERS of trendlines at different swing scales → big (major key swings, thick) +
+  // medium + small (minor swings, thin). More pivots at smaller scales means more, shorter
+  // trendlines; the big tier gives the long-term structural lines. All drawn together =
+  // a hierarchy of trendlines following the trend at every scale.
+  const tiers = [
+    { left: swLeft, right: swRight, tier: 1 },                                              // big
+    { left: Math.max(2, Math.round(swLeft / 2)), right: Math.max(2, Math.round(swRight / 2)), tier: 2 },  // medium
+    { left: Math.max(2, Math.round(swLeft / 4)), right: Math.max(2, Math.round(swRight / 4)), tier: 3 },  // small
+  ]
+  let segments: TrendSeg[] = []
+  const allPivots: { idx: number; price: number }[] = []
+  for (const t of tiers) {
+    const { lows: l, highs: h } = detectPivots(t.left, t.right)
+    segments = segments.concat(findTouchLines(l, 1, t.tier), findTouchLines(h, -1, t.tier))
+    allPivots.push(...l, ...h)
+  }
+
+  // active = the most-recent UNBROKEN segment (largest to.idx) — the level in force now.
+  let activeEnd = -1, activeIdx = -1
+  for (let s = 0; s < segments.length; s++)
+    if (segments[s].breakIdx < 0 && segments[s].to.idx > activeEnd) { activeEnd = segments[s].to.idx; activeIdx = s }
+  if (activeIdx >= 0) segments[activeIdx].active = true
+
+  return { segments, pivots: allPivots }
+}
+
+/** AnchoredSeg — a non-repainting trendline. */
+type AnchoredSeg = {
+  dir: 1 | -1                  // 1 = support (lows), -1 = resistance (highs)
+  setBar: number               // bar where the line is "set" (last pivot idx + look-right)
+  breakBar: number            // -1 if unbroken, else first close through the line
+  main: boolean               // main line (bigger look-right, persistent)
+  confirmed: number[]         // A.idx → setBar (solid, established history)
+  proj: number[]              // setBar → endBar (dotted, the "set" forward projection)
+}
+
+/** computeAnchoredTrendline — NON-REPAINTING, POINT-IN-TIME-STABLE trendlines (separate
+ *  from the JD swing tool). Pivots come from Look Left + Look Right; a trendline connects
+ *  two consecutive SAME-TYPE confirmed pivots A→B. The line is "set" once its LAST pivot
+ *  clears its look-right window (setBar = B.idx + lookRight) — the slope is FROZEN there
+ *  and never recomputed, so it does not drift like a Theil-Sen average. The confirmed
+ *  history (A→setBar) draws solid; the forward projection (setBar→break) draws dotted and
+ *  is the level price must respect / eventually break. Break = first close through the
+ *  line (support breaks DOWN, resistance breaks UP).
+ *  MAIN lines use a BIGGER look-right (more significant pivots, slower to confirm). They
+ *  PERSIST — every main pair stays on screen until a new one forms; multiple mains
+ *  coexist (a tightening trend spawns a new main inside the old one). This is the
+ *  backtest/scan-safe variant: nothing beyond the confirmation delay repaints. */
+function computeAnchoredTrendline(
+  high: number[], low: number[], close: number[],
+  tlOn: number, tlLeft: number, tlRight: number, tlPattern: number,
+  tlMainLeft: number, tlMainRight: number, tlMainPattern: number,
+  tlMinSize: number, tlBothSides: number, tlShowBreaks: number,
+): { segments: AnchoredSeg[] } {
+  const empty: { segments: AnchoredSeg[] } = { segments: [] }
+  if (!tlOn) return empty
+  const n = close.length
+  const pat = Math.max(1, Math.round(tlPattern))
+  const mainPat = Math.max(1, Math.round(tlMainPattern))
+  if (n < tlLeft + Math.max(tlRight, tlMainRight) + 5) return empty
+  // ATR for min-size filtering (micro-lines < tlMinSize×ATR apart are dropped).
+  const atrArr = tlMinSize > 0 ? atrDisp(high, low, close, 14) : []
+  const build = (isHigh: boolean, left: number, right: number, pattern: number, main: boolean): AnchoredSeg[] => {
+    const src = isHigh ? high : low
+    const pv = confirmPivot(fractalPivots(src, pattern, pattern, isHigh), src, isHigh, left, right)
+    const out: AnchoredSeg[] = []
+    for (let i = 0; i < pv.length - 1; i++) {
+      const A = pv[i], B = pv[i + 1]
+      const slope = (B.price - A.price) / (B.idx - A.idx)
+      // MIN SIZE: drop micro-lines between pivots closer than tlMinSize×ATR in price.
+      if (tlMinSize > 0) {
+        const a = atrArr[A.idx]
+        if (!isNaN(a) && a > 0 && Math.abs(B.price - A.price) < tlMinSize * a) continue
+      }
+      // BOTH-SIDES gate (default off = winning side only, like JD's disp_select):
+      // support (lows) keeps RISING lines; resistance (highs) keeps FALLING lines. With
+      // both sides on, every consecutive pair draws regardless of slope direction.
+      if (!tlBothSides) {
+        const rising = slope > 0
+        if (!isHigh && !rising) continue      // support = rising lows
+        if (isHigh && rising) continue        // resistance = falling highs
+      }
+      const setBar = Math.min(n - 1, B.idx + right)          // line SET once last pivot clears look-right
+      // INVALIDATION = first close THROUGH the line (ungated). This is where price actually
+      // kills the line — the dashed projection STOPS here, regardless of whether the break
+      // passes the confirm/cloud SIGNAL gates. A line that price closes through is dead.
+      let rawBreak = -1
+      for (let k = setBar; k < n; k++) {
+        const lv = A.price + slope * (k - A.idx)
+        const cl = close[k]
+        if (isNaN(cl)) continue
+        if (isHigh ? cl > lv : cl < lv) { rawBreak = k; break }
+      }
+      // SIGNAL gates apply ONLY to the wedge, NOT to line termination. signalBar starts at
+      // the invalidation point and is reset to -1 if confirm/cloud reject it. The line still
+      // ends at rawBreak; the wedge only draws when signalBar >= 0.
+      let signalBar = rawBreak
+      // LINE TERMINATION: the projection extends until price INVALIDATES it (rawBreak), or
+      // to end of data if never invalidated. No distance/stale proxy — the line is "in play"
+      // until price actually closes through it. This is what the user asked for: "go until
+      // price invalidates it".
+      const endBar = rawBreak >= 0 ? rawBreak : n - 1
+      const confirmed = new Array(n).fill(NaN), proj = new Array(n).fill(NaN)
+      for (let k = A.idx; k <= setBar && k <= endBar; k++) confirmed[k] = A.price + slope * (k - A.idx)
+      for (let k = setBar; k <= endBar; k++) proj[k] = A.price + slope * (k - A.idx)
+      out.push({ dir: isHigh ? -1 : 1, setBar, breakBar: signalBar, main, confirmed, proj })
+    }
+    return out
+  }
+
+  const segments: AnchoredSeg[] = [
+    ...build(false, tlLeft, tlRight, pat, false),           // support (lows)
+    ...build(true, tlLeft, tlRight, pat, false),            // resistance (highs)
+    ...build(false, tlMainLeft, tlMainRight, mainPat, true), // main support (own left + pattern)
+    ...build(true, tlMainLeft, tlMainRight, mainPat, true),  // main resistance (own left + pattern)
+  ]
+  return { segments }
+}
+
 // ── main render (guarded) ──
 export function renderLinguaCycle(rc: RenderContext) {
   try { _render(rc) }
   catch (e) { console.error('[lingua] render error:', e) }
+}
+
+/** renderAnchoredTrendline — standalone NON-REPAINTING trendline TOOL (separate catalog
+ *  entry from Lingua). Each line connects two consecutive confirmed pivots; the slope is
+ *  FROZEN once the last pivot clears its look-right (setBar). Solid = confirmed history
+ *  (A→setBar); dotted = forward projection (setBar→break). MAIN lines (bigger look-right)
+ *  draw bold with a gold glow and PERSIST — multiple coexist as the trend tightens. Break
+ *  = first close through the line (dot on the line at the break bar). Point-in-time-stable
+ *  → safe for scans/backtests. */
+export function renderAnchoredTrendline(rc: RenderContext, indKey: string = 'trendline', force: boolean = false) {
+  try {
+    const panelIdx = rc.panelIdx ?? 0
+    const tool = useToolStore.getState().tools.find((t: any) => t.indKey === indKey)
+    if (!tool || (!tool.on && !force)) return
+    const p = getMergedToolParams(panelIdx, indKey) as any
+    const tlLeft = (p.tlLeft as number) ?? 50
+    const tlRight = (p.tlRight as number) ?? 15
+    const tlPattern = (p.tlPattern as number) ?? 2
+    const tlMainLeft = (p.tlMainLeft as number) ?? 69
+    const tlMainRight = (p.tlMainRight as number) ?? 15
+    const tlMainPattern = (p.tlMainPattern as number) ?? 3
+    const tlMinSize = (p.tlMinSize as number) ?? 0
+    const tlBothSides = (p.tlBothSides as number) ?? 0
+    const tlShowMain = (p.tlShowMain as number) ?? 1
+    const tlShowBreaks = (p.tlShowBreaks as number) ?? 0
+    const tlBreakSize = Number(p.tlBreakSize) || 7
+    const tlShowCloud = (p.tlShowCloud as number) ?? 0
+    const tlCloudFast = (p.tlCloudFast as number) ?? 20
+    const tlCloudSlow = (p.tlCloudSlow as number) ?? 39
+    const { ctx, data, vs, visible, xCtr, pToY, barW } = rc
+    if (!data || data.length < 10 || visible.length === 0) return
+    // Draw on the DISPLAYED chart (whatever timeframe is shown). This is a standalone tool
+    // with NO dependency on Lingua's MTF (1H) feed — so it works whether or not Lingua is on,
+    // and it draws trendlines on the actual chart you're looking at.
+    const high = data.map((b: any) => b.high as number)
+    const low = data.map((b: any) => b.low as number)
+    const close = data.map((b: any) => b.close as number)
+    const tl = computeAnchoredTrendline(high, low, close, 1, tlLeft, tlRight, tlPattern, tlMainLeft, tlMainRight, tlMainPattern, tlMinSize, tlBothSides, tlShowBreaks)
+    // ── EMA CLOUD (optional, toggle: tlShowCloud) — a band between Cloud Fast/Slow EMAs
+    // tinted teal (fast>slow, bullish) / orange-red (slow>fast, bearish). Drawn on the
+    // displayed chart, independent of Lingua's MTF cloud. Gives trend-regime context for
+    // how the anchored trendlines should read.
+    if (tlShowCloud) {
+      const cf = ema(close, Math.max(2, tlCloudFast))
+      const cs = ema(close, Math.max(3, tlCloudSlow))
+      const bullCol = '0,210,170', bearCol = '232,108,40'
+      for (let i = 0; i < visible.length - 1; i++) {
+        const ai = vs + i, aj = vs + i + 1
+        if (isNaN(cf[ai]) || isNaN(cs[ai])) continue
+        const x1 = xCtr(i), x2 = xCtr(i + 1)
+        const yT = pToY(Math.max(cf[ai], cs[ai])), yB = pToY(Math.min(cf[ai], cs[ai]))
+        const isBull = cf[ai] >= cs[ai]
+        ctx.fillStyle = `rgba(${isBull ? bullCol : bearCol},0.12)`
+        ctx.fillRect(x1 - barW / 2, yT, (x2 - x1) + barW, Math.abs(yB - yT))
+      }
+      drawLine(rc, cf, 'rgba(120,180,200,0.4)', 1)
+      drawLine(rc, cs, 'rgba(120,180,200,0.4)', 1)
+    }
+    // PALETTE — "light" variant uses faded green/red + silver-blue glow so it stays
+    // visually distinct from the bold main tool (gold glow, saturated colors) when both
+    // run simultaneously. Same logic, different look, separate params.
+    const isLight = indKey === 'trendline_light'
+    const mainGlow = isLight ? '130,160,200' : '212,175,55'
+    for (const seg of tl.segments) {
+      // Light variant = MAIN LINES ONLY (tight, bold, clean). Skip the thin winning-side
+      // scatter entirely — that's what made it look like the "fast trend" tool. The Light
+      // tool should read as a single clean trendline at a tighter scale, not a scatter.
+      if (isLight && !seg.main) continue
+      if (seg.main && !tlShowMain) continue
+      // Light variant: BLUE (support) / ORANGE (resistance) — fully distinct from the main
+      // tool's green/red/gold. Wedges flip to the opposite light color.
+      const base = seg.dir === 1 ? (isLight ? [86,156,214] : [0,230,118]) : (isLight ? [230,150,40] : [255,68,68])
+      // confirmed/proj are data.length-sized ABSOLUTE-indexed arrays → drawLine reads
+      // vals[vs + i] directly; no mapLine / time-mapping needed.
+      if (seg.main) {
+        drawLine(rc, seg.confirmed, `rgba(${mainGlow},0.28)`, 4.5)
+        drawLine(rc, seg.proj, `rgba(${mainGlow},0.16)`, 4.5)
+        drawLine(rc, seg.confirmed, `rgba(${base[0]},${base[1]},${base[2]},0.98)`, 2.8)
+        drawLine(rc, seg.proj, `rgba(${base[0]},${base[1]},${base[2]},0.8)`, 2.4, true)
+      } else {
+        drawLine(rc, seg.confirmed, `rgba(${base[0]},${base[1]},${base[2]},0.55)`, 1.2)
+        drawLine(rc, seg.proj, `rgba(${base[0]},${base[1]},${base[2]},0.4)`, 1, true)
+      }
+      // break marker — OPPOSITE-COLOR WEDGE at the bar the line was broken. A support break
+      // (dir=1, green line) is BEARISH → red wedge pointing down; a resistance break
+      // (dir=-1, red line) is BULLISH → green wedge pointing up. Color = the NEW direction.
+      // Isolated try/catch: a wedge drawing failure must NEVER abort the line loop.
+      if (seg.breakBar >= 0 && tlShowBreaks) {
+        try {
+          const di = seg.breakBar - vs               // absolute bar → visible index
+          if (di >= 0 && di < visible.length) {
+            const lv = seg.proj[seg.breakBar]
+            if (!isNaN(lv) && isFinite(lv)) {
+              const x = xCtr(di)
+              const bearish = seg.dir === 1                         // support broke → down
+              const col = bearish
+                ? (isLight ? 'rgba(230,150,40,1)' : 'rgba(255,68,68,1)')
+                : (isLight ? 'rgba(86,156,214,1)' : 'rgba(0,230,118,1)')
+              const y = bearish ? pToY(lv) + (tlBreakSize + 4) : pToY(lv) - (tlBreakSize + 4)
+              const s = tlBreakSize
+              ctx.fillStyle = col
+              ctx.strokeStyle = 'rgba(8,12,20,0.9)'; ctx.lineWidth = 1
+              ctx.beginPath()
+              if (bearish) { ctx.moveTo(x, y + s); ctx.lineTo(x - s, y); ctx.lineTo(x + s, y) }
+              else        { ctx.moveTo(x, y - s); ctx.lineTo(x - s, y); ctx.lineTo(x + s, y) }
+              ctx.closePath(); ctx.fill(); ctx.stroke()
+            }
+          }
+        } catch (_) { /* wedge failure must not kill the lines */ }
+      }
+    }
+  } catch (e) { console.error('[trendline] render error:', e) }
 }
 
 /** pitchToDeg — maps the ATR-normalized EMA slope into an intuitive 0-90° scale.
@@ -508,9 +1045,12 @@ function _render(rc: RenderContext) {
   const tbConfirm = (p.tbConfirm as number) ?? 1
   const tbMargin = (p.tbMargin as number) ?? 0
   const tbReclaim = (p.tbReclaim as number) ?? 1
+  const cycleErOn = ((p.cycleErOn as number) ?? 1) === 1
+  const cycleChop = (p.cycleChop as number) ?? 0.30
   const tbLtfOn = (p.tbLtfOn as number) ?? 1   // 15m fractal-child LEAD markers (extra fetch)
   const showClouds = (p.showClouds as number) !== 0
   const showBands = (p.showBands as number) !== 0
+  const swHideCons = (p.swHideCons as number) !== 0   // hide built-in CONSOLIDATION stage tint/label (clean chart)
   // dev band colors default to the db_72_89 tool's exact colors → identical appearance
   const bandUpFill = tc.up_fill || 'rgba(239,68,68,.15)'
   const bandUpLine = tc.up_line || 'rgba(239,68,68,.40)'
@@ -562,7 +1102,7 @@ function _render(rc: RenderContext) {
 
   // 1+2) Classify + hysteresis on MTF-native timeline — CACHED, only
   // recomputes when bars/params change (NOT every animation frame).
-  const { mtfHyst, rawTrans, hystTrans, n } = computeCachedClassification(panelIdx, flat, flatH, xtreme, euThr, holdBars, tbOn, tbConfirm, tbMargin, tbReclaim)
+  const { mtfHyst, rawTrans, hystTrans, n } = computeCachedClassification(panelIdx, flat, flatH, xtreme, euThr, holdBars, tbOn, tbConfirm, tbMargin, tbReclaim, cycleErOn, cycleChop)
 
   // 3) Map each visible bar → its MTF stage via timestamp forward-fill.
   const stages: Stage[] = new Array(visible.length)
@@ -588,11 +1128,16 @@ function _render(rc: RenderContext) {
     // Trendbreak: vivid orange alert — price lost the respected gold eTrend line during
     // an uptrend. Early structural break; resolves to BACKSIDE once the slope confirms.
     'TRENDBREAK':    { tint: tc.tb_tint || 'rgba(255,111,0,0.10)',   line: tc.tb_line || 'rgba(255,111,0,0.7)',    text: tc.tb_text || 'rgba(255,145,0,0.95)' },
+    // Consolidation-flavored trends (choppy but directional — low Efficiency Ratio):
+    // MUTED versions of the trend tints so clean UPTREND/BACKSIDE read as stronger than
+    // the choppy variants at a glance. Faint tint, faded line + label.
+    'UP CONS':       { tint: tc.uc_tint || 'rgba(76,175,80,0.035)',  line: tc.uc_line || 'rgba(129,199,132,0.35)', text: tc.uc_text || 'rgba(129,199,132,0.7)' },
+    'DOWN CONS':     { tint: tc.dc_tint || 'rgba(239,83,80,0.035)',  line: tc.dc_line || 'rgba(239,154,154,0.35)', text: tc.dc_text || 'rgba(239,154,154,0.7)' },
   }
 
   // Short on-chart labels (2-letter) for readability. Internal stage values unchanged.
   const SHORT: Record<Stage, string> = {
-    'CONSOLIDATION': 'CO', 'UPTREND': 'UP', 'TRENDBREAK': 'TB', 'BACKSIDE': 'BK',
+    'CONSOLIDATION': 'CO', 'UP CONS': 'UC', 'DOWN CONS': 'DC', 'UPTREND': 'UP', 'TRENDBREAK': 'TB', 'BACKSIDE': 'BK',
     'EXTREME CONT': 'EC', 'EUPHORIC': 'EU', 'EXTREME LOWER': 'EL',
   }
 
@@ -608,30 +1153,32 @@ function _render(rc: RenderContext) {
   for (let i = 0; i < visible.length; i++) {
     const st = stages[i] in COL ? stages[i] : 'CONSOLIDATION'
     stageCounts[st] = (stageCounts[st] || 0) + 1
-    const c = COL[st]
-    const x = xCtr(i)
-
-    ctx.fillStyle = c.tint
-    ctx.fillRect(x - half, 0, slot, priceH)
-
-    if (st !== prevStage) {
-      ctx.strokeStyle = c.line
-      ctx.lineWidth = 1
-      ctx.setLineDash([4, 4])
-      ctx.beginPath()
-      ctx.moveTo(x - half, 0)
-      ctx.lineTo(x - half, priceH)
-      ctx.stroke()
-      ctx.setLineDash([])
-
-      const label = SHORT[st] ?? st
-      const tw = ctx.measureText(label).width
-      ctx.fillStyle = 'rgba(8,12,20,0.72)'
-      ctx.fillRect(x + 3, 3, tw + 6, 13)
-      ctx.fillStyle = c.text
-      ctx.fillText(label, x + 6, 4)
-      prevStage = st
+    // swHideCons: the CONSOLIDATION stage draws NOTHING (clean chart) but still advances
+    // prevStage so the next real stage draws its transition divider correctly.
+    const hidden = swHideCons && st === 'CONSOLIDATION'
+    if (!hidden) {
+      const c = COL[st]
+      const x = xCtr(i)
+      ctx.fillStyle = c.tint
+      ctx.fillRect(x - half, 0, slot, priceH)
+      if (st !== prevStage) {
+        ctx.strokeStyle = c.line
+        ctx.lineWidth = 1
+        ctx.setLineDash([4, 4])
+        ctx.beginPath()
+        ctx.moveTo(x - half, 0)
+        ctx.lineTo(x - half, priceH)
+        ctx.stroke()
+        ctx.setLineDash([])
+        const label = SHORT[st] ?? st
+        const tw = ctx.measureText(label).width
+        ctx.fillStyle = 'rgba(8,12,20,0.72)'
+        ctx.fillRect(x + 3, 3, tw + 6, 13)
+        ctx.fillStyle = c.text
+        ctx.fillText(label, x + 6, 4)
+      }
     }
+    prevStage = st
   }
   ctx.setLineDash([])
 
@@ -662,6 +1209,212 @@ function _render(rc: RenderContext) {
     }
   }
 
+  // ── SWING TRENDLINE (structural, JD-port) — drawn over the stage fills ──
+  // Green support lines (rising lows) + red resistance lines (falling highs), one per
+  // consecutive pivot pair (JD consecutive-pair model). EMA cloud band (20/39-style) tinted
+  // teal/orange-red by the 9/20-style cross. Major tier-1 breaks = wedges; break+retest =
+  // wedge + hollow diamond on the line. All params live in the 'swing' group.
+  const swOn = (p.swOn as number) ?? 1
+  if (swOn) {
+    const swLeft = (p.swLeft as number) ?? 69
+    const swRight = (p.swRight as number) ?? 21
+    const swPattern = (p.swPattern as number) ?? 5
+    const swMinSwing = (p.swMinSwing as number) ?? 1.2
+    const swConfirm = (p.swConfirm as number) ?? 2
+    const swTouches = (p.swTouches as number) ?? 3
+    const swTouchTol = (p.swTouchTol as number) ?? 0.1
+    const swSpineLen = (p.swSpineLen as number) ?? 50
+    const swCloudFast = (p.swCloudFast as number) ?? 50
+    const swCloudSlow = (p.swCloudSlow as number) ?? 69
+    const swShowWindow = (p.swShowWindow as number) ?? 0
+    const swShowPivots = (p.swShowPivots as number) ?? 0
+    const swShowBreaks = (p.swShowBreaks as number) ?? 1
+    const swBreakConfirm = (p.swBreakConfirm as number) ?? 0
+    const swEmaFast = (p.swEmaFast as number) ?? 39
+    const swEmaSlow = (p.swEmaSlow as number) ?? 50
+    const swShowBothSides = (p.swShowBothSides as number) ?? 0
+    const swLineCol = tc.sw_line || 'rgba(0,229,255,0.85)'
+    const swTentCol = tc.sw_tent || 'rgba(0,229,255,0.35)'
+    const swPivotCol = tc.sw_pivot || 'rgba(0,229,255,1)'
+    const swBreakCol = tc.sw_break || 'rgba(255,0,110,0.95)'
+    // EMA9/EMA20 reference removed — replaced by the MTF EMA trend spine inside the swing
+    // block (the single EMA we follow for the trend channel).
+    const swing = computeSwingTrendline(panelIdx, swOn, swPattern, swLeft, swRight, swMinSwing, swConfirm, swTouches, swTouchTol, swCloudFast, swCloudSlow, swBreakConfirm, swEmaFast, swEmaSlow, swShowBothSides)
+    if (swing.segments.length) {
+      // map an MTF timestamp → visible-bar index (largest displayed time ≤ t)
+      const visIdxForTime = (t: number): number => {
+        if (t < times[vs] || t > times[vs + visible.length - 1]) return -1
+        let lo = 0, hi = visible.length - 1, ans = -1
+        while (lo <= hi) { const m = (lo + hi) >> 1; if (times[vs + m] <= t) { ans = m; lo = m + 1 } else hi = m - 1 }
+        return ans
+      }
+      // map an MTF line → ABSOLUTE-indexed array. drawLine reads vals[vs + i], so the array
+      // must span the FULL data range (see lesson: visible-length array ⇒ draws nothing).
+      const mapLine = (mtfLine: number[]): (number | null)[] => {
+        const full: (number | null)[] = new Array(data.length).fill(null)
+        let sc = 0
+        for (let i = 0; i < visible.length; i++) {
+          const t = times[vs + i]
+          while (sc + 1 < n && mtf.times[sc + 1] <= t) sc++
+          const v = mtfLine[sc]
+          if (!isNaN(v)) full[vs + i] = v
+        }
+        return full
+      }
+      // EMA TREND SPINE — the smoothed trend the swing lines follow.
+      drawLine(rc, mapLine(ema(mtf.close, swSpineLen)), 'rgba(212,175,55,0.55)', 1.6)
+      // EMA CLOUD (39-60 band shape). COLOR driven per-bar by the 9/20 momentum cross:
+      // GREEN/TEAL when EMA9 is above EMA20 (bullish), ORANGE/RED when EMA20 is above
+      // EMA9 (bearish). The band flips color exactly where 9/20 crosses — the same pair
+      // that gates major breaks — so the cloud reads as the momentum regime map.
+      {
+        const cf = mapLine(ema(mtf.close, Math.max(2, swCloudFast)))
+        const cs = mapLine(ema(mtf.close, Math.max(3, swCloudSlow)))
+        const mEmaF = mapLine(ema(mtf.close, Math.max(2, swEmaFast)))
+        const mEmaS = mapLine(ema(mtf.close, Math.max(3, swEmaSlow)))
+        const bullCol = '0,210,170'   // green-teal (9 above 20)
+        const bearCol = '232,108,40'  // orange-red (20 above 9)
+        for (let i = 0; i < visible.length - 1; i++) {
+          const ai = vs + i, aj = vs + i + 1
+          if (cf[ai] == null || cs[ai] == null || cf[aj] == null || cs[aj] == null) continue
+          const x1 = xCtr(i), x2 = xCtr(i + 1)
+          const yT = pToY(Math.max(cf[ai]!, cs[ai]!)), yB = pToY(Math.min(cf[ai]!, cs[ai]!))
+          const isBull = mEmaF[ai] != null && mEmaS[ai] != null && (mEmaF[ai] as number) >= (mEmaS[ai] as number)
+          ctx.fillStyle = `rgba(${isBull ? bullCol : bearCol},0.15)`
+          ctx.fillRect(x1 - barW / 2, yT, (x2 - x1) + barW, Math.abs(yB - yT))
+        }
+        // boundary lines colored by the CURRENT (last visible bar) 9/20 regime
+        const li = vs + visible.length - 1
+        const curBull = mEmaF[li] != null && mEmaS[li] != null && (mEmaF[li] as number) >= (mEmaS[li] as number)
+        const lineCol = curBull ? bullCol : bearCol
+        drawLine(rc, cf, `rgba(${lineCol},0.55)`, 1.2)
+        drawLine(rc, cs, `rgba(${lineCol},0.55)`, 1.2)
+      }
+      // draw EVERY trendline, colored by role to match the hand-drawn channel legend:
+      // SUPPORT (dir=1, swing lows) = GREEN (bottom of channel); RESISTANCE (dir=-1, swing
+      // highs) = RED (top of channel). active (in force) = bright; broken = dim; tentative
+      // (young move) = dashed/dim. Both colors drawn together = the trend channel.
+      for (const seg of swing.segments) {
+        const segVis = mapLine(seg.line)
+        const base = seg.dir === 1 ? [0,230,118] : [255,68,68]
+        if (seg.main) {
+          // MAIN trend line (Theil-Sen consensus) — bold, the KEY break target. A subtle
+          // gold glow under the colored line marks it as the one to watch.
+          const a = seg.breakIdx >= 0 ? 0.5 : seg.active ? 1 : 0.92
+          drawLine(rc, segVis, 'rgba(212,175,55,0.30)', 4)
+          drawLine(rc, segVis, `rgba(${base[0]},${base[1]},${base[2]},${a})`, 2.8)
+          continue
+        }
+        // tier scales opacity + weight: big (tier 1) = bold/opaque, small (tier 3) = faint/thin
+        const tierScale = seg.tier === 1 ? 1 : seg.tier === 2 ? 0.65 : 0.45
+        const a = (seg.tentative ? 0.32 : seg.active ? 0.95 : seg.breakIdx >= 0 ? 0.38 : 0.72) * tierScale
+        const lw = seg.active ? 2.3 : seg.tier === 1 ? 2 : seg.tier === 2 ? 1.5 : 1.1
+        drawLine(rc, segVis, `rgba(${base[0]},${base[1]},${base[2]},${a})`, lw, !!seg.tentative)
+      }
+      // PIVOT CONFIRMATION WINDOW (diagnostic) — toggle on to audit which bars make each
+      // pivot significant. For every significant pivot, shade the bars that CONFIRM it
+      // (swLeft to the left → swRight to the right) and draw the pivot's price across that
+      // window. A valid swing high sits above every candle in its band; a swing low below.
+      // Eyeball this to judge if swLeft/swRight are tight enough to catch real swings.
+      if (swShowWindow) {
+        for (const pv of swing.pivots) {
+          const li = Math.max(0, pv.idx - swLeft), ri = Math.min(n - 1, pv.idx + swRight)
+          const dL = visIdxForTime(mtf.times[li]), dR = visIdxForTime(mtf.times[ri])
+          if (dL < 0 || dR < 0) continue
+          const xL = xCtr(dL), xR = xCtr(dR), yP = pToY(pv.price)
+          // faint band over the confirmation bars
+          ctx.fillStyle = 'rgba(0,229,255,0.07)'
+          ctx.fillRect(xL - barW / 2, 0, (xR - xL) + barW, priceH)
+          // price line across the window — pivot must be the extreme of all shaded bars
+          ctx.strokeStyle = 'rgba(0,229,255,0.45)'
+          ctx.lineWidth = 1
+          ctx.setLineDash([2, 3])
+          ctx.beginPath(); ctx.moveTo(xL - barW / 2, yP); ctx.lineTo(xR + barW / 2, yP); ctx.stroke()
+          ctx.setLineDash([])
+          // small ticks at the window edges (the look-left / look-right boundaries)
+          ctx.strokeStyle = 'rgba(0,229,255,0.6)'
+          for (const ex of [xL - barW / 2, xR + barW / 2]) {
+            ctx.beginPath(); ctx.moveTo(ex, yP - 4); ctx.lineTo(ex, yP + 4); ctx.stroke()
+          }
+        }
+      }
+      // pivot dots (toggle: swShowPivots) — all significant swings the lines connect
+      if (swShowPivots) {
+        for (const pv of swing.pivots) {
+          const di = visIdxForTime(mtf.times[pv.idx])
+          if (di < 0) continue
+          const x = xCtr(di), y = pToY(pv.price)
+          ctx.fillStyle = swPivotCol
+          ctx.strokeStyle = 'rgba(8,12,20,0.9)'
+          ctx.lineWidth = 1
+          ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+        }
+      }
+      // BREAK WEDGES (toggle: swShowBreaks). MAJOR breaks only — tier 1 (big swings).
+      // A break = close through the trendline (JD's triangleup/triangledown). Green wedge
+      // below = support broke (dir=1); red wedge above = resistance broke (dir=-1). When
+      // EMA-cross confirm is on, only momentum-confirmed breaks render. Two VISUALLY
+      // DISTINCT flavors: a plain TRENDBREAK = solid wedge; a BREAK & RETEST = the SAME
+      // solid wedge PLUS a large hollow DIAMOND on the trendline at the retest bar, joined
+      // by a dotted connector so the pair reads as one event.
+      if (swShowBreaks) {
+        for (const seg of swing.segments) {
+          if (seg.breakIdx < 0) continue
+          // Breaks focus on the lines that matter: MAIN trend lines (the consensus break
+          // target) and tier-1 big swings. Minor-tier breaks are suppressed.
+          if (!seg.main && seg.tier !== 1) continue
+          // When EMA-cross confirmation is on, only MAJOR breaks (confirmed by a 9/20 cross
+          // in the break's direction) render a wedge. This drops the noise from minor
+          // pivot breaks and keeps only momentum-confirmed structural breaks.
+          if (swBreakConfirm && !seg.majorBreak) continue
+          const di = visIdxForTime(mtf.times[seg.breakIdx])
+          if (di < 0) continue
+          const diDot = di + 1
+          if (diDot >= visible.length) continue
+          const x = xCtr(diDot)
+          const candle = data[vs + diDot]
+          if (!candle) continue
+          const isUp = seg.dir === 1
+          const col = isUp ? 'rgba(0,230,118,1)' : 'rgba(255,68,68,1)'
+          const y = isUp ? pToY(candle.low) + 10 : pToY(candle.high) - 10
+          const s = 5
+          ctx.fillStyle = col
+          ctx.strokeStyle = 'rgba(8,12,20,0.9)'
+          ctx.lineWidth = 1
+          ctx.beginPath()
+          if (isUp) { ctx.moveTo(x, y - s); ctx.lineTo(x - s, y); ctx.lineTo(x + s, y) }
+          else      { ctx.moveTo(x, y + s); ctx.lineTo(x - s, y); ctx.lineTo(x + s, y) }
+          ctx.closePath(); ctx.fill(); ctx.stroke()
+          // RETEST marker — large hollow DIAMOND on the extended line at the bar price
+          // tapped it, joined to the break wedge by a dotted connector. Only real retests
+          // (price moved away then returned) reach here, so this is unambiguous.
+          if (seg.retestIdx >= 0) {
+            const dr = visIdxForTime(mtf.times[seg.retestIdx])
+            if (dr >= 0 && dr < visible.length) {
+              const sl = (seg.to.price - seg.from.price) / (seg.to.idx - seg.from.idx)
+              const v = seg.from.price + sl * (seg.retestIdx - seg.from.idx)
+              const rx = xCtr(dr), ry = pToY(v)
+              // dotted connector from break wedge to retest diamond
+              ctx.strokeStyle = col
+              ctx.lineWidth = 1
+              ctx.setLineDash([2, 3])
+              ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(rx, ry); ctx.stroke()
+              ctx.setLineDash([])
+              // hollow diamond
+              const ds = 6
+              ctx.fillStyle = 'rgba(8,12,20,0.95)'
+              ctx.strokeStyle = col
+              ctx.lineWidth = 2
+              ctx.beginPath()
+              ctx.moveTo(rx, ry - ds); ctx.lineTo(rx + ds, ry); ctx.lineTo(rx, ry + ds); ctx.lineTo(rx - ds, ry)
+              ctx.closePath(); ctx.fill(); ctx.stroke()
+            }
+          }
+        }
+      }
+    }
+  }
+
   // Stash displayed-TF pitch for the overlay (drawn AFTER the crosshair in
   // ReactChartPanel so crosshair lines don't overwrite the readout).
   _panelPitch[panelIdx] = { pitch: dc.pitch, vs }
@@ -677,6 +1430,530 @@ function _render(rc: RenderContext) {
     rawTransitions, hystTransitions,
     lastStage: stages[stages.length - 1],
     pitchDeg: isNaN(lastDeg) ? null : +lastDeg.toFixed(1),
+  }
+
+  // ── LINGUA SUB-COMPONENTS — render Key Levels + both trendlines as part of the unified
+  // cycle view. Each is gated by its own Lingua toggle (lg* params) and reads ITS tool's
+  // dialed-in params (no duplication — the trendline/pzones tools hold the tuning). force
+  // bypasses the standalone tool's on/off so Lingua owns the draw here regardless. Drawn
+  // LAST in _render so the structure sits on top of the cycle tint, under candles.
+  const lgKeyLevels = ((p.lgKeyLevels as number) ?? 1) === 1
+  const lgTrendMain = ((p.lgTrendMain as number) ?? 1) === 1
+  const lgTrendLight = ((p.lgTrendLight as number) ?? 1) === 1
+  if (lgKeyLevels) renderPivotZones(rc)
+  if (lgTrendMain) renderAnchoredTrendline(rc, 'trendline', true)
+  if (lgTrendLight) renderAnchoredTrendline(rc, 'trendline_light', true)
+}
+
+// ── CONSOLIDATION ZONES (standalone tool) — BIG-PICTURE swing-cluster model ──
+// A consolidation is a SUSTAINED, BOUNDED range — NOT the tiny bar-by-bar chop a fixed
+// rolling window catches. We detect it from STRUCTURE: significant swing pivots. A genuine
+// big consolidation shows up as a CLUSTER of major swings that stay within a bounded
+// envelope (floor + ceiling) over a long span. Small chop doesn't produce enough
+// SIGNIFICANT pivots to cluster, so it's filtered out automatically — no micro-boxes.
+//
+// Algorithm (greedy range-bounded grouping):
+//   1. Find major swing highs + lows (confirmPivot, coPivLeft/coPivRight) — only big moves
+//      survive the lookback, matching "bigger picture".
+//   2. Merge into one chronological pivot stream.
+//   3. Walk it: greedily extend a group while its high-low RANGE stays within coBand×ATR.
+//      The range only grows as pivots are added, so a TREND (new highs/lows keep extending
+//      it) breaks the cap immediately → no box. A CONSOLIDATION oscillates, so the range
+//      grows slowly and stays bounded → box forms.
+//   4. A group is a BOX only if it spans ≥ coMinBars AND has ≥ coMinSwings (the big-picture
+//      duration + significance gates).
+//   5. Box resolves green/red on the first close outside its envelope → cycle handoff.
+type ConsBox = { start: number; end: number; hi: number; lo: number; resolveDir: number; resolveBar: number; ceil?: number; floor?: number; touches?: { idx: number; price: number; bull: boolean }[]; driftH?: number; driftL?: number; channelDrift?: number; type?: number; highs?: { idx: number; price: number }[]; lows?: { idx: number; price: number }[] }
+
+function computeConsolidation(
+  high: number[], low: number[], close: number[],
+  pivLeft: number, pivRight: number, bandATR: number, minBars: number, minSwings: number,
+): ConsBox[] {
+  const n = close.length
+  const boxes: ConsBox[] = []
+  if (n < 30) return boxes
+  const atr = wilderAtr(high, low, close, 14)
+  const avgAtr = (a: number, b: number) => {
+    let s = 0, c = 0
+    for (let k = a; k <= b && k < n; k++) { const v = atr[k]; if (!isNaN(v)) { s += v; c++ } }
+    return c > 0 ? s / c : NaN
+  }
+  // significant pivots only (big lookback → major swings, the "bigger picture" filter)
+  const highs = confirmPivot(fractalPivots(high, pivLeft, pivRight, true), high, true, pivLeft, pivRight)
+  const lows = confirmPivot(fractalPivots(low, pivLeft, pivRight, false), low, false, pivLeft, pivRight)
+  const pivs = [
+    ...highs.map((p: any) => ({ idx: p.idx, price: p.price, isHigh: true })),
+    ...lows.map((p: any) => ({ idx: p.idx, price: p.price, isHigh: false })),
+  ].sort((a, b) => a.idx - b.idx)
+  if (pivs.length < minSwings) return boxes
+
+  // greedy range-bounded grouping
+  let i = 0
+  while (i < pivs.length) {
+    let j = i, ceil = -Infinity, floor = Infinity
+    while (j < pivs.length) {
+      const p = pivs[j]
+      const nC = p.isHigh ? Math.max(ceil, p.price) : ceil
+      const nF = !p.isHigh ? Math.min(floor, p.price) : floor
+      // can't measure a range until we've seen BOTH a high and a low — accumulate then
+      if (!isFinite(ceil) || !isFinite(floor)) { ceil = nC; floor = nF; j++; continue }
+      const range = nC - nF
+      const a = avgAtr(pivs[i].idx, p.idx)
+      if (isFinite(a) && a > 0 && range > bandATR * a) break   // range broke out → trend resumed
+      ceil = nC; floor = nF; j++
+    }
+    const group = pivs.slice(i, j)
+    const span = group.length ? group[group.length - 1].idx - group[0].idx : 0
+    if (group.length >= minSwings && span >= minBars && isFinite(ceil) && isFinite(floor) && ceil > floor) {
+      const start = group[0].idx, end = group[group.length - 1].idx
+      // true envelope = max high / min low across the full span (incl. non-pivot bars)
+      let bhi = -Infinity, blo = Infinity
+      for (let k = start; k <= end; k++) { if (high[k] > bhi) bhi = high[k]; if (low[k] < blo) blo = low[k] }
+      let resolveDir = 0, resolveBar = -1
+      for (let k = end + 1; k < n; k++) {
+        if (close[k] > bhi) { resolveDir = 1; resolveBar = k; break }
+        if (close[k] < blo) { resolveDir = -1; resolveBar = k; break }
+      }
+      boxes.push({ start, end, hi: bhi, lo: blo, resolveDir, resolveBar })
+      i = j   // skip past this consolidation (avoid overlapping sub-boxes)
+    } else {
+      i++     // too short → advance one pivot
+    }
+  }
+  return boxes
+}
+
+/** aggregate — fold every `group` chart bars into one coarser HTF bar (high=max, low=min,
+ *  close=last). aStart[j] = first chart index belonging to HTF bar j, so HTF box boundaries
+ *  map back to the displayed chart precisely. Self-contained (no Lingua MTF dependency):
+ *  the consolidation tool builds its own bigger picture from displayed data. */
+function aggregateBars(
+  high: number[], low: number[], close: number[], group: number,
+): { ah: number[]; al: number[]; ac: number[]; aStart: number[] } {
+  const n = close.length
+  const ah: number[] = [], al: number[] = [], ac: number[] = [], aStart: number[] = []
+  for (let i = 0; i < n; i += group) {
+    let h = -Infinity, l = Infinity
+    const s = i
+    for (let k = i; k < Math.min(i + group, n); k++) {
+      if (!isNaN(high[k]) && high[k] > h) h = high[k]
+      if (!isNaN(low[k]) && low[k] < l) l = low[k]
+    }
+    ah.push(h); al.push(l); ac.push(close[Math.min(i + group - 1, n - 1)]); aStart.push(s)
+  }
+  return { ah, al, ac, aStart }
+}
+
+// ── REGIME CLASSIFIER ──────────────────────────────────────────────────────────
+// Per-bar ternary regime (UP / DOWN / RANGE) via Efficiency Ratio + EMA cloud.
+// Point-in-time: each bar's regime uses only data up to that bar (no look-forward) →
+// scan/backtest safe. ER = |net progress| ÷ Σ|step| over rgLen bars; low ER = churning =
+// RANGE ("not an uptrend"), high ER + bullish cloud = UP, high ER + bearish = DOWN.
+// This is the REAL-TIME regime signal — compare against Consolidation Zones (historical):
+// zones show WHERE ranges existed; regime shows "am I trending RIGHT NOW?".
+export function renderRegime(rc: RenderContext) {
+  try {
+    const panelIdx = rc.panelIdx ?? 0
+    const tool = useToolStore.getState().tools.find((t: any) => t.indKey === 'regime')
+    if (!tool || !tool.on) return
+    const p = getMergedToolParams(panelIdx, 'regime') as any
+    const rgLen = Math.max(5, Math.round((p.rgLen as number) ?? 20))
+    const rgSmooth = Math.max(1, Math.round((p.rgSmooth as number) ?? 10))
+    const rgChop = (p.rgChop as number) ?? 0.30
+    const rgCloudF = Math.max(2, Math.round((p.rgCloudF as number) ?? 16))
+    const rgCloudS = Math.max(3, Math.round((p.rgCloudS as number) ?? 33))
+    const rgRangeOnly = (p.rgRangeOnly as number) ?? 1
+    const rgShowLabel = (p.rgShowLabel as number) ?? 1
+    const rgShowDiv = (p.rgShowDiv as number) ?? 1
+    const tc = (tool.colors as Record<string, string>) || {}
+    const { ctx, data, visible, xCtr, priceH, barW, W, PRICE_W } = rc
+    if (!data || data.length < 20 || visible.length === 0) return
+    const close = data.map((b: any) => b.close as number)
+    const n = close.length
+
+    // Efficiency Ratio (Kaufman): |net| / Σ|step| over rgLen bars. Self-normalizing (0..1):
+    // 1 = pure trend, 0 = pure chop. Point-in-time — only past data, never the future.
+    const erRaw: number[] = new Array(n).fill(NaN)
+    for (let i = rgLen; i < n; i++) {
+      const net = Math.abs(close[i] - close[i - rgLen])
+      let path = 0
+      for (let k = i - rgLen + 1; k <= i; k++) path += Math.abs(close[k] - close[k - 1])
+      erRaw[i] = path > 0 ? net / path : 0
+    }
+    // Smooth ER with an EMA to kill single-bar whipsaw at regime edges.
+    const erS: number[] = new Array(n).fill(NaN)
+    {
+      let se = NaN
+      const a = 2 / (rgSmooth + 1)
+      for (let i = 0; i < n; i++) {
+        if (isNaN(erRaw[i])) continue
+        se = isNaN(se) ? erRaw[i] : se + (erRaw[i] - se) * a
+        erS[i] = se
+      }
+    }
+    // EMA cloud for direction (defaults match the consolidation Leg EMA so the two tools
+    // agree on what a "leg" is — the regime is the real-time version of the leg model).
+    const cf = ema(close, rgCloudF), cs = ema(close, rgCloudS)
+
+    // Regime per bar: 1=UP, -1=DOWN, 0=RANGE. RANGE wins when ER is below the chop floor.
+    const regime: number[] = new Array(n).fill(0)
+    for (let i = 0; i < n; i++) {
+      if (isNaN(erS[i]) || isNaN(cf[i]) || isNaN(cs[i])) { regime[i] = 0; continue }
+      regime[i] = erS[i] < rgChop ? 0 : (cf[i] >= cs[i] ? 1 : -1)
+    }
+
+    // ── Tint per visible bar. ──
+    const slot = barW && barW > 0 ? barW : 6
+    const half = slot / 2
+    const upT = tc.rg_up || 'rgba(34,197,94,0.09)'
+    const dnT = tc.rg_dn || 'rgba(239,68,68,0.09)'
+    const rngT = tc.rg_range || 'rgba(160,165,180,0.18)'
+    // TINT PASS — gray zones on range bars; trends stay clean (rangeOnly) or get faint
+    // green/red (ternary mode).
+    let prev: number | null = null
+    for (let vi = 0; vi < visible.length; vi++) {
+      const ai = visible[vi]
+      if (ai < 0 || ai >= n) { prev = null; continue }
+      const r = regime[ai]
+      const x = xCtr(vi)
+      let fill = ''
+      if (r === 0) fill = rngT
+      else if (!rgRangeOnly) fill = r > 0 ? upT : dnT
+      if (fill) { ctx.fillStyle = fill; ctx.fillRect(x - half, 0, slot, priceH) }
+      prev = r
+    }
+    // BRACKET PASS — solid gray lines at the START and END of each range zone, drawn on
+    // top of the tint so each gray block is clearly fenced in. (No lines on trend bars.)
+    if (rgShowDiv) {
+      ctx.strokeStyle = 'rgba(160,165,180,0.75)'
+      ctx.lineWidth = 1.5; ctx.setLineDash([])
+      let pv: number | null = null, pvX = 0
+      for (let vi = 0; vi < visible.length; vi++) {
+        const ai = visible[vi]
+        if (ai < 0 || ai >= n) { pv = null; continue }
+        const r = regime[ai]
+        const x = xCtr(vi)
+        if (r === 0 && pv !== 0) {  // range zone START (left edge)
+          ctx.beginPath(); ctx.moveTo(x - half, 0); ctx.lineTo(x - half, priceH); ctx.stroke()
+        }
+        if (pv === 0 && r !== 0 && vi > 0) {  // range zone END (right edge of last range bar)
+          ctx.beginPath(); ctx.moveTo(pvX + half, 0); ctx.lineTo(pvX + half, priceH); ctx.stroke()
+        }
+        pv = r; pvX = x
+      }
+    }
+
+    // ── Current-regime label (top-left of price panel). ──
+    if (rgShowLabel) {
+      const lastAi = visible[visible.length - 1]
+      const r = lastAi >= 0 && lastAi < n ? regime[lastAi] : 0
+      const ev = lastAi >= 0 && lastAi < n ? erS[lastAi] : NaN
+      const name = r > 0 ? 'UP' : r < 0 ? 'DOWN' : 'RANGE'
+      const col = r > 0 ? 'rgba(129,199,132,0.95)' : r < 0 ? 'rgba(248,113,113,0.95)' : 'rgba(180,185,200,0.95)'
+      const txt = `REGIME ${name}${isFinite(ev) ? ` · ER ${ev.toFixed(2)}` : ''}`
+      ctx.font = '11px ui-monospace, monospace'
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top'
+      const tw = ctx.measureText(txt).width
+      const lx = (PRICE_W ?? 0) + 8, ly = 6
+      ctx.fillStyle = 'rgba(8,12,20,0.72)'
+      ctx.fillRect(lx, ly, tw + 8, 16)
+      ctx.fillStyle = col
+      ctx.fillText(txt, lx + 4, ly + 2)
+      // textAlign restored to default (other render code leaks non-left).
+      ctx.textAlign = 'left'
+    }
+  } catch (e) { /* render must not crash the chart */ }
+}
+
+export function renderConsolidation(rc: RenderContext) {
+  try {
+    const panelIdx = rc.panelIdx ?? 0
+    const tool = useToolStore.getState().tools.find((t: any) => t.indKey === 'consolidation')
+    if (!tool || !tool.on) return
+    const p = getMergedToolParams(panelIdx, 'consolidation') as any
+    const coPivLeft = (p.coPivLeft as number) ?? 8
+    const coPivRight = (p.coPivRight as number) ?? 8
+    const coBand = (p.coBand as number) ?? 8
+    const coMinBars = (p.coMinBars as number) ?? 30
+    const coMinSwings = (p.coMinSwings as number) ?? 4
+    const coUseHtf = (p.coUseHtf as number) ?? 1
+    const coHtfGroup = (p.coHtfGroup as number) ?? 5
+    const coShowBreak = (p.coShowBreak as number) ?? 1
+    const coMaxHeight = (p.coMaxHeight as number) ?? 0
+    const coMaxHeightPct = (p.coMaxHeightPct as number) ?? 0
+    const coAtrLen = (p.coAtrLen as number) ?? 14
+    const coTouches = (p.coTouches as number) ?? 2
+    const coTouchBand = (p.coTouchBand as number) ?? 12
+    const coLegFast = (p.coLegFast as number) ?? 7
+    const coLegSlow = (p.coLegSlow as number) ?? 14
+    const coMaxDrift = (p.coMaxDrift as number) ?? 75
+    const coDirDrift = (p.coDirDrift as number) ?? 40
+    const coColorType = (p.coColorType as number) ?? 1
+    const coShowChannel = (p.coShowChannel as number) ?? 0
+    const coShowVals = (p.coShowVals as number) ?? 1
+    const coShowTouches = (p.coShowTouches as number) ?? 1
+    const tc = (tool.colors as Record<string, string>) || {}
+    const { ctx, data, vs, visible, xCtr, pToY, barW } = rc
+    if (!data || data.length < 20 || visible.length === 0) return
+    const high = data.map((b: any) => b.high as number)
+    const low = data.map((b: any) => b.low as number)
+    const close = data.map((b: any) => b.close as number)
+    // BIG-PICTURE: run the swing-cluster on AGGREGATED HTF data (default ON). Grouping every
+    // `coHtfGroup` chart bars into one coarser bar means only multi-week ranges produce
+    // enough significant pivots to cluster — the daily chop that made 17 boxes collapses to
+    // the one big multi-week consolidation. HTF box boundaries map back to chart bars via
+    // aStart; the price envelope is recomputed from the real chart high/low for precision.
+    // Toggle off (coUseHtf=0) to detect on the raw chart TF instead.
+    let boxes: ConsBox[]
+    if (coUseHtf) {
+      const group = Math.max(2, Math.round(coHtfGroup))
+      const { ah, al, ac, aStart } = aggregateBars(high, low, close, group)
+      const htfBoxes = computeConsolidation(ah, al, ac, Math.round(coPivLeft), Math.round(coPivRight), coBand, Math.round(coMinBars), Math.round(coMinSwings))
+      // map HTF indices back to chart indices; recompute envelope from real chart bars
+      boxes = htfBoxes.map(bx => {
+        const start = aStart[bx.start] ?? 0
+        const endIdx = Math.min(high.length - 1, (aStart[bx.end] ?? 0) + group - 1)
+        let bhi = -Infinity, blo = Infinity
+        for (let k = start; k <= endIdx; k++) { if (high[k] > bhi) bhi = high[k]; if (low[k] < blo) blo = low[k] }
+        const resolveBar = bx.resolveBar >= 0 ? (aStart[bx.resolveBar] ?? high.length - 1) : -1
+        return { start, end: endIdx, hi: bhi, lo: blo, resolveDir: bx.resolveDir, resolveBar }
+      })
+    } else {
+      boxes = computeConsolidation(high, low, close, Math.round(coPivLeft), Math.round(coPivRight), coBand, Math.round(coMinBars), Math.round(coMinSwings))
+    }
+    // MAX HEIGHT post-filters: reject boxes that are too tall. Two independent caps, each
+    // default 0 = off. A box survives only if it passes BOTH active caps.
+    //   coMaxHeight   — range ÷ ATR(coAtrLen). Tunable ratio (multi-week daily ≈ 6–10× daily ATR).
+    //   coMaxHeightPct — range ÷ mid-price × 100. Volatility-independent sanity cap.
+    // Unlike coBand (a grouping rule measured on the inflated HTF ATR, effectively never
+    // binding), these are HARD size caps on the displayed-timeframe ATR/price.
+    const chartAtrLen = Math.max(2, Math.round(coAtrLen))
+    if (boxes.length && (coMaxHeight > 0 || coMaxHeightPct > 0)) {
+      const chartAtr = atrDisp(high, low, close, chartAtrLen)
+      boxes = boxes.filter(bx => {
+        const mid = Math.floor((bx.start + bx.end) / 2)
+        const a = chartAtr[mid]
+        const rng = bx.hi - bx.lo
+        const midP = (bx.hi + bx.lo) / 2
+        if (coMaxHeight > 0 && isFinite(a) && a > 0 && rng / a > coMaxHeight) return false
+        if (coMaxHeightPct > 0 && midP > 0 && rng / midP * 100 > coMaxHeightPct) return false
+        return true
+      })
+    }
+    const chartAtrAll = (coShowVals || coMaxHeight > 0 || coMaxHeightPct > 0) ? atrDisp(high, low, close, chartAtrLen) : []
+    // STRUCTURAL TOUCH FILTER — leg-based (7/14 EMA cloud): a consolidation is TESTED
+    // repeatedly on BOTH sides, but multiple fractal pivots form on ONE leg. To count each
+    // swing only once, segment bars into legs via a coLegFast/coLegSlow EMA cross, then keep
+    // ONE extreme per leg: a BULL leg → its highest high (a ceiling probe), a BEAR leg → its
+    // lowest low (a floor probe). A touch = a leg whose extreme falls within coTouchBand% of
+    // the boundary. Require ≥ coTouches ceiling AND ≥ coTouches floor. This collapses noise
+    // (many micro-pivots on one move count as 1) and cleanly separates a real range (many
+    // alternating legs probing both edges) from a trend-to-trend fake (few, one-sided).
+    // Legs are computed once over the whole series; the qualifying extremes are attached to
+    // each box so the render can highlight them (red = bull-leg ceiling, green = bear-leg
+    // floor — opposite the cloud direction, per the user's color convention).
+    type Leg = { bull: boolean; start: number; end: number; extIdx: number; extPrice: number }
+    const legs: Leg[] = []
+    const legF = ema(close, Math.max(2, Math.round(coLegFast)))
+    const legS = ema(close, Math.max(3, Math.round(coLegSlow)))
+    {
+      let cur: Leg | null = null
+      for (let k = 0; k < close.length; k++) {
+        if (isNaN(legF[k]) || isNaN(legS[k])) continue
+        const bull = legF[k] >= legS[k]
+        if (!cur || cur.bull !== bull) {
+          cur = { bull, start: k, end: k, extIdx: k, extPrice: bull ? high[k] : low[k] }
+          legs.push(cur)
+        } else {
+          cur.end = k
+          if (bull ? high[k] > cur.extPrice : low[k] < cur.extPrice) { cur.extPrice = bull ? high[k] : low[k]; cur.extIdx = k }
+        }
+      }
+    }
+    // CONFIRMED SWING PIVOTS (dense, 1 per real swing) — drive the drift regression + the
+    // channel draw. These capture EVERY confirmed pivot (unlike leg extremes = 1 per EMA
+    // leg), so the regression slope is robust. The leg-extreme regression was masking
+    // staircase descents by grabbing each step's top; dense pivots expose the true tilt.
+    const pL = Math.round(coPivLeft), pR = Math.round(coPivRight)
+    const allHighPivots = (coMaxDrift > 0 || coShowChannel)
+      ? confirmPivot(fractalPivots(high, pL, pR, true), high, true, pL, pR) : []
+    const allLowPivots = (coMaxDrift > 0 || coShowChannel)
+      ? confirmPivot(fractalPivots(low, pL, pR, false), low, false, pL, pR) : []
+    // lineDrift — how much a swing-point line tilts across the box, as % of the box range.
+    // Regressed over ALL confirmed pivots in the box. Flat (≈0%) = stationary = genuine
+    // consolidation; large tilt = migrating pivots = a trend hiding inside the box.
+    // Theil–Sen slope = MEDIAN of all pairwise slopes (one vote per pivot PAIR, not per
+    // point). This is the fix for flat-then-trend boxes: a flat region spawns MANY pivots
+    // (price oscillates) while a trend spawns FEW (price runs). Least-squares weights by
+    // point density → the dense flat-start cluster outvotes the sparse trend-end and
+    // under-reports the pitch. Theil–Sen gives each pair one vote, so the true channel
+    // slope wins. Robust 'average' over ALL swing points — what the pitch should be.
+    const lineDrift = (pts: { idx: number; price: number }[], span: number, range: number): number => {
+      if (pts.length < 2 || range <= 0) return 0
+      const slopes: number[] = []
+      for (let i = 0; i < pts.length; i++)
+        for (let j = i + 1; j < pts.length; j++) {
+          const dx = pts[j].idx - pts[i].idx
+          if (dx <= 0) continue
+          slopes.push((pts[j].price - pts[i].price) / dx)
+        }
+      if (!slopes.length) return 0
+      slopes.sort((a, b) => a - b)
+      const m = Math.floor(slopes.length / 2)
+      const slope = slopes.length % 2 ? slopes[m] : (slopes[m - 1] + slopes[m]) / 2
+      return slope * span / range * 100  // signed: + = rising channel, - = falling
+    }
+    if (boxes.length && (coTouches > 0 || coMaxDrift > 0 || coShowChannel)) {
+      boxes = boxes.filter(bx => {
+        const rng = bx.hi - bx.lo
+        const span = bx.end - bx.start
+        const band = rng * (coTouchBand / 100)
+        const ceilThresh = bx.hi - band, floorThresh = bx.lo + band
+        // TOUCHES — leg-based (1 per EMA leg, deduped). Bull leg highest = ceiling touch;
+        // bear leg lowest = floor touch. This is the structural touch COUNT (↑N ↓N).
+        const touches: { idx: number; price: number; bull: boolean }[] = []
+        let ceil = 0, floor = 0
+        for (const leg of legs) {
+          if (leg.end < bx.start || leg.start > bx.end) continue
+          if (leg.bull) {
+            if (leg.extPrice >= ceilThresh) { ceil++; touches.push({ idx: leg.extIdx, price: leg.extPrice, bull: true }) }
+          } else {
+            if (leg.extPrice <= floorThresh) { floor++; touches.push({ idx: leg.extIdx, price: leg.extPrice, bull: false }) }
+          }
+        }
+        bx.ceil = ceil; bx.floor = floor; bx.touches = touches
+        // CHANNEL PIVOTS — dense (all confirmed swings in the box). Drive the drift regression
+        // + the channel draw. Denser than leg extremes → robust slope, no staircase masking.
+        const highs = allHighPivots.filter(pv => pv.idx >= bx.start && pv.idx <= bx.end)
+        const lows = allLowPivots.filter(pv => pv.idx >= bx.start && pv.idx <= bx.end)
+        bx.highs = highs; bx.lows = lows
+        bx.driftH = rng > 0 ? lineDrift(highs, span, rng) : 0
+        bx.driftL = rng > 0 ? lineDrift(lows, span, rng) : 0
+        // CHANNEL DRIFT — signed average of the high + low pivot lines. + = rising channel
+        // (uptrend consolidation), - = falling (downtrend consolidation). Magnitude = how
+        // strongly pivots migrate across the box. Used to CLASSIFY, not reject.
+        const channelDrift = (bx.driftH + bx.driftL) / 2
+        const absDrift = Math.abs(channelDrift)
+        bx.channelDrift = channelDrift
+        bx.type = absDrift < coDirDrift ? 0 : (channelDrift >= 0 ? 1 : -1)
+        // touch gate: must have ≥ coTouches ceiling AND floor probes
+        if (coTouches > 0 && (ceil < coTouches || floor < coTouches)) return false
+        // HARD DRIFT CAP: reject only if channel tilts > coMaxDrift% (pure trend, not a
+        // consolidation). Directional consolidations (coDirDrift..coMaxDrift) SURVIVE.
+        if (coMaxDrift > 0 && absDrift > coMaxDrift) return false
+        return true
+      })
+    }
+    // BOX COLOR — by consolidation TYPE when coColorType is on: range=slate, uptrend=cyan,
+    // downtrend=amber. These are DISTINCT from green/red (reserved for breakouts +
+    // support/resistance). Otherwise color by breakout direction (resolveDir) as before.
+    const typeFill = (t: number) => t > 0 ? 'rgba(56,189,248,0.16)' : t < 0 ? 'rgba(251,146,60,0.16)' : (tc.co_neutral || 'rgba(180,185,205,0.16)')
+    const typeBorder = (t: number) => t > 0 ? 'rgba(56,189,248,0.85)' : t < 0 ? 'rgba(251,146,60,0.85)' : (tc.co_neutral_line || 'rgba(180,185,205,0.7)')
+    const fill = (b: ConsBox) => coColorType ? typeFill(b.type ?? 0)
+      : !coShowBreak || b.resolveDir === 0
+        ? (tc.co_neutral || 'rgba(180,185,205,0.16)')
+        : b.resolveDir > 0 ? (tc.co_up || 'rgba(34,197,94,0.22)') : (tc.co_dn || 'rgba(239,68,68,0.22)')
+    const border = (b: ConsBox) => coColorType ? typeBorder(b.type ?? 0)
+      : !coShowBreak || b.resolveDir === 0
+        ? (tc.co_neutral_line || 'rgba(180,185,205,0.7)')
+        : b.resolveDir > 0 ? 'rgba(34,197,94,0.9)' : 'rgba(239,68,68,0.9)'
+    for (const bx of boxes) {
+      const iStart = bx.start - vs, iEnd = bx.end - vs
+      if (iEnd < 0 || iStart >= visible.length) continue
+      const rightBar = bx.resolveBar >= 0 ? bx.resolveBar : (visible.length - 1 + vs)
+      const iRight = Math.min(visible.length - 1, rightBar - vs)
+      if (iRight < iStart) continue
+      const xL = xCtr(Math.max(0, iStart)) - barW / 2
+      const xR = xCtr(iRight) + barW / 2
+      const yT = pToY(bx.hi), yB = pToY(bx.lo)
+      ctx.fillStyle = fill(bx)
+      ctx.fillRect(xL, yT, xR - xL, yB - yT)
+      // TOUCH BAND ZONES — faint shaded bands near ceiling/floor marking where touches count.
+      // Makes the percentile region the filter uses visible, and shows WHY a touch qualifies.
+      if (coTouches > 0 || coShowVals) {
+        const band = (bx.hi - bx.lo) * (coTouchBand / 100)
+        const yCeilBand = pToY(bx.hi - band), yFloorBand = pToY(bx.lo + band)
+        if (coShowTouches) {
+          ctx.fillStyle = 'rgba(250,204,21,0.07)'
+          ctx.fillRect(xL, yT, xR - xL, yCeilBand - yT)
+          ctx.fillRect(xL, yFloorBand, xR - xL, yB - yFloorBand)
+        }
+      }
+      ctx.strokeStyle = border(bx)
+      ctx.lineWidth = 1
+      ctx.strokeRect(xL, yT, xR - xL, yB - yT)
+      // TOUCH DOTS — highlight the swing pivots that fall within the touch bands. Ceiling
+      // touches = gold ring at the pivot high; floor touches = teal ring at the pivot low.
+      // These are the actual touches counted by the filter, so you can SEE the ↑N ↓N tally.
+      // TOUCH DOTS — one dot per qualifying LEG (7/14 EMA). Bull leg → red dot at its
+      // highest high (ceiling probe); bear leg → green dot at its lowest low (floor probe).
+      // Dot color is opposite the cloud direction (bull cloud = red dot, bear cloud = green
+      // dot), matching the convention. These ARE the touches counted by the filter.
+      if (coShowTouches && bx.touches) {
+        for (const t of bx.touches) {
+          const vi = t.idx - vs
+          if (vi < 0 || vi >= visible.length) continue
+          const dx = xCtr(vi), dy = pToY(t.price)
+          ctx.beginPath(); ctx.arc(dx, dy, 3.5, 0, Math.PI * 2)
+          ctx.fillStyle = t.bull ? 'rgba(239,68,68,0.95)' : 'rgba(34,197,94,0.95)'
+          ctx.fill()
+          ctx.strokeStyle = 'rgba(8,12,20,0.8)'; ctx.lineWidth = 1; ctx.stroke()
+        }
+      }
+      // SWING-POINT CHANNEL — faint connection lines through the swing highs (upper, red)
+      // and swing lows (lower, green). Flat lines = consolidation; sloped lines = trend-in-
+      // box. This is the visual the drift filter measures — turn it on to SEE why a box
+      // passed or failed the tilt test.
+      if (coShowChannel) {
+        const drawChan = (pts: { idx: number; price: number }[], stroke: string) => {
+          if (!pts || pts.length < 2) return
+          ctx.strokeStyle = stroke; ctx.lineWidth = 1.25; ctx.setLineDash([])
+          ctx.beginPath(); let started = false
+          for (const p of pts) {
+            const vi = p.idx - vs
+            if (vi < 0 || vi >= visible.length) continue
+            const dx = xCtr(vi), dy = pToY(p.price)
+            if (!started) { ctx.moveTo(dx, dy); started = true } else ctx.lineTo(dx, dy)
+          }
+          ctx.stroke()
+        }
+        drawChan(bx.highs, 'rgba(239,68,68,0.55)')
+        drawChan(bx.lows, 'rgba(34,197,94,0.55)')
+      }
+      // midpoint guide
+      ctx.strokeStyle = 'rgba(180,185,205,0.18)'
+      ctx.setLineDash([3, 4])
+      ctx.beginPath(); ctx.moveTo(xL, (yT + yB) / 2); ctx.lineTo(xR, (yT + yB) / 2); ctx.stroke()
+      ctx.setLineDash([])
+      // value label — shows the box's range in ×ATR (chart TF) and % of price, so the user
+      // can READ each box and calibrate coMaxHeight between the values to kill the tall one.
+      if (coShowVals) {
+        const mid = Math.floor((bx.start + bx.end) / 2)
+        const a = chartAtrAll[mid]
+        const rng = bx.hi - bx.lo
+        const pct = rng / ((bx.hi + bx.lo) / 2) * 100
+        const atrX = (isFinite(a) && a > 0) ? (rng / a) : NaN
+        const lbl = `R ${isFinite(atrX) ? atrX.toFixed(1) + '×ATR' : '?'} · ${pct.toFixed(1)}%${bx.ceil != null && bx.floor != null ? ` · ↑${bx.ceil} ↓${bx.floor}` : ''}${bx.channelDrift != null && bx.type != null ? ` · ${(bx.type > 0 ? '↑' : bx.type < 0 ? '↓' : '≈')}${Math.abs(bx.channelDrift).toFixed(0)}%` : ''}`
+        // pin BOTH alignment anchors — other render code leaves ctx.textAlign in a non-left
+        // state, which makes fillText glyphs drift left of their fillRect (fillRect ignores
+        // textAlign, fillText obeys it → misaligned text/background). Restore after drawing.
+        const prevAlign = ctx.textAlign, prevBase = ctx.textBaseline
+        ctx.textAlign = 'left'
+        ctx.textBaseline = 'top'
+        ctx.font = '11px ui-monospace, monospace'
+        const tw = ctx.measureText(lbl).width
+        const lblX = xL + 4
+        const lblY = yB + 4   // BELOW the box, bottom-left, outside
+        ctx.fillStyle = 'rgba(8,12,20,0.85)'
+        ctx.fillRect(lblX, lblY, tw + 8, 16)
+        ctx.fillStyle = 'rgba(215,220,235,0.95)'
+        ctx.fillText(lbl, lblX + 4, lblY + 2)
+        ctx.textAlign = prevAlign
+        ctx.textBaseline = prevBase
+      }
+    }
+  } catch (e) {
+    console.error('[renderConsolidation]', e)
   }
 }
 

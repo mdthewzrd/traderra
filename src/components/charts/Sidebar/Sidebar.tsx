@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, Component } from 'react'
 import { useUIStore, useChartStore, useWatchlistStore } from '@/stores/charts'
+import { useToolStore } from '@/stores/charts/toolStore'
 import { TabLook } from './tabs/TabLook'
 import { TabTools } from './tabs/TabTools'
 import { TabSettings } from './tabs/TabSettings'
@@ -10,6 +11,25 @@ import { TabScan } from './tabs/TabScan'
 import { TabBt } from './tabs/TabBt'
 import { TabLab } from './tabs/TabLab'
 import { TabAgent } from './tabs/TabAgent'
+
+class SidebarErrorBoundary extends Component<{
+  children: React.ReactNode
+}, { error: string | null }> {
+  state = { error: null as string | null }
+  static getDerivedStateFromError(e: any) { return { error: String(e?.message || e) } }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 12, fontSize: 11, color: '#ff6b6b', fontFamily: 'JetBrains Mono, monospace' }}>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>⚠ Sidebar Error</div>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 10 }}>{this.state.error}</pre>
+          <button onClick={() => this.setState({ error: null })} style={{ marginTop: 8, background: '#1a2030', border: '1px solid #2a3050', color: '#dde3f0', borderRadius: 4, padding: '4px 12px', cursor: 'pointer', fontSize: 11 }}>Retry</button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 /**
  * Sidebar — right-side panel with watchlist, tab navigation, and tab content.
@@ -147,15 +167,6 @@ export function Sidebar() {
     ;(window as any).sbClose = () => setSidebarOpen(false)
   }, [sidebarOpen, setSidebarOpen, setSidebarTab])
 
-  // Apply tab-active class
-  useEffect(() => {
-    const content = sbRef.current?.querySelector('#sidebar-content')
-    if (!content) return
-    content.querySelectorAll(':scope > div').forEach((d: HTMLDivElement) => {
-      d.classList.toggle('tab-active', d.id === `tab-${sidebarTab}`)
-    })
-  }, [sidebarTab])
-
   const tabs = ['look', 'tools', 'settings', 'vault', 'scan', 'bt', 'lab'] as const
   const tabLabels: Record<string, string> = { look: 'LOOK', tools: 'TOOLS', settings: 'SET', vault: 'VAULT', scan: 'SCAN', bt: 'BT', lab: 'LAB' }
 
@@ -250,7 +261,7 @@ export function Sidebar() {
             key={tab}
             className={`sb-tab${sidebarTab === tab ? ' active' : ''}`}
             data-tab={tab}
-            onClick={() => { setSidebarTab(tab); (window as any).sbTab?.(tab) }}
+            onClick={() => { setSidebarTab(tab); (window as any).sbTab?.(tab); if (tab === 'tools') useToolStore.getState().selectTool(null) }}
           >
             {tabLabels[tab] || tab.toUpperCase()}
           </div>
@@ -261,13 +272,13 @@ export function Sidebar() {
 
       {/* Tab Content — Real React components */}
       <div id="sidebar-content">
-        <TabLook />
-        <TabTools />
-        <TabSettings />
-        <TabVault />
-        <TabScan />
-        <TabBt />
-        <TabLab />
+        <div id="tab-look" className={sidebarTab === 'look' ? 'tab-active' : ''}><TabLook /></div>
+        <div id="tab-tools" className={sidebarTab === 'tools' ? 'tab-active' : ''}><TabTools /></div>
+        <div id="tab-settings" className={sidebarTab === 'settings' ? 'tab-active' : ''}><TabSettings /></div>
+        <div id="tab-vault" className={sidebarTab === 'vault' ? 'tab-active' : ''}><TabVault /></div>
+        <div id="tab-scan" className={sidebarTab === 'scan' ? 'tab-active' : ''}><TabScan /></div>
+        <div id="tab-bt" className={sidebarTab === 'bt' ? 'tab-active' : ''}><TabBt /></div>
+        <div id="tab-lab" className={sidebarTab === 'lab' ? 'tab-active' : ''}><TabLab /></div>
       </div>
 
       {/* Overlay modals — still HTML for charts-engine.js interop */}

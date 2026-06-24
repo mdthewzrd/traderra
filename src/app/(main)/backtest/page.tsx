@@ -97,6 +97,8 @@ interface ChartSettings {
   showVolume: boolean
   showCrosshair: boolean
   showLegend: boolean
+  showExecDots: boolean
+  showExecWedges: boolean
 }
 
 // Helper: get UTC minute range for morning session given a date string
@@ -136,9 +138,11 @@ const DATA_COLUMNS: DataColumnDef[] = [
       let bestBar = mb[0]
       for (const b of mb) if (b.high > bestBar.high) bestBar = b
       const d = new Date(bestBar.time * 1000)
-      const etH = (d.getUTCHours() - 5 + 24) % 12 || 12
+      const month = d.getUTCMonth() + 1
+      const etOff = (month >= 4 && month <= 10) ? 4 : 5
+      const etH = (d.getUTCHours() - etOff + 24) % 12 || 12
       const etM = d.getUTCMinutes()
-      const ampm = ((d.getUTCHours() - 5 + 24) % 24) < 12 ? 'a' : 'p'
+      const ampm = ((d.getUTCHours() - etOff + 24) % 24) < 12 ? 'a' : 'p'
       return `${etH}:${String(etM).padStart(2, '0')}${ampm}`
     }
   },
@@ -316,8 +320,12 @@ const TEAL = '#14b8a6'
 const VOL_UP = 'rgba(216,216,224,0.18)'
 const VOL_DN = 'rgba(239,68,68,0.25)'
 
-const LEFT_W = 240
-const RIGHT_W = 420
+const LEFT_W_DEFAULT = 240
+const LEFT_W_MIN = 140
+const LEFT_W_MAX = 420
+const RIGHT_W_DEFAULT = 420
+const RIGHT_W_MIN = 240
+const RIGHT_W_MAX = 600
 
 // ─── Light mode palette ──────────────────────────────────
 const LIGHT = {
@@ -362,6 +370,8 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [allBars, setAllBars] = useState<any[]>([])
+  const [bars5m, setBars5m] = useState<any[]>([])
+  const [bars15m, setBars15m] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const mouseRef = useRef<{ x: number; y: number } | null>(null)
   // Manual zoom from wheel — null means "compute default"
@@ -399,32 +409,39 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
       .then(r => r.json())
       .then(data => { setAllBars(data.bars || []); setLoading(false) })
       .catch(() => setLoading(false))
+    // Also fetch 5m + 15m bars when on 2m TF
+    if (tf === '2') {
+      const p5 = new URLSearchParams({ symbol, tf: '5' })
+      p5.set('from', fromDate.toISOString().slice(0, 10))
+      p5.set('to', toStr)
+      fetch(`/api/chart-data/bars?${p5}`)
+        .then(r => r.json())
+        .then(data => setBars5m(data.bars || []))
+        .catch(() => setBars5m([]))
+      // Fetch wider 15m range for EMA(72) warmup
+      const wideFrom = new Date(fromDate)
+      wideFrom.setDate(wideFrom.getDate() - 14)
+      const p15 = new URLSearchParams({ symbol, tf: '15' })
+      p15.set('from', wideFrom.toISOString().slice(0, 10))
+      p15.set('to', toStr)
+      fetch(`/api/chart-data/bars?${p15}`)
+        .then(r => r.json())
+        .then(data => setBars15m(data.bars || []))
+        .catch(() => setBars15m([]))
+    }
   }, [symbol, tf, date, dayOffset])
 
   // Compute visible bars — default puts D0 at right edge, manualZoom from wheel
   const visibleBars = useMemo(() => {
     if (!allBars.length) return []
 
-    // If user manually zoomed, use that
-    if (manualZoom) return allBars.slice(manualZoom.start, manualZoom.end)
-
-    // Default window width per TF
-    let defaultBars = allBars.length
-    if (tf === '1') defaultBars = Math.min(allBars.length, 390)
-    else if (tf === '2') defaultBars = Math.min(allBars.length, 195)
-    else if (tf === '5') defaultBars = Math.min(allBars.length, 156)
-    else if (tf === '15') defaultBars = Math.min(allBars.length, 104)
-    else if (tf === '60') defaultBars = Math.min(allBars.length, 98)
-    else defaultBars = Math.min(allBars.length, 120)
-
-    // Find D0 — the last bar matching signal date
-    let d0Idx = allBars.length - 1
+    // Find D0 bar index (last bar matching signal date)
+    let d0Idx = -1
     if (date) {
       for (let i = allBars.length - 1; i >= 0; i--) {
         const b = allBars[i]
         let bd = ''
         if (typeof b.time === 'number') {
-          // Convert to ET date (DST-aware)
           const utcMonth = new Date(b.time * 1000).getUTCMonth() + 1
           const etOff = (utcMonth >= 4 && utcMonth <= 10) ? -4 : -5
           const etMs = b.time * 1000 + etOff * 3600000
@@ -436,13 +453,196 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
         if (bd === date) { d0Idx = i; break }
       }
     }
-
-    // Extend past D0 by dayOffset
+    // Max bar to show: when dayOffset=0, clip to D0 only
     const bpd = tf === '1' ? 390 : tf === '2' ? 195 : tf === '5' ? 78 : tf === '15' ? 26 : tf === '60' ? 7 : 1
-    const endIdx = Math.min(allBars.length, d0Idx + dayOffset * bpd + 1)
+    const maxEnd = d0Idx >= 0 ? Math.min(allBars.length, d0Idx + dayOffset * bpd + 1) : allBars.length
+
+    // If user manually zoomed, clamp to maxEnd
+    if (manualZoom) {
+      const clampedEnd = Math.min(manualZoom.end, maxEnd)
+      const clampedStart = Math.min(manualZoom.start, clampedEnd - 10)
+      return allBars.slice(Math.max(0, clampedStart), clampedEnd)
+    }
+
+    // Default window width per TF
+    let defaultBars = allBars.length
+    if (tf === '1') defaultBars = Math.min(allBars.length, 390)
+    else if (tf === '2') defaultBars = Math.min(allBars.length, 195)
+    else if (tf === '5') defaultBars = Math.min(allBars.length, 156)
+    else if (tf === '15') defaultBars = Math.min(allBars.length, 104)
+    else if (tf === '60') defaultBars = Math.min(allBars.length, 98)
+    else defaultBars = Math.min(allBars.length, 120)
+
+    // Use pre-computed maxEnd for default view
+    const endIdx = maxEnd
     const startIdx = Math.max(0, endIdx - defaultBars)
     return allBars.slice(startIdx, endIdx)
   }, [allBars, tf, dayOffset, date, manualZoom])
+
+  // ── Pre-compute execution signal markers (zoom-independent) ──
+  const execMarkers = useMemo(() => {
+    if (!allBars.length || allBars.length <= 89) return []
+    const calcEMA = (period: number): number[] => {
+      const k = 2 / (period + 1)
+      const vals: number[] = [allBars[0].close]
+      for (let i = 1; i < allBars.length; i++) vals.push(allBars[i].close * k + vals[i - 1] * (1 - k))
+      return vals
+    }
+    const calcATR = (period: number): number[] => {
+      const tr: number[] = [allBars[0].high - allBars[0].low]
+      for (let i = 1; i < allBars.length; i++)
+        tr.push(Math.max(allBars[i].high - allBars[i].low, Math.abs(allBars[i].high - allBars[i - 1].close), Math.abs(allBars[i].low - allBars[i - 1].close)))
+      const k = 2 / (period + 1)
+      const vals: number[] = [tr[0]]
+      for (let i = 1; i < tr.length; i++) vals.push(tr[i] * k + vals[i - 1] * (1 - k))
+      return vals
+    }
+    const ema9 = calcEMA(9), ema20 = calcEMA(20), atr9 = calcATR(9), atr20 = calcATR(20)
+    const markers: { absIdx: number; y: number; color: string; shape: 'dot' | 'wedge-up' | 'wedge-down'; above: boolean; size?: number }[] = []
+    const POP_COLORS = ['#ff5252', '#fb923c', '#c084fc']
+    enum P { WAIT_TRIGGER, SCAN, POP_HIT, POP_BB, RETRACE_FILL, LOWER_HIT, COVER_CONFIRM }
+    let phase: P = P.WAIT_TRIGGER, phaseIdx = 0, entryNum = 0
+    let regime: '2m' | '5m' = '2m', trendDone = false, hadEntry = false
+
+    // ── 15m trigger: EMA(72)/ATR(72) on 15m bars, upper 6.9 dev band ──
+    const dayOf = (ts: number) => Math.floor((ts + 4 * 3600) / 86400)
+    const triggerByDay = new Map<number, number>() // dayKey → 2m bar index
+    if (bars15m.length > 89) {
+      const c15 = bars15m.map(b => b.close)
+      const k72 = 2 / 73
+      const ema72_15: number[] = [c15[0]]
+      for (let j = 1; j < c15.length; j++) ema72_15.push(c15[j] * k72 + ema72_15[j - 1] * (1 - k72))
+      const tr15: number[] = [bars15m[0].high - bars15m[0].low]
+      for (let j = 1; j < bars15m.length; j++) tr15.push(Math.max(bars15m[j].high - bars15m[j].low, Math.abs(bars15m[j].high - bars15m[j - 1].close), Math.abs(bars15m[j].low - bars15m[j - 1].close)))
+      const atr72_15: number[] = [tr15[0]]
+      for (let j = 1; j < tr15.length; j++) atr72_15.push(tr15[j] * k72 + atr72_15[j - 1] * (1 - k72))
+      const seenDays = new Set<number>()
+      for (let j = 0; j < bars15m.length; j++) {
+        const utcHour = (bars15m[j].time % 86400) / 3600
+        if (utcHour < 11.5 || utcHour >= 16) continue
+        if (ema72_15[j] == null || atr72_15[j] == null) continue
+        const dk = dayOf(bars15m[j].time)
+        if (seenDays.has(dk)) continue
+        if (bars15m[j].high >= ema72_15[j] + atr72_15[j] * 6.9) {
+          seenDays.add(dk)
+          // Map to 2m bar index
+          for (let k = 0; k < allBars.length; k++) {
+            if (allBars[k].time >= bars15m[j].time) { triggerByDay.set(dk, k); break }
+          }
+        }
+      }
+    }
+    let ema9_5m: number[] = [], atr9_5m: number[] = [], ema20_5m: number[] = [], atr20_5m: number[] = []
+    if (bars5m.length > 20) {
+      const k9 = 2 / 10, k20 = 2 / 21
+      ema9_5m = [bars5m[0].close]
+      for (let j = 1; j < bars5m.length; j++) ema9_5m.push(bars5m[j].close * k9 + ema9_5m[j - 1] * (1 - k9))
+      ema20_5m = [bars5m[0].close]
+      for (let j = 1; j < bars5m.length; j++) ema20_5m.push(bars5m[j].close * k20 + ema20_5m[j - 1] * (1 - k20))
+      const tr5: number[] = [bars5m[0].high - bars5m[0].low]
+      for (let j = 1; j < bars5m.length; j++) tr5.push(Math.max(bars5m[j].high - bars5m[j].low, Math.abs(bars5m[j].high - bars5m[j - 1].close), Math.abs(bars5m[j].low - bars5m[j - 1].close)))
+      atr9_5m = [tr5[0]]
+      for (let j = 1; j < tr5.length; j++) atr9_5m.push(tr5[j] * k9 + atr9_5m[j - 1] * (1 - k9))
+      atr20_5m = [tr5[0]]
+      for (let j = 1; j < tr5.length; j++) atr20_5m.push(tr5[j] * k20 + atr20_5m[j - 1] * (1 - k20))
+    }
+    const get5mIdx = (ts: number): number => {
+      for (let j = bars5m.length - 1; j >= 0; j--) { if (bars5m[j].time <= ts) return j }
+      return -1
+    }
+    // Reset phase state at each new trading day so each day gets independent signal detection
+    let lastDay = -1
+    for (let i = 1; i < allBars.length; i++) {
+      const day = dayOf(allBars[i].time || 0)
+      if (day !== lastDay) {
+        lastDay = day
+        phase = P.WAIT_TRIGGER; phaseIdx = i; entryNum = 0; regime = '2m'
+        trendDone = false; hadEntry = false
+      }
+      const utcHour = ((allBars[i].time || 0) % 86400) / 3600
+      if (utcHour < 11.5 || utcHour >= 16) continue
+      if (ema9[i] == null || atr9[i] == null || ema20[i] == null || atr20[i] == null) continue
+      if (phase === P.WAIT_TRIGGER) {
+        const trigIdx = triggerByDay.get(day)
+        if (trigIdx != null && i >= trigIdx) {
+          markers.push({ absIdx: i, y: allBars[i].high, color: '#ff0', shape: 'dot', above: true, size: 5 })
+          phase = P.SCAN; phaseIdx = i
+        }
+        continue
+      }
+      const upper05_2m = ema9[i]! + atr9[i]! * 0.5
+      const lower20_2m = ema20[i]! - atr20[i]! * 2.0
+      const retr42_2m = ema9[i]! + atr9[i]! * 0.42
+      const j5 = get5mIdx(allBars[i].time || 0)
+      let upper05_5m = Infinity, lower20_5m = -Infinity, lower10_5m = -Infinity
+      if (j5 >= 0 && ema9_5m[j5] != null && atr9_5m[j5] != null) {
+        upper05_5m = ema9_5m[j5] + atr9_5m[j5] * 0.5
+        lower20_5m = ema20_5m[j5] - atr20_5m[j5] * 2.0
+        lower10_5m = ema20_5m[j5] - atr20_5m[j5] * 1.0
+      }
+      if (hadEntry && lower10_5m > -Infinity && allBars[i].low <= lower10_5m && !trendDone) {
+        trendDone = true
+        markers.push({ absIdx: i, y: allBars[i].low, color: '#f87171', shape: 'dot', above: false })
+      }
+      if (trendDone) continue
+      const upper05 = regime === '5m' ? upper05_5m : upper05_2m
+      const lower20 = lower20_2m
+      const retr42 = regime === '5m' ? (j5 >= 0 && ema9_5m[j5] != null ? ema9_5m[j5] + atr9_5m[j5] * 0.42 : retr42_2m) : retr42_2m
+      if (phase === P.SCAN) {
+        if (allBars[i].high >= upper05) {
+          const c = regime === '5m' ? '#ff79c6' : POP_COLORS[0]
+          markers.push({ absIdx: i, y: allBars[i].high, color: c, shape: 'dot', above: true })
+          phase = P.POP_HIT; phaseIdx = i; entryNum = 0
+        }
+      }
+      else if (phase === P.POP_HIT) {
+        if (allBars[i].low < allBars[i - 1].low) {
+          markers.push({ absIdx: i, y: allBars[i].low, color: '#ffffff', shape: 'dot', above: false })
+          phase = P.POP_BB; phaseIdx = i
+        }
+        else if (allBars[i].high >= upper05) { phaseIdx = i }
+        else if (i - phaseIdx > 15) { phase = P.SCAN; entryNum = 0 }
+      }
+      else if (phase === P.POP_BB) {
+        if (allBars[i].high >= retr42) {
+          markers.push({ absIdx: i, y: allBars[i].high, color: '#fbbf24', shape: 'dot', above: true })
+          markers.push({ absIdx: i, y: retr42, color: '#ff3333', shape: 'wedge-down', above: true })
+          phase = P.RETRACE_FILL; phaseIdx = i; hadEntry = true
+        }
+        else if (i - phaseIdx > 20) { phase = P.SCAN; entryNum = 0 }
+      }
+      else if (phase === P.RETRACE_FILL) {
+        if (allBars[i].low <= lower20) {
+          markers.push({ absIdx: i, y: allBars[i].low, color: '#4ade80', shape: 'dot', above: false })
+          phase = P.LOWER_HIT; phaseIdx = i
+        }
+        else if (lower20_5m > -Infinity && allBars[i].low <= lower20_5m * 1.02) {
+          markers.push({ absIdx: i, y: allBars[i].low, color: '#60a5fa', shape: 'dot', above: false })
+          phase = P.SCAN; entryNum = 0; regime = '5m'
+        }
+        else if (entryNum < 2 && allBars[i].high >= upper05) {
+          entryNum++
+          const c = POP_COLORS[entryNum]
+          markers.push({ absIdx: i, y: allBars[i].high, color: c, shape: 'dot', above: true })
+          phase = P.POP_HIT; phaseIdx = i
+        }
+        else if (i - phaseIdx > 20) { phase = P.SCAN; entryNum = 0 }
+      }
+      else if (phase === P.LOWER_HIT) {
+        if (allBars[i].high >= upper05) {
+          entryNum = 0; regime = '5m'
+          markers.push({ absIdx: i, y: allBars[i].high, color: '#ff79c6', shape: 'dot', above: true })
+          phase = P.POP_HIT; phaseIdx = i
+        }
+        else if (allBars[i].high > allBars[i - 1].high) {
+          markers.push({ absIdx: i, y: allBars[i].low, color: '#00e676', shape: 'wedge-up', above: false })
+          phase = P.SCAN; entryNum = 0
+        }
+        else if (i - phaseIdx > 40) { phase = P.SCAN; entryNum = 0 }
+      }
+    }
+    return markers
+  }, [allBars, bars5m, bars15m])
 
   const draw = useCallback(() => {
     const bars = visibleBars
@@ -562,7 +762,9 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
       const getBarMinET = (b: any): number | null => {
         if (typeof b.time === 'number') {
           const d = new Date(b.time * 1000)
-          const h = d.getUTCHours() - 5
+          const month = d.getUTCMonth() + 1
+          const etOff = (month >= 4 && month <= 10) ? 4 : 5
+          const h = d.getUTCHours() - etOff
           const m = d.getUTCMinutes()
           return h * 60 + m
         }
@@ -796,38 +998,29 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
       }
 
       // ── Legend ──
-      // ── Exec Signals: entry/cover/stop markers (2m only) ──
-      if (tf !== 'D' && ema9 && ema20 && atr9) {
-        const execSigs = calcExecSignals(bars, ema9, ema20, atr9)
-        for (const sig of execSigs) {
-          const vi = sig.barIdx
-          if (vi < 0 || vi >= bars.length) continue
-          const x = xFor(vi)
-          const y = yFor(sig.price)
-          const sz = 6
-          if (sig.type === 'entry') {
-            // ▼ Short wedge (red)
+      // ── Execution signals (render pre-computed markers) ──
+      if (execMarkers.length) {
+        const startAbsIdx = allBars.findIndex(b => b.time === bars[0]?.time)
+        for (const m of execMarkers) {
+          const relIdx = m.absIdx - startAbsIdx
+          if (relIdx < 0 || relIdx >= bars.length) continue
+          const x = xFor(relIdx)
+          const y = yFor(m.y)
+          if (m.shape === 'dot' && settings.showExecDots) {
             ctx.beginPath()
-            ctx.moveTo(x, y + sz + 2); ctx.lineTo(x - sz, y - sz + 2); ctx.lineTo(x + sz, y - sz + 2)
-            ctx.closePath(); ctx.fillStyle = '#ff5252'; ctx.fill()
-            // Stop line above
-            if (sig.stopPrice) {
-              const sy = yFor(sig.stopPrice)
-              ctx.strokeStyle = '#facc15'; ctx.lineWidth = 1.2; ctx.setLineDash([3, 2])
-              ctx.beginPath(); ctx.moveTo(x - barW * 3, sy); ctx.lineTo(x + barW * 3, sy); ctx.stroke()
-              ctx.setLineDash([])
-            }
-          } else if (sig.type === 'cover-recycle' || sig.type === 'cover-full') {
-            // ▲ Cover wedge (green)
+            ctx.arc(x, m.above ? y - 6 : y + 6, m.size || 3.5, 0, Math.PI * 2)
+            ctx.fillStyle = m.color
+            ctx.fill()
+          } else if (m.shape === 'wedge-up' && settings.showExecWedges) {
+            const sz = 6
             ctx.beginPath()
             ctx.moveTo(x, y - sz - 2); ctx.lineTo(x - sz, y + sz - 2); ctx.lineTo(x + sz, y + sz - 2)
-            ctx.closePath()
-            ctx.fillStyle = sig.type === 'cover-recycle' ? '#4ade80' : '#00e676'
-            ctx.fill()
-          } else if (sig.type === 'stop') {
-            // ■ Stop hit line (yellow)
-            ctx.strokeStyle = '#facc15'; ctx.lineWidth = 1.5
-            ctx.beginPath(); ctx.moveTo(x - barW * 2, y); ctx.lineTo(x + barW * 2, y); ctx.stroke()
+            ctx.closePath(); ctx.fillStyle = m.color; ctx.fill()
+          } else if (m.shape === 'wedge-down' && settings.showExecWedges) {
+            const sz = 6
+            ctx.beginPath()
+            ctx.moveTo(x, y + sz + 2); ctx.lineTo(x - sz, y - sz + 2); ctx.lineTo(x + sz, y - sz + 2)
+            ctx.closePath(); ctx.fillStyle = m.color; ctx.fill()
           }
         }
       }
@@ -846,47 +1039,94 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
       ctx.fillStyle = `${GOLD}80`; ctx.font = '9px monospace'; ctx.textAlign = 'right'
       ctx.fillText(`${visibleBars.length}/${allBars.length}`, W - PAD_R - 4, 12)
     }
-  }, [visibleBars, allBars.length, tf, date, settings, dark, GOLD])
+  }, [visibleBars, allBars.length, tf, date, settings, dark, GOLD, execMarkers])
 
   useEffect(() => { draw() }, [draw])
 
   // Wheel zoom
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault()
-    if (!allBars.length) return
-    // Derive current visible range
-    const firstBarTime = visibleBars[0]?.time
-    const curS = firstBarTime != null ? Math.max(0, allBars.findIndex(b => b.time === firstBarTime)) : 0
-    const curE = curS + visibleBars.length
-    const visible = curE - curS
-    const zoomAmount = Math.max(2, Math.round(visible * 0.1))
-
-    let newStart: number, newEnd: number
-    if (e.deltaY < 0) {
-      const newVisible = Math.max(10, visible - zoomAmount)
-      const rect = canvasRef.current?.getBoundingClientRect()
-      const mouseX = rect ? (e.clientX - rect.left) / (rect.width - 54) : 0.5
-      const center = curS + Math.round(visible * mouseX)
-      const half = Math.round(newVisible / 2)
-      newStart = Math.max(0, center - half)
-      newEnd = Math.min(allBars.length, newStart + newVisible)
-      newStart = Math.max(0, newEnd - newVisible)
-    } else {
-      const newVisible = Math.min(allBars.length, visible + zoomAmount)
-      const center = Math.round((curS + curE) / 2)
-      const half = Math.round(newVisible / 2)
-      newStart = Math.max(0, center - half)
-      newEnd = Math.min(allBars.length, newStart + newVisible)
-    }
-    setManualZoom({ start: newStart, end: newEnd })
-  }, [allBars, visibleBars])
+  // ── Drag-to-pan state ──
+  const dragRef = useRef<{ startX: number; startIdx: number } | null>(null)
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current?.getBoundingClientRect()
     if (!rect) return
+    // If dragging, pan the chart
+    if (dragRef.current) {
+      const dx = e.clientX - dragRef.current.startX
+      const barsPerPx = visibleBars.length / (rect.width - 54)
+      const shift = Math.round(dx * barsPerPx)
+      const firstBarTime = visibleBars[0]?.time
+      const curS = firstBarTime != null ? Math.max(0, allBars.findIndex(b => b.time === firstBarTime)) : 0
+      const vis = visibleBars.length
+      let newStart = Math.max(0, Math.min(allBars.length - vis, dragRef.current.startIdx - shift))
+      // Clamp to not go past D0 if dayOffset=0
+      if (dayOffset === 0 && date) {
+        let d0End = -1
+        for (let i = allBars.length - 1; i >= 0; i--) {
+          const b = allBars[i]
+          let bd = typeof b.time === "number" ? (() => { const d = new Date(b.time * 1000); const m = d.getUTCMonth()+1; const off = (m>=4&&m<=10)?-4:-5; const ed = new Date(b.time*1000+off*3600000); return isNaN(ed.getTime())?"":ed.toISOString().slice(0,10) })() : typeof b.time === "string" ? b.time.slice(0,10) : ""
+          if (bd === date) { d0End = i + 1; break }
+        }
+        if (d0End > 0 && newStart + vis > d0End) newStart = Math.max(0, d0End - vis)
+      }
+      setManualZoom({ start: newStart, end: newStart + vis })
+      return
+    }
     mouseRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top }; draw()
   }
-  const handleMouseLeave = () => { mouseRef.current = null; draw() }
+  const handleMouseLeave = () => { mouseRef.current = null; dragRef.current = null; draw() }
+
+  // ── Non-passive wheel listener + mouse handlers via ref ──
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      if (!allBars.length) return
+      const firstBarTime = visibleBars[0]?.time
+      const curS = firstBarTime != null ? Math.max(0, allBars.findIndex(b => b.time === firstBarTime)) : 0
+      const curE = curS + visibleBars.length
+      const visible = curE - curS
+      const zoomAmount = Math.max(2, Math.round(visible * 0.1))
+      let newStart: number, newEnd: number
+      if (e.deltaY < 0) {
+        const newVisible = Math.max(10, visible - zoomAmount)
+        const rect = canvas.getBoundingClientRect()
+        const mouseX = rect ? (e.clientX - rect.left) / (rect.width - 54) : 0.5
+        const center = curS + Math.round(visible * mouseX)
+        const half = Math.round(newVisible / 2)
+        newStart = Math.max(0, center - half)
+        newEnd = Math.min(allBars.length, newStart + newVisible)
+        newStart = Math.max(0, newEnd - newVisible)
+      } else {
+        const newVisible = Math.min(allBars.length, visible + zoomAmount)
+        const center = Math.round((curS + curE) / 2)
+        const half = Math.round(newVisible / 2)
+        newStart = Math.max(0, center - half)
+        newEnd = Math.min(allBars.length, newStart + newVisible)
+      }
+      setManualZoom({ start: newStart, end: newEnd })
+    }
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return
+      const firstBarTime = visibleBars[0]?.time
+      const curS = firstBarTime != null ? Math.max(0, allBars.findIndex(b => b.time === firstBarTime)) : 0
+      dragRef.current = { startX: e.clientX, startIdx: curS }
+      canvas.style.cursor = 'grabbing'
+    }
+    const onMouseUp = () => {
+      dragRef.current = null
+      if (canvas) canvas.style.cursor = 'crosshair'
+    }
+    canvas.addEventListener('wheel', onWheel, { passive: false })
+    canvas.addEventListener('mousedown', onMouseDown)
+    window.addEventListener('mouseup', onMouseUp)
+    return () => {
+      canvas.removeEventListener('wheel', onWheel)
+      canvas.removeEventListener('mousedown', onMouseDown)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [allBars, visibleBars])
   const tfLabel = tf === '1' ? '1m' : tf === '2' ? '2m' : tf === '5' ? '5m' : tf === '15' ? '15m' : tf === '60' ? '1H' : '1D'
   const Th = dark
     ? { bg: BG, surface: SURFACE, border: BORDER, muted: MUTED }
@@ -904,7 +1144,6 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
         </div>
       ) : (
         <canvas ref={canvasRef} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave}
-          onWheel={handleWheel}
           style={{ width: '100%', height, display: 'block', cursor: 'crosshair' }} />
       )}
     </div>
@@ -1325,6 +1564,8 @@ export default function BacktestPage() {
   const [showRunModal, setShowRunModal] = useState(false)
   const [showExec, setShowExec] = useState(false)
   const [activeExec, setActiveExec] = useState<string>('pop-short')
+  const [showExecDots, setShowExecDots] = useState(true)
+  const [showExecWedges, setShowExecWedges] = useState(true)
   const [selectedRun, setSelectedRun] = useState<string>('r1')
   const [chatInput, setChatInput] = useState('')
   const [chatMessages, setChatMessages] = useState<{ role: string; content: string }[]>([])
@@ -1333,6 +1574,7 @@ export default function BacktestPage() {
     showEma9_20: true, showEma72_89: true, showDevBands: true,
     showVwap: true, showPrevClose: true, showAhPmShade: true,
     showVolume: true, showCrosshair: true, showLegend: true,
+    showExecDots: true, showExecWedges: true,
   })
   const [dark, setDark] = useState(true)
   const [dayOffset, setDayOffset] = useState(0)
@@ -1347,6 +1589,8 @@ export default function BacktestPage() {
   const [visibleFilters, setVisibleFilters] = useState<Set<string>>(new Set())
   const [showFilterMenu, setShowFilterMenu] = useState(false)
   const [hideFilters, setHideFilters] = useState<Set<string>>(new Set())
+  const [leftW, setLeftW] = useState(LEFT_W_DEFAULT)
+  const [rightW, setRightW] = useState(RIGHT_W_DEFAULT)
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set())
   const [routeStarts, setRouteStarts] = useState<Set<string>>(new Set())
   const DEFAULT_WIDTHS: Record<string, number> = { ticker: 56, date: 68, rs: 44, grade: 32, gap: 44, d0: 40, abs: 40 }
@@ -1867,10 +2111,29 @@ export default function BacktestPage() {
     return () => window.removeEventListener('keydown', handler)
   }, [selectedIdx, signals.length])
 
+  // ── Panel resize ──
+  const panelResizingRef = useRef<{ side: 'left' | 'right'; startX: number; startW: number } | null>(null)
+  const onResizeDown = (side: 'left' | 'right', e: React.MouseEvent) => {
+    e.preventDefault()
+    panelResizingRef.current = { side, startX: e.clientX, startW: side === 'left' ? leftW : rightW }
+    const onMove = (ev: MouseEvent) => {
+      if (!panelResizingRef.current) return
+      const dx = ev.clientX - panelResizingRef.current.startX
+      if (panelResizingRef.current.side === 'left') {
+        setLeftW(Math.max(LEFT_W_MIN, Math.min(LEFT_W_MAX, panelResizingRef.current.startW + dx)))
+      } else {
+        setRightW(Math.max(RIGHT_W_MIN, Math.min(RIGHT_W_MAX, panelResizingRef.current.startW - dx)))
+      }
+    }
+    const onUp = () => { panelResizingRef.current = null; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
   // ─── Left Sidebar: Scans (top) + Runs (bottom) ────
   const renderLeftSidebar = () => (
     <div style={{
-      width: LEFT_W, minWidth: LEFT_W, maxWidth: LEFT_W,
+      width: leftW, minWidth: leftW, maxWidth: leftW,
       background: T.SURFACE, borderRight: `1px solid ${T.BORDER}`,
       display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)',
       position: 'sticky', top: 48,
@@ -1967,7 +2230,7 @@ export default function BacktestPage() {
     const activeFilterDefs = FILTERS.filter(f => visibleFilters.has(f.key))
     return (
     <div style={{
-      width: RIGHT_W, minWidth: RIGHT_W, maxWidth: RIGHT_W,
+      width: rightW, minWidth: rightW, maxWidth: rightW,
       background: T.SURFACE, borderLeft: `1px solid ${T.BORDER}`,
       display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)',
       position: 'sticky', top: 48,
@@ -2336,7 +2599,7 @@ export default function BacktestPage() {
                     padding: '2px 12px', borderRadius: 3, fontSize: 10, fontWeight: 600,
                     background: tf === t ? T.GOLD : T.SURFACE, color: tf === t ? '#000' : T.MUTED,
                     border: `1px solid ${tf === t ? T.GOLD : T.BORDER}`,
-                  }}>{t === '5' ? '5m' : t === '15' ? '15m' : t === '60' ? '1H' : '1D'}</button>
+                  }}>{t === '1' ? '1m' : t === '2' ? '2m' : t === '5' ? '5m' : t === '15' ? '15m' : t === '60' ? '1H' : '1D'}</button>
                 ))}
               </div>
             )}
@@ -2370,6 +2633,22 @@ export default function BacktestPage() {
 
             <div style={{ width: 1, height: 18, background: T.BORDER }} />
 
+            {/* Exec toggles */}
+            <button onClick={() => setChartSettings(s => ({ ...s, showExecDots: !s.showExecDots }))} title="Exec Dots" style={{
+              padding: '3px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600,
+              background: chartSettings.showExecDots ? '#4ade80' : T.SURFACE, color: chartSettings.showExecDots ? '#000' : T.MUTED,
+              border: `1px solid ${chartSettings.showExecDots ? '#4ade80' : T.BORDER}`,
+              display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer',
+            }}>Dots</button>
+            <button onClick={() => setChartSettings(s => ({ ...s, showExecWedges: !s.showExecWedges }))} title="Exec Wedges" style={{
+              padding: '3px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600,
+              background: chartSettings.showExecWedges ? '#f87171' : T.SURFACE, color: chartSettings.showExecWedges ? '#000' : T.MUTED,
+              border: `1px solid ${chartSettings.showExecWedges ? '#f87171' : T.BORDER}`,
+              display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer',
+            }}>Wedges</button>
+
+            <div style={{ width: 1, height: 18, background: T.BORDER }} />
+
             {/* Settings */}
             <div style={{ position: 'relative' }}>
               <button onClick={() => setShowSettings(v => !v)} title="Chart Settings" style={{
@@ -2396,6 +2675,8 @@ export default function BacktestPage() {
                     ['showVolume', 'Volume Bars'],
                     ['showCrosshair', 'Crosshair on Hover'],
                     ['showLegend', 'Legend'],
+                    ['showExecDots', 'Exec Dots'],
+                    ['showExecWedges', 'Exec Wedges'],
                   ] as [keyof ChartSettings, string][]).map(([key, label]) => (
                     <label key={key} className="flex items-center justify-between" style={{ padding: '4px 0', cursor: 'pointer' }}>
                       <span style={{ color: T.TEXT2, fontSize: 11 }}>{label}</span>
@@ -2538,7 +2819,21 @@ export default function BacktestPage() {
       {/* Body */}
       <div style={{ display: 'flex', flex: 1 }}>
         {renderLeftSidebar()}
+        {/* Left resize handle */}
+        <div
+          onMouseDown={(e) => onResizeDown('left', e)}
+          style={{ width: 4, cursor: 'col-resize', background: 'transparent', flexShrink: 0, transition: 'background 0.15s', zIndex: 10 }}
+          onMouseOver={(e) => { (e.target as HTMLDivElement).style.background = T.BORDER }}
+          onMouseOut={(e) => { (e.target as HTMLDivElement).style.background = 'transparent' }}
+        />
         {renderCenter()}
+        {/* Right resize handle */}
+        <div
+          onMouseDown={(e) => onResizeDown('right', e)}
+          style={{ width: 4, cursor: 'col-resize', background: 'transparent', flexShrink: 0, transition: 'background 0.15s', zIndex: 10 }}
+          onMouseOver={(e) => { (e.target as HTMLDivElement).style.background = T.BORDER }}
+          onMouseOut={(e) => { (e.target as HTMLDivElement).style.background = 'transparent' }}
+        />
         {renderRightSidebar()}
       </div>
 

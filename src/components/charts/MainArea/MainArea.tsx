@@ -5,6 +5,7 @@
  * Supports 1, 2, or 4 panel layouts.
  */
 
+import { useRef, useState, Fragment, Children, type ReactNode, type CSSProperties, type MouseEvent as RMouseEvent } from 'react'
 import { ReactChartPanel } from '@/components/charts/ChartCanvas/ReactChartPanel'
 import { useUIStore } from '@/stores/charts/uiStore'
 
@@ -106,10 +107,104 @@ const BT_SIDEBAR_HTML = `
 </div>
 `
 
+// Horizontal multi-panel stack. Each panel starts at full container width (so you scroll
+// sideways to the next chart); drag the divider to resize the panel on its left.
+function HStack({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [sizes, setSizes] = useState<number[]>(() => Array(Children.count(children)).fill(1))
+  const drag = useRef<{ i: number; x0: number; w0: number } | null>(null)
+
+  const move = (e: MouseEvent) => {
+    const d = drag.current
+    if (!d || !ref.current) return
+    const cw = ref.current.clientWidth || 1
+    const dx = (e.clientX - d.x0) / cw
+    setSizes(prev => { const next = [...prev]; next[d.i] = Math.max(0.15, Math.min(3, d.w0 + dx)); return next })
+  }
+  const up = () => {
+    drag.current = null
+    window.removeEventListener('mousemove', move)
+    window.removeEventListener('mouseup', up)
+    document.body.style.cursor = ''
+  }
+  const onDown = (i: number) => (e: RMouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    drag.current = { i, x0: e.clientX, w0: sizes[i] }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', up)
+    document.body.style.cursor = 'col-resize'
+  }
+
+  return (
+    <div ref={ref} style={{ display: 'flex', flex: 1, minHeight: 0, overflowX: 'auto' }}>
+      {Children.toArray(children).map((child, i) => (
+        <Fragment key={i}>
+          {i > 0 && (
+            <div
+              onMouseDown={onDown(i - 1)}
+              title="Drag to resize"
+              style={{ flex: '0 0 6px', width: 6, cursor: 'col-resize', background: '#11151f', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 6 }}
+            >
+              <div style={{ width: 2, height: 36, borderRadius: 2, background: '#3a4258' }} />
+            </div>
+          )}
+          <div style={{ width: `${sizes[i] * 100}%`, flex: '0 0 auto', minWidth: 0, minHeight: 0, display: 'flex' }}>{child}</div>
+        </Fragment>
+      ))}
+    </div>
+  )
+}
+
 export function MainArea() {
   const activeLayout = useUIStore(s => s.activeLayout)
   const fullscreenPanel = useUIStore(s => s.fullscreenPanel)
   const sidebarOpen = useUIStore(s => s.sidebarOpen)
+  const activePanel = useUIStore(s => s.activePanel)
+  const setActivePanel = useUIStore(s => s.setActivePanel)
+
+  // Render one panel wrapped in a clickable 'active' container. Clicking sets it as the
+  // target for toolbar actions (template apply, etc.). Active panel gets a blue outline.
+  const renderP = (idx: number, wrapperStyle: CSSProperties = {}) => (
+    <div
+      key={idx}
+      onClick={() => setActivePanel(idx)}
+      style={{
+        flex: 1, minWidth: 0, minHeight: 0, position: 'relative',
+        display: 'flex', flexDirection: 'column',
+        outline: activePanel === idx ? '2px solid #D4AF37' : '1px solid #1a1f2e',
+        outlineOffset: -2,
+        ...wrapperStyle,
+      }}
+    >
+      <ReactChartPanel panelIdx={idx} />
+    </div>
+  )
+
+  // Layout body — 5 modes. Stacked modes (2v/3v) scroll vertically for multi-view.
+  let body: React.ReactNode
+  if (activeLayout === '2h') {
+    body = <HStack key="h2">{renderP(0)}{renderP(1)}</HStack>
+  } else if (activeLayout === '3h') {
+    body = <HStack key="h3">{renderP(0)}{renderP(1)}{renderP(2)}</HStack>
+  } else if (activeLayout === '2v') {
+    body = (
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        {renderP(0, { flex: '0 0 100%' })}
+        {renderP(1, { flex: '0 0 100%' })}
+      </div>
+    )
+  } else if (activeLayout === '3v') {
+    body = (
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        {renderP(0, { flex: '0 0 100%' })}
+        {renderP(1, { flex: '0 0 100%' })}
+        {renderP(2, { flex: '0 0 100%' })}
+      </div>
+    )
+  } else {
+    body = <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>{renderP(0)}</div>
+  }
 
   const maStyle = (extra: React.CSSProperties = {}): React.CSSProperties => ({
     flex: 1,
@@ -130,35 +225,9 @@ export function MainArea() {
     )
   }
 
-  if (activeLayout === 2) {
-    return (
-      <div id="main-area" style={maStyle({ display: 'flex', flexDirection: 'column' })}>
-        <div style={{ flex: 1, minHeight: 0 }}>
-          <ReactChartPanel panelIdx={0} />
-        </div>
-        <div style={{ flex: 1, minHeight: 0 }}>
-          <ReactChartPanel panelIdx={1} />
-        </div>
-        <div style={{ display: 'none' }} dangerouslySetInnerHTML={{ __html: BT_SIDEBAR_HTML }} />
-      </div>
-    )
-  }
-
-  if (activeLayout === 4) {
-    return (
-      <div id="main-area" style={maStyle({ display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', gap: 2 })}>
-        <ReactChartPanel panelIdx={0} />
-        <ReactChartPanel panelIdx={1} />
-        <ReactChartPanel panelIdx={2} />
-        <ReactChartPanel panelIdx={3} />
-        <div style={{ display: 'none' }} dangerouslySetInnerHTML={{ __html: BT_SIDEBAR_HTML }} />
-      </div>
-    )
-  }
-
   return (
     <div id="main-area" style={maStyle({ display: 'flex' })}>
-      <ReactChartPanel panelIdx={0} />
+      {body}
       <div dangerouslySetInnerHTML={{ __html: BT_SIDEBAR_HTML }} />
     </div>
   )

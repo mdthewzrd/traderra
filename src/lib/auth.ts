@@ -37,6 +37,7 @@ export const auth = betterAuth({
       'http://localhost:6565',
       'http://localhost:3000',
       'http://localhost:3199',
+      'http://100.118.174.102:6565',
     ],
     credentials: true,
   },

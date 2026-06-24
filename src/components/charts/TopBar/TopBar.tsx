@@ -1,34 +1,50 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { useUIStore, useChartStore, useDrawingStore } from '@/stores/charts'
+import { useUIStore, useChartStore } from '@/stores/charts'
 import { ProfileIcon } from '@/app/charts/ChartsTerminal'
-import { useToolStore } from '@/stores/charts/toolStore'
 import { ChartDateNav } from './ChartDateNav'
 
+const GOLD = '#D4AF37'
+
+/** Shared button style — compact gold-tinted */
+const tb: React.CSSProperties = {
+  background: 'transparent',
+  border: '1px solid rgba(212,175,55,0.35)',
+  borderRadius: 3,
+  cursor: 'pointer',
+  fontSize: 13,
+  fontWeight: 700,
+  padding: '2px 8px',
+  fontFamily: 'JetBrains Mono, monospace',
+  color: 'rgba(212,175,55,0.75)',
+  letterSpacing: 0.3,
+  transition: 'all 0.15s',
+  lineHeight: '18px',
+}
+
+const tbActive: React.CSSProperties = {
+  ...tb,
+  background: `${GOLD}18`,
+  borderColor: GOLD,
+  color: GOLD,
+}
+
 /**
- * TopBar — the main toolbar at the top of the charts terminal.
- * Matches the original HTML topbar exactly.
+ * TopBar — site-level nav only.
+ * Chart-specific controls (date, OHLCV, FROM/TO) live in the chart panel.
+ * [Brand | Symbol ▶ LIVE ... spacer ... TPL | Theme | ⟳ | Profile]
  */
 
 export function TopBar() {
   const [symInput, setSymInput] = useState('AAPL')
-
   const chartSymbol = useChartStore((s) => s.symbol)
   const setChartSymbol = useChartStore((s) => s.setSymbol)
   const liveMode = useUIStore((s) => s.liveMode)
   const setLiveMode = useUIStore((s) => s.setLiveMode)
-  const showPriceLine = useUIStore((s) => s.showPriceLine)
-  const setShowPriceLine = useUIStore((s) => s.setShowPriceLine)
-  const useAdjusted = useUIStore((s) => s.useAdjusted)
-  const setUseAdjusted = useUIStore((s) => s.setUseAdjusted)
-  const cleanPrints = useUIStore((s) => s.cleanPrints)
-  const setCleanPrints = useUIStore((s) => s.setCleanPrints)
   const activeLayout = useUIStore((s) => s.activeLayout)
   const setActiveLayout = useUIStore((s) => s.setActiveLayout)
-  const setSidebarTab = useUIStore((s) => s.setSidebarTab)
-  const sidebarOpen = useUIStore((s) => s.sidebarOpen)
-  const setSidebarOpen = useUIStore((s) => s.setSidebarOpen)
+  const setPanelTf = useChartStore((s) => s.setPanelTf)
 
   const handleLoadSymbol = useCallback(() => {
     const sym = symInput.trim().toUpperCase()
@@ -38,21 +54,11 @@ export function TopBar() {
     ;(window as any).loadChart?.(sym)
   }, [symInput, setChartSymbol])
 
-  // Sync symbol input when chart symbol changes
   useEffect(() => { setSymInput(chartSymbol) }, [chartSymbol])
 
   return (
-    <div id="topbar">
+    <div id="topbar" style={{ flexWrap: 'nowrap', overflow: 'visible' }}>
       <span id="logo">TRADERRA</span>
-      <div className="sep" />
-
-      {/* Watchlist toggle */}
-      <button
-        className="tbtn"
-        id="wl-toggle"
-        style={{ borderColor: '#6878a8!important', color: '#6878a8!important' }}
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-      >📋</button>
 
       <input
         id="symbol-input"
@@ -62,159 +68,58 @@ export function TopBar() {
         onChange={(e) => setSymInput(e.target.value.toUpperCase())}
         onKeyDown={(e) => e.key === 'Enter' && handleLoadSymbol()}
       />
-      <button className="tbtn" id="load-btn" onClick={handleLoadSymbol}>▶ LOAD</button>
+      <button style={tb} onClick={handleLoadSymbol}>▶</button>
       <button
-        className={`tbtn${liveMode ? ' active' : ''}`}
-        id="live-btn"
+        style={liveMode ? tbActive : tb}
         onClick={() => setLiveMode(!liveMode)}
       >⬤ LIVE</button>
-
-      <ChartDateNav />
-
-      <div className="sep" />
-
-      {/* DRAW dropdown */}
-      <Dropdown id="draw" label="✏ DRAW ▾">
-        <DropdownToolButton emoji="✏" label="Line" tool="trendline" />
-        <DropdownToolButton emoji="〰" label="Fib Retracement" tool="fib_ret" color="#a78bfa" />
-        <DropdownToolButton emoji="▣" label="Orange Box" tool="box_orange" />
-        <DropdownToolButton emoji="▣" label="Yellow Box" tool="box_yellow" />
-        <DropdownToolButton emoji="T" label="Orange Text" tool="text_orange" />
-        <DropdownToolButton emoji="T" label="Yellow Text" tool="text_yellow" />
-        <DropdownSep />
-        <span style={{ fontSize: 8, color: '#3a4560', padding: '2px 6px' }}>HIGHLIGHT:</span>
-        <DropdownToolButton emoji="■" label="Cyan" tool="hl_cyan" color="#22d3ee" stayOpen />
-        <DropdownToolButton emoji="■" label="Magenta" tool="hl_magenta" color="#e879f9" stayOpen />
-        <DropdownToolButton emoji="■" label="Green" tool="hl_green" color="#4ade80" stayOpen />
-        <DropdownToolButton emoji="■" label="White" tool="hl_white" color="#cbd5e1" stayOpen />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 6px' }}>
-          <span style={{ fontSize: 8, color: '#3a4560' }}>OP:</span>
-          <input id="hl-opacity" type="range" min={5} max={80} defaultValue={35} style={{ width: 60, height: 14, accentColor: '#22d3ee', cursor: 'pointer' }} />
-          <span id="hl-opacity-val" style={{ fontSize: 11, color: '#4a6080' }}>15%</span>
-        </div>
-        <DropdownSep />
-        <DropdownToolButton emoji="✎" label="Edit" tool="edit" color="#fbbf24" />
-        <DropdownToolButton emoji="🗑" label="Delete" tool="del" color="#ff3d57" />
+      {/* Layout buttons — tiny grid icons. '2h' defaults to 1H/4H side-by-side. */}
+      {([
+        ['single', [[1]], 'Single chart'],
+        ['2h', [[1, 1]], 'Two side-by-side (scrollable, resizable)'],
+        ['3h', [[1, 1, 1]], 'Three side-by-side (scrollable, resizable)'],
+        ['2v', [[1], [1]], 'Two stacked (scrollable)'],
+        ['3v', [[1], [1], [1]], 'Three stacked (scrollable)'],
+      ] as const).map(([mode, rows, title]) => (
         <button
-          className="tbtn"
-          style={{ margin: '2px 4px' }}
-          onClick={() => useDrawingStore.getState().clearAnnotations()}
-        >✕ Clear All</button>
-      </Dropdown>
+          key={mode}
+          style={activeLayout === mode ? tbActive : tb}
+          title={title as string}
+          onClick={() => {
+            setActiveLayout(mode as string)
+            if (mode === '2h') { setPanelTf(0, '60'); setPanelTf(1, '240') }
+            useUIStore.getState().setActivePanel(0)
+          }}
+        >
+          <span style={{
+            display: 'inline-grid',
+            gridTemplateColumns: `repeat(${(rows as number[][])[0].length}, 4px)`,
+            gap: 1, verticalAlign: 'middle', lineHeight: 0,
+          }}>
+            {(rows as number[][]).flat().map((_, i) => (
+              <span key={i} style={{ width: 4, height: 4, background: 'currentColor', opacity: 0.85 }} />
+            ))}
+          </span>
+        </button>
+      ))}
 
-      {/* TRADE dropdown */}
-      <Dropdown id="trade" label="⇅ TRADE ▾" labelColor="#ff9800">
-        <DropdownToolButton emoji="▲" label="Long Entry" tool="entry_arrow" color="#ff9800" />
-        <DropdownToolButton emoji="▼" label="Long Exit" tool="exit_arrow" color="#40c4ff" />
-        <DropdownSep />
-        <DropdownToolButton emoji="▼" label="Short Entry" tool="short_arrow" color="#ff5252" />
-        <DropdownToolButton emoji="▲" label="Cover" tool="cover_arrow" color="#00e676" />
-        <DropdownSep />
-        <DropdownToolButton emoji="—" label="Stop" tool="stop_line" color="#facc15" />
-        <DropdownToolButton emoji="—" label="Trail Stop" tool="trail_stop" color="#38bdf8" />
-      </Dropdown>
+      <div style={{ flex: 1 }} />
 
-      <div className="sep" />
+      <TemplateDropdown />
+      <ThemeToggleButton />
+      <button
+        style={{ ...tb, fontSize: 16 }}
+        onClick={() => { useUIStore.getState().setSidebarTab('look'); useUIStore.getState().setSidebarOpen(true) }}
+        title="Chart settings"
+      >⚙</button>
+      <button
+        style={{ ...tb, fontSize: 16 }}
+        onClick={() => window.location.reload()}
+        title="Reload chart"
+      >⟳</button>
 
-      <div className="tbtn-row">
-        <button className="tbtn" id="toggle-bars-btn" onClick={() => useUIStore.getState().setBarsVisible(!useUIStore.getState().barsVisible)}>≡ BARS</button>
-        <button className={`tbtn${showPriceLine ? '' : ' off'}`} id="price-line-btn" style={{ borderColor: showPriceLine ? '#26a69a' : '#4a5580', color: showPriceLine ? '#26a69a' : '#4a5580', textDecoration: showPriceLine ? 'none' : 'line-through' }} onClick={() => setShowPriceLine(!showPriceLine)}>— LINE</button>
-        <button className={`tbtn${useAdjusted ? '' : ' unadj'}`} id="adj-btn" style={{ borderColor: useAdjusted ? '#f59e0b' : '#4a5580', color: useAdjusted ? '#f59e0b' : '#4a5580', textDecoration: useAdjusted ? 'none' : 'line-through' }} onClick={() => setUseAdjusted(!useAdjusted)}>ADJ</button>
-        <button className={`tbtn${cleanPrints ? ' on' : ''}`} id="clean-btn" style={{ borderColor: '#e879f9', color: '#e879f9', textDecoration: cleanPrints ? 'none' : 'line-through' }} onClick={() => setCleanPrints(!cleanPrints)}>CLN</button>
-        {[1, 2, 4].map(n => (
-          <button key={n} className={`tbtn${activeLayout === n ? ' active' : ''}`} id={`ly${n}`} style={{ fontWeight: 900 }} onClick={() => setActiveLayout(n)}>{n}</button>
-        ))}
-        <button className="tbtn" id="bt-btn" style={{ borderColor: '#f59e0b', color: '#f59e0b' }} onClick={() => setSidebarTab('bt')}>⏱ BT</button>
-        <button className="tbtn" id="scan-btn" style={{ borderColor: '#4ade80', color: '#4ade80' }} onClick={() => setSidebarTab('scan')}>📡 SCAN</button>
-        <a className="tbtn" href="/scanner" target="_blank" style={{ borderColor: '#D4AF37', color: '#D4AF37', textDecoration: 'none' }} title="Open Scan Dashboard">🔍 DASH</a>
-        <button className="tbtn" id="agent-btn" style={{ borderColor: '#a855f7', color: '#a855f7' }} onClick={() => useUIStore.getState().setAgentChatOpen(!useUIStore.getState().agentChatOpen)}>🤖 RENATA</button>
-        <button className="tbtn" id="vault-btn" style={{ borderColor: '#a78bfa', color: '#a78bfa' }} onClick={() => setSidebarTab('vault')}>📦 VAULT</button>
-        <button className="tbtn" id="settings-btn" style={{ borderColor: '#D4AF37', color: '#D4AF37' }} onClick={() => setSidebarTab('look')}>⚙ LOOK</button>
-        <button className="tbtn" id="tools-btn" style={{ borderColor: '#D4AF37', color: '#D4AF37' }} onClick={() => setSidebarTab('tools')}>🔧 TOOLS</button>
-        <button className="tbtn" id="input-settings-btn" style={{ borderColor: '#22d3ee', color: '#22d3ee' }} onClick={() => setSidebarTab('settings')}>⚙ SET</button>
-        <IndBtnsContainer />
-        <div id="hot-btns-container" style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }} />
-        <AddIndBtnButton />
-        <TemplateDropdown />
-        <ThemeToggleButton />
-        <button
-          className="tbtn"
-          id="reload-chart-btn"
-          style={{ borderColor: '#22d3ee', color: '#22d3ee' }}
-          onClick={() => window.location.reload()}
-          title="Reload chart"
-        >⟳ RELOAD</button>
-      </div>
-      <div id="ticker-info">
-        <span id="ti-sym" style={{ color: '#dde3f0', fontWeight: 700, fontSize: 14 }} />
-        <span id="ti-price" style={{ fontSize: 13 }} />
-        <span id="ti-chg" style={{ fontSize: 12 }} />
-      </div>
       <ProfileIcon />
     </div>
-  )
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   Dropdown — handles open/close with click-outside
-   ═══════════════════════════════════════════════════════════════ */
-
-function Dropdown({ id, label, labelColor, children }: {
-  id: string
-  label: string
-  labelColor?: string
-  children: React.ReactNode
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  // Close on click outside
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('click', handler)
-    return () => document.removeEventListener('click', handler)
-  }, [open])
-
-  return (
-    <div className="dropdown-group" ref={ref}>
-      <button
-        className={`tbtn dropdown-trigger${open ? ' active' : ''}`}
-        id={`${id}-menu-btn`}
-        style={labelColor ? { borderColor: labelColor, color: labelColor } : undefined}
-        onClick={(e) => { e.stopPropagation(); setOpen(v => !v) }}
-      >{label}</button>
-      <div className={`dropdown-content${open ? ' open' : ''}`} id={`${id}-menu`} onClick={(e) => e.stopPropagation()}>
-        {children}
-      </div>
-    </div>
-  )
-}
-
-function DropdownSep() {
-  return <hr style={{ border: 'none', borderTop: '1px solid #2a3050', margin: '2px 0' }} />
-}
-
-function DropdownToolButton({ emoji, label, tool, color, stayOpen }: {
-  emoji: string
-  label: string
-  tool: string
-  color?: string
-  stayOpen?: boolean
-}) {
-  const setActiveTool = useDrawingStore((s) => s.setActiveTool)
-  return (
-    <button
-      className="tool-btn"
-      data-tool={tool}
-      style={color ? { borderColor: color, color } : undefined}
-      onClick={() => {
-        setActiveTool(tool)
-        ;(window as any).setActiveTool?.(tool)
-      }}
-    >{emoji} {label}</button>
   )
 }
 
@@ -250,7 +155,12 @@ function TemplateDropdown() {
     const chartStyle = useUIStore.getState().chartStyle
     const theme = useUIStore.getState().theme
     const inds = require('@/stores/charts/indicatorStore').useIndicatorStore.getState().inds
-    saveTemplate(name, tools, chartStyle, theme, inds)
+    // capture current view so saved templates preserve symbol + top-panel timeframe
+    const { useChartStore } = require('@/stores/charts/chartStore')
+    const symbol = useChartStore.getState().symbol
+    const ap = useUIStore.getState().activePanel
+    const tf = useChartStore.getState().panels[ap]?.tf || ''
+    saveTemplate(name, tools, chartStyle, theme, inds, symbol, tf)
     const { loadTemplatesFromStorage } = require('@/lib/charts/templates')
     setTemplates(loadTemplatesFromStorage())
   }
@@ -265,9 +175,55 @@ function TemplateDropdown() {
     if (tpl.chartStyle) {
       useUIStore.getState().setChartStyle(tpl.chartStyle)
     }
+    // Symbol + timeframe: applied to the top panel (index 0). Optional — templates
+    // without these fields leave the current symbol/TF untouched.
+    if (tpl.symbol) {
+      const { useChartStore } = require('@/stores/charts/chartStore')
+      useChartStore.getState().setSymbol(tpl.symbol)
+    }
+    if (tpl.tf) {
+      const { useChartStore } = require('@/stores/charts/chartStore')
+      const ap = useUIStore.getState().activePanel
+      useChartStore.getState().setPanelTf(ap, tpl.tf)
+    }
     if (tpl.tools) {
       const { useToolStore } = require('@/stores/charts/toolStore')
-      useToolStore.getState().setTools(tpl.tools)
+      const { IND_CATALOG } = require('@/stores/charts/toolStore')
+      // Build the template's DESIRED state per indKey, hydrating params/colors from catalog
+      // defaults (same as before) so a template from an older config still loads.
+      const tplByKey: Record<string, any> = {}
+      for (const t of tpl.tools) {
+        const cat = IND_CATALOG[t.indKey]
+        const params: Record<string, string | number> = {}
+        cat?.params?.forEach((p: any) => { params[p.key] = t.params?.[p.key] ?? p.def })
+        const colors: Record<string, string> = {}
+        cat?.colors?.forEach((c: any) => { colors[c.key] = t.colors?.[c.key] ?? c.def })
+        tplByKey[t.indKey] = { on: t.on !== false, params, colors }
+      }
+      const ts = useToolStore.getState()
+      // MERGE (not replace): a template is a VISIBILITY/LAYOUT preset, NOT a destructive
+      // list swap. Every existing tool stays in the Vault — tools in the template take the
+      // template's on/params/colors; tools NOT in the template are turned OFF (hidden) but
+      // are KEPT. Template tools missing from the Vault are added (hydrated). This is why
+      // the Vault always shows ALL tools regardless of the active template.
+      const existingKeys = new Set(ts.tools.map((t: any) => t.indKey))
+      const merged = ts.tools.map((t: any) => {
+        const want = tplByKey[t.indKey]
+        if (want) return { ...t, on: want.on, params: { ...t.params, ...want.params }, colors: { ...t.colors, ...want.colors } }
+        return { ...t, on: false }            // not in template → hidden, but KEPT in the Vault
+      })
+      for (const key of Object.keys(tplByKey)) {
+        if (!existingKeys.has(key)) {           // template tool missing from Vault → add it
+          const want = tplByKey[key]
+          merged.push({
+            id: 't' + Date.now() + Math.random().toString(36).slice(2, 6),
+            indKey: key, name: IND_CATALOG[key]?.label || key,
+            on: want.on, params: want.params, colors: want.colors, hot: false,
+            legacyKeys: IND_CATALOG[key]?.legacyKeys || [key],
+          })
+        }
+      }
+      ts.setTools(merged)
     }
     setOpen(false)
     useUIStore.getState().setActiveTemplateName(tpl.name)
@@ -282,13 +238,11 @@ function TemplateDropdown() {
   return (
     <div className="dropdown-group" ref={ref}>
       <button
-        className={`tbtn dropdown-trigger${open ? ' active' : ''}`}
-        id="tpl-menu-btn"
-        style={{ borderColor: '#D4AF37', color: '#D4AF37' }}
+        style={open ? tbActive : tb}
         onClick={(e) => { e.stopPropagation(); setOpen(v => !v) }}
       >📋 TPL ▾</button>
-      <div className={`dropdown-content${open ? ' open' : ''}`} id="tpl-dropdown" style={{ minWidth: 200 }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ padding: '4px 10px', fontSize: 11, color: '#4a6080', fontWeight: 700 }}>CHART TEMPLATES</div>
+      <div className={`dropdown-content${open ? ' open' : ''}`} style={{ minWidth: 200 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ padding: '4px 10px', fontSize: 10, color: 'rgba(212,175,55,0.5)', fontWeight: 700, letterSpacing: 0.5 }}>TEMPLATES</div>
         {templates.length === 0 && (
           <div style={{ padding: '6px 10px', fontSize: 11, color: '#4a6080' }}>No templates saved</div>
         )}
@@ -296,131 +250,33 @@ function TemplateDropdown() {
           <div key={tpl.id} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 10px' }}>
             <button
               className="tool-btn"
-              style={{ flex: 1, textAlign: 'left', color: '#dde3f0', padding: '2px 4px' }}
+              style={{ flex: 1, textAlign: 'left', color: tpl.id.startsWith('preset_') ? '#22d3ee' : '#dde3f0', padding: '2px 4px' }}
               onClick={() => handleApply(i)}
-            >{tpl.name}</button>
-            <button
-              style={{ background: 'none', border: 'none', color: '#ff3d57', cursor: 'pointer', fontSize: 10, padding: '0 2px' }}
-              onClick={() => handleDelete(i)}
-              title="Delete template"
-            >✕</button>
+            >{tpl.id.startsWith('preset_') ? '⚡ ' : ''}{tpl.name}</button>
+            {!tpl.id.startsWith('preset_') && (
+              <button
+                style={{ background: 'none', border: 'none', color: '#ff3d57', cursor: 'pointer', fontSize: 10, padding: '0 2px' }}
+                onClick={() => handleDelete(i)}
+                title="Delete template"
+              >✕</button>
+            )}
           </div>
         ))}
-        <DropdownSep />
-        {useUIStore.getState().activeTemplateName && (
-          <div className="tool-btn" style={{ color: '#22d3ee', cursor: 'pointer' }} onClick={() => {
-            const name = useUIStore.getState().activeTemplateName
-            const { loadTemplatesFromStorage, saveTemplate } = require('@/lib/charts/templates')
-            const all = loadTemplatesFromStorage()
-            const idx = all.findIndex((t: any) => t.name === name)
-            if (idx >= 0) {
-              const tools = require('@/stores/charts/toolStore').useToolStore.getState().tools
-              const chartStyle = useUIStore.getState().chartStyle
-              const theme = useUIStore.getState().theme
-              const inds = require('@/stores/charts/indicatorStore').useIndicatorStore.getState().inds
-              saveTemplate(name, tools, chartStyle, theme, inds)
-              // Overwrite existing
-              const { deleteTemplate } = require('@/lib/charts/templates')
-              const updated = loadTemplatesFromStorage()
-              // The new one is at the end, move it to the original position
-              // Simpler: just re-save and let duplicates exist
-              setTemplates(updated)
-            }
-            setOpen(false)
-          }}>🔄 Update "{useUIStore.getState().activeTemplateName}"</div>
-        )}
-        <div className="tool-btn" style={{ color: '#D4AF37', cursor: 'pointer' }} onClick={handleSave}>💾 Save Current as Template</div>
+        <hr style={{ border: 'none', borderTop: '1px solid #2a3050', margin: '2px 0' }} />
+        <div className="tool-btn" style={{ color: GOLD, cursor: 'pointer' }} onClick={handleSave}>💾 Save Current</div>
       </div>
     </div>
   )
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   Theme Toggle & Hot Buttons
+   Theme Toggle
    ═══════════════════════════════════════════════════════════════ */
 
 function ThemeToggleButton() {
   const theme = useUIStore((s) => s.theme)
   const toggleTheme = useUIStore((s) => s.toggleTheme)
   return (
-    <button
-      className="tbtn"
-      id="theme-toggle-btn"
-      style={{ borderColor: '#5a6a88', color: '#5a6a88' }}
-      onClick={toggleTheme}
-    >{theme === 'dark' ? '🌙' : '☀'}</button>
-  )
-}
-
-
-/** Custom indicator buttons in TopBar */
-function IndBtnsContainer() {
-  const indBtns = useUIStore(s => s.indBtns)
-  const removeIndBtn = useUIStore(s => s.removeIndBtn)
-
-  return (
-    <div id="ind-btns-container" style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
-      {indBtns.map((indKey: string) => {
-        const { IND_CATALOG } = require('@/stores/charts/toolStore')
-        const cat = IND_CATALOG[indKey]
-        const label = cat?.label || indKey
-        const isOn = !!require('@/stores/charts/indicatorStore').useIndicatorStore.getState().inds[indKey]
-        return (
-          <button
-            key={indKey}
-            className={`ptog${isOn ? ' on' : ''}`}
-            data-ind={indKey}
-            style={{ opacity: isOn ? 1 : 0.55 }}
-            onClick={() => {
-              const store = require('@/stores/charts/indicatorStore').useIndicatorStore.getState()
-              store.setInds({ ...store.inds, [indKey]: !store.inds[indKey] })
-            }}
-            onContextMenu={(e) => { e.preventDefault(); removeIndBtn(indKey) }}
-            title={`${label} (right-click to remove)`}
-          >{label.toUpperCase().slice(0, 8)}</button>
-        )
-      })}
-    </div>
-  )
-}
-
-/** + button to add indicator button */
-function AddIndBtnButton() {
-  const [open, setOpen] = useState(false)
-  const addIndBtn = useUIStore(s => s.addIndBtn)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('click', handler)
-    return () => document.removeEventListener('click', handler)
-  }, [open])
-
-  const { IND_CATALOG } = require('@/stores/charts/toolStore')
-
-  return (
-    <div className="dropdown-group" ref={ref}>
-      <button
-        className="tbtn"
-        id="add-ind-btn"
-        style={{ borderColor: '#3a4a68', color: '#3a4a68' }}
-        onClick={(e) => { e.stopPropagation(); setOpen(v => !v) }}
-        title="Add indicator button"
-      >＋</button>
-      <div className={`dropdown-content${open ? ' open' : ''}`} style={{ minWidth: 200, maxHeight: 300, overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ padding: '4px 10px', fontSize: 11, color: '#4a6080', fontWeight: 700 }}>ADD INDICATOR BUTTON</div>
-        {Object.entries(IND_CATALOG).map(([key, cat]: [string, any]) => (
-          <button
-            key={key}
-            className="tool-btn"
-            style={{ textAlign: 'left' }}
-            onClick={() => { addIndBtn(key); setOpen(false) }}
-          >{cat.label}</button>
-        ))}
-      </div>
-    </div>
+    <button style={tb} onClick={toggleTheme}>{theme === 'dark' ? '🌙' : '☀'}</button>
   )
 }

@@ -502,14 +502,18 @@ function computeDisplayedTF(panelIdx: number, data: any[]) {
   const emaMid = tp.emaMid ?? 59
   const emaSlow = tp.emaSlow ?? 69
   const trendEma = tp.trendEma ?? 39
+  const cloudFast = tp.cloudFast ?? 200
+  const cloudSlow = tp.cloudSlow ?? 236
   const cached = _dc[panelIdx]
-  if (!data || data.length === 0) return cached || { e9: [], e20: [], eMid: [], eSlow: [], eTrend: [], pitch: [], atr: [], atrMid: [], atrSlow: [], mean: [] }
-  const sig = `${data.length}|${data[data.length - 1].time}|${emaMid}|${emaSlow}|${trendEma}`
+  if (!data || data.length === 0) return cached || { e9: [], e20: [], eMid: [], eSlow: [], eTrend: [], pitch: [], atr: [], atrMid: [], atrSlow: [], mean: [], eCloudF: [], eCloudS: [] }
+  const sig = `${data.length}|${data[data.length - 1].time}|${emaMid}|${emaSlow}|${trendEma}|${cloudFast}|${cloudSlow}`
   if (sig === _dcSig[panelIdx] && cached) return cached
   const close = data.map((b: any) => b.close as number)
   const high = data.map((b: any) => b.high as number)
   const low = data.map((b: any) => b.low as number)
   const e9 = ema(close, 9), e20 = ema(close, 20), eMid = ema(close, emaMid), eSlow = ema(close, emaSlow)
+  // 200/236 long-term cycle cloud EMAs — drawn in Lingua cycle red/green (tunable periods).
+  const eCloudF = ema(close, cloudFast), eCloudS = ema(close, cloudSlow)
   // Trend Pitch EMA — slower EMA (default 63) whose blended 10/30/60 slope the pitch
   // metric measures. Computed on the DISPLAYED TF so the visible line + hover readout
   // + top-right readout are all coherent (what you SEE = what you read).
@@ -528,7 +532,7 @@ function computeDisplayedTF(panelIdx: number, data: any[]) {
   // ATR period mirrors the EMA period (same construction as db_72_89).
   const atr = wilderAtr(high, low, close, 14), atrMid = wilderAtr(high, low, close, emaMid), atrSlow = wilderAtr(high, low, close, emaSlow)
   const mean = close.map((_, i) => (eMid[i] + eSlow[i]) / 2)
-  _dcSig[panelIdx] = sig; _dc[panelIdx] = { e9, e20, eMid, eSlow, eTrend, pitch, atr, atrMid, atrSlow, mean }
+  _dcSig[panelIdx] = sig; _dc[panelIdx] = { e9, e20, eMid, eSlow, eTrend, pitch, atr, atrMid, atrSlow, mean, eCloudF, eCloudS }
   return _dc[panelIdx]
 }
 
@@ -1082,6 +1086,7 @@ function _render(rc: RenderContext) {
   const tbLtfOn = (p.tbLtfOn as number) ?? 1   // 15m fractal-child LEAD markers (extra fetch)
   const showClouds = (p.showClouds as number) !== 0
   const showBands = (p.showBands as number) !== 0
+  const cycleCloudOn = ((p.cycleCloudOn as number) ?? 1) === 1   // 200/236 long-term cycle cloud (Lingua red/green)
   const swHideCons = (p.swHideCons as number) !== 0   // hide built-in CONSOLIDATION stage tint/label (clean chart)
   // dev band colors default to the db_72_89 tool's exact colors → identical appearance
   const bandUpFill = tc.up_fill || 'rgba(239,68,68,.15)'
@@ -1109,6 +1114,13 @@ function _render(rc: RenderContext) {
     // mean cloud — green/red crossover (EMA periods tunable via params)
     drawEMABand(rc, NL(dc.eMid), NL(dc.eSlow),
       C.band_72_89_bull_fill, C.band_72_89_bear_fill, C.band_72_89_bull_line, C.band_72_89_bear_line)
+    // 200/236 long-term cycle cloud — Lingua cycle red/green (green when fast>slow).
+    // Distinct palette from the means cloud so the macro trend reads at a glance.
+    if (cycleCloudOn) {
+      drawEMABand(rc, NL(dc.eCloudF), NL(dc.eCloudS),
+        tc.cc_up_fill || 'rgba(76,175,80,0.12)', tc.cc_dn_fill || 'rgba(239,83,80,0.12)',
+        tc.cc_up_line || 'rgba(76,175,80,0.6)',  tc.cc_dn_line || 'rgba(239,83,80,0.6)')
+    }
   }
   if (showBands) {
     // Dev band — SAME rendering as the 'db_72_89' tool (drawDevBand, ATR period = EMA

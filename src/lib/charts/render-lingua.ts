@@ -404,14 +404,14 @@ let _cacheSig: Record<number, string> = {}
 let _cacheMtfHyst: Record<number, Stage[]> = {}
 let _cacheRawTransitions: Record<number, number> = {}
 let _cacheHystTransitions: Record<number, number> = {}
-function computeCachedClassification(panelIdx: number, flat: number, flatH: number, xtreme: number, euThr: number, holdBars: number, tbOn: number, tbConfirm: number, tbMargin: number, tbReclaim: number, erOn: boolean, chopThr: number): {
+function computeCachedClassification(panelIdx: number, flat: number, flatH: number, xtreme: number, euThr: number, holdBars: number, tbOn: number, tbConfirm: number, tbMargin: number, tbReclaim: number, erOn: boolean, chopThr: number, pitchOn: boolean, pitchWin: number, pitchBlend: number): {
   mtfHyst: Stage[], rawTrans: number, hystTrans: number, n: number,
 } {
   const mtf = tfSlot(MTF, panelIdx), htf = tfSlot(HTF, panelIdx)
   const n = mtf.times.length
   // _feedGen busts the cache when MTF/HTF bars are re-fed (incl. on param change, which
   // re-runs setLinguaMtfBars via the ReactChartPanel param-subscription effect).
-  const sig = `${n}|${mtf.times[n-1]}|${htf.times.length}|${flat}|${flatH}|${xtreme}|${euThr}|${holdBars}|${tbOn}|${tbConfirm}|${tbMargin}|${tbReclaim}|${erOn}|${chopThr}|${_feedGen[panelIdx] || 0}`
+  const sig = `${n}|${mtf.times[n-1]}|${htf.times.length}|${flat}|${flatH}|${xtreme}|${euThr}|${holdBars}|${tbOn}|${tbConfirm}|${tbMargin}|${tbReclaim}|${erOn}|${chopThr}|${pitchOn}|${pitchWin}|${pitchBlend}|${_feedGen[panelIdx] || 0}`
   const cached = _cacheMtfHyst[panelIdx]
   if (sig === _cacheSig[panelIdx] && cached && cached.length === n) {
     return { mtfHyst: cached, rawTrans: _cacheRawTransitions[panelIdx] || 0, hystTrans: _cacheHystTransitions[panelIdx] || 0, n }
@@ -434,9 +434,38 @@ function computeCachedClassification(panelIdx: number, flat: number, flatH: numb
     let se = NaN; const ea = 2 / (erSmooth + 1)
     for (let i = 0; i < n; i++) { if (isNaN(erRaw[i])) continue; se = isNaN(se) ? erRaw[i] : se + (erRaw[i] - se) * ea; erMtf[i] = se }
   }
+  // STRUCTURAL PITCH (Theil–Sen) — rolling MEDIAN pairwise slope of recent MTF closes,
+  // ATR(14)-normalized to match `aop`'s scale. Blended into the classifier's angle signal
+  // (aop, the laggy EMA-slope) to make the cycle respond to real structure faster — fixes
+  // 'consolidation detected late'. On RAW bars density is uniform (1/bar) so the median
+  // pairwise slope is a pure trend estimate with NO cluster bias — the per-bar analog of
+  // the box-channel Theil–Sen drift, but available at classify time. Point-in-time (window
+  // strictly behind i), scan-safe. OFF → aopEff === mtf.aop (exact prior behavior).
+  const aopEff: number[] = mtf.aop.slice()
+  if (pitchOn && pitchWin >= 5 && pitchBlend > 0) {
+    const atr14 = wilderAtr(mtf.high, mtf.low, mtf.close, 14)
+    const W = Math.max(5, Math.floor(pitchWin))
+    for (let i = W; i < n; i++) {
+      const base = mtf.aop[i], den = atr14[i]
+      if (isNaN(base) || isNaN(den) || den === 0) continue
+      const slopes: number[] = []
+      for (let a = i - W + 1; a < i; a++) {
+        const ca = mtf.close[a]; if (isNaN(ca)) continue
+        for (let b = a + 1; b <= i; b++) {
+          const cb = mtf.close[b]; if (isNaN(cb)) continue
+          slopes.push((cb - ca) / (b - a))
+        }
+      }
+      if (slopes.length < 2) continue
+      slopes.sort((x, y) => x - y)
+      const m = slopes.length >> 1
+      const ts = slopes.length % 2 ? slopes[m] : (slopes[m - 1] + slopes[m]) / 2  // price/bar
+      aopEff[i] = base * (1 - pitchBlend) + (ts / den) * pitchBlend              // → aop scale
+    }
+  }
   for (let i = 0; i < n; i++) {
     const h = ffill(htf, mtf.times[i])
-    mtfRaw[i] = classifyHier(mtf.aop[i], mtf.dev[i], mtf.devLow[i], h.dev, h.devLow, h.aop, flat, flatH, xtreme, euThr, erMtf[i], erOn, chopThr)
+    mtfRaw[i] = classifyHier(aopEff[i], mtf.dev[i], mtf.devLow[i], h.dev, h.devLow, h.aop, flat, flatH, xtreme, euThr, erMtf[i], erOn, chopThr)
   }
   const mtfHyst0 = applyHysteresis(mtfRaw, holdBars)
   // Post-extreme reset on the 1H timeline: EC/EUPHORIC/EL fires once, holds until price
@@ -445,7 +474,7 @@ function computeCachedClassification(panelIdx: number, flat: number, flatH: numb
   // Trendbreak detection: UPTREND → TRENDBREAK when close loses the gold eTrend line;
   // resolves to BACKSIDE when eSlow slope confirms down, or back to UPTREND if price
   // reclaims eTrend. Early structural break — fires before the slope-based BACKSIDE.
-  const mtfHyst = tbOn ? applyTrendBreak(mtfHystExt, mtf.aop, mtf.eTrend, mtf.atrMid, mtf.close, flat, tbConfirm, tbMargin, tbReclaim) : mtfHystExt
+  const mtfHyst = tbOn ? applyTrendBreak(mtfHystExt, aopEff, mtf.eTrend, mtf.atrMid, mtf.close, flat, tbConfirm, tbMargin, tbReclaim) : mtfHystExt
   let rawTrans = 0, hystTrans = 0
   for (let i = 1; i < n; i++) {
     if (mtfRaw[i] !== mtfRaw[i - 1]) rawTrans++
@@ -1047,6 +1076,9 @@ function _render(rc: RenderContext) {
   const tbReclaim = (p.tbReclaim as number) ?? 1
   const cycleErOn = ((p.cycleErOn as number) ?? 1) === 1
   const cycleChop = (p.cycleChop as number) ?? 0.30
+  const cyclePitchOn = ((p.cyclePitchOn as number) ?? 1) === 1   // Theil–Sen structural pitch blended into the cycle's angle signal
+  const cyclePitchWin = (p.cyclePitchWin as number) ?? 20       // rolling window (bars) for the structural slope
+  const cyclePitchBlend = (p.cyclePitchBlend as number) ?? 0.6  // 0 = pure EMA aop (old), 1 = pure structural
   const tbLtfOn = (p.tbLtfOn as number) ?? 1   // 15m fractal-child LEAD markers (extra fetch)
   const showClouds = (p.showClouds as number) !== 0
   const showBands = (p.showBands as number) !== 0
@@ -1102,7 +1134,7 @@ function _render(rc: RenderContext) {
 
   // 1+2) Classify + hysteresis on MTF-native timeline — CACHED, only
   // recomputes when bars/params change (NOT every animation frame).
-  const { mtfHyst, rawTrans, hystTrans, n } = computeCachedClassification(panelIdx, flat, flatH, xtreme, euThr, holdBars, tbOn, tbConfirm, tbMargin, tbReclaim, cycleErOn, cycleChop)
+  const { mtfHyst, rawTrans, hystTrans, n } = computeCachedClassification(panelIdx, flat, flatH, xtreme, euThr, holdBars, tbOn, tbConfirm, tbMargin, tbReclaim, cycleErOn, cycleChop, cyclePitchOn, cyclePitchWin, cyclePitchBlend)
 
   // 3) Map each visible bar → its MTF stage via timestamp forward-fill.
   const stages: Stage[] = new Array(visible.length)

@@ -1186,11 +1186,11 @@ export function renderAnchoredTrendline(rc: RenderContext, indKey: string = 'tre
       drawLine(rc, cf, 'rgba(120,180,200,0.4)', 1)
       drawLine(rc, cs, 'rgba(120,180,200,0.4)', 1)
     }
-    // ── SWING MARKERS (tlShowSwings): dot the TREND-RELEVANT main swings only.
-    // Uptrend (fast>=slow) → show swing LOWS (the higher lows the rising support connects).
-    // Downtrend (fast<slow) → show swing HIGHS (the lower highs the falling resistance connects).
-    // Color by EMA respect: a low ABOVE the 20EMA = green (healthy pullback), below = red (violation).
-    // This surfaces the exact anchor points the curl will steepen toward, pinned at the origin.
+    // ── SWING MARKERS (tlShowSwings): dot ALL main swing points (highs AND lows).
+    // All swings are shown for visibility; the TREND REGIME decides which side becomes the band
+    // (lows→support in uptrend, highs→resistance in downtrend) — that's the curl's job, not the
+    // markers'. Color by EMA respect: a low ABOVE the 20EMA (or high BELOW it) = green (healthy,
+    // respects structure); the violation side = red.
     if (tlShowSwings) {
       const mainPat = Math.max(1, Math.round(tlMainPattern))
       const markSwings = (isHigh: boolean) => {
@@ -1199,10 +1199,7 @@ export function renderAnchoredTrendline(rc: RenderContext, indKey: string = 'tre
         for (const p of pv) {
           const vi = p.idx - vs
           if (vi < 0 || vi >= visible.length) continue
-          if (isNaN(cf[p.idx]) || isNaN(cs[p.idx])) continue
-          const isUp = cf[p.idx] >= cs[p.idx]   // cloud regime at this swing's bar
-          if (isUp && isHigh) continue          // uptrend → skip highs, keep lows
-          if (!isUp && !isHigh) continue        // downtrend → skip lows, keep highs
+          if (isNaN(cf[p.idx])) continue
           const respects = isHigh ? p.price < cf[p.idx] : p.price > cf[p.idx]
           const x = xCtr(vi), y = pToY(p.price)
           ctx.beginPath(); ctx.arc(x, y, Math.max(3, barW * 0.5), 0, Math.PI * 2)

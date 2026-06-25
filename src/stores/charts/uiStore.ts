@@ -74,6 +74,12 @@ interface UIState {
   activePanel: number
   setActivePanel: (v: number) => void
 
+  // Chart tabs — timeframe presets cycled via TopBar ◀ ▶ (apply to the active panel)
+  tabs: { tf: string; label: string }[]
+  activeTab: number
+  setActiveTab: (v: number) => void
+  cycleTab: (dir: 1 | -1) => void
+
   // Custom indicator buttons in TopBar
   indBtns: string[]  // indKey list
   addIndBtn: (indKey: string) => void
@@ -168,6 +174,15 @@ export const useUIStore = create<UIState>()(
   activePanel: 0,
   setActivePanel: (v) => set({ activePanel: v }),
 
+  tabs: [
+    { tf: '15', label: '15m' },
+    { tf: '60', label: '1H' },
+    { tf: '240', label: '4H' },
+  ],
+  activeTab: 1,
+  setActiveTab: (v) => set({ activeTab: v }),
+  cycleTab: (dir) => set((s) => ({ activeTab: (s.activeTab + dir + s.tabs.length) % s.tabs.length })),
+
   indBtns: [] as string[],
   _hydrateIndBtns: () => {
     try {
@@ -212,6 +227,8 @@ export const useUIStore = create<UIState>()(
         activePanel: s.activePanel,
         chartStyle: s.chartStyle,
         liveMode: s.liveMode,
+        tabs: s.tabs,
+        activeTab: s.activeTab,
       }),
     }
   )

@@ -45,6 +45,11 @@ export function TopBar() {
   const activeLayout = useUIStore((s) => s.activeLayout)
   const setActiveLayout = useUIStore((s) => s.setActiveLayout)
   const setPanelTf = useChartStore((s) => s.setPanelTf)
+  const activePanel = useUIStore((s) => s.activePanel)
+  const tabs = useUIStore((s) => s.tabs)
+  const activeTab = useUIStore((s) => s.activeTab)
+  const setActiveTab = useUIStore((s) => s.setActiveTab)
+  const cycleTab = useUIStore((s) => s.cycleTab)
 
   const handleLoadSymbol = useCallback(() => {
     const sym = symInput.trim().toUpperCase()
@@ -55,6 +60,26 @@ export function TopBar() {
   }, [symInput, setChartSymbol])
 
   useEffect(() => { setSymInput(chartSymbol) }, [chartSymbol])
+
+  // Tab → active panel's timeframe. Fires on tab change (incl. mount sync to the persisted tab).
+  useEffect(() => {
+    const t = tabs[activeTab]
+    if (t) setPanelTf(activePanel, t.tf)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
+
+  // ◀ ▶ arrow keys cycle tabs (skipped while typing or interacting with the chart canvas).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement
+      const tag = el?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'CANVAS' || el?.isContentEditable) return
+      if (e.key === 'ArrowLeft') { cycleTab(-1); e.preventDefault() }
+      else if (e.key === 'ArrowRight') { cycleTab(1); e.preventDefault() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [cycleTab])
 
   return (
     <div id="topbar" style={{ flexWrap: 'nowrap', overflow: 'visible' }}>
@@ -102,6 +127,20 @@ export function TopBar() {
           </span>
         </button>
       ))}
+
+      {/* Chart tabs — timeframe presets. ◀ ▶ cycle; selecting sets the active panel's TF. */}
+      <button style={tb} title="Previous timeframe (←)" onClick={() => cycleTab(-1)}>◀</button>
+      <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+        {tabs.map((t, i) => (
+          <button
+            key={t.tf}
+            style={i === activeTab ? tbActive : tb}
+            title={`Work on ${t.label}`}
+            onClick={() => setActiveTab(i)}
+          >{t.label}</button>
+        ))}
+      </div>
+      <button style={tb} title="Next timeframe (→)" onClick={() => cycleTab(1)}>▶</button>
 
       <div style={{ flex: 1 }} />
 

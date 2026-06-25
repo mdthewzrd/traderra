@@ -1026,15 +1026,16 @@ function computeCurlTrend(
     const out: number[] = new Array(n).fill(NaN)
     for (let k = 0; k < n; k++) {
       const win = pv.filter(p => p.idx + right <= k).slice(-N)   // pivots confirmed as-of bar k
-      if (win.length < N) continue
+      const M = win.length
+      if (M < 2) continue            // need ≥2 for a line — curls as soon as 2 confirm; grows toward N as more arrive
       const x0 = win[0].idx
       let sx = 0, sy = 0, sxy = 0, sxx = 0
       for (const p of win) { const x = p.idx - x0; sx += x; sy += p.price; sxy += x * p.price; sxx += x * x }
-      const denom = N * sxx - sx * sx
+      const denom = M * sxx - sx * sx
       if (Math.abs(denom) < 1e-9) continue
-      const m = (N * sxy - sx * sy) / denom
+      const m = (M * sxy - sx * sy) / denom
       if (wantPos ? m <= 0 : m >= 0) continue                       // disp_select — trend-aligned only
-      const b = (sy - m * sx) / N
+      const b = (sy - m * sx) / M
       out[k] = b + m * (k - x0)
     }
     return out

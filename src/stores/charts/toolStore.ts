@@ -169,8 +169,8 @@ export const IND_CATALOG: Record<string, IndCatalogEntry> = {
     ], legacyKeys:['lingua'] },
   curltrend:      { label:'Curl Trendline', group:'Trendlines', combo:true,
     params:[
-      {key:'ctLeft',label:'Look Left',def:69,min:2,max:200,group:'pivot'},
-      {key:'ctRight',label:'Look Right',def:21,min:1,max:120,group:'pivot'},
+      {key:'ctLeft',label:'Look Left',def:34,min:2,max:200,group:'pivot'},
+      {key:'ctRight',label:'Look Right',def:10,min:1,max:120,group:'pivot'},
       {key:'ctPattern',label:'Pattern',def:5,min:1,max:13,group:'pivot'},
       {key:'ctPivots',label:'Pivots in Window',def:3,min:2,max:6,group:'curl'},
       {key:'ctShowBreak',label:'Show Break Marker',def:1,type:'toggle',group:'display'},

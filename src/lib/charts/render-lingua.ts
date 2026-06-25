@@ -1001,6 +1001,93 @@ export function renderLinguaCycle(rc: RenderContext) {
  *  draw bold with a gold glow and PERSIST — multiple coexist as the trend tightens. Break
  *  = first close through the line (dot on the line at the break bar). Point-in-time-stable
  *  → safe for scans/backtests. */
+/** computeCurlTrend — ROLLING N-pivot regression trendline ("the curl").
+ *  Re-fits each bar to the N most-recent CONFIRMED same-type pivots (N=ctPivots, default 3).
+ *  As a new swing confirms the oldest drops out → the slope STEEPENS = the curl that tracks an
+ *  accelerating trend and tightens until the break. Unlike the FROZEN anchored line, the forward
+ *  slope is LIVE (recomputed per bar from the freshest structure), so a break fires when price
+ *  closes through THIS bar's curled level — leading the laggy EMA flip. Point-in-time safe: at
+ *  bar k only pivots confirmed as-of k (idx + lookRight <= k) are used. Supports (lows) draw when
+ *  RISING, resistances (highs) draw when FALLING (JD disp_select). Based on the JD swing pivots
+ *  (fractalPivots + confirmPivot), re-purposed into a rolling fit. */
+function computeCurlTrend(
+  high: number[], low: number[], close: number[],
+  pattern: number, left: number, right: number, nPiv: number,
+): { sup: number[]; res: number[]; supBreak: number; resBreak: number } {
+  const n = close.length
+  const N = Math.max(2, Math.round(nPiv))
+  const patSide = Math.max(1, Math.floor((pattern - 1) / 2))
+  const lo = confirmPivot(fractalPivots(low, patSide, patSide, false), low, false, left, right)
+  const hi = confirmPivot(fractalPivots(high, patSide, patSide, true), high, true, left, right)
+
+  // Rolling least-squares fit through the N freshest confirmed-as-of-k pivots of one type.
+  // disp_select: support draws only when rising (slope>0), resistance only when falling (<0).
+  const fit = (pv: { idx: number; price: number }[], wantPos: boolean): number[] => {
+    const out: number[] = new Array(n).fill(NaN)
+    for (let k = 0; k < n; k++) {
+      const win = pv.filter(p => p.idx + right <= k).slice(-N)   // pivots confirmed as-of bar k
+      if (win.length < N) continue
+      const x0 = win[0].idx
+      let sx = 0, sy = 0, sxy = 0, sxx = 0
+      for (const p of win) { const x = p.idx - x0; sx += x; sy += p.price; sxy += x * p.price; sxx += x * x }
+      const denom = N * sxx - sx * sx
+      if (Math.abs(denom) < 1e-9) continue
+      const m = (N * sxy - sx * sy) / denom
+      if (wantPos ? m <= 0 : m >= 0) continue                       // disp_select — trend-aligned only
+      const b = (sy - m * sx) / N
+      out[k] = b + m * (k - x0)
+    }
+    return out
+  }
+
+  const sup = fit(lo, true), res = fit(hi, false)
+  let supBreak = -1, resBreak = -1
+  for (let k = 0; k < n; k++) {                                     // break = first close through the live curl
+    if (supBreak < 0 && !isNaN(sup[k]) && close[k] < sup[k]) supBreak = k
+    if (resBreak < 0 && !isNaN(res[k]) && close[k] > res[k]) resBreak = k
+  }
+  // "tightens until it breaks" — stop the line at the break (no draw after the trend ends)
+  if (supBreak >= 0) for (let k = supBreak + 1; k < n; k++) sup[k] = NaN
+  if (resBreak >= 0) for (let k = resBreak + 1; k < n; k++) res[k] = NaN
+  return { sup, res, supBreak, resBreak }
+}
+
+/** renderCurlTrend — the curl trendline (separate tool, drawn on the displayed chart). */
+export function renderCurlTrend(rc: RenderContext) {
+  try {
+    const panelIdx = rc.panelIdx ?? 0
+    const tool = useToolStore.getState().tools.find((t: any) => t.indKey === 'curltrend')
+    if (!tool || !tool.on) return
+    const p = getMergedToolParams(panelIdx, 'curltrend') as any
+    const ctLeft = (p.ctLeft as number) ?? 69
+    const ctRight = (p.ctRight as number) ?? 21
+    const ctPattern = (p.ctPattern as number) ?? 5
+    const ctPivots = (p.ctPivots as number) ?? 3
+    const ctShowBreak = ((p.ctShowBreak as number) ?? 1) === 1
+    const { ctx, data, vs, visible, xCtr, pToY, barW } = rc
+    if (!data || data.length < ctLeft + ctRight + 10 || visible.length === 0) return
+    const high = data.map((b: any) => b.high as number)
+    const low = data.map((b: any) => b.low as number)
+    const close = data.map((b: any) => b.close as number)
+    const c = computeCurlTrend(high, low, close, ctPattern, ctLeft, ctRight, ctPivots)
+    const supCol = (p.ct_sup as string) || 'rgba(86,156,214,0.95)'
+    const resCol = (p.ct_res as string) || 'rgba(230,150,40,0.95)'
+    const brkCol = (p.ct_break as string) || 'rgba(250,204,21,0.95)'
+    drawLine(rc, c.sup, supCol, 2)
+    drawLine(rc, c.res, resCol, 2)
+    if (ctShowBreak) {
+      const mark = (k: number) => {
+        if (k < 0 || k - vs < 0 || k - vs >= visible.length) return
+        const x = xCtr(k - vs), y = pToY(close[k])
+        ctx.fillStyle = brkCol
+        ctx.beginPath(); ctx.arc(x, y, Math.max(3, barW * 0.4), 0, Math.PI * 2); ctx.fill()
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 1; ctx.stroke()
+      }
+      mark(c.supBreak); mark(c.resBreak)
+    }
+  } catch { /* never break the render loop */ }
+}
+
 export function renderAnchoredTrendline(rc: RenderContext, indKey: string = 'trendline', force: boolean = false) {
   try {
     const panelIdx = rc.panelIdx ?? 0

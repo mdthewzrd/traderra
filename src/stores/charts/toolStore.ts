@@ -167,6 +167,19 @@ export const IND_CATALOG: Record<string, IndCatalogEntry> = {
       {key:'up_fill',label:'Dev Upper Fill',def:'rgba(239,68,68,.15)'},{key:'up_line',label:'Dev Upper Line',def:'rgba(239,68,68,.40)'},{key:'dn_fill',label:'Dev Lower Fill',def:'rgba(34,197,94,.15)'},{key:'dn_line',label:'Dev Lower Line',def:'rgba(34,197,94,.40)'},
       {key:'sw_line',label:'Swing Trendline',def:'rgba(0,229,255,0.85)'},{key:'sw_tent',label:'Swing Tentative',def:'rgba(0,229,255,0.35)'},{key:'sw_pivot',label:'Swing Pivot Dot',def:'rgba(0,229,255,1)'},{key:'sw_break',label:'Swing Break',def:'rgba(255,0,110,0.95)'},
     ], legacyKeys:['lingua'] },
+  curltrend:      { label:'Curl Trendline', group:'Trendlines', combo:true,
+    params:[
+      {key:'ctLeft',label:'Look Left',def:69,min:2,max:200,group:'pivot'},
+      {key:'ctRight',label:'Look Right',def:21,min:1,max:120,group:'pivot'},
+      {key:'ctPattern',label:'Pattern',def:5,min:1,max:13,group:'pivot'},
+      {key:'ctPivots',label:'Pivots in Window',def:3,min:2,max:6,group:'curl'},
+      {key:'ctShowBreak',label:'Show Break Marker',def:1,type:'toggle',group:'display'},
+    ],
+    colors:[
+      {key:'ct_sup',label:'Support (rising)',def:'rgba(86,156,214,0.95)'},
+      {key:'ct_res',label:'Resistance (falling)',def:'rgba(230,150,40,0.95)'},
+      {key:'ct_break',label:'Break Marker',def:'rgba(250,204,21,0.95)'},
+    ], legacyKeys:['curltrend'] },
   trendline:      { label:'Trendline (Anchored)', group:'Trendlines', combo:true,
     params:[
       {key:'tlLeft',label:'Look Left',def:50,min:1,max:120,group:'detect'},
@@ -305,6 +318,7 @@ function makeDefaultTools(): ToolInstance[] {
     mk('devzones', false, false),
     mk('lingua', false, false),
     mk('lingua_exec', false, false),
+    mk('curltrend', false, false),
   ]
 }
 

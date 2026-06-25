@@ -21,7 +21,7 @@ import { renderPivotZones } from '@/lib/charts/render-pzones'
 import { renderDevZones } from '@/lib/charts/render-devzones'
 import { renderAdaptiveBands } from '@/lib/charts/render-adaptive-bands'
 import { renderLinguaExec, setLinguaExecPitch } from '@/lib/charts/render-lingua-exec'
-import { renderLinguaCycle, renderAnchoredTrendline, renderConsolidation, renderRegime, renderLinguaPitchOverlay, setLinguaMtfBars, htfOf, ltfOf } from '@/lib/charts/render-lingua'
+import { renderLinguaCycle, renderAnchoredTrendline, renderConsolidation, renderRegime, renderLinguaPitchOverlay, renderCurlTrend, setLinguaMtfBars, htfOf, ltfOf } from '@/lib/charts/render-lingua'
 import { isIntraday } from '@/lib/charts/format'
 import { C } from '@/lib/charts/theme'
 import { useIndicatorStore } from '@/stores/charts/indicatorStore'
@@ -542,6 +542,8 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       // ── Anchored Trendline (non-repainting, separate tool) ──
       if (inds.trendline) renderAnchoredTrendline(rc)
       if (inds.trendline_light) renderAnchoredTrendline(rc, 'trendline_light')
+      // ── Curl Trendline (rolling 3-pivot regression — "the curl", separate tool) ──
+      if (inds.curltrend) renderCurlTrend(rc)
       if (inds.regime) renderRegime(rc)
       if (inds.consolidation) renderConsolidation(rc)
 

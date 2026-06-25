@@ -1186,11 +1186,11 @@ export function renderAnchoredTrendline(rc: RenderContext, indKey: string = 'tre
       drawLine(rc, cf, 'rgba(120,180,200,0.4)', 1)
       drawLine(rc, cs, 'rgba(120,180,200,0.4)', 1)
     }
-    // ── SWING MARKERS (tlShowSwings): dot each MAIN swing, colored by EMA respect.
-    // A swing LOW 'respects' the uptrend if it holds ABOVE the fast EMA (20) — a healthy
-    // pullback. Below = structure violation (red). Highs mirror for downtrends. This makes
-    // the trend's anchor points + their EMA relationship VISIBLE — the foundation for the
-    // curl (which will steepen toward the green/respecting swings, pinned at the origin).
+    // ── SWING MARKERS (tlShowSwings): dot the TREND-RELEVANT main swings only.
+    // Uptrend (fast>=slow) → show swing LOWS (the higher lows the rising support connects).
+    // Downtrend (fast<slow) → show swing HIGHS (the lower highs the falling resistance connects).
+    // Color by EMA respect: a low ABOVE the 20EMA = green (healthy pullback), below = red (violation).
+    // This surfaces the exact anchor points the curl will steepen toward, pinned at the origin.
     if (tlShowSwings) {
       const mainPat = Math.max(1, Math.round(tlMainPattern))
       const markSwings = (isHigh: boolean) => {
@@ -1199,8 +1199,11 @@ export function renderAnchoredTrendline(rc: RenderContext, indKey: string = 'tre
         for (const p of pv) {
           const vi = p.idx - vs
           if (vi < 0 || vi >= visible.length) continue
-          if (isNaN(cf[p.idx])) continue
-          const respects = isHigh ? p.price < cf[p.idx] : p.price > cf[p.idx]   // low above 20EMA = respects
+          if (isNaN(cf[p.idx]) || isNaN(cs[p.idx])) continue
+          const isUp = cf[p.idx] >= cs[p.idx]   // cloud regime at this swing's bar
+          if (isUp && isHigh) continue          // uptrend → skip highs, keep lows
+          if (!isUp && !isHigh) continue        // downtrend → skip lows, keep highs
+          const respects = isHigh ? p.price < cf[p.idx] : p.price > cf[p.idx]
           const x = xCtr(vi), y = pToY(p.price)
           ctx.beginPath(); ctx.arc(x, y, Math.max(3, barW * 0.5), 0, Math.PI * 2)
           ctx.fillStyle = respects ? 'rgba(0,200,120,0.95)' : 'rgba(232,80,80,0.95)'

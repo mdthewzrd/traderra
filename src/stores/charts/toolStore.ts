@@ -196,6 +196,8 @@ export const IND_CATALOG: Record<string, IndCatalogEntry> = {
       {key:'tlShowMain',label:'Show Main Lines',def:1,type:'toggle',group:'display'},
       {key:'tlShowBreaks',label:'Show Breaks',def:0,type:'toggle',group:'display'},
       {key:'tlBreakSize',label:'Break Wedge Size',def:7,min:3,max:16,group:'display'},
+      {key:'tlCurlProj',label:'Curl Projection (re-fit)',def:1,type:'toggle',group:'curl'},
+      {key:'tlCurlN',label:'Curl Pivots (N)',def:3,min:2,max:10,group:'curl'},
     ],
     colors:[
       {key:'tl_support',label:'Support (cyan)',def:'rgba(0,229,255,0.95)'},{key:'tl_resist',label:'Resistance (magenta)',def:'rgba(255,0,170,0.95)'},{key:'tl_main',label:'Main Glow',def:'rgba(150,100,220,0.28)'},

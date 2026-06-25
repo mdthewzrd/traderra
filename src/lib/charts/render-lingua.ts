@@ -922,6 +922,7 @@ function computeAnchoredTrendline(
   tlOn: number, tlLeft: number, tlRight: number, tlPattern: number,
   tlMainLeft: number, tlMainRight: number, tlMainPattern: number,
   tlMinSize: number, tlBothSides: number, tlShowBreaks: number,
+  tlCurlProj: number = 0, tlCurlN: number = 3,
 ): { segments: AnchoredSeg[] } {
   const empty: { segments: AnchoredSeg[] } = { segments: [] }
   if (!tlOn) return empty
@@ -973,7 +974,31 @@ function computeAnchoredTrendline(
       const endBar = rawBreak >= 0 ? rawBreak : n - 1
       const confirmed = new Array(n).fill(NaN), proj = new Array(n).fill(NaN)
       for (let k = A.idx; k <= setBar && k <= endBar; k++) confirmed[k] = A.price + slope * (k - A.idx)
-      for (let k = setBar; k <= endBar; k++) proj[k] = A.price + slope * (k - A.idx)
+      // CURL PROJECTION (tlCurlProj): the FORWARD projection RE-FITS to the N most-recent
+      // confirmed pivots (as-of bar k) instead of holding the frozen A→B slope. As newer swings
+      // confirm, the line re-anchors and its slope steepens with the accelerating trend → it
+      // FOLLOWS the uptrend as it forms instead of lagging behind (the ~70% lag). Confirmed
+      // history (A→setBar) stays frozen = no repaint, scan-safe. Point-in-time: only pivots
+      // with idx+right<=k are used. Falls back to frozen slope if <2 pivots or degenerate fit.
+      if (tlCurlProj) {
+        const N = Math.max(2, Math.round(tlCurlN))
+        for (let k = setBar; k <= endBar; k++) {
+          const win = pv.filter(p => p.idx + right <= k).slice(-N)
+          if (win.length >= 2) {
+            const x0 = win[0].idx
+            let sx = 0, sy = 0, sxy = 0, sxx = 0
+            for (const p of win) { const x = p.idx - x0; sx += x; sy += p.price; sxy += x * p.price; sxx += x * x }
+            const den = win.length * sxx - sx * sx
+            if (Math.abs(den) >= 1e-9) {
+              const m = (win.length * sxy - sx * sy) / den
+              const b = (sy - m * sx) / win.length
+              proj[k] = b + m * (k - x0)
+            } else { proj[k] = A.price + slope * (k - A.idx) }
+          } else { proj[k] = A.price + slope * (k - A.idx) }
+        }
+      } else {
+        for (let k = setBar; k <= endBar; k++) proj[k] = A.price + slope * (k - A.idx)
+      }
       out.push({ dir: isHigh ? -1 : 1, setBar, breakBar: signalBar, main, confirmed, proj })
     }
     return out
@@ -1124,6 +1149,8 @@ export function renderAnchoredTrendline(rc: RenderContext, indKey: string = 'tre
     const tlShowMain = (p.tlShowMain as number) ?? 1
     const tlShowBreaks = (p.tlShowBreaks as number) ?? 0
     const tlBreakSize = Number(p.tlBreakSize) || 7
+    const tlCurlProj = ((p.tlCurlProj as number) ?? 0) === 1
+    const tlCurlN = (p.tlCurlN as number) ?? 3
     const tlShowCloud = (p.tlShowCloud as number) ?? 0
     const tlCloudFast = (p.tlCloudFast as number) ?? 20
     const tlCloudSlow = (p.tlCloudSlow as number) ?? 39
@@ -1135,7 +1162,7 @@ export function renderAnchoredTrendline(rc: RenderContext, indKey: string = 'tre
     const high = data.map((b: any) => b.high as number)
     const low = data.map((b: any) => b.low as number)
     const close = data.map((b: any) => b.close as number)
-    const tl = computeAnchoredTrendline(high, low, close, 1, tlLeft, tlRight, tlPattern, tlMainLeft, tlMainRight, tlMainPattern, tlMinSize, tlBothSides, tlShowBreaks)
+    const tl = computeAnchoredTrendline(high, low, close, 1, tlLeft, tlRight, tlPattern, tlMainLeft, tlMainRight, tlMainPattern, tlMinSize, tlBothSides, tlShowBreaks, tlCurlProj ? 1 : 0, tlCurlN)
     // ── EMA CLOUD (optional, toggle: tlShowCloud) — a band between Cloud Fast/Slow EMAs
     // tinted teal (fast>slow, bullish) / orange-red (slow>fast, bearish). Drawn on the
     // displayed chart, independent of Lingua's MTF cloud. Gives trend-regime context for

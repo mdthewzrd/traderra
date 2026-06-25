@@ -120,6 +120,7 @@ export const IND_CATALOG: Record<string, IndCatalogEntry> = {
   {key:'cyclePitchOn',label:'Structural Pitch',def:1,type:'toggle',group:'aop'},
   {key:'cyclePitchWin',label:'Pitch Window',def:20,step:1,min:5,max:60,group:'aop'},
   {key:'cyclePitchBlend',label:'Pitch Blend',def:0.6,step:0.05,min:0,max:1,group:'aop'},
+  {key:'cyclePitchSmooth',label:'Pitch Smooth',def:5,step:1,min:1,max:20,group:'aop'},
   {key:'cycleStructOn',label:'Struct Break Gate',def:1,type:'toggle',group:'aop'},
   {key:'structHtfExt',label:'HTF Extended (×xtreme)',def:0.7,step:0.05,min:0,max:1,group:'aop'},
   {key:'structSuppress',label:'Counter-Trend Suppress',def:1,type:'toggle',group:'aop'},

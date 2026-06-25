@@ -411,7 +411,8 @@ function computeCachedClassification(panelIdx: number, flat: number, flatH: numb
   const n = mtf.times.length
   // _feedGen busts the cache when MTF/HTF bars are re-fed (incl. on param change, which
   // re-runs setLinguaMtfBars via the ReactChartPanel param-subscription effect).
-  const sig = `${n}|${mtf.times[n-1]}|${htf.times.length}|${flat}|${flatH}|${xtreme}|${euThr}|${holdBars}|${tbOn}|${tbConfirm}|${tbMargin}|${tbReclaim}|${erOn}|${chopThr}|${pitchOn}|${pitchWin}|${pitchBlend}|${structOn}|${structHtfExt}|${structSuppress}|${_feedGen[panelIdx] || 0}`
+  const pitchSmooth = ((getMergedToolParams(panelIdx, 'lingua') as any).cyclePitchSmooth as number) ?? 5
+  const sig = `${n}|${mtf.times[n-1]}|${htf.times.length}|${flat}|${flatH}|${xtreme}|${euThr}|${holdBars}|${tbOn}|${tbConfirm}|${tbMargin}|${tbReclaim}|${erOn}|${chopThr}|${pitchOn}|${pitchWin}|${pitchBlend}|${pitchSmooth}|${structOn}|${structHtfExt}|${structSuppress}|${_feedGen[panelIdx] || 0}`
   const cached = _cacheMtfHyst[panelIdx]
   if (sig === _cacheSig[panelIdx] && cached && cached.length === n) {
     return { mtfHyst: cached, rawTrans: _cacheRawTransitions[panelIdx] || 0, hystTrans: _cacheHystTransitions[panelIdx] || 0, n }
@@ -445,6 +446,8 @@ function computeCachedClassification(panelIdx: number, flat: number, flatH: numb
   if (pitchOn && pitchWin >= 5 && pitchBlend > 0) {
     const atr14 = wilderAtr(mtf.high, mtf.low, mtf.close, 14)
     const W = Math.max(5, Math.floor(pitchWin))
+    const pa = 2 / (Math.max(1, pitchSmooth) + 1)   // EMA alpha — smooths the raw median (matches aop's own smoothing)
+    let pse = NaN                                    // running EMA of the ATR-normalized pitch
     for (let i = W; i < n; i++) {
       const base = mtf.aop[i], den = atr14[i]
       if (isNaN(base) || isNaN(den) || den === 0) continue
@@ -460,7 +463,9 @@ function computeCachedClassification(panelIdx: number, flat: number, flatH: numb
       slopes.sort((x, y) => x - y)
       const m = slopes.length >> 1
       const ts = slopes.length % 2 ? slopes[m] : (slopes[m - 1] + slopes[m]) / 2  // price/bar
-      aopEff[i] = base * (1 - pitchBlend) + (ts / den) * pitchBlend              // → aop scale
+      const norm = ts / den                                                         // → aop scale
+      pse = isNaN(pse) ? norm : pse + (norm - pse) * pa                            // EMA smooth (lag-free init)
+      aopEff[i] = base * (1 - pitchBlend) + pse * pitchBlend                       // blend the SMOOTHED pitch
     }
   }
   for (let i = 0; i < n; i++) {

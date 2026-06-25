@@ -1017,8 +1017,17 @@ function computeCurlTrend(
   const n = close.length
   const N = Math.max(2, Math.round(nPiv))
   const patSide = Math.max(1, Math.floor((pattern - 1) / 2))
-  const lo = confirmPivot(fractalPivots(low, patSide, patSide, false), low, false, left, right)
-  const hi = confirmPivot(fractalPivots(high, patSide, patSide, true), high, true, left, right)
+  // Forward-confirmed swings: pattern fractal (local turn) + `right` bars forward hold. NO
+  // symmetric confirmPivot — it invalidates trend pullbacks (the left side is ALWAYS more
+  // extreme inside a trend) and starved the fit to nothing (the "nothing plots" bug). `left`
+  // is now a MIN-SPACING filter between kept pivots so only significant swings anchor the curl.
+  const pick = (src: number[], findHigh: boolean) => {
+    const raw = fractalPivots(src, patSide, right, findHigh)
+    const out: { idx: number; price: number }[] = []
+    for (const p of raw) if (!out.length || p.idx - out[out.length - 1].idx >= left) out.push(p)
+    return out
+  }
+  const lo = pick(low, false), hi = pick(high, true)
 
   // Rolling least-squares fit through the N freshest confirmed-as-of-k pivots of one type.
   // disp_select: support draws only when rising (slope>0), resistance only when falling (<0).

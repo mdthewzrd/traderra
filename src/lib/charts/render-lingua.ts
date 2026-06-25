@@ -1154,6 +1154,7 @@ export function renderAnchoredTrendline(rc: RenderContext, indKey: string = 'tre
     const tlShowCloud = (p.tlShowCloud as number) ?? 0
     const tlCloudFast = (p.tlCloudFast as number) ?? 20
     const tlCloudSlow = (p.tlCloudSlow as number) ?? 39
+    const tlShowSwings = ((p.tlShowSwings as number) ?? 0) === 1
     const { ctx, data, vs, visible, xCtr, pToY, barW } = rc
     if (!data || data.length < 10 || visible.length === 0) return
     // Draw on the DISPLAYED chart (whatever timeframe is shown). This is a standalone tool
@@ -1167,9 +1168,11 @@ export function renderAnchoredTrendline(rc: RenderContext, indKey: string = 'tre
     // tinted teal (fast>slow, bullish) / orange-red (slow>fast, bearish). Drawn on the
     // displayed chart, independent of Lingua's MTF cloud. Gives trend-regime context for
     // how the anchored trendlines should read.
+    // Hoist the cloud EMAs so BOTH the cloud band and the swing-respect markers reference
+    // the SAME fast/slow EMAs (no drift between what's tinted and what's judged).
+    const cf = ema(close, Math.max(2, tlCloudFast))
+    const cs = ema(close, Math.max(3, tlCloudSlow))
     if (tlShowCloud) {
-      const cf = ema(close, Math.max(2, tlCloudFast))
-      const cs = ema(close, Math.max(3, tlCloudSlow))
       const bullCol = '0,210,170', bearCol = '232,108,40'
       for (let i = 0; i < visible.length - 1; i++) {
         const ai = vs + i, aj = vs + i + 1
@@ -1182,6 +1185,30 @@ export function renderAnchoredTrendline(rc: RenderContext, indKey: string = 'tre
       }
       drawLine(rc, cf, 'rgba(120,180,200,0.4)', 1)
       drawLine(rc, cs, 'rgba(120,180,200,0.4)', 1)
+    }
+    // ── SWING MARKERS (tlShowSwings): dot each MAIN swing, colored by EMA respect.
+    // A swing LOW 'respects' the uptrend if it holds ABOVE the fast EMA (20) — a healthy
+    // pullback. Below = structure violation (red). Highs mirror for downtrends. This makes
+    // the trend's anchor points + their EMA relationship VISIBLE — the foundation for the
+    // curl (which will steepen toward the green/respecting swings, pinned at the origin).
+    if (tlShowSwings) {
+      const mainPat = Math.max(1, Math.round(tlMainPattern))
+      const markSwings = (isHigh: boolean) => {
+        const src = isHigh ? high : low
+        const pv = confirmPivot(fractalPivots(src, mainPat, mainPat, isHigh), src, isHigh, tlMainLeft, tlMainRight)
+        for (const p of pv) {
+          const vi = p.idx - vs
+          if (vi < 0 || vi >= visible.length) continue
+          if (isNaN(cf[p.idx])) continue
+          const respects = isHigh ? p.price < cf[p.idx] : p.price > cf[p.idx]   // low above 20EMA = respects
+          const x = xCtr(vi), y = pToY(p.price)
+          ctx.beginPath(); ctx.arc(x, y, Math.max(3, barW * 0.5), 0, Math.PI * 2)
+          ctx.fillStyle = respects ? 'rgba(0,200,120,0.95)' : 'rgba(232,80,80,0.95)'
+          ctx.fill()
+          ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.stroke()
+        }
+      }
+      markSwings(false); markSwings(true)
     }
     // PALETTE — "light" variant uses faded green/red + silver-blue glow so it stays
     // visually distinct from the bold main tool (gold glow, saturated colors) when both

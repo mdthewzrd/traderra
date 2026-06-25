@@ -1062,6 +1062,8 @@ function computeCurlTrend(
   return { sup, res, supBreak, resBreak }
 }
 
+let _curlErrOnce = false
+let _curlLogOnce = false
 /** renderCurlTrend — the curl trendline (separate tool, drawn on the displayed chart). */
 export function renderCurlTrend(rc: RenderContext) {
   try {
@@ -1069,8 +1071,8 @@ export function renderCurlTrend(rc: RenderContext) {
     const tool = useToolStore.getState().tools.find((t: any) => t.indKey === 'curltrend')
     if (!tool || !tool.on) return
     const p = getMergedToolParams(panelIdx, 'curltrend') as any
-    const ctLeft = (p.ctLeft as number) ?? 69
-    const ctRight = (p.ctRight as number) ?? 21
+    const ctLeft = (p.ctLeft as number) ?? 15
+    const ctRight = (p.ctRight as number) ?? 10
     const ctPattern = (p.ctPattern as number) ?? 5
     const ctPivots = (p.ctPivots as number) ?? 3
     const ctShowBreak = ((p.ctShowBreak as number) ?? 1) === 1
@@ -1080,6 +1082,13 @@ export function renderCurlTrend(rc: RenderContext) {
     const low = data.map((b: any) => b.low as number)
     const close = data.map((b: any) => b.close as number)
     const c = computeCurlTrend(high, low, close, ctPattern, ctLeft, ctRight, ctPivots)
+    if (!_curlLogOnce) {
+      _curlLogOnce = true
+      const patSide = Math.max(1, Math.floor((ctPattern - 1) / 2))
+      const loPv = (function(){ const raw=[]; const fp=fractalPivots(low,patSide,ctRight,false); for(const x of fp) raw.push(x); return raw.length })()
+      const hiPv = (function(){ const raw=[]; const fp=fractalPivots(high,patSide,ctRight,true); for(const x of fp) raw.push(x); return raw.length })()
+      console.log('[curltrend] data:'+data.length, 'params:', {ctLeft,ctRight,ctPattern,ctPivots}, 'raw lows:'+loPv, 'raw highs:'+hiPv, 'sup valid:'+c.sup.filter(v=>!isNaN(v)).length, 'res valid:'+c.res.filter(v=>!isNaN(v)).length)
+    }
     const supCol = (p.ct_sup as string) || 'rgba(86,156,214,0.95)'
     const resCol = (p.ct_res as string) || 'rgba(230,150,40,0.95)'
     const brkCol = (p.ct_break as string) || 'rgba(250,204,21,0.95)'
@@ -1095,7 +1104,7 @@ export function renderCurlTrend(rc: RenderContext) {
       }
       mark(c.supBreak); mark(c.resBreak)
     }
-  } catch { /* never break the render loop */ }
+  } catch (e) { if (!_curlErrOnce) { _curlErrOnce = true; console.error('[curltrend] threw (logged once):', e) } }
 }
 
 export function renderAnchoredTrendline(rc: RenderContext, indKey: string = 'trendline', force: boolean = false) {

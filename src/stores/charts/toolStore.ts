@@ -169,7 +169,7 @@ export const IND_CATALOG: Record<string, IndCatalogEntry> = {
     ], legacyKeys:['lingua'] },
   curltrend:      { label:'Curl Trendline', group:'Trendlines', combo:true,
     params:[
-      {key:'ctLeft',label:'Min Swing Spacing',def:8,min:2,max:200,group:'pivot'},
+      {key:'ctLeft',label:'Min Swing Spacing',def:15,min:2,max:200,group:'pivot'},
       {key:'ctRight',label:'Confirm (forward)',def:10,min:1,max:120,group:'pivot'},
       {key:'ctPattern',label:'Pattern',def:5,min:1,max:13,group:'pivot'},
       {key:'ctPivots',label:'Pivots in Window',def:3,min:2,max:6,group:'curl'},

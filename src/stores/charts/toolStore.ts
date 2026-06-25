@@ -180,6 +180,26 @@ export const IND_CATALOG: Record<string, IndCatalogEntry> = {
       {key:'ct_res',label:'Resistance (falling)',def:'rgba(230,150,40,0.95)'},
       {key:'ct_break',label:'Break Marker',def:'rgba(250,204,21,0.95)'},
     ], legacyKeys:['curltrend'] },
+  mikesbands:    { label:"Mike's Bands", group:'Trendlines', combo:true,
+    params:[
+      {key:'tlLeft',label:'Look Left',def:50,min:1,max:120,group:'detect'},
+      {key:'tlRight',label:'Look Right',def:15,min:1,max:60,group:'detect'},
+      {key:'tlPattern',label:'Pattern Window',def:2,min:1,max:13,group:'detect'},
+      {key:'tlMinSize',label:'Min Size (×ATR)',def:0,step:0.1,min:0,max:5,group:'detect'},
+      {key:'tlMainLeft',label:'Main Look Left',def:69,min:1,max:200,group:'main'},
+      {key:'tlMainRight',label:'Main Look Right',def:15,min:5,max:120,group:'main'},
+      {key:'tlMainPattern',label:'Main Pattern',def:3,min:1,max:13,group:'main'},
+      {key:'tlShowCloud',label:'Show EMA Cloud',def:0,type:'toggle',group:'cloud'},
+      {key:'tlCloudFast',label:'Cloud Fast',def:20,min:2,max:200,group:'cloud'},
+      {key:'tlCloudSlow',label:'Cloud Slow',def:39,min:3,max:300,group:'cloud'},
+      {key:'tlBothSides',label:'Show Both Sides',def:0,type:'toggle',group:'display'},
+      {key:'tlShowMain',label:'Show Main Lines',def:1,type:'toggle',group:'display'},
+      {key:'tlShowBreaks',label:'Show Breaks',def:0,type:'toggle',group:'display'},
+      {key:'tlBreakSize',label:'Break Wedge Size',def:7,min:3,max:16,group:'display'},
+    ],
+    colors:[
+      {key:'tl_support',label:'Support (cyan)',def:'rgba(0,229,255,0.95)'},{key:'tl_resist',label:'Resistance (magenta)',def:'rgba(255,0,170,0.95)'},{key:'tl_main',label:'Main Glow',def:'rgba(150,100,220,0.28)'},
+    ], legacyKeys:['mikesbands'] },
   trendline:      { label:'Trendline (Anchored)', group:'Trendlines', combo:true,
     params:[
       {key:'tlLeft',label:'Look Left',def:50,min:1,max:120,group:'detect'},
@@ -319,6 +339,7 @@ function makeDefaultTools(): ToolInstance[] {
     mk('lingua', false, false),
     mk('lingua_exec', false, false),
     mk('curltrend', false, false),
+    mk('mikesbands', false, false),
   ]
 }
 

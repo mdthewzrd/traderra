@@ -545,6 +545,8 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       if (inds.trendline_light) renderAnchoredTrendline(rc, 'trendline_light')
       // ── Curl Trendline (rolling 3-pivot regression — "the curl", standalone tool) ──
       if (inds.curltrend) renderCurlTrend(rc)
+      // ── Mike's Bands (fresh standalone tool — clone of anchored trendline to start) ──
+      if (inds.mikesbands) renderAnchoredTrendline(rc, 'mikesbands')
       if (inds.regime) renderRegime(rc)
       if (inds.consolidation) renderConsolidation(rc)
 

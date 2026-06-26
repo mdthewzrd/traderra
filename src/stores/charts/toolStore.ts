@@ -539,7 +539,9 @@ export const useToolStore = create<ToolState>()(
       // (e.g. trendEma 63→39) propagate from code, while user-tuned params survive.
       // Stale tools whose indKey was removed from the catalog are dropped.
       partialize: (s) => ({
-        tools: s.tools.map(t => ({ indKey: t.indKey, on: t.on, hot: t.hot, params: t.params, colors: t.colors })),
+        // Persist the stable instance `id` so panelParams (keyed by id) survives refresh —
+        // without it, merge regenerates ids every load and every param override orphans.
+        tools: s.tools.map(t => ({ id: t.id, indKey: t.indKey, on: t.on, hot: t.hot, params: t.params, colors: t.colors })),
         selectedToolId: s.selectedToolId,
         panelParams: s.panelParams,
       }),
@@ -560,7 +562,7 @@ export const useToolStore = create<ToolState>()(
             const freshColors: Record<string, string> = {}
             cat?.colors?.forEach((c: any) => { freshColors[c.key] = c.def })
             return {
-              id: newToolId(),
+              id: t.id || newToolId(),
               indKey: t.indKey,
               name: cat?.label || t.indKey,
               on: t.on ?? false,

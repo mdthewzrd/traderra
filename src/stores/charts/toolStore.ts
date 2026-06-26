@@ -211,7 +211,7 @@ export const IND_CATALOG: Record<string, IndCatalogEntry> = {
       {key:'lfSlow',label:'Blend Slow EMA',def:59,min:1,max:300,group:'ema'},
       {key:'lfTrend1',label:'Trend EMA 1',def:72,min:1,max:400,group:'ema'},
       {key:'lfTrend2',label:'Trend EMA 2',def:89,min:1,max:400,group:'ema'},
-      {key:'lfTrendFilter',label:'Macro Trend Filter',def:1,type:'toggle',group:'classify'},
+      {key:'lfCloudW',label:'Cloud Smooth Weight',def:0.4,step:0.05,min:0,max:1,group:'classify'},
       {key:'lfBlendBars',label:'Break Window (bars)',def:6,min:1,max:30,group:'classify'},
       {key:'lfLeft',label:'Look Left',def:30,min:1,max:120,group:'detect'},
       {key:'lfRight',label:'Look Right',def:10,min:1,max:60,group:'detect'},

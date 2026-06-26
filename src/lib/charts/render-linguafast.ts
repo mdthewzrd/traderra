@@ -46,16 +46,14 @@ export function classifyFromStructure(
   close: number[],
   blendBars: number,
   eMid: number[], eSlow: number[],
-  eTrend1: number[], eTrend2: number[], trendFilter: boolean,
+  eTrend1: number[], eTrend2: number[], cloudWeight: number,
 ): FastStage[] {
   const out: FastStage[] = new Array(n).fill('CONSOLIDATION')
   for (let i = 0; i < n; i++) {
-    // MACRO TREND from the 72/89 pair — the 'help with the trend' anchor. A structural break
-    // can whipsaw in chop; this filters counter-macro signals so the regime stays clean.
-    // macroUp = 72≥89 AND price≥89 ; macroDown = 72<89 AND price<89.
+    // CLOUD SIGNAL (the smoother): +1 if 72>=89 (macro up), -1 if 72<89 (macro down).
+    // Blended with the structural trend at cloudWeight (default 0.4 = base 40% off the cloud).
     const t1 = eTrend1[i], t2 = eTrend2[i]
-    const macroUp = !isNaN(t1) && !isNaN(t2) && t1 >= t2 && close[i] >= t2
-    const macroDown = !isNaN(t1) && !isNaN(t2) && t1 < t2 && close[i] < t2
+    const cloud = (!isNaN(t1) && !isNaN(t2)) ? (t1 >= t2 ? 1 : -1) : 0
     // alive = set and not yet broken (or broken exactly at i)
     let active: { dir: 1 | -1; setBar: number } | null = null
     let broken: { dir: 1 | -1; breakBar: number } | null = null
@@ -69,14 +67,16 @@ export function classifyFromStructure(
       }
     }
     if (active) {
-      // structure holding → trend residence from the live segment, MACRO-FILTERED.
-      // A counter-macro trend signal softens to a CONS flavor (don't commit hard against 72/89).
-      const structural: FastStage = active.dir === 1 ? 'UPTREND' : 'BACKSIDE'
-      if (trendFilter) {
-        if (structural === 'UPTREND' && macroDown) out[i] = 'UP CONS'
-        else if (structural === 'BACKSIDE' && macroUp) out[i] = 'DOWN CONS'
-        else out[i] = structural
-      } else out[i] = structural
+      // structure holding → blend the structural trend with the cloud (40% cloud smoother).
+      // Full UPTREND/BACKSIDE only when structure AND cloud agree; disagreement softens to
+      // UP CONS / DOWN CONS. This bases the trend partly off the 72/89 cloud (smoother, less whipsaw).
+      const structural = active.dir === 1 ? 1 : -1
+      const blended = structural * (1 - cloudWeight) + cloud * cloudWeight
+      if (blended >= 0.5) out[i] = 'UPTREND'
+      else if (blended <= -0.5) out[i] = 'BACKSIDE'
+      else if (blended > 0) out[i] = 'UP CONS'
+      else if (blended < 0) out[i] = 'DOWN CONS'
+      else out[i] = 'CONSOLIDATION'
     } else if (broken) {
       // in a transition window between break and next segment
       const since = i - broken.breakBar
@@ -122,7 +122,7 @@ export function renderLinguaFast(rc: RenderContext) {
     const lfBlendBars = (p.lfBlendBars as number) ?? 6
     const lfTrend1 = (p.lfTrend1 as number) ?? 72
     const lfTrend2 = (p.lfTrend2 as number) ?? 89
-    const lfTrendFilter = ((p.lfTrendFilter as number) ?? 1) === 1
+    const lfCloudW = (p.lfCloudW as number) ?? 0.4
 
     // structural trendline params (reuse the proven anchored detection)
     const lfLeft = (p.lfLeft as number) ?? 30
@@ -148,7 +148,7 @@ export function renderLinguaFast(rc: RenderContext) {
     const eSlow = ema(close, lfSlow)
     const eTrend1 = ema(close, lfTrend1)
     const eTrend2 = ema(close, lfTrend2)
-    const stages = classifyFromStructure(tl.segments, n, close, lfBlendBars, eMid, eSlow, eTrend1, eTrend2, lfTrendFilter)
+    const stages = classifyFromStructure(tl.segments, n, close, lfBlendBars, eMid, eSlow, eTrend1, eTrend2, lfCloudW)
 
     // ── 2. Stage background fills ──
     for (let i = 0; i < visible.length; i++) {
@@ -161,15 +161,27 @@ export function renderLinguaFast(rc: RenderContext) {
       ctx.fillRect(x1, pToY(rc.maxP), barW + 0.5, pToY(rc.minP) - pToY(rc.maxP))
     }
 
-    // ── 3. EMAs overlay (editable 9/20 fast, 50/59 slow) ──
+    // ── 3. 72/89 TREND CLOUD + EMAs overlay ──
+    // The 72/89 cloud is the smoother the classifier bases 40% of the trend off. Drawn as a
+    // BAND FILL (not lines) so it reads clearly as a cloud. Tinted by trend (72>=89 = bull).
+    const c1 = eTrend1, c2 = eTrend2
+    for (let i = 0; i < visible.length - 1; i++) {
+      const ai = vs + i
+      if (isNaN(c1[ai]) || isNaN(c2[ai])) continue
+      const x1 = xCtr(i) - barW / 2
+      const top = pToY(Math.max(c1[ai], c2[ai]))
+      const bot = pToY(Math.min(c1[ai], c2[ai]))
+      ctx.fillStyle = c1[ai] >= c2[ai] ? 'rgba(0,180,140,0.13)' : 'rgba(210,70,50,0.13)'
+      ctx.fillRect(x1, top, barW + 0.5, bot - top)
+    }
     if (lfShowEmas) {
       const e9 = ema(close, lfFast1), e20 = ema(close, lfFast2)
       drawEmaLine(rc, e9, 'rgba(120,200,255,0.85)', 1.4)    // light blue — fast
       drawEmaLine(rc, e20, 'rgba(0,229,255,0.85)', 1.4)     // cyan — fast
       drawEmaLine(rc, eMid, 'rgba(200,180,100,0.7)', 1.2)   // gold — mid (blend band)
       drawEmaLine(rc, eSlow, 'rgba(200,120,200,0.7)', 1.2)  // magenta — slow (blend band)
-      drawEmaLine(rc, eTrend1, 'rgba(255,206,21,0.95)', 2.2)  // gold-bold — macro trend (72)
-      drawEmaLine(rc, eTrend2, 'rgba(255,140,40,0.95)', 2.2)  // orange-bold — macro trend (89)
+      drawEmaLine(rc, eTrend1, 'rgba(255,206,21,0.55)', 1)    // thin gold — cloud edge (72)
+      drawEmaLine(rc, eTrend2, 'rgba(255,140,40,0.55)', 1)    // thin orange — cloud edge (89)
     }
 
     // ── 4. Structural break markers (the TRENDBREAK signal points) ──

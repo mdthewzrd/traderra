@@ -5,6 +5,8 @@
  */
 import { prisma } from '@/lib/prisma';
 import { classifyFiling, type DilutionTag } from '@/lib/dilution/classify';
+import type { CashPosition } from '@/lib/sec/financials';
+import { computeCashFromDb } from '@/lib/sec/financials';
 
 /**
  * Classify recent filings for a company and persist tags. Idempotent — safe to
@@ -50,6 +52,7 @@ export interface DilutionSnapshot {
   } | null;
   sharesLatest: { period: string; outstanding: number } | null;
   sharesHistory: { period: string; outstanding: number }[];
+  cash: CashPosition;
   filings: {
     accessionNo: string;
     formType: string;
@@ -65,7 +68,7 @@ export interface DilutionSnapshot {
 
 /** Build the dilution snapshot entirely from the DB (no SEC call). */
 export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
-  const [company, factRows, filings] = await Promise.all([
+  const [company, factRows, filings, cash] = await Promise.all([
     prisma.dilutionCompany.findUnique({ where: { cik } }),
     prisma.dilutionFact.findMany({
       where: { cik, fact: 'EntityCommonStockSharesOutstanding' },
@@ -77,6 +80,7 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
       orderBy: { filingDate: 'desc' },
       take: 50,
     }),
+    computeCashFromDb(cik),
   ]);
 
   const sharesHistory = factRows.map((r) => ({ period: r.period, outstanding: r.val }));
@@ -100,6 +104,7 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
       : null,
     sharesLatest: sharesHistory[0] ?? null,
     sharesHistory,
+    cash,
     filings: filings.map((f) => ({
       accessionNo: f.accessionNo,
       formType: f.formType,

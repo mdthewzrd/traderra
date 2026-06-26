@@ -366,7 +366,25 @@ export default function LabPage() {
     setBusy(true); setMsg('Saving…')
     try {
       const dataUrl = c.toDataURL({ format: 'png', multiplier: 2 })
-      const r = await fetch('/api/lab/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dataUrl }) })
+      // Serialize annotations as readable text. The PNG is opaque to the agent (no image
+      // input); this sidecar exposes every text label, arrow direction, and box region so
+      // the cycle logic can be read and coded against. Sorted left→right = chart timeline.
+      const cw = c.getWidth(), ch = c.getHeight()
+      const objects = c.getObjects().map((o: any) => {
+        const o2: any = {
+          type: o.type,
+          left: Math.round(o.left || 0), top: Math.round(o.top || 0),
+          leftPct: Math.round(((o.left || 0) / cw) * 100), topPct: Math.round(((o.top || 0) / ch) * 100),
+          width: Math.round(o.width || 0), height: Math.round(o.height || 0),
+          angle: Math.round(o.angle || 0),
+          stroke: o.stroke || null, fill: o.fill || null,
+          text: o.text || null,
+        }
+        if (o.type === 'line') { o2.x1 = o.x1; o2.y1 = o.y1; o2.x2 = o.x2; o2.y2 = o.y2 }
+        if (o.type === 'path') { o2.path = o.path }
+        return o2
+      }).sort((a: any, b: any) => a.left - b.left)
+      const r = await fetch('/api/lab/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dataUrl, objects, cw, ch }) })
       const j = await r.json()
       if (j.ok) setMsg(`✓ Saved — tell Renata "check the lab". (${j.name})`)
       else setMsg('Save failed: ' + j.error)

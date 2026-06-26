@@ -7,6 +7,7 @@ import { NextResponse } from 'next/server';
 import { getCikForTicker } from '@/lib/sec/cik-map';
 import { syncFilings } from '@/lib/sec/submissions';
 import { syncSharesOutstanding } from '@/lib/sec/companyfacts';
+import { syncFinancials } from '@/lib/sec/financials';
 import { backfillTags, getSnapshot } from '@/lib/dilution/store';
 
 export async function POST(req: Request) {
@@ -25,9 +26,10 @@ export async function POST(req: Request) {
       );
     }
 
-    const [filingsRes, sharesRes] = await Promise.all([
+    const [filingsRes, sharesRes, finRes] = await Promise.all([
       syncFilings(ticker, { limit: 50 }),
       syncSharesOutstanding(ticker, { limit: 40 }),
+      syncFinancials(ticker, { force: true }),
     ]);
 
     if (filingsRes.status === 'error' && filingsRes.cik === null) {
@@ -43,6 +45,7 @@ export async function POST(req: Request) {
       sync: {
         filings: { count: filingsRes.count, status: filingsRes.status, error: filingsRes.error },
         shares: { count: sharesRes.count, status: sharesRes.status },
+        cash: { status: finRes.status },
         tagsChanged,
       },
       snapshot,

@@ -576,3 +576,22 @@ model DilutionScanHit {
   @@index([cik])
   @@index([filingDate])
 }
+
+// ── Backtest annotations: notes + lab image link per signal ──
+// Manual flow: user annotates in /lab, saves PNG, pastes the filename here.
+// The agent reads `note` (text); the image is the user's visual aid / reference.
+model BacktestAnnotation {
+  id          String   @id @default(cuid())
+  scanId      String   // SavedScan id
+  ticker      String
+  signalDate  String   // YYYY-MM-DD of the signal
+  note        String   @default("")
+  labImage    String?  // filename from /api/lab/save, e.g. lab-1782...png
+  tag         String?  // optional short label (HELD / FAILED-CRAP / FAILED-PUSH)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([scanId, ticker, signalDate])
+  @@index([scanId])
+  @@index([ticker])
+}

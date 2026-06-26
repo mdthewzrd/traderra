@@ -8,10 +8,11 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   Search, RefreshCw, ExternalLink, TrendingDown, AlertTriangle,
-  FileText, Building2, Loader2,
+  FileText, Building2, Loader2, Gauge, Layers, Wallet,
 } from 'lucide-react';
 
 import { DILUTION_TAG_META, type DilutionTag } from '@/lib/dilution/classify';
+import { deriveDilutionSummary } from '@/lib/dilution/summary';
 
 type Filing = {
   accessionNo: string;
@@ -26,10 +27,20 @@ type Filing = {
 type Snapshot = {
   company: {
     name: string; tickers: string[]; exchange: string | null;
-    cik: string; filingsLastSynced: string | null;
+    cik: string; filingsLastSynced: string | null; factsLastSynced: string | null;
   } | null;
   sharesLatest: { period: string; outstanding: number } | null;
   sharesHistory: { period: string; outstanding: number }[];
+  cash: {
+    estimatedCash: number | null;
+    asOfDate: string | null;
+    monthlyCashFlow: number | null;
+    asOfOperatingEnd: string | null;
+    reportedRunwayMonths: number | null;
+    projectedCash: number | null;
+    cashRemainingMonths: number | null;
+    projectedAsOf: string | null;
+  };
   filings: Filing[];
   tagSummary: Record<string, number>;
 };
@@ -51,11 +62,21 @@ function fmtNum(n: number): string {
   return String(n);
 }
 
+function fmtMoney(n: number | null): string {
+  if (n === null) return '—';
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  if (abs >= 1e9) return sign + '$' + (abs / 1e9).toFixed(2) + 'B';
+  if (abs >= 1e6) return sign + '$' + (abs / 1e6).toFixed(2) + 'M';
+  if (abs >= 1e3) return sign + '$' + (abs / 1e3).toFixed(1) + 'K';
+  return sign + '$' + abs.toFixed(0);
+}
+
 export default function DilutionPage() {
   const [input, setInput] = useState('AAPL');
   const [ticker, setTicker] = useState('');
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // true on mount → immediate spinner, proves page mounted
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -114,6 +135,24 @@ export default function DilutionPage() {
     (snapshot?.tagSummary['convertible'] ?? 0) +
     (snapshot?.tagSummary['reverse-split'] ?? 0);
 
+  const summary = snapshot
+    ? deriveDilutionSummary(
+        snapshot.filings.map((f) => ({
+          formType: f.formType,
+          filingDate: f.filingDate,
+          dilutionTags: f.dilutionTags,
+          primaryDesc: f.primaryDesc,
+        })),
+      )
+    : null;
+
+  const cash = snapshot?.cash ?? null;
+  const cashOutOfMoney = cash !== null && cash.cashRemainingMonths !== null && cash.cashRemainingMonths < 0;
+  const cashRanOutDate =
+    cash?.asOfDate && cash.reportedRunwayMonths !== null
+      ? new Date(new Date(cash.asOfDate).getTime() + cash.reportedRunwayMonths * 30.44 * 86_400_000)
+      : null;
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       <div className="mx-auto max-w-6xl px-4 py-6">
@@ -164,7 +203,14 @@ export default function DilutionPage() {
           </div>
         )}
         {status && !error && (
-          <div className="mb-4 text-xs text-zinc-500">{status}</div>
+          <div className="mb-4 flex items-center gap-2 text-xs text-zinc-500">
+            <span>{status}</span>
+            {snapshot?.company?.filingsLastSynced && (
+              <span className="rounded border border-zinc-700 px-1.5 py-0.5 text-zinc-400">
+                DB · last sync {new Date(snapshot.company.filingsLastSynced).toLocaleString()}
+              </span>
+            )}
+          </div>
         )}
 
         {loading && !snapshot ? (
@@ -206,6 +252,145 @@ export default function DilutionPage() {
                 </div>
               </div>
             </div>
+
+            {/* Dilution Summary + Rating — the AskEdgar dilution-tracker view */}
+            {summary && (
+              <div className="grid gap-4 lg:grid-cols-3">
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+                  <div className="flex items-center gap-2 text-zinc-400">
+                    <Gauge className="h-4 w-4" />
+                    <span className="text-xs uppercase tracking-wide">Dilution rating</span>
+                  </div>
+                  <div className="mt-2 flex items-end gap-2">
+                    <span className={`text-4xl font-bold ${summary.rating <= 20 ? 'text-emerald-400' : summary.rating <= 45 ? 'text-amber-400' : summary.rating <= 70 ? 'text-orange-400' : 'text-red-400'}`}>
+                      {summary.rating}
+                    </span>
+                    <span className="mb-1 text-sm text-zinc-500">/ 100</span>
+                    <span className={`mb-1 ml-auto rounded border px-2 py-0.5 text-xs ${summary.rating <= 20 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' : summary.rating <= 45 ? 'border-amber-500/30 bg-amber-500/10 text-amber-400' : summary.rating <= 70 ? 'border-orange-500/30 bg-orange-500/10 text-orange-400' : 'border-red-500/30 bg-red-500/10 text-red-400'}`}>
+                      {summary.tier}
+                    </span>
+                  </div>
+                  <div className="mt-3 space-y-1">
+                    {summary.breakdown.map((b) => (
+                      <div key={b.component} className="flex items-center justify-between text-xs">
+                        <span className={b.fired ? 'text-zinc-300' : 'text-zinc-600'}>
+                          {b.fired ? '◉' : '○'} {b.component}
+                        </span>
+                        <span className={b.fired ? 'text-zinc-400' : 'text-zinc-700'}>
+                          +{b.weight}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 lg:col-span-2">
+                  <div className="mb-2 flex items-center gap-2 text-zinc-400">
+                    <Layers className="h-4 w-4" />
+                    <span className="text-xs uppercase tracking-wide">Dilution programs (from SEC filings)</span>
+                  </div>
+                  {summary.programs.length === 0 ? (
+                    <div className="py-6 text-center text-sm text-zinc-500">
+                      No dilution-relevant filings detected in the synced window.
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-zinc-800/60">
+                      {summary.programs.map((p) => (
+                        <div key={p.key} className="flex items-start gap-3 py-2">
+                          <span
+                            className={`mt-1 h-2 w-2 shrink-0 rounded-full ${
+                              p.severity === 'danger' ? 'bg-red-500' : p.severity === 'warn' ? 'bg-amber-500' : 'bg-zinc-600'
+                            }`}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-baseline justify-between gap-2">
+                              <span className="text-sm font-medium">{p.label}</span>
+                              <span className="shrink-0 text-xs text-zinc-500">
+                                {p.count} filing{p.count > 1 ? 's' : ''}{p.latestDate ? ` · latest ${p.latestDate}` : ''}
+                              </span>
+                            </div>
+                            <div className="truncate text-xs text-zinc-500">{p.blurb}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-2 border-t border-zinc-800/60 pt-2 text-[11px] text-zinc-600">
+                    Metadata-derived (form type + 8-K items). Deeper program status — capacity remaining, shares sold — arrives with full-text document parsing.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Cash Position — AskEdgar/Nexus methodology: total liquidity (cash + restricted) as-of report date */}
+            {snapshot.cash && (
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+                <div className="flex items-center gap-2 text-zinc-400">
+                  <Wallet className="h-4 w-4" />
+                  <span className="text-xs uppercase tracking-wide">Cash position</span>
+                  <span className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-400">total liquidity · SEC XBRL</span>
+                  {snapshot.cash.asOfDate && (
+                    <span className="ml-auto text-[11px] text-zinc-600">as of {snapshot.cash.asOfDate}</span>
+                  )}
+                </div>
+                {snapshot.cash.estimatedCash === null && snapshot.cash.monthlyCashFlow === null ? (
+                  <div className="mt-2 text-sm text-zinc-500">No XBRL cash/operating data reported.</div>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
+                      <div>
+                        <div className="text-xs text-zinc-500">Cash &amp; equiv. (incl. restricted)</div>
+                        <div className="text-2xl font-bold">{fmtMoney(snapshot.cash.estimatedCash)}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-zinc-500">Monthly burn</div>
+                        <div className={`text-2xl font-bold ${(snapshot.cash.monthlyCashFlow ?? 0) < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                          {fmtMoney(Math.abs(snapshot.cash.monthlyCashFlow ?? 0))}{snapshot.cash.monthlyCashFlow !== null && snapshot.cash.monthlyCashFlow >= 0 ? ' gen' : '/mo'}
+                        </div>
+                      </div>
+                      {/* HEADLINE: as-reported runway — matches Nexus methodology */}
+                      <div className="rounded-md border border-zinc-600/60 bg-zinc-800/40 px-3 py-1">
+                        <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                          <span>Runway</span>
+                          <span className="rounded bg-zinc-700 px-1 py-px text-[9px] uppercase tracking-wide text-zinc-300">≈ Nexus</span>
+                        </div>
+                        {snapshot.cash.reportedRunwayMonths === null ? (
+                          <div className="text-2xl font-bold text-emerald-400">
+                            {(snapshot.cash.monthlyCashFlow ?? 0) >= 0 ? 'Cash-flow+' : '—'}
+                          </div>
+                        ) : (
+                          <div className={`text-3xl font-bold ${snapshot.cash.reportedRunwayMonths < 6 ? 'text-red-400' : snapshot.cash.reportedRunwayMonths < 12 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                            {snapshot.cash.reportedRunwayMonths.toFixed(1)}<span className="ml-1 text-sm font-normal text-zinc-500">mo</span>
+                          </div>
+                        )}
+                      </div>
+                      {/* SECONDARY: forward-projected to today */}
+                      <div>
+                        <div className="text-xs text-zinc-500">Projected to today</div>
+                        {snapshot.cash.cashRemainingMonths === null ? (
+                          <div className="text-2xl font-bold text-zinc-500">—</div>
+                        ) : (
+                          <div className={`text-2xl font-bold ${cashOutOfMoney ? 'text-red-400' : snapshot.cash.cashRemainingMonths < 6 ? 'text-red-400' : snapshot.cash.cashRemainingMonths < 12 ? 'text-amber-400' : 'text-zinc-300'}`}>
+                            {snapshot.cash.cashRemainingMonths.toFixed(1)}<span className="ml-1 text-sm font-normal text-zinc-500">mo</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500">
+                      {snapshot.cash.projectedCash !== null && (
+                        <span>Est. cash today: {fmtMoney(snapshot.cash.projectedCash)}</span>
+                      )}
+                      {cashOutOfMoney && cashRanOutDate && (
+                        <span className="font-medium text-red-400">Out of money since ~{cashRanOutDate.toISOString().slice(0, 10)}</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-zinc-600">
+                      Headline = total liquidity (cash + restricted cash) ÷ latest operating burn, as-of report date — matches AskEdgar/Nexus. Projected = forward to today assuming burn continues.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Shares outstanding */}
             <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">

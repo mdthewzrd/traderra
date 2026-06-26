@@ -10,7 +10,7 @@ const OUT_DIR = '/home/mdwzrd/.wzrd-pi-dev/projects/edge-dev/uploads'
 
 export async function POST(req: NextRequest) {
   try {
-    const { dataUrl } = await req.json()
+    const { dataUrl, objects, cw, ch } = await req.json()
     if (!dataUrl || !dataUrl.startsWith('data:image/')) {
       return NextResponse.json({ error: 'missing or invalid dataUrl' }, { status: 400 })
     }
@@ -20,6 +20,39 @@ export async function POST(req: NextRequest) {
     const name = `lab-${Date.now()}.png`
     const full = path.join(OUT_DIR, name)
     await writeFile(full, buf)
+
+    // Sidecar .txt: human-readable serialization of the annotations. The agent cannot
+    // read the PNG (no image input), so we expose every text label, arrow, and box here.
+    if (Array.isArray(objects) && objects.length) {
+      const lines: string[] = []
+      lines.push(`# Lingua Lab annotations — ${name}`)
+      lines.push(`# Canvas: ${cw || '?'}x${ch || '?'}, ${objects.length} objects (sorted left→right = chart timeline)`)
+      lines.push(`# leftPct/topPct = position relative to canvas; 0% = far left/top, 100% = far right/bottom`)
+      lines.push('')
+      lines.push('## TEXT LABELS (cycle notes — read these first)')
+      for (const o of objects.filter((o: any) => o.text)) {
+        lines.push(`[${o.leftPct}% L, ${o.topPct}% T] ${JSON.stringify(o.text)}`)
+      }
+      lines.push('')
+      lines.push('## ALL OBJECTS (in timeline order)')
+      for (const o of objects) {
+        const pos = `[${o.leftPct}% L, ${o.topPct}% T]`
+        const col = o.stroke || o.fill || ''
+        if (o.type === 'i-text' || o.type === 'textbox' || o.text) {
+          lines.push(`${pos} TEXT ${col}: ${JSON.stringify(o.text || '')}`)
+        } else if (o.type === 'line') {
+          lines.push(`${pos} LINE ${col} ${o.width}x${o.height} angle=${o.angle}`)
+        } else if (o.type === 'path') {
+          lines.push(`${pos} ARROW/PATH ${col} ${o.width}x${o.height} angle=${o.angle}`)
+        } else if (o.type === 'rect') {
+          lines.push(`${pos} BOX ${col} ${o.width}x${o.height}`)
+        } else {
+          lines.push(`${pos} ${o.type?.toUpperCase()} ${col} ${o.width}x${o.height}`)
+        }
+      }
+      await writeFile(full.replace(/\.png$/, '.txt'), lines.join('\n'))
+    }
+
     return NextResponse.json({ ok: true, path: full, name })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })

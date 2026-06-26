@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { calcExecSignals, type ExecSignal } from '@/lib/charts/exec-signals'
 import { LinguaExecPanel } from '@/components/backtest/LinguaExecPanel'
+import { AnnotationBar } from '@/components/backtest/AnnotationBar'
 import {
   Search, Loader2, ChevronLeft, ChevronRight,
   BarChart3, TrendingUp, List,
@@ -2375,6 +2376,9 @@ export default function BacktestPage() {
       position: 'sticky', top: 48,
     }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        {sig && (
+          <AnnotationBar scanId={selectedScan} ticker={sig.ticker} date={sig.date} dark={dark} T={T} />
+        )}
         {/* ── Signal Header + Filter Button ── */}
         <div className="flex items-center justify-between px-2 py-1.5" style={{ borderBottom: `1px solid ${T.BORDER}`, background: T.SURFACE2 }}>
           <span style={{ color: T.GOLD, fontSize: 10, fontWeight: 700 }}>SIGNALS</span>

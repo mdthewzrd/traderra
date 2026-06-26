@@ -406,11 +406,16 @@ export interface ToolState {
 }
 
 /** Merge a tool's global params with the per-panel override for panelIdx.
- *  Used by render-lingua (non-reactive) to read the correct params per chart. */
-export function getMergedToolParams(panelIdx: number, indKey: string): Record<string, number | string> {
+ *  `key` may be an INSTANCE id (preferred) or an indKey (legacy). When an indKey is
+ *  passed, the FIRST matching instance is used (correct for singletons). Per-panel
+ *  overrides are keyed by INSTANCE id so duplicate tool copies (e.g. two EMA Clouds)
+ *  carry independent params — keying by indKey collided across duplicates. */
+export function getMergedToolParams(panelIdx: number, key: string): Record<string, number | string> {
   const s = useToolStore.getState()
-  const globalP = (s.tools.find(t => t.indKey === indKey)?.params as Record<string, number | string>) || {}
-  const override = s.panelParams[panelIdx]?.[indKey]
+  let tool = s.tools.find(t => t.id === key)
+  if (!tool) tool = s.tools.find(t => t.indKey === key)   // legacy indKey → first instance
+  const globalP = (tool?.params as Record<string, number | string>) || {}
+  const override = tool ? s.panelParams[panelIdx]?.[tool.id] : undefined
   return override ? { ...globalP, ...override } : { ...globalP }
 }
 
@@ -496,10 +501,11 @@ export const useToolStore = create<ToolState>()(
 
     // Write a param override scoped to ONE panel (the active chart). Reads merge this on top
     // of the global tool.params, so unedited charts keep showing global defaults.
-    setPanelParam: (panelIdx, indKey, key, value) => set(s => {
+    // `id` must be a tool INSTANCE id so duplicate copies stay independent.
+    setPanelParam: (panelIdx, id, key, value) => set(s => {
       const byPanel = s.panelParams[panelIdx] || {}
-      const byInd = byPanel[indKey] || {}
-      return { panelParams: { ...s.panelParams, [panelIdx]: { ...byPanel, [indKey]: { ...byInd, [key]: value } } } }
+      const byId = byPanel[id] || {}
+      return { panelParams: { ...s.panelParams, [panelIdx]: { ...byPanel, [id]: { ...byId, [key]: value } } } }
     }),
 
     toggleShowAddPopup: () => set(s => ({ showAddPopup: !s.showAddPopup })),

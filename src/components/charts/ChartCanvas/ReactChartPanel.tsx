@@ -101,7 +101,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
   // drawn band updates but EC/EUPHORIC triggers stay stale until bars reload).
   // MERGED: global lingua tool params + this panel's overrides → each chart tunes independently.
   const linguaGlobal = useToolStore(s => s.tools.find((t: any) => t.indKey === 'lingua')?.params) || {}
-  const linguaOverride = useToolStore(s => s.panelParams[panelIdx]?.lingua)
+  const linguaOverride = useToolStore(s => { const t = s.tools.find((x: any) => x.indKey === 'lingua'); return t ? s.panelParams[panelIdx]?.[t.id] : undefined })
   const linguaParams = useMemo(() => ({ ...linguaGlobal, ...(linguaOverride || {}) }), [linguaGlobal, linguaOverride])
   // Lingua working timeframe — parametric (default 1H). HTF confirmation auto-derives as
   // 4× the primary (1H→4H, 30m→2H, 15m→1H). Fetch BOTH regardless of the displayed panel.
@@ -126,7 +126,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
   // forward-filled onto the active chart's time axis inside renderLinguaExec.
   const linguaExecOn = useToolStore(s => s.tools.find((t: any) => t.indKey === 'lingua_exec')?.on ?? false)
   const linguaExecGlobal = useToolStore(s => s.tools.find((t: any) => t.indKey === 'lingua_exec')?.params) || {}
-  const linguaExecOverride = useToolStore(s => s.panelParams[panelIdx]?.lingua_exec)
+  const linguaExecOverride = useToolStore(s => { const t = s.tools.find((x: any) => x.indKey === 'lingua_exec'); return t ? s.panelParams[panelIdx]?.[t.id] : undefined })
   const linguaExecParams = useMemo(() => ({ ...linguaExecGlobal, ...(linguaExecOverride || {}) }), [linguaExecGlobal, linguaExecOverride])
   const _PITCH_TF: Record<string, string> = { 'Active': '0', '1H': '60', '4H': '240', 'D': 'D', 'W': 'W' }
   const pitchTfMin = _PITCH_TF[(linguaExecParams?.pitchTf as string) || 'Active'] ?? '0'
@@ -338,7 +338,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       const toolOverrides = activeTools.map((t: any) => ({
         indKey: t.indKey,
         params: t.indKey === 'emacloud'
-          ? { ...t.params, ...useToolStore.getState().panelParams[panelIdx]?.['emacloud'] }
+          ? { ...t.params, ...useToolStore.getState().panelParams[panelIdx]?.[t.id] }
           : t.params,
         colors: t.colors,
       }))
@@ -438,15 +438,17 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
           'rgba(34,197,94,.50)', 'rgba(239,68,68,.50)')
       }
 
-      // EMA Cloud — editable fast/slow (uses shared ic.ema cache like band_9_20)
+      // EMA Cloud — editable fast/slow (uses shared ic.ema cache like band_9_20).
+      // Multiple duplicates each carry independent spans → draw every ON instance.
       if (inds.emacloud) {
-        const ec = toolOverrides.find((t: any) => t.indKey === 'emacloud')
-        const ef = (ec?.params?.fast as number) ?? 9
-        const es = (ec?.params?.slow as number) ?? 20
-        if (ic.ema[ef] && ic.ema[es]) {
-          drawEMABand(rc, ic.ema[ef], ic.ema[es],
-            'rgba(34,197,94,.15)', 'rgba(239,68,68,.15)',
-            'rgba(34,197,94,.50)', 'rgba(239,68,68,.50)')
+        for (const ec of toolOverrides.filter((t: any) => t.indKey === 'emacloud')) {
+          const ef = (ec.params?.fast as number) ?? 9
+          const es = (ec.params?.slow as number) ?? 20
+          if (ic.ema[ef] && ic.ema[es]) {
+            drawEMABand(rc, ic.ema[ef], ic.ema[es],
+              'rgba(34,197,94,.15)', 'rgba(239,68,68,.15)',
+              'rgba(34,197,94,.50)', 'rgba(239,68,68,.50)')
+          }
         }
       }
 

@@ -335,11 +335,14 @@ export function computeIndicators(
   if (inds.ema200) ensureEMA(ema200Tool?.params?.period ?? 200)
   if (inds.ema40_60) { ensureEMA(40); ensureEMA(60) }
   if (inds.band_72_89 || inds.db_72_89 || inds.db_72_89_tight) { ensureEMA(72); ensureEMA(89) }
-  // EMA Cloud — editable fast/slow spans (params come merged from ReactChartPanel)
-  if (inds.emacloud) {
-    const ecTool = toolMap['emacloud']
-    ensureEMA((ecTool?.params?.fast as number) ?? 9)
-    ensureEMA((ecTool?.params?.slow as number) ?? 20)
+  // EMA Cloud — editable fast/slow spans. toolMap is indKey-keyed so it only holds ONE
+  // emacloud instance; iterate toolOverrides to cache EVERY duplicate's spans.
+  if (inds.emacloud && toolOverrides) {
+    for (const t of toolOverrides) {
+      if (t.indKey !== 'emacloud') continue
+      ensureEMA((t.params?.fast as number) ?? 9)
+      ensureEMA((t.params?.slow as number) ?? 20)
+    }
   }
   if (inds.ema || emaTool) ensureEMA(emaTool?.params?.period ?? 20)
 

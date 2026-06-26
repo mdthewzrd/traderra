@@ -203,7 +203,7 @@ function ToolSettings({ tool }: { tool: ToolInstance }) {
   const activePanel = useUIStore((s) => s.activePanel)
   // Per-panel params: edits below target the ACTIVE chart only. Reads merge the panel's
   // overrides on top of the global tool.params, so unedited charts keep showing defaults.
-  const paramOverride = useToolStore((s) => s.panelParams[activePanel]?.[tool.indKey])
+  const paramOverride = useToolStore((s) => s.panelParams[activePanel]?.[tool.id])
   const mergedParams = { ...tool.params, ...(paramOverride || {}) }
   const setToolColor = useToolStore((s) => s.setToolColor)
   const setToolName = useToolStore((s) => s.setToolName)
@@ -233,13 +233,13 @@ function ToolSettings({ tool }: { tool: ToolInstance }) {
         <td style={{ padding: '6px 4px', textAlign: 'right' }}>
           {prm.type === 'toggle' ? (
             <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, cursor: 'pointer' }}>
-              <input type="checkbox" checked={!!val} onChange={(e) => setPanelParam(activePanel, tool.indKey, prm.key, e.target.checked ? 1 : 0)} style={{ width: 16, height: 16, accentColor: '#D4AF37', cursor: 'pointer' }} />
+              <input type="checkbox" checked={!!val} onChange={(e) => setPanelParam(activePanel, tool.id, prm.key, e.target.checked ? 1 : 0)} style={{ width: 16, height: 16, accentColor: '#D4AF37', cursor: 'pointer' }} />
               <span style={{ fontSize: 11, color: val ? '#22c55e' : '#6b7280', fontFamily: 'JetBrains Mono, monospace' }}>{val ? 'ON' : 'OFF'}</span>
             </label>
           ) : prm.type === 'select' ? (
             <select
               value={String(val)}
-              onChange={(e) => setPanelParam(activePanel, tool.indKey, prm.key, e.target.value)}
+              onChange={(e) => setPanelParam(activePanel, tool.id, prm.key, e.target.value)}
               style={{ background: '#0a0c12', border: '1px solid #1e2535', color: '#dde3f0', fontFamily: 'JetBrains Mono, monospace', fontSize: 11, padding: '4px 6px', borderRadius: 4, outline: 'none', cursor: 'pointer', maxWidth: 120 }}
             >
               {(prm.options || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
@@ -251,7 +251,7 @@ function ToolSettings({ tool }: { tool: ToolInstance }) {
               min={prm.min ?? 0}
               max={prm.max ?? 9999}
               step={prm.step ?? 1}
-              onChange={(e) => setPanelParam(activePanel, tool.indKey, prm.key, parseFloat(e.target.value) || 0)}
+              onChange={(e) => setPanelParam(activePanel, tool.id, prm.key, parseFloat(e.target.value) || 0)}
               style={{ width: 64, background: '#0a0c12', border: '1px solid #1e2535', color: '#dde3f0', fontFamily: 'JetBrains Mono, monospace', fontSize: 11, padding: '4px 6px', borderRadius: 4, textAlign: 'right', outline: 'none' }}
             />
           )}

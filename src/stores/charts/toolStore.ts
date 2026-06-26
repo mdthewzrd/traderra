@@ -203,6 +203,25 @@ export const IND_CATALOG: Record<string, IndCatalogEntry> = {
     colors:[
       {key:'tl_support',label:'Support (cyan)',def:'rgba(0,229,255,0.95)'},{key:'tl_resist',label:'Resistance (magenta)',def:'rgba(255,0,170,0.95)'},{key:'tl_main',label:'Main Glow',def:'rgba(150,100,220,0.28)'},
     ], legacyKeys:['mikesbands'] },
+  linguafast:    { label:'Lingua Cycle (Fast)', group:'Lingua', combo:true,
+    params:[
+      {key:'lfFast1',label:'Fast EMA 1',def:9,min:1,max:200,group:'ema'},
+      {key:'lfFast2',label:'Fast EMA 2',def:20,min:1,max:200,group:'ema'},
+      {key:'lfMid',label:'Blend Mid EMA',def:50,min:1,max:300,group:'ema'},
+      {key:'lfSlow',label:'Blend Slow EMA',def:59,min:1,max:300,group:'ema'},
+      {key:'lfBlendBars',label:'Break Window (bars)',def:6,min:1,max:30,group:'classify'},
+      {key:'lfLeft',label:'Look Left',def:30,min:1,max:120,group:'detect'},
+      {key:'lfRight',label:'Look Right',def:10,min:1,max:60,group:'detect'},
+      {key:'lfPattern',label:'Pattern Window',def:2,min:1,max:13,group:'detect'},
+      {key:'lfMinSize',label:'Min Size (×ATR)',def:0,step:0.1,min:0,max:5,group:'detect'},
+      {key:'lfMainLeft',label:'Main Look Left',def:30,min:1,max:200,group:'main'},
+      {key:'lfMainRight',label:'Main Look Right',def:10,min:5,max:120,group:'main'},
+      {key:'lfMainPattern',label:'Main Pattern',def:3,min:1,max:13,group:'main'},
+      {key:'lfShowEmas',label:'Show EMAs',def:1,type:'toggle',group:'display'},
+    ],
+    colors:[
+      {key:'lf_up',label:'Uptrend tint',def:'rgba(0,180,140,0.14)'},{key:'lf_back',label:'Backside tint',def:'rgba(210,70,50,0.14)'},{key:'lf_brk',label:'Break tint',def:'rgba(250,180,40,0.22)'},
+    ], legacyKeys:['linguafast'] },
   trendline:      { label:'Trendline (Anchored)', group:'Trendlines', combo:true,
     params:[
       {key:'tlLeft',label:'Look Left',def:50,min:1,max:120,group:'detect'},
@@ -343,6 +362,7 @@ function makeDefaultTools(): ToolInstance[] {
     mk('lingua_exec', false, false),
     mk('curltrend', false, false),
     mk('mikesbands', false, false),
+    mk('linguafast', false, false),
   ]
 }
 

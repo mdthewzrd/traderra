@@ -20,6 +20,7 @@ import { calcExecSignals, type ExecSignal } from '@/lib/charts/exec-signals'
 import { renderPivotZones } from '@/lib/charts/render-pzones'
 import { renderDevZones } from '@/lib/charts/render-devzones'
 import { renderCurlTrend } from '@/lib/charts/render-curltrend'
+import { renderLinguaFast } from '@/lib/charts/render-linguafast'
 import { renderAdaptiveBands } from '@/lib/charts/render-adaptive-bands'
 import { renderLinguaExec, setLinguaExecPitch } from '@/lib/charts/render-lingua-exec'
 import { renderLinguaCycle, renderAnchoredTrendline, renderConsolidation, renderRegime, renderLinguaPitchOverlay, setLinguaMtfBars, htfOf, ltfOf } from '@/lib/charts/render-lingua'
@@ -547,6 +548,8 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
       if (inds.curltrend) renderCurlTrend(rc)
       // ── Mike's Bands (fresh standalone tool — clone of anchored trendline to start) ──
       if (inds.mikesbands) renderAnchoredTrendline(rc, 'mikesbands')
+      // ── Lingua Cycle (Fast): structural-break-primary classifier (Mike's Bands break = trigger) ──
+      if (inds.linguafast) renderLinguaFast(rc)
       if (inds.regime) renderRegime(rc)
       if (inds.consolidation) renderConsolidation(rc)
 

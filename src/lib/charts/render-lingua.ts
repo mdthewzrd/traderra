@@ -917,7 +917,7 @@ type AnchoredSeg = {
  *  PERSIST — every main pair stays on screen until a new one forms; multiple mains
  *  coexist (a tightening trend spawns a new main inside the old one). This is the
  *  backtest/scan-safe variant: nothing beyond the confirmation delay repaints. */
-function computeAnchoredTrendline(
+export function computeAnchoredTrendline(
   high: number[], low: number[], close: number[],
   tlOn: number, tlLeft: number, tlRight: number, tlPattern: number,
   tlMainLeft: number, tlMainRight: number, tlMainPattern: number,

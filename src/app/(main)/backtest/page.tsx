@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { calcExecSignals, type ExecSignal } from '@/lib/charts/exec-signals'
+import { LinguaExecPanel } from '@/components/backtest/LinguaExecPanel'
 import {
   Search, Loader2, ChevronLeft, ChevronRight,
   BarChart3, TrendingUp, List,
@@ -32,8 +33,10 @@ interface ScanDef {
   id: string
   name: string
   type: string
+  strategy?: string
   resultCount: number
   createdAt: string
+  tags?: string[]
   runs?: ScanRun[]
 }
 
@@ -43,6 +46,138 @@ interface ScanRun {
   dateRange: string
   runAt: string
   resultCount: number
+}
+
+// ─── Scan tree organization (mirrors /scanner page) ──────────────
+const SCAN_TREE: { id: string; label: string; order: number; subfolders?: { id: string; label: string }[] }[] = [
+  { id: 'mikes-scans', label: "Mike's Scans", order: -1, subfolders: [
+    { id: 'mean-reversion', label: 'Mean Reversion' },
+    { id: 'parabolic', label: 'Parabolic' },
+  ] },
+  { id: 'mdr-swing', label: 'MDR Swing', order: 0, subfolders: [
+    { id: 'scans', label: 'Scans' },
+    { id: 'backtests', label: 'Backtests' },
+  ] },
+  { id: 'og-scans', label: 'OG Scans', order: 1 },
+  { id: 'standalone', label: 'Standalone', order: 2 },
+]
+
+// DB scans carry no group field — derive folder from strategy (matches scanner builtins)
+const STRATEGY_GROUP: Record<string, string> = {
+  'd1-gap': 'mikes-scans/parabolic',
+  'd1-gap-potential': 'mikes-scans/parabolic',
+  'frd-gap': 'mikes-scans/mean-reversion',
+  'frd-gap-lc': 'mikes-scans/mean-reversion',
+  'mdr-swing': 'mdr-swing/scans',
+  'mdr-signals': 'mdr-swing/scans',
+  'mdr-fixed': 'mdr-swing/backtests',
+}
+function folderForStrategy(strategy: string): string {
+  if (STRATEGY_GROUP[strategy]) return STRATEGY_GROUP[strategy]
+  if (strategy.startsWith('og-')) return 'og-scans'
+  return 'standalone'
+}
+
+// ─── Collapsible folder components (module-level to avoid remount) ───
+function FolderGroup({ label, items, selectedScan, onSelect }: {
+  label: string
+  items: ScanDef[]
+  selectedScan: string
+  onSelect: (id: string) => void
+}) {
+  const [open, setOpen] = useState(true)
+  const totalSig = items.reduce((s, i) => s + (i.resultCount || 0), 0)
+  return (
+    <div>
+      <button onClick={() => setOpen(!open)} style={{
+        display: 'flex', alignItems: 'center', width: '100%', textAlign: 'left',
+        padding: '7px 10px', border: 'none', cursor: 'pointer', background: 'transparent',
+        borderBottom: `1px solid ${BORDER}`,
+      }}
+        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+        <span style={{ color: GOLD, fontSize: 10, marginRight: 6, transition: 'transform 0.15s', transform: open ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-block' }}>▶</span>
+        <span style={{ color: TEXT2, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, flex: 1 }}>{label}</span>
+        <span style={{ color: MUTED, fontSize: 9 }}>{totalSig} sig</span>
+      </button>
+      {open && items.map(scan => {
+        const isActive = scan.id === selectedScan
+        return (
+          <button key={scan.id} onClick={() => onSelect(scan.id)} style={{
+            display: 'block', width: '100%', textAlign: 'left',
+            padding: '6px 10px 6px 24px', border: 'none', cursor: 'pointer',
+            background: isActive ? GOLD_DIM : 'transparent',
+            borderLeft: isActive ? `2px solid ${GOLD}` : '2px solid transparent',
+            borderBottom: `1px solid ${BORDER}`,
+          }}
+            onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
+            onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}>
+            <div style={{ color: isActive ? GOLD : TEXT, fontSize: 11, fontWeight: 600, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{scan.name}</div>
+            <div className="flex items-center gap-2">
+              <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: `${TEAL}20`, color: TEAL }}>{scan.resultCount} sig</span>
+              {scan.type === 'builtin' && <span style={{ fontSize: 8, color: MUTED }}>{scan.type}</span>}
+            </div>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function NestedFolderGroup({ label, subfolders, grouped, projectId, selectedScan, onSelect }: {
+  label: string
+  subfolders: { id: string; label: string }[]
+  grouped: Record<string, ScanDef[]>
+  projectId: string
+  selectedScan: string
+  onSelect: (id: string) => void
+}) {
+  const [open, setOpen] = useState(true)
+  const totalSig = subfolders.reduce((s, sf) => s + (grouped[`${projectId}/${sf.id}`]?.reduce((a, i) => a + (i.resultCount || 0), 0) || 0), 0)
+  return (
+    <div>
+      <button onClick={() => setOpen(!open)} style={{
+        display: 'flex', alignItems: 'center', width: '100%', textAlign: 'left',
+        padding: '7px 10px', border: 'none', cursor: 'pointer', background: 'transparent',
+        borderBottom: `1px solid ${BORDER}`,
+      }}
+        onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+        <span style={{ color: GOLD, fontSize: 10, marginRight: 6, transition: 'transform 0.15s', transform: open ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-block' }}>▶</span>
+        <span style={{ color: GOLD, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, flex: 1 }}>{label}</span>
+        <span style={{ color: MUTED, fontSize: 9, marginRight: 4 }}>{totalSig} sig</span>
+      </button>
+      {open && subfolders.map(sf => {
+        const items = grouped[`${projectId}/${sf.id}`] || []
+        if (items.length === 0) return null
+        return (
+          <div key={sf.id}>
+            <div style={{ padding: '4px 10px 4px 20px', color: MUTED, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, background: 'rgba(255,255,255,0.01)', borderBottom: `1px solid ${BORDER}` }}>{sf.label}</div>
+            {items.map(scan => {
+              const isActive = scan.id === selectedScan
+              return (
+                <button key={scan.id} onClick={() => onSelect(scan.id)} style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  padding: '6px 10px 6px 30px', border: 'none', cursor: 'pointer',
+                  background: isActive ? GOLD_DIM : 'transparent',
+                  borderLeft: isActive ? `2px solid ${GOLD}` : '2px solid transparent',
+                  borderBottom: `1px solid ${BORDER}`,
+                }}
+                  onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
+                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}>
+                  <div style={{ color: isActive ? GOLD : TEXT, fontSize: 11, fontWeight: 600, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{scan.name}</div>
+                  <div className="flex items-center gap-2">
+                    <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: `${TEAL}20`, color: TEAL }}>{scan.resultCount} sig</span>
+                    {scan.type === 'builtin' && <span style={{ fontSize: 8, color: MUTED }}>{scan.type}</span>}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 type Timeframe = '1' | '2' | '5' | '15' | '60' | 'D'
@@ -2046,27 +2181,18 @@ export default function BacktestPage() {
     if (filteredSignals.length > 0) runBaselineBacktest(filteredSignals)
   }, [activeFilters])
 
-  // Runs derived from loaded scans (no mock data)
-  const [runs, setRuns] = useState<ScanRun[]>([])
-
+  // Keep ALL scans; tree dedupes per strategy, runs panel shows every run for the selected strategy
   useEffect(() => {
     fetch('/api/scans')
       .then(r => r.json())
       .then(data => {
-        // Show best scan per strategy (most results), so partial re-runs don't clutter
-        const all = (data.scans || []) as ScanDef[]
-        const byStrategy = new Map<string, ScanDef>()
-        for (const s of all) {
-          const existing = byStrategy.get(s.strategy)
-          if (!existing || s.resultCount > existing.resultCount) byStrategy.set(s.strategy, s)
-        }
-        const list = [...byStrategy.values()].filter(s => s.resultCount > 0)
-        setScans(list)
-        // Auto-select the main Backside B scan (has the most results)
-        const mainScan = list.find((s: ScanDef) => s.id === 'cmpsmjxn20000ju04vg9pzyzb')
-          || list.find((s: ScanDef) => s.name.toLowerCase().includes('backside') && s.resultCount > 30)
-          || list[0]
-        if (mainScan) setSelectedScan(mainScan.id)
+        const all = ((data.scans || []) as ScanDef[])
+          .filter(s => s.resultCount > 0)
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        setScans(all)
+        // Auto-select the most recent D1 Gap run (Mike's primary scan)
+        const d1 = all.find(s => s.strategy === 'd1-gap') || all[0]
+        if (d1) setSelectedScan(d1.id)
       })
   }, [])
 
@@ -2078,20 +2204,25 @@ export default function BacktestPage() {
       .then(data => {
         const sigs = data.results || []
         setSignals(sigs); setSelectedIdx(0); setDayOffset(0); setLoading(false)
-        // Create a run from this scan's data
-        if (sigs.length && selectedScan) {
-          const scan = scans.find(s => s.id === selectedScan)
-          setRuns([{
-            id: selectedScan + '-r1',
-            scanId: selectedScan,
-            dateRange: sigs.length > 1 ? `${sigs[sigs.length-1]?.date?.slice(5)} → ${sigs[0]?.date?.slice(5)}` : '1d',
-            runAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
-            resultCount: sigs.length,
-          }])
-        }
       })
       .catch(() => setLoading(false))
   }, [selectedScan])
+
+  // Group every DB scan by strategy → for the tree (dedupe) + runs panel (all runs)
+  const byStrategy = useMemo(() => {
+    const m: Record<string, ScanDef[]> = {}
+    for (const s of scans) { const k = s.strategy || s.name; (m[k] = m[k] || []).push(s) }
+    return m
+  }, [scans])
+  // One representative per strategy (best resultCount) for the tree leaves
+  const treeScans = useMemo(
+    () => Object.values(byStrategy).map(arr =>
+      arr.reduce((best, s) => s.resultCount > best.resultCount ? s : best, arr[0])),
+    [byStrategy]
+  )
+  const activeStrategy = scans.find(s => s.id === selectedScan)?.strategy || ''
+  // Runs for the selected strategy, most recent first
+  const activeRuns: ScanDef[] = (byStrategy[activeStrategy] || []).slice()
 
   const sig = signals[selectedIdx] as Signal | undefined
   const activeScan = scans.find(s => s.id === selectedScan)
@@ -2147,29 +2278,34 @@ export default function BacktestPage() {
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {scans.map(scan => {
-            const isActive = scan.id === selectedScan
-            return (
-              <button key={scan.id} onClick={() => setSelectedScan(scan.id)} style={{
-                display: 'block', width: '100%', textAlign: 'left',
-                padding: '8px 10px', border: 'none', cursor: 'pointer',
-                background: isActive ? T.GOLD_DIM : 'transparent',
-                borderLeft: isActive ? `2px solid ${T.GOLD}` : '2px solid transparent',
-                borderBottom: `1px solid ${T.BORDER}`,
-              }}
-                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
-                onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
-              >
-                <div style={{ color: isActive ? T.GOLD : TEXT, fontSize: 11, fontWeight: 600, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {scan.name}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: `${T.TEAL}20`, color: T.TEAL }}>{scan.resultCount} sig</span>
-                  <span style={{ color: T.MUTED, fontSize: 8 }}>{scan.type}</span>
-                </div>
-              </button>
-            )
-          })}
+          {(() => {
+            // Build nested tree from SCAN_TREE (dedupe by strategy, assign folder by strategy)
+            const grouped: Record<string, ScanDef[]> = {}
+            const ungrouped: ScanDef[] = []
+            treeScans.forEach(scan => {
+              const g = folderForStrategy(scan.strategy || scan.name)
+              if (g && g.includes('/')) {
+                (grouped[g] = grouped[g] || []).push(scan)
+              } else {
+                const top = SCAN_TREE.find(f => f.id === g)
+                if (top && !top.subfolders) (grouped[g] = grouped[g] || []).push(scan)
+                else ungrouped.push(scan)
+              }
+            })
+            return <>
+              {SCAN_TREE.map(project => {
+                if (project.subfolders) {
+                  const hasContent = project.subfolders.some(sf => (grouped[`${project.id}/${sf.id}`] || []).length > 0)
+                  if (!hasContent) return null
+                  return <NestedFolderGroup key={project.id} label={project.label} subfolders={project.subfolders} grouped={grouped} projectId={project.id} selectedScan={selectedScan} onSelect={setSelectedScan} />
+                }
+                const items = grouped[project.id] || []
+                if (items.length === 0) return null
+                return <FolderGroup key={project.id} label={project.label} items={items} selectedScan={selectedScan} onSelect={setSelectedScan} />
+              })}
+              {ungrouped.length > 0 && <FolderGroup label="Other" items={ungrouped} selectedScan={selectedScan} onSelect={setSelectedScan} />}
+            </>
+          })()}
           {scans.length === 0 && (
             <div style={{ padding: 20, textAlign: 'center' }}>
               <Search className="h-5 w-5 mx-auto mb-2" style={{ color: T.MUTED, opacity: 0.3 }} />
@@ -2179,19 +2315,19 @@ export default function BacktestPage() {
         </div>
       </div>
 
-      {/* ── Bottom half: Saved Runs ── */}
+      {/* ── Bottom half: Saved Runs (all DB runs for the selected strategy) ── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <div style={{ padding: '8px 10px', borderBottom: `1px solid ${T.BORDER}`, background: T.SURFACE2 }}>
           <div className="flex items-center justify-between">
             <span style={{ color: T.GOLD, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Runs</span>
-            <span style={{ color: T.MUTED, fontSize: 9 }}>{runs.length}</span>
+            <span style={{ color: T.MUTED, fontSize: 9 }}>{activeRuns.length}</span>
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {runs.map(run => {
-            const isActive = run.id === selectedRun
+          {activeRuns.map(run => {
+            const isActive = run.id === selectedScan
             return (
-            <div key={run.id} onClick={() => setSelectedRun(run.id)} style={{
+            <div key={run.id} onClick={() => setSelectedScan(run.id)} style={{
               padding: '6px 10px', borderBottom: `1px solid ${T.BORDER}`, cursor: 'pointer',
               background: isActive ? T.GOLD_DIM : 'transparent',
               borderLeft: isActive ? `2px solid ${T.GOLD}` : '2px solid transparent',
@@ -2200,13 +2336,16 @@ export default function BacktestPage() {
               onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
             >
               <div className="flex items-center justify-between">
-                <span style={{ color: isActive ? T.GOLD : T.TEXT2, fontSize: 10, fontWeight: 600 }}>{run.dateRange}</span>
+                <span style={{ color: isActive ? T.GOLD : T.TEXT2, fontSize: 10, fontWeight: 600 }}>{run.name}</span>
                 <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: `${T.TEAL}20`, color: T.TEAL }}>{run.resultCount}</span>
               </div>
-              <div style={{ color: isActive ? T.GOLD : T.MUTED, fontSize: 8, marginTop: 2 }}>{run.runAt}</div>
+              <div style={{ color: isActive ? T.GOLD : T.MUTED, fontSize: 8, marginTop: 2 }}>{new Date(run.createdAt).toLocaleDateString()}</div>
             </div>
             )
           })}
+          {activeRuns.length === 0 && (
+            <div style={{ padding: 16, textAlign: 'center', color: T.MUTED, fontSize: 9 }}>Select a scan to see runs</div>
+          )}
         </div>
       </div>
 
@@ -2764,6 +2903,7 @@ export default function BacktestPage() {
               <div style={{ position: 'absolute', top: '100%', right: 0, zIndex: 50, background: T.SURFACE, border: `1px solid ${T.BORDER}`, borderRadius: 4, padding: 4, minWidth: 160 }}>
                 {[
                   { key: 'pop-short', label: 'Pop Short (2m 9/20)', desc: 'Short pops into upper dev band' },
+                  { key: 'lingua-exec', label: 'Lingua Exec (50/89 Pullback)', desc: 'Long pullback-to-mean engine' },
                 ].map(ex => (
                   <button key={ex.key} onClick={() => { setActiveExec(ex.key); setShowExec(false) }} style={{
                     display: 'block', width: '100%', textAlign: 'left', padding: '6px 8px', borderRadius: 3, fontSize: 10,
@@ -2816,6 +2956,8 @@ export default function BacktestPage() {
         </div>
       </div>
 
+      {/* Lingua Exec engine view (replaces body when selected) */}
+      {activeExec === 'lingua-exec' ? <LinguaExecPanel dark={dark} signals={filteredSignals} selectedSignal={sig} /> : (<>
       {/* Body */}
       <div style={{ display: 'flex', flex: 1 }}>
         {renderLeftSidebar()}
@@ -2836,6 +2978,7 @@ export default function BacktestPage() {
         />
         {renderRightSidebar()}
       </div>
+      </>) }
 
       {/* Run Modal */}
       {showRunModal && <RunModal scan={activeScan} onClose={() => setShowRunModal(false)} onRun={(range) => {

@@ -132,7 +132,7 @@ interface ScanRun {
   rawDateRange?: { from?: string; to?: string } | null
 }
 
-type Timeframe = '5' | '15' | '60' | 'D'
+export type Timeframe = '5' | '15' | '60' | 'D'
 type ChartMode = 'single' | 'stacked'
 type PageMode = 'scanner' | 'backtest'
 
@@ -369,7 +369,7 @@ function EquityChart({ data, color, height, inverted }: { data: number[]; color:
   return <canvas ref={canvasRef} style={{ width: '100%', height, display: 'block' }} />
 }
 
-interface ChartSettings {
+export interface ChartSettings {
   showEma9_20: boolean
   showEma72_89: boolean
   showDevBands9_20: boolean
@@ -384,7 +384,7 @@ interface ChartSettings {
   showKeyLevels: boolean
 }
 
-interface KeyLevelsParams {
+export interface KeyLevelsParams {
   lookLeft: number
   lookRight: number
   numPivots: number
@@ -404,7 +404,7 @@ interface IndTemplate {
   name: string
   settings: Partial<ChartSettings>
 }
-const IND_TEMPLATES: IndTemplate[] = [
+export const IND_TEMPLATES: IndTemplate[] = [
   {
     id: 'default',
     name: 'Default',
@@ -437,7 +437,7 @@ const IND_TEMPLATES: IndTemplate[] = [
   },
 ]
 
-const TEMPLATE_IND_KEYS: [keyof ChartSettings, string][] = [
+export const TEMPLATE_IND_KEYS: [keyof ChartSettings, string][] = [
   ['showEma9_20', 'EMA 9/20 Cloud'],
   ['showEma72_89', 'EMA 72/89 Cloud'],
   ['showDevBands9_20', 'Dev Band 9/20'],
@@ -513,8 +513,23 @@ function barETDate(b: any): string {
   return ''
 }
 
+/** Get minutes-of-day in ET (America/New_York, DST-aware) for a bar, or null. */
+function barETMinutes(b: any): number | null {
+  if (typeof b.time !== 'number') return null
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York', hour12: false, hour: '2-digit', minute: '2-digit',
+    }).formatToParts(new Date(b.time * 1000))
+    const h = parseInt((parts.find(p => p.type === 'hour') || {}).value || '0', 10) % 24
+    const m = parseInt((parts.find(p => p.type === 'minute') || {}).value || '0', 10)
+    return h * 60 + m
+  } catch {
+    return null
+  }
+}
+
 // ─── MiniChart with zoom & drag ─────────────────────────
-function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset = 0, entryMarker, exitMarker, centerOnDate, legMarkers, exitEpoch, klParams }: {
+export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset = 0, entryMarker, exitMarker, centerOnDate, legMarkers, exitEpoch, klParams }: {
   symbol: string
   tf: Timeframe
   date?: string
@@ -542,6 +557,7 @@ function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffs
   useEffect(() => {
     setLoading(true)
     setAllBars([])
+    setManualZoom(null)  // reset any stale wheel-zoom so the D0-centered window recomputes
     const params = new URLSearchParams({ symbol, tf })
     const baseDate = date || new Date().toISOString().slice(0, 10)
     const fromDate = new Date(baseDate + 'T12:00:00')
@@ -800,21 +816,23 @@ function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffs
 
     // ── After-hours / Pre-market shading (intraday) ──
     if (settings.showAhPmShade && tf !== 'D' && bars.length > 1) {
-      const getBarMinET = (b: any): number | null => {
-        if (typeof b.time === 'number') {
-          const d = new Date(b.time * 1000)
-          const h = d.getUTCHours() - 5
-          const m = d.getUTCMinutes()
-          return h * 60 + m
-        }
-        return null
-      }
+      const getBarMinET = (b: any): number | null => barETMinutes(b)
       const getBarDate = (b: any): string => barETDate(b)
       const preMktStart = 4 * 60
       const mktOpen = 9 * 60 + 30
       const mktClose = 16 * 60
       const ahEnd = 20 * 60
 
+      // 9:30 ET boundary x for D0 — clip gold so it stops exactly at market open
+      const step = (W - PAD_R) / bars.length
+      let d0OpenX = Infinity
+      if (date) {
+        for (let i = 0; i < bars.length; i++) {
+          const mins = getBarMinET(bars[i])
+          if (mins !== null && getBarDate(bars[i]) === date && mins >= mktOpen) { d0OpenX = xFor(i) - step / 2; break }
+        }
+      }
+      let d0Labeled = false
       for (let i = 0; i < bars.length; i++) {
         const mins = getBarMinET(bars[i])
         if (mins === null) continue
@@ -823,24 +841,24 @@ function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffs
         if (isPre || isAH) {
           const x = xFor(i)
           const barDate = getBarDate(bars[i])
-          // D0 pre-market gets gold-grey tint, everything else normal
-          const isD0 = date && barDate === date && isPre
-          ctx.fillStyle = isD0 ? 'rgba(212,175,55,0.12)' : isPre ? 'rgba(40,40,70,0.3)' : 'rgba(50,35,35,0.3)'
-          ctx.fillRect(x - bodyW, 0, bodyW * 2, CHART_H)
+          const isD0 = isPre && date && barDate === date
+          ctx.fillStyle = isD0 ? 'rgba(212,175,55,0.22)' : isPre ? 'rgba(70,70,80,0.3)' : 'rgba(50,35,35,0.3)'
+          const left = x - bodyW
+          const right = isD0 ? Math.min(x + bodyW, d0OpenX) : x + bodyW
+          if (right > left) ctx.fillRect(left, 0, right - left, CHART_H)
+          if (isD0 && !d0Labeled) {
+            d0Labeled = true
+            ctx.fillStyle = GOLD; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'left'
+            ctx.fillText('D0', x + 3, 12)
+          }
         }
       }
     }
 
     // ── 7:00 AM ET vertical marker (intraday) ──
     if (tf !== 'D' && bars.length > 1) {
-      const getBarMinET7 = (b: any): number | null => {
-        if (typeof b.time === 'number') {
-          const d = new Date(b.time * 1000)
-          return (d.getUTCHours() - 5) * 60 + d.getUTCMinutes()
-        }
-        return null
-      }
-      const TARGET7 = 7 * 60 // 7:00 AM ET (chart axis uses fixed UTC-5)
+      const getBarMinET7 = (b: any): number | null => barETMinutes(b)
+      const TARGET7 = 7 * 60 // 7:00 AM ET (DST-aware via barETMinutes)
       const drawn7 = new Set<string>()
       for (let i = 0; i < bars.length; i++) {
         const mins = getBarMinET7(bars[i])
@@ -1757,6 +1775,14 @@ export default function ScanDashboardPage() {
         case 'vol': va = a.volume || 0; vb = b.volume || 0; break
         case 'pm_high_atr': va = a.pm_high_atr ?? -99; vb = b.pm_high_atr ?? -99; break
         case 'dev69_upper': va = (a as any).dev69_upper ?? -99; vb = (b as any).dev69_upper ?? -99; break
+        case 'prev_close': va = (a as any).prev_close ?? -99; vb = (b as any).prev_close ?? -99; break
+        case 'ema50': va = (a as any).ema50 ?? -99; vb = (b as any).ema50 ?? -99; break
+        case 'ema100': va = (a as any).ema100 ?? -99; vb = (b as any).ema100 ?? -99; break
+        case 'ema200': va = (a as any).ema200 ?? -99; vb = (b as any).ema200 ?? -99; break
+        case 'gaps_50_5y': va = (a as any).gaps_50_5y ?? -99; vb = (b as any).gaps_50_5y ?? -99; break
+        case 'gaps_50_2y': va = (a as any).gaps_50_2y ?? -99; vb = (b as any).gaps_50_2y ?? -99; break
+        case 'red_pct_5y': va = (a as any).red_pct_5y ?? -99; vb = (b as any).red_pct_5y ?? -99; break
+        case 'red_pct_2y': va = (a as any).red_pct_2y ?? -99; vb = (b as any).red_pct_2y ?? -99; break
         default: va = a.date; vb = b.date
       }
       if (va < vb) return sortDir === 'asc' ? -1 : 1
@@ -2300,6 +2326,14 @@ export default function ScanDashboardPage() {
                 <th style={{ padding: '4px 4px', textAlign: 'center', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>¼ATR</th>
                 <th style={{ padding: '4px 4px', textAlign: 'center', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>6.9</th>
                 <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>PM T</th>
+                <th onClick={() => toggleSort('prev_close')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'prev_close' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>D-1{sortCol === 'prev_close' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('ema50')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'ema50' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="% dist: D-1 close vs D-1 EMA50">d50{sortCol === 'ema50' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('ema100')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'ema100' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="% dist: D-1 close vs D-1 EMA100">d100{sortCol === 'ema100' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('ema200')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'ema200' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="% dist: D-1 close vs D-1 EMA200">d200{sortCol === 'ema200' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('gaps_50_5y')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'gaps_50_5y' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="# of ≥50% gap days in 5y">G5y{sortCol === 'gaps_50_5y' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('gaps_50_2y')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'gaps_50_2y' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="# of ≥50% gap days in 2y">G2y{sortCol === 'gaps_50_2y' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('red_pct_5y')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'red_pct_5y' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="% of days close < open in 5y">R5y{sortCol === 'red_pct_5y' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('red_pct_2y')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'red_pct_2y' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="% of days close < open in 2y">R2y{sortCol === 'red_pct_2y' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                 {/* Multi-signal type columns */}
                 {isMultiSignal && signalTypeColumns.map(st => (
                   <th key={st} style={{ padding: '4px 3px', textAlign: 'center', color: GOLD, fontSize: 7, fontWeight: 700, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{st.replace(/_/g, ' ').replace(/^d(\d)/, 'D$1')}</th>
@@ -2361,6 +2395,14 @@ export default function ScanDashboardPage() {
                     <td style={{ padding: '3px 2px', textAlign: 'center', fontSize: 9, color: (s as any).pm_hit_0_25x || (s as any)['pm_hit_0.25x'] ? GOLD : T.BORDER }}>{((s as any).pm_hit_0_25x || (s as any)['pm_hit_0.25x']) ? '✓' : '–'}</td>
                     <td style={{ padding: '3px 2px', textAlign: 'center', fontSize: 9, color: (s as any).dev69_3hit ? GOLD : T.BORDER }}>{(s as any).dev69_3hit ? '✓' : '–'}</td>
                     <td style={{ padding: '3px 4px', color: s.pm_high_time ? T.TEXT2 : T.BORDER, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 9 }}>{s.pm_high_time || '–'}</td>
+                    <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{s.prev_close != null ? `$${s.prev_close.toFixed(2)}` : '–'}</td>
+                    <td style={{ padding: '3px 4px', color: s.ema50 != null ? (s.ema50 < 0 ? T.RED : T.TEAL) : T.BORDER, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{s.ema50 != null ? `${(s.ema50 * 100).toFixed(0)}%` : '–'}</td>
+                    <td style={{ padding: '3px 4px', color: s.ema100 != null ? (s.ema100 < 0 ? T.RED : T.TEAL) : T.BORDER, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{s.ema100 != null ? `${(s.ema100 * 100).toFixed(0)}%` : '–'}</td>
+                    <td style={{ padding: '3px 4px', color: s.ema200 != null ? (s.ema200 < 0 ? T.RED : T.TEAL) : T.BORDER, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{s.ema200 != null ? `${(s.ema200 * 100).toFixed(0)}%` : '–'}</td>
+                    <td style={{ padding: '3px 4px', color: ((s as any).gaps_50_5y || 0) > 0 ? GOLD : T.MUTED, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(s as any).gaps_50_5y != null ? (s as any).gaps_50_5y : '–'}</td>
+                    <td style={{ padding: '3px 4px', color: ((s as any).gaps_50_2y || 0) > 0 ? GOLD : T.MUTED, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(s as any).gaps_50_2y != null ? (s as any).gaps_50_2y : '–'}</td>
+                    <td style={{ padding: '3px 4px', color: ((s as any).red_pct_5y || 0) >= 0.5 ? T.RED : T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(s as any).red_pct_5y != null ? `${((s as any).red_pct_5y * 100).toFixed(0)}%` : '–'}</td>
+                    <td style={{ padding: '3px 4px', color: ((s as any).red_pct_2y || 0) >= 0.5 ? T.RED : T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(s as any).red_pct_2y != null ? `${((s as any).red_pct_2y * 100).toFixed(0)}%` : '–'}</td>
                     {/* Multi-signal type checkmarks */}
                     {isMultiSignal && signalTypeColumns.map(st => (
                       <td key={st} style={{ padding: '3px 3px', textAlign: 'center', fontSize: 9 }}>

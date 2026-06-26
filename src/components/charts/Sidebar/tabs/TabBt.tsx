@@ -51,6 +51,33 @@ export function TabBt() {
   const [status, setStatus] = useState('Uses saved scan results + Polygon daily bars. Conservative fill model: if stop and target hit on the same bar, stop wins.')
   const fileRef = useRef<HTMLInputElement>(null)
   const setChartSymbol = useChartStore(s => s.setSymbol)
+  const chartSymbol = useChartStore(s => s.symbol)
+
+  // Lingua Exec engine mode
+  const [engine, setEngine] = useState<'scan' | 'lingua'>('scan')
+  const [le, setLe] = useState({ symbol: 'SPY', tf: '60', from: '2024-03-27', to: '2026-06-18' })
+  const [leLoading, setLeLoading] = useState(false)
+  const runLinguaExec = useCallback(async () => {
+    setLeLoading(true); setStatus('Running Lingua Exec backtest...')
+    try {
+      const res = await fetch('/api/backtest/lingua-exec', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(le),
+      })
+      const data = await res.json()
+      if (data.error) { setStatus('⚠ ' + data.error); setLeLoading(false); return }
+      // Map ledger trades → BTResult[] so the existing stats + trade list render automatically.
+      const mapped: BTResult[] = data.trades.map((t: any) => ({
+        symbol: le.symbol, entryDate: t.openDate, exitDate: t.exitDate,
+        entryPrice: t.fills[0]?.price || 0, exitPrice: t.unitsClosed[t.unitsClosed.length - 1]?.exit || 0,
+        pnl: t.tradeR, pnlPct: 0, rMultiple: t.tradeR, duration: t.fills.length,
+        win: t.tradeR > 0, exitReason: t.exitLabel,
+      }))
+      setBtResults(mapped); setBtTrades([]); setBtHighlight(true)
+      const s = data.stats
+      setStatus(`Lingua Exec ${le.symbol} ${le.tf}min: ${s.closed} trades | ${s.wins}W/${s.losses}L | Win ${s.winRate.toFixed(1)}% | TotR ${s.totR.toFixed(1)} | PF ${s.profitFactor.toFixed(2)} | MaxDD ${s.maxDD.toFixed(1)}R`)
+    } catch (e: any) { setStatus('⚠ ' + e.message) }
+    setLeLoading(false)
+  }, [le])
 
   // CSV upload
   const handleFileUpload = useCallback(() => {
@@ -150,7 +177,10 @@ export function TabBt() {
     <div id="tab-bt">
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div style={{ padding: '8px 12px', borderBottom: '1px solid #111620', display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', letterSpacing: 1 }}>⏱ BT — SAVED SCANS</span>
+        <div style={{ display: 'flex', gap: 2 }}>
+          <button onClick={() => setEngine('scan')} style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 3, cursor: 'pointer', border: `1px solid ${engine === 'scan' ? '#f59e0b' : '#2a3050'}`, background: engine === 'scan' ? '#f59e0b18' : 'none', color: engine === 'scan' ? '#f59e0b' : '#4a6080' }}>⏱ SCAN</button>
+          <button onClick={() => setEngine('lingua')} style={{ fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 3, cursor: 'pointer', border: `1px solid ${engine === 'lingua' ? '#4ade80' : '#2a3050'}`, background: engine === 'lingua' ? '#4ade8018' : 'none', color: engine === 'lingua' ? '#4ade80' : '#4a6080' }}>⚡ LINGUA</button>
+        </div>
         <label style={{ marginLeft: 'auto', background: 'none', border: '1px solid #f59e0b', color: '#f59e0b', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 3, cursor: 'pointer' }}>
           📂 CSV
           <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleFileUpload} />
@@ -163,6 +193,7 @@ export function TabBt() {
         }}>HLDT</button>
       </div>
 
+      {engine === 'scan' && (<>
       {/* Info box */}
       <div id="scan-bt-active" style={{ padding: '8px 10px', background: '#0d1220', border: '1px solid #1e2840', borderRadius: 4, fontSize: 11, color: '#8aa0c0', lineHeight: 1.5, margin: '8px 12px' }}>Select a saved scan in <span style={{ color: '#4ade80', fontWeight: 700 }}>SCAN</span> to backtest it here, or upload a CSV.</div>
 
@@ -212,6 +243,37 @@ export function TabBt() {
           <button style={{ flex: 1, background: '#0d1220', border: '1px solid #38bdf8', color: '#38bdf8', fontSize: 11, fontWeight: 800, padding: '7px 10px', borderRadius: 4, cursor: 'pointer' }}>📋 REVIEW</button>
         </div>
       </div>
+      </>)}
+
+      {/* Lingua Exec config */}
+      {engine === 'lingua' && (
+        <div style={{ padding: '8px 12px', borderBottom: '1px solid #111620' }}>
+          <div style={{ fontSize: 10, color: '#4ade80', fontWeight: 700, marginBottom: 6, letterSpacing: 0.8 }}>LINGUA EXEC — 50/89 PULLBACK ENGINE</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div>
+              <div style={labelStyle}>SYMBOL</div>
+              <input value={le.symbol} style={inputStyle} onChange={(e) => setLe(v => ({ ...v, symbol: e.target.value.toUpperCase() }))} />
+            </div>
+            <div>
+              <div style={labelStyle}>TIMEFRAME</div>
+              <select value={le.tf} style={selectStyle} onChange={(e) => setLe(v => ({ ...v, tf: e.target.value }))}>
+                <option value="60">1H</option><option value="240">4H</option><option value="D">Daily</option><option value="W">Weekly</option>
+                <option value="15">15m</option><option value="30">30m</option><option value="5">5m</option>
+              </select>
+            </div>
+            <div>
+              <div style={labelStyle}>FROM</div>
+              <input value={le.from} style={inputStyle} onChange={(e) => setLe(v => ({ ...v, from: e.target.value }))} />
+            </div>
+            <div>
+              <div style={labelStyle}>TO</div>
+              <input value={le.to} style={inputStyle} onChange={(e) => setLe(v => ({ ...v, to: e.target.value }))} />
+            </div>
+          </div>
+          <button onClick={() => setLe(v => ({ ...v, symbol: chartSymbol }))} style={{ marginTop: 6, width: '100%', background: '#0d1220', border: '1px solid #2a3050', color: '#8aa0c0', fontSize: 10, fontWeight: 600, padding: '3px', borderRadius: 3, cursor: 'pointer' }}>↻ USE CHART SYMBOL ({chartSymbol})</button>
+          <button onClick={runLinguaExec} disabled={leLoading} style={{ marginTop: 6, width: '100%', background: leLoading ? '#2a3050' : '#4ade80', color: '#000', border: 'none', fontSize: 11, fontWeight: 800, padding: '7px 10px', borderRadius: 4, cursor: leLoading ? 'wait' : 'pointer' }}>{leLoading ? '⏳ RUNNING...' : '⚡ RUN LINGUA EXEC'}</button>
+        </div>
+      )}
 
       {/* Summary stats */}
       {(btResults.length > 0 || trades.length > 0) && (

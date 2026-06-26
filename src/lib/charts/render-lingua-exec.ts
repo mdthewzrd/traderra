@@ -147,22 +147,28 @@ export function renderLinguaExec(rc: RenderContext) {
     const e39 = ema(close, 39), e61 = ema(close, 61)
     const tightDn = p.tightMultDn ?? 3.6   // ADD (trigger entry) stop mult
     const entryMultDn = p.entryMultDn ?? 3.9 // ENTRY 1 (bar break) stop mult — wider
+    const addFreedMin = p.addFreedMin ?? 0.2 // add fires when the stop rise frees ≥ this FRACTION of current risk
+    const recycleMult = p.recycleMult ?? 6.0 // near-extreme upper dev zone (below 6.9) that arms a recycle 50%
     let phase = 0          // 0=SCAN 1=ARM 2=IN
     let pbLow = NaN
     let activeStop = NaN     // current position stop; checked every bar in IN
-    let added = false, coverArmed = false, ex1 = false, ex2 = false
-    let pendingEntry = false, pendingAdd = false   // trig fires → fill at NEXT bar's open
+    let lastFill = NaN       // most recent entry/add fill price (reference for % risk gate)
+    let coverArmed = false, ex1 = false, ex2 = false
+    let recycleArmed = false, recycled = false       // near-extreme (6.0) zone reached; recycle 50% fired
+    let add1Done = false, sold = false                // add1Done = first add fired; sold = adding stops
+    let pendingEntry = false                          // E1 trigger fires → fill at NEXT bar's open
+    let addedThisPullback = false                     // one add per 50ema pullback episode
     for (let i = 90; i < rc.data.length; i++) {
       if (regimes[i] < 0) continue
-      if (phase === 0) { pendingEntry = false; pendingAdd = false }   // clear stale pendings between trades
+      if (phase === 0) { pendingEntry = false; addedThisPullback = false; add1Done = false; sold = false; recycleArmed = false; recycled = false; lastFill = NaN }   // clear between trades
       const bullLeg = regimes[i] <= 2
       // abandon current trade if macro flips bear
-      if (phase !== 0 && !bullLeg) { phase = 0; added = false; coverArmed = false; ex1 = false; ex2 = false }
+      if (phase !== 0 && !bullLeg) { phase = 0; coverArmed = false; ex1 = false; ex2 = false; add1Done = false; sold = false; addedThisPullback = false; recycleArmed = false; recycled = false }
       // SCAN: a fresh pullback to 50ema starts one episode — but ONLY when
       // momentum is green (39 > 61). While 39 < 61 we sit out, even in a bull regime.
       if (phase === 0) {
         if (bullLeg && e39[i] > e61[i] && low[i] <= eFast[i]) {
-          phase = 1; pbLow = low[i]; added = false; coverArmed = false; ex1 = false; ex2 = false
+          phase = 1; pbLow = low[i]; coverArmed = false; ex1 = false; ex2 = false; add1Done = false; sold = false; addedThisPullback = false; recycleArmed = false; recycled = false
           pullbacks.push({ idx: i, dir: 1 })
         }
         continue
@@ -173,44 +179,68 @@ export function renderLinguaExec(rc: RenderContext) {
         pbLow = Math.min(pbLow, low[i])
         if (pendingEntry) {                            // trigger fired last bar → fill at THIS open
           activeStop = e89[i] - a89[i] * entryMultDn     // ENTRY 1 stop = 3.9 band (wider)
+          lastFill = open[i]
           entries.push({ idx: i, dir: 1, price: open[i], stop: activeStop, kind: 1 })
           pendingEntry = false
           phase = 2
+          // FIRST ADD is immediate: fires on this entry-fill bar at the open, no pullback
+          // needed. Ratchets the stop to the tighter 3.6 band. Subsequent adds fill ON a pullback.
+          activeStop = e89[i] - a89[i] * tightDn           // add1 stop = 3.6 band
+          entries.push({ idx: i, dir: 1, price: open[i], stop: activeStop, kind: 2 })
+          lastFill = open[i]
+          add1Done = true
           // fall through to IN so this bar's stop/cover checks run against the open fill
         } else {
           if (close[i] > high[i - 1]) pendingEntry = true   // trigger → enter NEXT bar at open
           continue
         }
       }
-      // IN — STOP-OUT first (highest priority), then cover, escape, add
+      // IN — STOP-OUT first (highest priority), then cover, escape, then add
       if (low[i] <= activeStop) {
         stopOuts.push({ idx: i, dir: 1, price: activeStop })
-        phase = 0; added = false; coverArmed = false; ex1 = false; ex2 = false
+        phase = 0; coverArmed = false; ex1 = false; ex2 = false; add1Done = false; sold = false; addedThisPullback = false; recycleArmed = false; recycled = false
         continue
       }
-      // IN — cover logic first, then escape, then add
-      if (regimes[i] === 1) coverArmed = true                 // 6.9 upper hit arms cover
+      // IN — cover (6.9 hit) / recycle (near-extreme) / escape (39/61), then add
+      if (regimes[i] === 1) coverArmed = true                 // 6.9 upper hit arms full cover
+      if (high[i] >= e72[i] + a72[i] * recycleMult) recycleArmed = true   // near-extreme (almost 6.9) zone
       if (coverArmed) {
-        if (!ex1 && low[i] < low[i - 1]) { exits.push({ idx: i, dir: 1, price: low[i], kind: 1 }); ex1 = true }
-        if (!ex2 && e9[i] < e20[i] && e9[i - 1] >= e20[i - 1]) { exits.push({ idx: i, dir: 1, price: close[i], kind: 2 }); ex2 = true }
-        if (ex1 && ex2) { phase = 0; added = false; coverArmed = false; ex1 = false; ex2 = false; continue }
-      } else if (e39[i] < e61[i]) {
-        // ESCAPE HATCH: 39 below 61 (bearish momentum) before 6.9 ever hit → sell out, end trade.
-        // State check (not a one-shot cross) so trades entered AFTER the flip also exit.
-        exits.push({ idx: i, dir: 1, price: close[i], kind: 3 })
-        phase = 0; added = false; coverArmed = false; ex1 = false; ex2 = false
-        continue
-      }
-      // signal 2 add (one time) — same open-of-next-bar fill as the starter
-      if (!added) {
-        if (pendingAdd) {                                      // trig fired last bar → add at THIS open
-          // TRIGGER ENTRY (add) tightens the stop from entry-1's 3.9 → 3.6 band.
-          activeStop = e89[i] - a89[i] * tightDn               // add stop = 3.6 band
-          entries.push({ idx: i, dir: 1, price: open[i], stop: activeStop, kind: 2 })
-          added = true; pendingAdd = false
-        } else if (close[i] > high[i - 1]) {                   // add trig → arms fill at next open
-          pendingAdd = true
+        if (!ex1 && low[i] < low[i - 1]) { exits.push({ idx: i, dir: 1, price: low[i], kind: 1 }); ex1 = true; sold = true }   // 1st cover → no more adds
+        if (!ex2 && e9[i] < e20[i] && e9[i - 1] >= e20[i - 1]) { exits.push({ idx: i, dir: 1, price: close[i], kind: 2 }); ex2 = true; sold = true }
+        if (ex1 && ex2) { phase = 0; coverArmed = false; ex1 = false; ex2 = false; add1Done = false; sold = false; addedThisPullback = false; recycleArmed = false; recycled = false; continue }
+      } else {
+        // RECYCLE: price reached the near-extreme zone but never cleanly tagged 6.9. If the 9/20
+        // then flips bearish, take 50% off (recycle) to bank the almost-hit run. Fires once; the
+        // remaining half rides until the 39/61 escape below. Frozen on any sell (sold=true).
+        if (recycleArmed && !recycled && !sold && e9[i] < e20[i] && e9[i - 1] >= e20[i - 1]) {
+          exits.push({ idx: i, dir: 1, price: close[i], kind: 4 }); recycled = true; sold = true
         }
+        // ESCAPE HATCH: 39 below 61 (bearish momentum) → sell out (full, or remaining 50% post-recycle).
+        if (e39[i] < e61[i]) {
+          exits.push({ idx: i, dir: 1, price: close[i], kind: 3 })
+          phase = 0; coverArmed = false; ex1 = false; ex2 = false; add1Done = false; sold = false; addedThisPullback = false; recycleArmed = false; recycled = false
+          continue
+        }
+      }
+      // MULTI-ADD: add1 was immediate (add1Done). Each FRESH pullback to the 50ema during the
+      // trade FILLS an add directly AT the mean (limit order sitting on the 50ema), gated by the
+      // freed-risk %. One add per pullback episode — addedThisPullback resets once price LEAVES
+      // the mean (low > eFast), so the next touch is a fresh pullback. Frozen on any sell (sold).
+      if (!sold && add1Done) {
+        if (low[i] <= eFast[i] && !addedThisPullback) {        // fresh pullback touching the 50ema
+          const newStop = e89[i] - a89[i] * tightDn            // candidate add stop = 3.6 band
+          const freed = newStop - activeStop                   // $ of risk the rising band freed
+          const curRisk = lastFill - activeStop                // per-share risk from most recent fill
+          // GATE (PERCENT): fill only when the stop rise frees ≥ 20% of current risk. If the band
+          // hasn't risen enough yet the touch is skipped and retries on the next pullback.
+          if (curRisk > 0 && freed >= addFreedMin * curRisk) {
+            activeStop = newStop
+            entries.push({ idx: i, dir: 1, price: eFast[i], stop: activeStop, kind: 2 })  // limit fill @ 50ema
+            lastFill = eFast[i]
+            addedThisPullback = true                           // one add per episode
+          }
+        }
+        if (low[i] > eFast[i]) addedThisPullback = false       // price left the mean → next touch is fresh
       }
     }
     } catch { /* trade logic error → arrays stay as-is, chart still renders */ }
@@ -355,7 +385,7 @@ export function renderLinguaExec(rc: RenderContext) {
       drawWedge(rc.ctx, x, y, xSize, 'down', col)      // apex at price, base above → sell tag
       rc.ctx.save()
       rc.ctx.fillStyle = col; rc.ctx.font = '700 8px JetBrains Mono, monospace'; rc.ctx.textBaseline = 'bottom'
-      rc.ctx.fillText(ex.kind === 2 ? '9/20' : (ex.kind === 3 ? '39/61' : 'BRK'), x + xSize + 2, y - xSize - 2)
+      rc.ctx.fillText(ex.kind === 2 ? '9/20' : ex.kind === 3 ? '39/61' : ex.kind === 4 ? 'RC' : 'BRK', x + xSize + 2, y - xSize - 2)
       rc.ctx.restore()
     }
   }

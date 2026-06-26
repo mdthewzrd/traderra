@@ -454,3 +454,125 @@ model BtKV {
   value     String
   updatedAt DateTime @updatedAt
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Dilution Radar — free-SEC dilution terminal (replaces paid AskEdgar)
+// Spec: edge-dev assets/dilution/SPEC.md
+// ─────────────────────────────────────────────────────────────────────────
+
+// Ticker ↔ CIK map cache (hydrated from sec.gov/files/company_tickers_exchange.json)
+model SecTickerCik {
+  ticker    String   @id            // uppercase, share-class hyphenated (BRK-B)
+  cik       String                  // 10-digit zero-padded SEC CIK
+  name      String
+  exchange  String?
+  fetchedAt DateTime @default(now())
+
+  @@index([cik])
+}
+
+model DilutionCompany {
+  cik               String   @id            // 10-digit zero-padded SEC CIK
+  tickers           String[]                // native array: current + historical tickers
+  name              String
+  sicCode           String?
+  exchange          String?
+  entityType        String?
+  firstFetched      DateTime @default(now())
+  filingsLastSynced DateTime?
+  factsLastSynced   DateTime?
+  filings           DilutionFiling[]
+  form4Txns         DilutionForm4Txn[]
+  facts             DilutionFact[]
+}
+
+model DilutionFiling {
+  accessionNo  String   @id                 // globally unique → idempotent upsert
+  cik          String
+  company      DilutionCompany @relation(fields: [cik], references: [cik], onDelete: Cascade)
+  formType     String                       // S-1, S-3, 424B5, 8-K, 4, 425...
+  filingDate   DateTime
+  reportDate   DateTime?
+  primaryDoc   String?
+  primaryDesc  String?
+  items        String[]                     // 8-K items ["1.01","5.03","3.03"]
+  dilutionTags String[] @default([])        // ["shelf","atm","convertible","equity-line","reverse-split","warrant","delisting-risk"]
+  rawPayload   Json?                        // full raw row for debug/replay
+  createdAt    DateTime @default(now())
+
+  @@index([cik, filingDate])
+  @@index([formType, filingDate])
+}
+
+model DilutionFact {
+  cik     String
+  company DilutionCompany @relation(fields: [cik], references: [cik], onDelete: Cascade)
+  fact    String   // EntityCommonStockSharesOutstanding | EntityPublicFloat | ...
+  period  String   // "end" date, e.g. "2026-04-17"
+  unit    String   // "shares" | "USD"
+  val     Float
+  filed   DateTime?
+  accn    String?
+
+  @@id([cik, fact, period])
+  @@index([cik, fact])
+}
+
+model DilutionForm4Txn {
+  id          String   @id @default(cuid())
+  cik         String
+  company     DilutionCompany @relation(fields: [cik], references: [cik], onDelete: Cascade)
+  reporter    String
+  reporterCik String?
+  isOfficer   Boolean  @default(false)
+  txnCode     String   // P=buy S=sell A=award G=gift M=exempt...
+  securities  Float    @default(0)
+  price       Float?
+  afterShares Float?
+  txnDate     DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([cik, txnDate])
+}
+
+// Plain-string userId/cik (no FK) — keeps User model untouched; allows watch before full ingest
+model DilutionWatch {
+  userId    String
+  cik       String
+  ticker    String
+  addedAt   DateTime @default(now())
+  lastAlert DateTime?
+
+  @@id([userId, cik])
+  @@index([userId])
+  @@index([cik])
+}
+
+model DilutionScanRun {
+  id        String   @id @default(cuid())
+  scanType  String   // equity-line | atm | convertible | shelf-effective | reverse-split
+  query     String
+  ranAt     DateTime @default(now())
+  hitCount  Int      @default(0)
+  hits      DilutionScanHit[]
+
+  @@index([scanType, ranAt])
+}
+
+model DilutionScanHit {
+  id          String   @id @default(cuid())
+  scanRunId   String
+  scanRun     DilutionScanRun @relation(fields: [scanRunId], references: [id], onDelete: Cascade)
+  cik         String
+  ticker      String?
+  formType    String
+  filingDate  DateTime
+  accessionNo String
+  snippet     String?
+  score       Float?
+  createdAt   DateTime @default(now())
+
+  @@index([scanRunId])
+  @@index([cik])
+  @@index([filingDate])
+}

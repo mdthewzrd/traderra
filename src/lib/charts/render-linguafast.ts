@@ -10,15 +10,18 @@ import type { RenderContext } from './render-types'
 import { useToolStore, getMergedToolParams } from '@/stores/charts/toolStore'
 import { drawEMABand } from './render-indicators'
 
-// EMA seeded from the first finite value (matches the proven ema in render-lingua).
-function ema(src: number[], span: number): number[] {
-  const n = src.length, out: number[] = new Array(n).fill(NaN)
+// EMA seeded from the first finite value. Returns (number|null)[] — warmup/gap
+// bars are NULL, not NaN. CRITICAL: drawEMABand skips bars via `null == t[e]`,
+// and `null == NaN` is FALSE, so NaN warmup bars would feed pToY(NaN) into the
+// canvas path and break it (nothing plots). This was the 4-hour bug.
+function ema(src: number[], span: number): (number | null)[] {
+  const n = src.length, out: (number | null)[] = new Array(n).fill(null)
   if (n === 0) return out
   const k = 2 / (span + 1)
   let prev = NaN, startIdx = 0
   for (let i = 0; i < n; i++) {
     if (!isNaN(src[i])) { prev = src[i]; startIdx = i; break }
-    out[i] = NaN
+    out[i] = null
   }
   if (isNaN(prev)) return out
   out[startIdx] = prev

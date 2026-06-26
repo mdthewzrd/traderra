@@ -251,9 +251,11 @@ export default function LiveFeedPage() {
   const isLive = selectedDate === null
 
   // ── SSE hit handler ──
-  const addHits = useCallback((pushed: any, live = true) => {
+  const knownRef = useRef<Set<string>>(new Set())  // ticker|strategy|date ever seen (beep only for new)
+  const addHits = useCallback((pushed: any, live = true, silent = false) => {
     const spec = pushed.spec || pushed.meta?.strategy || 'unknown'
     const phase = pushed.meta?.phase || ''
+    const fullState = !!pushed.meta?.fullState
     const incoming: Hit[] = (pushed.results || []).map((r: any, i: number) => ({
       id: pushed.id + '-' + i,
       ticker: r.ticker || r.symbol || '?',
@@ -276,18 +278,28 @@ export default function LiveFeedPage() {
     }))
     if (!incoming.length) return
     if (live) {
+      // determine genuinely-new tickers (for the beep) before mutating state
+      const isPotential = spec === POTENTIAL
+      const newOnes = silent ? [] : incoming.filter(h => {
+        const k = h.ticker + '|' + h.strategy + '|' + (h.date || '').slice(0, 10)
+        return !knownRef.current.has(k) && (knownRef.current.add(k), true)
+      })
       setLiveHits(prev => {
-        // dedupe by ticker+strategy: replace if newer phase/checks
+        if (fullState) {
+          // authoritative full set for this strategy: replace its hits, keep others
+          const others = prev.filter(h => h.strategy !== spec)
+          return [...others, ...incoming].sort((a, b) => b.receivedAt - a.receivedAt).slice(0, 400)
+        }
+        // legacy single ping: dedupe by ticker+strategy, keep newest
         const map = new Map<string, Hit>()
         for (const h of [...incoming, ...prev]) {
           const key = h.ticker + '|' + h.strategy
           if (!map.has(key) || map.get(key)!.receivedAt < h.receivedAt) map.set(key, h)
         }
-        return [...map.values()].sort((a, b) => b.receivedAt - a.receivedAt).slice(0, 300)
+        return [...map.values()].sort((a, b) => b.receivedAt - a.receivedAt).slice(0, 400)
       })
-      // Sound: beep only (no toast popups — hits already appear in the panels)
-      const isPotential = spec === POTENTIAL
-      if (!mutedRef.current && !isPotential) {
+      // beep only for genuinely new, non-potential, non-muted (never on fullState replay / catch-up)
+      if (!mutedRef.current && !isPotential && !fullState && newOnes.length) {
         BEEP(phase === 'confirmed' ? [880, 1100] : [800, 600], 0.15, 0.35)
       }
     }
@@ -312,12 +324,25 @@ export default function LiveFeedPage() {
   // Clock — seeded post-mount to avoid SSR/client timestamp mismatch (#418)
   useEffect(() => { setNow(Date.now()); const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t) }, [])
 
-  // Catch up on missed pushes entering LIVE
+  // Catch up on missed pushes entering LIVE — SILENT (replay), repeats every 60s so
+  // names that persist on the server buffer reappear after a reload.
   useEffect(() => {
     if (selectedDate !== null) return
-    fetch('/api/scans/push?since=0').then(r => r.json()).then(d => {
-      (d.scans || []).sort((a: any, b: any) => a.createdAt - b.createdAt).forEach((s: any) => addHits(s))
+    const run = () => fetch('/api/scans/push?since=0').then(r => r.json()).then(d => {
+      // dedupe to the latest fullState per strategy + all non-fullState pings
+      const latestFull = new Map<string, any>()
+      const pings: any[] = []
+      for (const s of (d.scans || []).sort((a: any, b: any) => a.createdAt - b.createdAt)) {
+        const strat = s.spec || s.meta?.strategy || ''
+        if (s.meta?.fullState) latestFull.set(strat, s)
+        else pings.push(s)
+      }
+      pings.forEach(s => addHits(s, true, true))
+      latestFull.forEach(s => addHits(s, true, true))
     }).catch(() => {})
+    run()
+    const t = setInterval(run, 60000)
+    return () => clearInterval(t)
   }, [addHits, selectedDate])
 
   // ── Load historical day ──
@@ -429,34 +454,45 @@ export default function LiveFeedPage() {
     })
   }
 
-  // ── Derived: merge DB + live, group into one section per strategy (deduped) ──
+  // ── Derived: merge DB + live, group into scan rows (d1-gap + potential merge into "D1 Gap") ──
   const sortCands = (a: Hit, b: Hit) => (b.checks_met || 0) - (a.checks_met || 0) || (b.pm_high_pct || 0) - (a.pm_high_pct || 0)
   const allHits: Hit[] = isLive
     ? dedupMerge([...recentCandidates, ...recentSignals], liveHits)
     : dayGroups.flatMap(g => g.hits)
 
-  interface ScanSection { strategy: string; name: string; color: string; isPotential: boolean; hits: Hit[] }
-  const sections: ScanSection[] = useMemo(() => {
-    const map = new Map<string, Hit[]>()
-    for (const h of allHits) {
-      if (!map.has(h.strategy)) map.set(h.strategy, [])
-      map.get(h.strategy)!.push(h)
-    }
-    const list: ScanSection[] = [...map.entries()].map(([strategy, hits]) => {
-      const isPot = strategy === POTENTIAL
-      const sorted = isPot
-        ? [...hits].sort(sortCands)
-        : [...hits].sort((a, b) => b.date.localeCompare(a.date))
-      return { strategy, name: hits[0]?.scanName || strategy, color: colorFor(strategy), isPotential: isPot, hits: sorted }
-    })
-    // D1 Gap + Potential always first, then by count desc
-    const priority = (s: string) => (s === 'd1-gap' ? 0 : s === POTENTIAL ? 1 : 2)
-    return list.sort((a, b) => priority(a.strategy) - priority(b.strategy) || b.hits.length - a.hits.length)
-  }, [allHits])
+  // Scan grouping: d1-gap + d1-gap-potential merge into one "D1 Gap" row
+  const GROUP_OF: Record<string, string> = { 'd1-gap': 'D1 Gap', 'd1-gap-potential': 'D1 Gap' }
+  const groupOf = (strategy: string) => GROUP_OF[strategy] || strategy
+  const GROUP_COLORS: Record<string, string> = { 'D1 Gap': '#ef5350' }
+  const groupColor = (g: string) => GROUP_COLORS[g] || colorFor(g)
 
-  const visibleSections = enabledScans.size === 0 ? sections : sections.filter(s => enabledScans.has(s.strategy))
-  const toggleScan = (s: string) => setEnabledScans(prev => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n })
-  const toggleCollapse = (s: string) => setCollapsedScans(prev => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n })
+  interface ScanRow { group: string; color: string; potential: Hit[]; valid: Hit[]; recent: Hit[] }
+  const MAX_COL = 24
+  const scanRows: ScanRow[] = useMemo(() => {
+    const today = isLive ? todayStr() : (selectedDate || todayStr())
+    const byGroup = new Map<string, Hit[]>()
+    for (const h of allHits) {
+      const g = groupOf(h.strategy)
+      if (!byGroup.has(g)) byGroup.set(g, [])
+      byGroup.get(g)!.push(h)
+    }
+    const rows: ScanRow[] = [...byGroup.entries()].map(([group, hits]) => {
+      const isDev = (h: Hit) => h.strategy === POTENTIAL && (h.checks_met || 0) < 5
+      const potential = hits.filter(h => h.date === today && isDev(h)).sort(sortCands)
+      const valid = hits.filter(h => h.date === today && !isDev(h))
+        .sort((a, b) => (b.pm_high_pct || 0) - (a.pm_high_pct || 0))
+      const recent = hits.filter(h => h.date < today)
+        .sort((a, b) => b.date.localeCompare(a.date))
+      return { group, color: groupColor(group), potential, valid, recent }
+    })
+    rows.sort((a, b) => (a.group === 'D1 Gap' ? 0 : 1) - (b.group === 'D1 Gap' ? 0 : 1)
+      || (b.potential.length + b.valid.length + b.recent.length) - (a.potential.length + a.valid.length + a.recent.length))
+    return rows
+  }, [allHits, isLive, selectedDate])
+
+  const visibleRows = enabledScans.size === 0 ? scanRows : scanRows.filter(r => enabledScans.has(r.group))
+  const toggleScan = (g: string) => setEnabledScans(prev => { const n = new Set(prev); n.has(g) ? n.delete(g) : n.add(g); return n })
+  const toggleCollapse = (g: string) => setCollapsedScans(prev => { const n = new Set(prev); n.has(g) ? n.delete(g) : n.add(g); return n })
 
   // ── Row renderers ──
   const S = {
@@ -468,75 +504,71 @@ export default function LiveFeedPage() {
     row: { display: 'grid', alignItems: 'center', padding: '6px 12px', borderBottom: '1px solid #0d1118', cursor: 'pointer', transition: 'background .1s', fontSize: 11 } as React.CSSProperties,
   }
 
-  const renderCandidateRow = (h: Hit) => (
-    <div key={h.id} style={{ ...S.row, gridTemplateColumns: '1fr 90px 90px 100px 110px', background: chartTicker === h.ticker ? '#0d1828' : 'transparent', borderLeft: `3px solid ${h.checks_met === 5 ? '#4ade80' : h.checks_met === 4 ? '#f59e0b' : '#3a8c4a'}` }}
-      onClick={() => selectRow(h)} onDoubleClick={() => openFullChart(h)}
-      onMouseEnter={e => { if (chartTicker !== h.ticker) e.currentTarget.style.background = '#0d1220' }}
-      onMouseLeave={e => { if (chartTicker !== h.ticker) e.currentTarget.style.background = 'transparent' }}>
-      <span style={{ fontWeight: 800, color: '#dde3f0', fontSize: 13 }}>{h.ticker}</span>
-      <span style={{ color: (h.pm_high_pct || 0) >= 0.5 ? '#4ade80' : '#8aa0c0', fontWeight: 700, textAlign: 'right' }}>{fmtPct(h.pm_high_pct)}</span>
-      <span style={{ color: '#6a7a90', textAlign: 'right' }}>{fmtPct(h.gap)}</span>
-      <span style={{ color: '#6a7a90', textAlign: 'right' }}>{fmtVol(h.pm_vol)}</span>
-      <span><ChecksDots checks={h.checks} met={h.checks_met} total={h.checks_total} /></span>
-    </div>
-  )
-
-  const renderSignalRow = (h: Hit) => (
-    <div key={h.id} style={{ ...S.row, gridTemplateColumns: '1fr 90px 90px 100px', background: chartTicker === h.ticker ? '#0d1828' : 'transparent', borderLeft: `3px solid ${colorFor(h.strategy)}` }}
-      onClick={() => selectRow(h)} onDoubleClick={() => openFullChart(h)}
-      onMouseEnter={e => { if (chartTicker !== h.ticker) e.currentTarget.style.background = '#0d1220' }}
-      onMouseLeave={e => { if (chartTicker !== h.ticker) e.currentTarget.style.background = 'transparent' }}>
-      <span style={{ fontWeight: 800, color: '#dde3f0', fontSize: 13 }}>{h.ticker}</span>
-      <span style={{ color: '#6a7a90', textAlign: 'right', fontSize: 11 }}>{h.date ? h.date.slice(5) : ''}</span>
-      <span style={{ color: (h.pm_high_pct || 0) >= 0.5 ? '#4ade80' : '#8aa0c0', fontWeight: 700, textAlign: 'right' }}>{fmtPct(h.pm_high_pct || h.gap)}</span>
-      <span style={{ color: '#6a7a90', textAlign: 'right' }}>{fmtVol(h.pm_vol || h.volume)}</span>
-    </div>
-  )
-
-  // One collapsible section per scan. Potential sections show trigger-dot rows; others use date-grouped rows.
-  const renderSection = (sec: ScanSection) => {
-    const collapsed = collapsedScans.has(sec.strategy)
-    const renderRow = sec.isPotential ? renderCandidateRow : renderSignalRow
-    // date-grouped body (potential rows are already sorted by checks; date grouping only for signal rows)
-    const body: JSX.Element[] = []
-    if (!collapsed) {
-      if (sec.isPotential) {
-        sec.hits.forEach(h => body.push(renderRow(h)))
-      } else {
-        let lastDate = ''
-        sec.hits.forEach((h, idx) => {
-          if (h.date !== lastDate) {
-            lastDate = h.date
-            body.push(<div key={'d-' + sec.strategy + '-' + h.date + '-' + idx} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px 3px', background: '#0c111b', borderTop: '1px solid #111620' }}>
-              <span style={{ fontSize: 10, fontWeight: 800, color: '#6a7a90' }}>{fmtDay(h.date)}</span>
-              <span style={{ fontSize: 8, color: '#3a4560' }}>{h.date}</span>
-            </div>)
-          }
-          body.push(renderRow(h))
-        })
-      }
+  // Compact hit row — adapts to column kind (potential shows trigger dots, valid/recent show pm% / date)
+  const renderHitCompact = (h: Hit, kind: 'potential' | 'valid' | 'recent', key: string) => {
+    const active = chartTicker === h.ticker
+    const hv = {
+      onMouseEnter: (e: any) => { if (!active) e.currentTarget.style.background = '#0d1220' },
+      onMouseLeave: (e: any) => { if (!active) e.currentTarget.style.background = 'transparent' },
+      onClick: () => selectRow(h), onDoubleClick: () => openFullChart(h),
     }
-    const cols = sec.isPotential ? '1fr 90px 90px 100px 110px' : '1fr 90px 90px 100px'
+    const gapColor = (h.gap || 0) >= 0.5 ? '#5eead4' : '#6a7a90'   // teal when at trigger-level
+    const pmhColor = (h.pm_high_pct || 0) >= 0.5 ? '#4ade80' : '#8aa0c0'
+    if (kind === 'potential') return (
+      <div key={key} style={{ display: 'grid', alignItems: 'center', gridTemplateColumns: '1fr 44px 44px 78px', padding: '5px 10px', borderBottom: '1px solid #0d1118', cursor: 'pointer', fontSize: 12, background: active ? '#0d1828' : 'transparent', borderLeft: `3px solid ${(h.checks_met || 0) === 5 ? '#4ade80' : (h.checks_met || 0) === 4 ? '#f59e0b' : '#3a8c4a'}` }} {...hv}>
+        <span style={{ fontWeight: 800, color: '#dde3f0' }}>{h.ticker}</span>
+        <span style={{ textAlign: 'right', color: gapColor, fontWeight: 700 }} title="Gap (open/prev close − 1)">{fmtPct(h.gap)}</span>
+        <span style={{ textAlign: 'right', color: pmhColor, fontWeight: 700 }} title="PM high / prev close − 1">{fmtPct(h.pm_high_pct)}</span>
+        <span style={{ display: 'flex', justifyContent: 'flex-end' }}><ChecksDots checks={h.checks} met={h.checks_met} total={h.checks_total} /></span>
+      </div>
+    )
     return (
-      <div key={sec.strategy} style={{ borderBottom: '1px solid #111620' }}>
-        <div onClick={() => toggleCollapse(sec.strategy)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: '#0a0e16', cursor: 'pointer', position: 'sticky', top: 0, zIndex: 4 }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: sec.color, boxShadow: `0 0 6px ${sec.color}66` }} />
-          <span style={{ fontSize: 12, fontWeight: 800, color: sec.color, letterSpacing: 0.5 }}>{sec.name.toUpperCase()}</span>
-          <span style={{ fontSize: 9, color: '#3a4560' }}>{sec.isPotential ? '· developing setups' : `· ${sec.hits.length} recent`}</span>
-          <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: '#5a6a80', background: '#111620', padding: '1px 8px', borderRadius: 8 }}>{sec.hits.length}</span>
-          <span style={{ fontSize: 10, color: '#4a6080' }}>{collapsed ? '▸' : '▾'}</span>
+      <div key={key} style={{ display: 'grid', alignItems: 'center', gridTemplateColumns: kind === 'valid' ? '1fr 44px 44px 50px' : '1fr 44px 42px 50px', padding: '5px 10px', borderBottom: '1px solid #0d1118', cursor: 'pointer', fontSize: 12, background: active ? '#0d1828' : 'transparent', borderLeft: `3px solid ${colorFor(h.strategy)}` }} {...hv}>
+        <span style={{ fontWeight: 800, color: '#dde3f0' }}>{h.ticker}</span>
+        <span style={{ textAlign: 'right', color: gapColor, fontWeight: 700 }} title="Gap (open/prev close − 1)">{fmtPct(h.gap)}</span>
+        {kind === 'valid'
+          ? <span style={{ textAlign: 'right', color: pmhColor, fontWeight: 700 }} title="PM high / prev close − 1">{fmtPct(h.pm_high_pct)}</span>
+          : <span style={{ textAlign: 'right', color: '#6a7a90', fontSize: 10 }}>{h.date ? h.date.slice(5) : ''}</span>}
+        <span style={{ textAlign: 'right', color: '#6a7a90' }}>{fmtVol(h.pm_vol || h.volume)}</span>
+      </div>
+    )
+  }
+
+  const renderColumn = (title: string, color: string, kind: 'potential' | 'valid' | 'recent', hits: Hit[], group: string) => {
+    const shown = hits.slice(0, MAX_COL)
+    return (
+      <div style={{ borderRight: '1px solid #111620', minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', background: '#0c1018', borderBottom: '1px solid #111620' }}>
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: color }} />
+          <span style={{ fontSize: 9, fontWeight: 800, color, letterSpacing: 0.5 }}>{title}</span>
+          <span style={{ marginLeft: 'auto', fontSize: 9, color: '#3a4560' }}>{hits.length}</span>
         </div>
-        {!collapsed && <>
-          <div style={{ ...S.row, gridTemplateColumns: cols, color: '#2a3550', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', borderBottom: '1px solid #111620', cursor: 'default' }}>
-            {sec.isPotential
-              ? <><span>Ticker</span><span style={{ textAlign: 'right' }}>PM Hi%</span><span style={{ textAlign: 'right' }}>Gap</span><span style={{ textAlign: 'right' }}>PM Vol</span><span>Triggers</span></>
-              : <><span>Ticker</span><span style={{ textAlign: 'right' }}>Date</span><span style={{ textAlign: 'right' }}>PM Hi%</span><span style={{ textAlign: 'right' }}>PM Vol</span></>
-            }
+        {hits.length === 0
+          ? <div style={{ padding: 14, textAlign: 'center', color: '#2a3550', fontSize: 10 }}>—</div>
+          : shown.map((h, i) => renderHitCompact(h, kind, group + '-' + kind + '-' + i))}
+        {hits.length > MAX_COL && <div style={{ padding: '4px 10px', fontSize: 9, color: '#3a4560', textAlign: 'center' }}>+{hits.length - MAX_COL} more</div>}
+      </div>
+    )
+  }
+
+  // One horizontal row per scan: 3 columns (Potential | Valid | Recent)
+  const renderScanRow = (row: ScanRow) => {
+    const collapsed = collapsedScans.has(row.group)
+    return (
+      <div key={row.group} style={{ borderBottom: '2px solid #111620' }}>
+        <div onClick={() => toggleCollapse(row.group)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: '#0a0e16', cursor: 'pointer' }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: row.color, boxShadow: `0 0 6px ${row.color}66` }} />
+          <span style={{ fontSize: 12, fontWeight: 800, color: row.color, letterSpacing: 0.5 }}>{row.group.toUpperCase()}</span>
+          <span style={{ fontSize: 9, color: '#3a4560' }}>· {(row.potential.length + row.valid.length)} today / {row.recent.length} prior</span>
+          <span style={{ marginLeft: 'auto', fontSize: 10, color: '#4a6080' }}>{collapsed ? '▸' : '▾'}</span>
+        </div>
+        {!collapsed && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr' }}>
+            {renderColumn('POTENTIAL', '#38bdf8', 'potential', row.potential, row.group)}
+            {renderColumn('VALID', '#4ade80', 'valid', row.valid, row.group)}
+            {renderColumn('RECENT', '#6a7a90', 'recent', row.recent, row.group)}
           </div>
-          {sec.hits.length === 0
-            ? <div style={{ padding: 16, textAlign: 'center', color: '#4a6080', fontSize: 11 }}>No hits.</div>
-            : body}
-        </>}
+        )}
       </div>
     )
   }
@@ -569,19 +601,19 @@ export default function LiveFeedPage() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderBottom: '1px solid #111620', background: '#080c14', flexWrap: 'wrap', flexShrink: 0 }}>
         <span style={{ fontSize: 9, fontWeight: 700, color: '#3a4560', textTransform: 'uppercase', marginRight: 2 }}>Scans:</span>
         <button onClick={() => setEnabledScans(new Set())} style={{ fontSize: 8, fontWeight: 700, color: enabledScans.size === 0 ? '#4ade80' : '#4a6080', background: 'none', border: '1px solid #1e2840', borderRadius: 3, padding: '2px 7px', cursor: 'pointer', fontFamily: 'inherit' }}>ALL</button>
-        {sections.map(sec => {
-          const on = enabledScans.size === 0 || enabledScans.has(sec.strategy)
+        {scanRows.map(row => {
+          const on = enabledScans.size === 0 || enabledScans.has(row.group)
           return (
-            <button key={sec.strategy} onClick={() => toggleScan(sec.strategy)} style={{
+            <button key={row.group} onClick={() => toggleScan(row.group)} style={{
               fontSize: 10, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer',
               borderRadius: 3, padding: '3px 9px', display: 'flex', alignItems: 'center', gap: 5,
-              border: `1px solid ${on ? sec.color : '#1e2840'}`,
-              background: on ? sec.color + '18' : 'transparent',
-              color: on ? sec.color : '#4a6080', opacity: on ? 1 : 0.5,
+              border: `1px solid ${on ? row.color : '#1e2840'}`,
+              background: on ? row.color + '18' : 'transparent',
+              color: on ? row.color : '#4a6080', opacity: on ? 1 : 0.5,
             }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: sec.color }} />
-              {sec.name}
-              <span style={{ fontSize: 8, opacity: 0.7 }}>{sec.hits.length}</span>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: row.color }} />
+              {row.group}
+              <span style={{ fontSize: 8, opacity: 0.7 }}>{row.potential.length + row.valid.length + row.recent.length}</span>
             </button>
           )
         })}
@@ -591,10 +623,10 @@ export default function LiveFeedPage() {
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {dayLoading && !isLive ? (
           <div style={{ padding: 40, textAlign: 'center', color: '#4a6080', fontSize: 12 }}>Loading…</div>
-        ) : visibleSections.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: '#4a6080', fontSize: 12 }}>No signals for the selected scans{isLive ? '' : ' on this day'}.</div>
+        ) : visibleRows.length === 0 ? (
+          <div style={{ padding: 40, textAlign: 'center', color: '#4a6080', fontSize: 12 }}>No scans selected{isLive ? '' : ' with hits on this day'}.</div>
         ) : (
-          visibleSections.map(renderSection)
+          visibleRows.map(renderScanRow)
         )}
       </div>
 

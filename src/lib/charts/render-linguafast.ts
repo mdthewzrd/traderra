@@ -46,9 +46,16 @@ export function classifyFromStructure(
   close: number[],
   blendBars: number,
   eMid: number[], eSlow: number[],
+  eTrend1: number[], eTrend2: number[], trendFilter: boolean,
 ): FastStage[] {
   const out: FastStage[] = new Array(n).fill('CONSOLIDATION')
   for (let i = 0; i < n; i++) {
+    // MACRO TREND from the 72/89 pair — the 'help with the trend' anchor. A structural break
+    // can whipsaw in chop; this filters counter-macro signals so the regime stays clean.
+    // macroUp = 72≥89 AND price≥89 ; macroDown = 72<89 AND price<89.
+    const t1 = eTrend1[i], t2 = eTrend2[i]
+    const macroUp = !isNaN(t1) && !isNaN(t2) && t1 >= t2 && close[i] >= t2
+    const macroDown = !isNaN(t1) && !isNaN(t2) && t1 < t2 && close[i] < t2
     // alive = set and not yet broken (or broken exactly at i)
     let active: { dir: 1 | -1; setBar: number } | null = null
     let broken: { dir: 1 | -1; breakBar: number } | null = null
@@ -62,8 +69,14 @@ export function classifyFromStructure(
       }
     }
     if (active) {
-      // structure holding → trend residence from the live segment
-      out[i] = active.dir === 1 ? 'UPTREND' : 'BACKSIDE'
+      // structure holding → trend residence from the live segment, MACRO-FILTERED.
+      // A counter-macro trend signal softens to a CONS flavor (don't commit hard against 72/89).
+      const structural: FastStage = active.dir === 1 ? 'UPTREND' : 'BACKSIDE'
+      if (trendFilter) {
+        if (structural === 'UPTREND' && macroDown) out[i] = 'UP CONS'
+        else if (structural === 'BACKSIDE' && macroUp) out[i] = 'DOWN CONS'
+        else out[i] = structural
+      } else out[i] = structural
     } else if (broken) {
       // in a transition window between break and next segment
       const since = i - broken.breakBar
@@ -107,6 +120,9 @@ export function renderLinguaFast(rc: RenderContext) {
     const lfMid = (p.lfMid as number) ?? 50
     const lfSlow = (p.lfSlow as number) ?? 59
     const lfBlendBars = (p.lfBlendBars as number) ?? 6
+    const lfTrend1 = (p.lfTrend1 as number) ?? 72
+    const lfTrend2 = (p.lfTrend2 as number) ?? 89
+    const lfTrendFilter = ((p.lfTrendFilter as number) ?? 1) === 1
 
     // structural trendline params (reuse the proven anchored detection)
     const lfLeft = (p.lfLeft as number) ?? 30
@@ -130,7 +146,9 @@ export function renderLinguaFast(rc: RenderContext) {
     const tl = computeAnchoredTrendline(high, low, close, 1, lfLeft, lfRight, lfPattern, lfMainLeft, lfMainRight, lfMainPattern, lfMinSize, 1, 0)
     const eMid = ema(close, lfMid)
     const eSlow = ema(close, lfSlow)
-    const stages = classifyFromStructure(tl.segments, n, close, lfBlendBars, eMid, eSlow)
+    const eTrend1 = ema(close, lfTrend1)
+    const eTrend2 = ema(close, lfTrend2)
+    const stages = classifyFromStructure(tl.segments, n, close, lfBlendBars, eMid, eSlow, eTrend1, eTrend2, lfTrendFilter)
 
     // ── 2. Stage background fills ──
     for (let i = 0; i < visible.length; i++) {
@@ -150,6 +168,8 @@ export function renderLinguaFast(rc: RenderContext) {
       drawEmaLine(rc, e20, 'rgba(0,229,255,0.85)', 1.4)     // cyan — fast
       drawEmaLine(rc, eMid, 'rgba(200,180,100,0.7)', 1.2)   // gold — mid (blend band)
       drawEmaLine(rc, eSlow, 'rgba(200,120,200,0.7)', 1.2)  // magenta — slow (blend band)
+      drawEmaLine(rc, eTrend1, 'rgba(255,206,21,0.95)', 2.2)  // gold-bold — macro trend (72)
+      drawEmaLine(rc, eTrend2, 'rgba(255,140,40,0.95)', 2.2)  // orange-bold — macro trend (89)
     }
 
     // ── 4. Structural break markers (the TRENDBREAK signal points) ──

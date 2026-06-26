@@ -1,24 +1,30 @@
 /**
  * render-linguafast.ts — Lingua Cycle (Fast): two editable EMA clouds.
  *
- * Per user: strip the over-engineered classifier (it was "all over the place").
- * Just two visible CLOUDS with editable EMA values:
- *   - Fast cloud: 9 / 20 (tight, tracks near-term trend)
- *   - Slow cloud: 72 / 89 (wide, the macro trend base)
- * Each cloud is tinted by its own trend (fast-above-slow = bull green, below = bear red).
- * That's it — clean, editable, build regime logic back on top later once we can see it.
+ * Uses the PROVEN drawEMABand (same function the working Lingua cloud uses) — no
+ * hand-rolled draw loop. Just two editable clouds:
+ *   - Fast cloud: 9 / 20
+ *   - Slow cloud: 72 / 89
  */
 import type { RenderContext } from './render-types'
 import { useToolStore, getMergedToolParams } from '@/stores/charts/toolStore'
+import { drawEMABand } from './render-indicators'
 
-function ema(src: number[], len: number): number[] {
-  const n = src.length, k = 2 / (len + 1), out = new Array(n).fill(NaN)
-  let prev = NaN
+// EMA seeded from the first finite value (matches the proven ema in render-lingua).
+function ema(src: number[], span: number): number[] {
+  const n = src.length, out: number[] = new Array(n).fill(NaN)
+  if (n === 0) return out
+  const k = 2 / (span + 1)
+  let prev = NaN, startIdx = 0
   for (let i = 0; i < n; i++) {
-    const v = src[i]
-    if (isNaN(v)) continue
-    if (isNaN(prev)) prev = v
-    else prev = v * k + prev * (1 - k)
+    if (!isNaN(src[i])) { prev = src[i]; startIdx = i; break }
+    out[i] = NaN
+  }
+  if (isNaN(prev)) return out
+  out[startIdx] = prev
+  for (let i = startIdx + 1; i < n; i++) {
+    if (isNaN(src[i])) { out[i] = prev; continue }
+    prev = src[i] * k + prev * (1 - k)
     out[i] = prev
   }
   return out
@@ -36,41 +42,15 @@ export function renderLinguaFast(rc: RenderContext) {
     const lfSlow1 = (p.lfSlow1 as number) ?? 72
     const lfSlow2 = (p.lfSlow2 as number) ?? 89
 
-    const { ctx, data, vs, visible, xCtr, pToY, barW } = rc
-    if (!data || data.length < 50 || visible.length === 0) return
+    if (!rc.data || rc.data.length < 50 || rc.visible.length === 0) return
+    const close = rc.data.map((b: any) => b.close as number)
 
-    const close = data.map((b: any) => b.close as number)
     const f1 = ema(close, lfFast1), f2 = ema(close, lfFast2)
     const s1 = ema(close, lfSlow1), s2 = ema(close, lfSlow2)
 
-    // draw a cloud: band fill between the two EMAs (tinted by trend) + thin edge lines
-    const drawCloud = (a: number[], b: number[], bullCol: string, bearCol: string, edgeCol: string) => {
-      for (let i = 0; i < visible.length - 1; i++) {
-        const ai = vs + i
-        if (isNaN(a[ai]) || isNaN(b[ai])) continue
-        const x1 = xCtr(i) - barW / 2
-        const top = pToY(Math.max(a[ai], b[ai]))
-        const bot = pToY(Math.min(a[ai], b[ai]))
-        ctx.fillStyle = a[ai] >= b[ai] ? bullCol : bearCol
-        ctx.fillRect(x1, top, barW + 0.5, bot - top)
-      }
-      ctx.strokeStyle = edgeCol; ctx.lineWidth = 1; ctx.lineJoin = 'round'
-      for (const arr of [a, b]) {
-        ctx.beginPath()
-        let started = false
-        for (let i = 0; i < visible.length; i++) {
-          const ai = vs + i, v = arr[ai]
-          if (v == null || isNaN(v)) { started = false; continue }
-          const x = xCtr(i), y = pToY(v)
-          if (!started) { ctx.moveTo(x, y); started = true } else ctx.lineTo(x, y)
-        }
-        ctx.stroke()
-      }
-    }
-
-    // slow cloud (72/89) behind, fast cloud (9/20) on top
-    drawCloud(s1, s2, 'rgba(0,180,140,0.10)', 'rgba(210,70,50,0.10)', 'rgba(180,160,90,0.45)')
-    drawCloud(f1, f2, 'rgba(0,200,120,0.16)', 'rgba(230,90,60,0.16)', 'rgba(0,229,255,0.7)')
+    // slow cloud (72/89) behind, fast cloud (9/20) on top — both via the proven drawEMABand
+    drawEMABand(rc, s1, s2, 'rgba(0,180,140,0.10)', 'rgba(210,70,50,0.10)', 'rgba(180,160,90,0.45)', 'rgba(180,160,90,0.45)')
+    drawEMABand(rc, f1, f2, 'rgba(0,200,120,0.16)', 'rgba(230,90,60,0.16)', 'rgba(0,229,255,0.85)', 'rgba(0,229,255,0.85)')
   } catch (e) {
     console.error('[linguafast] threw:', e)
   }

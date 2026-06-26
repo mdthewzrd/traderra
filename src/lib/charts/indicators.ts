@@ -335,6 +335,17 @@ export function computeIndicators(
   if (inds.ema200) ensureEMA(ema200Tool?.params?.period ?? 200)
   if (inds.ema40_60) { ensureEMA(40); ensureEMA(60) }
   if (inds.band_72_89 || inds.db_72_89 || inds.db_72_89_tight) { ensureEMA(72); ensureEMA(89) }
+  // Dev Bands — editable fast/slow spans. toolMap is indKey-keyed (holds one instance),
+  // so iterate toolOverrides to cache EVERY duplicate's EMA + ATR spans from merged params.
+  if (toolOverrides) {
+    const DB_KEYS = new Set(['dev_s_9_20', 'dev_l_9_20', 'db_72_89', 'db_72_89_tight'])
+    for (const t of toolOverrides) {
+      if (!DB_KEYS.has(t.indKey)) continue
+      const fast = Number(t.params?.fast) || 0, slow = Number(t.params?.slow) || 0
+      if (fast) { ensureEMA(fast); ensureATR(fast) }
+      if (slow) { ensureEMA(slow); ensureATR(slow) }
+    }
+  }
   // EMA Cloud — editable fast/slow spans. toolMap is indKey-keyed so it only holds ONE
   // emacloud instance; iterate toolOverrides to cache EVERY duplicate's spans.
   if (inds.emacloud && toolOverrides) {

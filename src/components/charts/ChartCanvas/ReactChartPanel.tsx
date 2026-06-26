@@ -38,11 +38,6 @@ function getLiveInds(): Record<string, boolean> {
 }
 
 // Mike's deviation band parameters
-const MIKE_DEV = {
-  s_9_20: { fast: 9, slow: 20, up: [0.5, 1], dn: [2, 2.4] },
-  db_72_89: { fast: 72, slow: 89, up: [6.9, 9.6], dn: [6.9, 9.6] },
-  db_72_89_tight: { fast: 72, slow: 89, up: [3, 3.3], dn: [3.6, 3.9] },
-}
 
 /**
  * ReactChartPanel — pure React canvas panel replacing charts-engine.js.
@@ -334,12 +329,13 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
 
       // Compute all indicators for this frame — pass tool overrides for param control
       const activeTools = useToolStore.getState().tools.filter((t: any) => t.on)
-      // emacloud: pull per-panel-merged fast/slow so UI edits + ensureEMA + draw all agree
+      // Merge per-panel param overrides for EVERY tool (keyed by instance id) so UI edits
+      // flow to render + indicators.ts. Singleton render funcs (lingua, etc.) read via
+      // getMergedToolParams directly, so this only needs to cover dispatch-site reads.
+      const panelOverrides = useToolStore.getState().panelParams[panelIdx] || {}
       const toolOverrides = activeTools.map((t: any) => ({
         indKey: t.indKey,
-        params: t.indKey === 'emacloud'
-          ? { ...t.params, ...useToolStore.getState().panelParams[panelIdx]?.[t.id] }
-          : t.params,
+        params: { ...t.params, ...panelOverrides[t.id] },
         colors: t.colors,
       }))
       const ic = computeIndicators(bars, inds, tf, toolOverrides)
@@ -452,40 +448,46 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
         }
       }
 
-      // Deviation band short (9/20) — red upper, green lower
-      if (inds.dev_s_9_20 && ic.ema[9] && ic.atr[9] && ic.ema[20] && ic.atr[20]) {
-        const d = MIKE_DEV.s_9_20
-        drawDevBand(rc,
-          ic.ema[d.fast], ic.atr[d.fast],
-          ic.ema[d.slow], ic.atr[d.slow],
-          d.up, d.dn,
-          'rgba(239,68,68,.15)', 'rgba(239,68,68,.40)',
-          'rgba(34,197,94,.15)', 'rgba(34,197,94,.40)',
-        )
+      // Dev Band short (9/20) — editable fast/slow/mults via merged params
+      if (inds.dev_s_9_20) {
+        for (const t of toolOverrides.filter((x: any) => x.indKey === 'dev_s_9_20')) {
+          const p: any = t.params || {}, fast = Number(p.fast) || 9, slow = Number(p.slow) || 20
+          if (ic.ema[fast] && ic.atr[fast] && ic.ema[slow] && ic.atr[slow]) {
+            drawDevBand(rc, ic.ema[fast], ic.atr[fast], ic.ema[slow], ic.atr[slow],
+              [Number(p.upLow ?? 0.5), Number(p.upHigh ?? 1)],
+              [Number(p.dnLow ?? 2), Number(p.dnHigh ?? 2.4)],
+              'rgba(239,68,68,.15)', 'rgba(239,68,68,.40)',
+              'rgba(34,197,94,.15)', 'rgba(34,197,94,.40)')
+          }
+        }
       }
 
-      // Deviation band 72/89 — red upper, green lower
-      if (inds.db_72_89 && ic.ema[72] && ic.atr[72] && ic.ema[89] && ic.atr[89]) {
-        const d = MIKE_DEV.db_72_89
-        drawDevBand(rc,
-          ic.ema[d.fast], ic.atr[d.fast],
-          ic.ema[d.slow], ic.atr[d.slow],
-          d.up, d.dn,
-          'rgba(239,68,68,.15)', 'rgba(239,68,68,.40)',
-          'rgba(34,197,94,.15)', 'rgba(34,197,94,.40)',
-        )
+      // Dev Band 72/89 — editable fast/slow/mults via merged params
+      if (inds.db_72_89) {
+        for (const t of toolOverrides.filter((x: any) => x.indKey === 'db_72_89')) {
+          const p: any = t.params || {}, fast = Number(p.fast) || 72, slow = Number(p.slow) || 89
+          if (ic.ema[fast] && ic.atr[fast] && ic.ema[slow] && ic.atr[slow]) {
+            drawDevBand(rc, ic.ema[fast], ic.atr[fast], ic.ema[slow], ic.atr[slow],
+              [Number(p.upLow ?? 6.9), Number(p.upHigh ?? 9.6)],
+              [Number(p.dnLow ?? 6.9), Number(p.dnHigh ?? 9.6)],
+              'rgba(239,68,68,.15)', 'rgba(239,68,68,.40)',
+              'rgba(34,197,94,.15)', 'rgba(34,197,94,.40)')
+          }
+        }
       }
 
-      // Deviation band 72/89 tight — red upper, green lower
-      if (inds.db_72_89_tight && ic.ema[72] && ic.atr[72] && ic.ema[89] && ic.atr[89]) {
-        const d = MIKE_DEV.db_72_89_tight
-        drawDevBand(rc,
-          ic.ema[d.fast], ic.atr[d.fast],
-          ic.ema[d.slow], ic.atr[d.slow],
-          d.up, d.dn,
-          'rgba(239,68,68,.10)', 'rgba(239,68,68,.30)',
-          'rgba(34,197,94,.10)', 'rgba(34,197,94,.30)',
-        )
+      // Dev Band 72/89 tight — editable fast/slow/mults via merged params
+      if (inds.db_72_89_tight) {
+        for (const t of toolOverrides.filter((x: any) => x.indKey === 'db_72_89_tight')) {
+          const p: any = t.params || {}, fast = Number(p.fast) || 72, slow = Number(p.slow) || 89
+          if (ic.ema[fast] && ic.atr[fast] && ic.ema[slow] && ic.atr[slow]) {
+            drawDevBand(rc, ic.ema[fast], ic.atr[fast], ic.ema[slow], ic.atr[slow],
+              [Number(p.upLow ?? 3), Number(p.upHigh ?? 3.3)],
+              [Number(p.dnLow ?? 3.6), Number(p.dnHigh ?? 3.9)],
+              'rgba(239,68,68,.10)', 'rgba(239,68,68,.30)',
+              'rgba(34,197,94,.10)', 'rgba(34,197,94,.30)')
+          }
+        }
       }
 
       // Trail Stop — swing-structure + dev band (solid green)

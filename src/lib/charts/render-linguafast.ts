@@ -1,28 +1,16 @@
 /**
- * render-linguafast.ts — "Lingua Cycle (Fast)": structural-break-primary regime classifier.
+ * render-linguafast.ts — Lingua Cycle (Fast): two editable EMA clouds.
  *
- * Built per user spec (Option A): regime changes fire off the MIKE'S BANDS STRUCTURAL
- * TRENDLINE BREAK — price closing through the swing-pivot-anchored line — NOT EMA slope.
- * The old Lingua decides base regime from EMA angle (laggy) and only *corrects* with a
- * trendbreak stage that runs last; a real reversal waits for 3 stacked lagging gates.
- * This tool inverts the priority: the break IS the trigger.
- *
- * Logic (point-in-time, scan-safe — reuses the non-repainting computeAnchoredTrendline):
- *  - A SUPPORT segment alive (set, unbroken) at bar i → UPTREND
- *  - A RESISTANCE segment alive → BACKSIDE
- *  - No alive structure (we're between a break and the next segment setting) →
- *      first `blendBars` after the break = TRENDBREAK; beyond that the slower EMAs
- *      (50/59) decide UP CONS / DOWN CONS / CONSOLIDATION ("blend the slower parts").
- *
- * All EMAs editable (9/20 fast, 50/59 slow) so you can tune the blend band.
+ * Per user: strip the over-engineered classifier (it was "all over the place").
+ * Just two visible CLOUDS with editable EMA values:
+ *   - Fast cloud: 9 / 20 (tight, tracks near-term trend)
+ *   - Slow cloud: 72 / 89 (wide, the macro trend base)
+ * Each cloud is tinted by its own trend (fast-above-slow = bull green, below = bear red).
+ * That's it — clean, editable, build regime logic back on top later once we can see it.
  */
 import type { RenderContext } from './render-types'
 import { useToolStore, getMergedToolParams } from '@/stores/charts/toolStore'
-import { computeAnchoredTrendline } from './render-lingua'
 
-export type FastStage = 'UPTREND' | 'BACKSIDE' | 'TRENDBREAK' | 'CONSOLIDATION' | 'UP CONS' | 'DOWN CONS'
-
-// inline EMA (decouple from render-lingua's local helper)
 function ema(src: number[], len: number): number[] {
   const n = src.length, k = 2 / (len + 1), out = new Array(n).fill(NaN)
   let prev = NaN
@@ -36,78 +24,6 @@ function ema(src: number[], len: number): number[] {
   return out
 }
 
-/**
- * Derive a regime array from trendline SEGMENTS (structure), not EMA slope.
- * Primary trigger = the break itself. Between breaks, blend slower EMAs.
- */
-export function classifyFromStructure(
-  segments: { dir: 1 | -1; setBar: number; breakBar: number; main: boolean }[],
-  n: number,
-  close: number[],
-  blendBars: number,
-  eMid: number[], eSlow: number[],
-  eTrend1: number[], eTrend2: number[], cloudWeight: number,
-): FastStage[] {
-  const out: FastStage[] = new Array(n).fill('CONSOLIDATION')
-  for (let i = 0; i < n; i++) {
-    // CLOUD SIGNAL (the smoother): +1 if 72>=89 (macro up), -1 if 72<89 (macro down).
-    // Blended with the structural trend at cloudWeight (default 0.4 = base 40% off the cloud).
-    const t1 = eTrend1[i], t2 = eTrend2[i]
-    const cloud = (!isNaN(t1) && !isNaN(t2)) ? (t1 >= t2 ? 1 : -1) : 0
-    // alive = set and not yet broken (or broken exactly at i)
-    let active: { dir: 1 | -1; setBar: number } | null = null
-    let broken: { dir: 1 | -1; breakBar: number } | null = null
-    for (const s of segments) {
-      const alive = s.setBar <= i && (s.breakBar < 0 || i <= s.breakBar)
-      if (alive) {
-        if (!active || s.setBar > active.setBar) active = { dir: s.dir, setBar: s.setBar }
-      }
-      if (s.breakBar >= 0 && i > s.breakBar) {
-        if (!broken || s.breakBar > broken.breakBar) broken = { dir: s.dir, breakBar: s.breakBar }
-      }
-    }
-    if (active) {
-      // structure holding → blend the structural trend with the cloud (40% cloud smoother).
-      // Full UPTREND/BACKSIDE only when structure AND cloud agree; disagreement softens to
-      // UP CONS / DOWN CONS. This bases the trend partly off the 72/89 cloud (smoother, less whipsaw).
-      const structural = active.dir === 1 ? 1 : -1
-      const blended = structural * (1 - cloudWeight) + cloud * cloudWeight
-      if (blended >= 0.5) out[i] = 'UPTREND'
-      else if (blended <= -0.5) out[i] = 'BACKSIDE'
-      else if (blended > 0) out[i] = 'UP CONS'
-      else if (blended < 0) out[i] = 'DOWN CONS'
-      else out[i] = 'CONSOLIDATION'
-    } else if (broken) {
-      // in a transition window between break and next segment
-      const since = i - broken.breakBar
-      if (since <= blendBars) {
-        out[i] = 'TRENDBREAK'
-      } else {
-        // "blend the slower parts": beyond the break window, let the 50/59 EMAs classify
-        // the consolidation flavor so we don't sit blank during a prolonged chop.
-        const c = close[i], m = eMid[i], s = eSlow[i]
-        if (!isNaN(c) && !isNaN(m) && !isNaN(s)) {
-          if (c > m && m > s) out[i] = 'UP CONS'
-          else if (c < m && m < s) out[i] = 'DOWN CONS'
-          else out[i] = 'CONSOLIDATION'
-        } else out[i] = 'CONSOLIDATION'
-      }
-    } else {
-      out[i] = 'CONSOLIDATION'
-    }
-  }
-  return out
-}
-
-const STAGE_COLORS: Record<FastStage, string> = {
-  'UPTREND':        'rgba(0,180,140,0.14)',   // teal-green
-  'UP CONS':        'rgba(0,150,120,0.08)',
-  'CONSOLIDATION':  'rgba(150,150,170,0.07)',  // neutral gray
-  'DOWN CONS':      'rgba(190,110,50,0.08)',
-  'BACKSIDE':       'rgba(210,70,50,0.14)',    // red
-  'TRENDBREAK':     'rgba(250,180,40,0.22)',   // gold — the signal
-}
-
 export function renderLinguaFast(rc: RenderContext) {
   try {
     const panelIdx = rc.panelIdx ?? 0
@@ -117,103 +33,45 @@ export function renderLinguaFast(rc: RenderContext) {
 
     const lfFast1 = (p.lfFast1 as number) ?? 9
     const lfFast2 = (p.lfFast2 as number) ?? 20
-    const lfMid = (p.lfMid as number) ?? 50
-    const lfSlow = (p.lfSlow as number) ?? 59
-    const lfBlendBars = (p.lfBlendBars as number) ?? 6
-    const lfTrend1 = (p.lfTrend1 as number) ?? 72
-    const lfTrend2 = (p.lfTrend2 as number) ?? 89
-    const lfCloudW = (p.lfCloudW as number) ?? 0.4
-
-    // structural trendline params (reuse the proven anchored detection)
-    const lfLeft = (p.lfLeft as number) ?? 30
-    const lfRight = (p.lfRight as number) ?? 10
-    const lfPattern = (p.lfPattern as number) ?? 2
-    const lfMainLeft = (p.lfMainLeft as number) ?? 30
-    const lfMainRight = (p.lfMainRight as number) ?? 10
-    const lfMainPattern = (p.lfMainPattern as number) ?? 3
-    const lfMinSize = (p.lfMinSize as number) ?? 0
-    const lfShowEmas = ((p.lfShowEmas as number) ?? 1) === 1
+    const lfSlow1 = (p.lfSlow1 as number) ?? 72
+    const lfSlow2 = (p.lfSlow2 as number) ?? 89
 
     const { ctx, data, vs, visible, xCtr, pToY, barW } = rc
     if (!data || data.length < 50 || visible.length === 0) return
 
-    const high = data.map((b: any) => b.high as number)
-    const low = data.map((b: any) => b.low as number)
     const close = data.map((b: any) => b.close as number)
-    const n = close.length
+    const f1 = ema(close, lfFast1), f2 = ema(close, lfFast2)
+    const s1 = ema(close, lfSlow1), s2 = ema(close, lfSlow2)
 
-    // ── 1. Structural regime from trendline segments ──
-    const tl = computeAnchoredTrendline(high, low, close, 1, lfLeft, lfRight, lfPattern, lfMainLeft, lfMainRight, lfMainPattern, lfMinSize, 1, 0)
-    const eMid = ema(close, lfMid)
-    const eSlow = ema(close, lfSlow)
-    const eTrend1 = ema(close, lfTrend1)
-    const eTrend2 = ema(close, lfTrend2)
-    const stages = classifyFromStructure(tl.segments, n, close, lfBlendBars, eMid, eSlow, eTrend1, eTrend2, lfCloudW)
-
-    // ── 2. Stage background fills ──
-    for (let i = 0; i < visible.length; i++) {
-      const ai = vs + i
-      const stage = stages[ai]
-      if (!stage) continue
-      ctx.fillStyle = STAGE_COLORS[stage]
-      const x1 = xCtr(i) - barW / 2
-      // fill full vertical price area of the panel
-      ctx.fillRect(x1, pToY(rc.maxP), barW + 0.5, pToY(rc.minP) - pToY(rc.maxP))
-    }
-
-    // ── 3. 72/89 TREND CLOUD + EMAs overlay ──
-    // The 72/89 cloud is the smoother the classifier bases 40% of the trend off. Drawn as a
-    // BAND FILL (not lines) so it reads clearly as a cloud. Tinted by trend (72>=89 = bull).
-    const c1 = eTrend1, c2 = eTrend2
-    for (let i = 0; i < visible.length - 1; i++) {
-      const ai = vs + i
-      if (isNaN(c1[ai]) || isNaN(c2[ai])) continue
-      const x1 = xCtr(i) - barW / 2
-      const top = pToY(Math.max(c1[ai], c2[ai]))
-      const bot = pToY(Math.min(c1[ai], c2[ai]))
-      ctx.fillStyle = c1[ai] >= c2[ai] ? 'rgba(0,180,140,0.13)' : 'rgba(210,70,50,0.13)'
-      ctx.fillRect(x1, top, barW + 0.5, bot - top)
-    }
-    if (lfShowEmas) {
-      const e9 = ema(close, lfFast1), e20 = ema(close, lfFast2)
-      drawEmaLine(rc, e9, 'rgba(120,200,255,0.85)', 1.4)    // light blue — fast
-      drawEmaLine(rc, e20, 'rgba(0,229,255,0.85)', 1.4)     // cyan — fast
-      drawEmaLine(rc, eMid, 'rgba(200,180,100,0.7)', 1.2)   // gold — mid (blend band)
-      drawEmaLine(rc, eSlow, 'rgba(200,120,200,0.7)', 1.2)  // magenta — slow (blend band)
-      drawEmaLine(rc, eTrend1, 'rgba(255,206,21,0.55)', 1)    // thin gold — cloud edge (72)
-      drawEmaLine(rc, eTrend2, 'rgba(255,140,40,0.55)', 1)    // thin orange — cloud edge (89)
-    }
-
-    // ── 4. Structural break markers (the TRENDBREAK signal points) ──
-    let prevStage: FastStage | null = null
-    for (let i = 0; i < visible.length; i++) {
-      const ai = vs + i
-      const st = stages[ai]
-      if (st === 'TRENDBREAK' && prevStage && prevStage !== 'TRENDBREAK') {
-        const x = xCtr(i), y = pToY(close[ai])
-        ctx.fillStyle = 'rgba(250,204,21,0.95)'
-        ctx.beginPath(); ctx.arc(x, y, Math.max(3, barW * 0.55), 0, Math.PI * 2); ctx.fill()
-        ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 1; ctx.stroke()
+    // draw a cloud: band fill between the two EMAs (tinted by trend) + thin edge lines
+    const drawCloud = (a: number[], b: number[], bullCol: string, bearCol: string, edgeCol: string) => {
+      for (let i = 0; i < visible.length - 1; i++) {
+        const ai = vs + i
+        if (isNaN(a[ai]) || isNaN(b[ai])) continue
+        const x1 = xCtr(i) - barW / 2
+        const top = pToY(Math.max(a[ai], b[ai]))
+        const bot = pToY(Math.min(a[ai], b[ai]))
+        ctx.fillStyle = a[ai] >= b[ai] ? bullCol : bearCol
+        ctx.fillRect(x1, top, barW + 0.5, bot - top)
       }
-      prevStage = st
+      ctx.strokeStyle = edgeCol; ctx.lineWidth = 1; ctx.lineJoin = 'round'
+      for (const arr of [a, b]) {
+        ctx.beginPath()
+        let started = false
+        for (let i = 0; i < visible.length; i++) {
+          const ai = vs + i, v = arr[ai]
+          if (v == null || isNaN(v)) { started = false; continue }
+          const x = xCtr(i), y = pToY(v)
+          if (!started) { ctx.moveTo(x, y); started = true } else ctx.lineTo(x, y)
+        }
+        ctx.stroke()
+      }
     }
+
+    // slow cloud (72/89) behind, fast cloud (9/20) on top
+    drawCloud(s1, s2, 'rgba(0,180,140,0.10)', 'rgba(210,70,50,0.10)', 'rgba(180,160,90,0.45)')
+    drawCloud(f1, f2, 'rgba(0,200,120,0.16)', 'rgba(230,90,60,0.16)', 'rgba(0,229,255,0.7)')
   } catch (e) {
     console.error('[linguafast] threw:', e)
   }
-}
-
-// minimal EMA line drawer (NaN-aware, visible-range only)
-function drawEmaLine(rc: RenderContext, vals: number[], color: string, lw: number) {
-  const { ctx, vs, visible, xCtr, pToY } = rc
-  ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.lineJoin = 'round'
-  ctx.beginPath()
-  let started = false
-  for (let i = 0; i < visible.length; i++) {
-    const ai = vs + i
-    const v = vals[ai]
-    if (v == null || isNaN(v)) { started = false; continue }
-    const x = xCtr(i), y = pToY(v)
-    if (!started) { ctx.moveTo(x, y); started = true } else ctx.lineTo(x, y)
-  }
-  ctx.stroke()
 }

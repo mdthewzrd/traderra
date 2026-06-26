@@ -334,7 +334,14 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
 
       // Compute all indicators for this frame — pass tool overrides for param control
       const activeTools = useToolStore.getState().tools.filter((t: any) => t.on)
-      const toolOverrides = activeTools.map((t: any) => ({ indKey: t.indKey, params: t.params, colors: t.colors }))
+      // emacloud: pull per-panel-merged fast/slow so UI edits + ensureEMA + draw all agree
+      const toolOverrides = activeTools.map((t: any) => ({
+        indKey: t.indKey,
+        params: t.indKey === 'emacloud'
+          ? { ...t.params, ...useToolStore.getState().panelParams[panelIdx]?.['emacloud'] }
+          : t.params,
+        colors: t.colors,
+      }))
       const ic = computeIndicators(bars, inds, tf, toolOverrides)
 
       // Compute 2m trail stop overlay when on higher TF
@@ -429,6 +436,18 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
         drawEMABand(rc, ic.ema[72], ic.ema[89],
           'rgba(34,197,94,.15)', 'rgba(239,68,68,.15)',
           'rgba(34,197,94,.50)', 'rgba(239,68,68,.50)')
+      }
+
+      // EMA Cloud — editable fast/slow (uses shared ic.ema cache like band_9_20)
+      if (inds.emacloud) {
+        const ec = toolOverrides.find((t: any) => t.indKey === 'emacloud')
+        const ef = (ec?.params?.fast as number) ?? 9
+        const es = (ec?.params?.slow as number) ?? 20
+        if (ic.ema[ef] && ic.ema[es]) {
+          drawEMABand(rc, ic.ema[ef], ic.ema[es],
+            'rgba(34,197,94,.15)', 'rgba(239,68,68,.15)',
+            'rgba(34,197,94,.50)', 'rgba(239,68,68,.50)')
+        }
       }
 
       // Deviation band short (9/20) — red upper, green lower

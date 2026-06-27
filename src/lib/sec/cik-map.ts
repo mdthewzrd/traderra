@@ -6,7 +6,7 @@
  * Refreshes from SEC every 24h; falls back to the stale DB copy on fetch failure.
  */
 import { prisma } from '@/lib/prisma';
-import { secFetchJson } from '@/lib/sec/client';
+import { secFetchJson, secFetchResponse } from '@/lib/sec/client';
 
 const CIK_MAP_URL = 'https://www.sec.gov/files/company_tickers_exchange.json';
 const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -126,6 +126,29 @@ async function loadCikMap(): Promise<Map<string, CikMapEntry>> {
   }
 }
 
+const EDGAR_BROWSE_URL = (t: string) =>
+  `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${encodeURIComponent(
+    t,
+  )}&type=10-K&dateb=&owner=include&count=1&action=getcompany`;
+
+/**
+ * Fallback resolver for tickers absent from SEC's static maps (OTC / delisted
+ * filers — exactly the heavy diluters booted off an exchange). EDGAR's
+ * browse-edgar accepts a ticker in the CIK field and resolves it server-side
+ * for ANY filer. Returns the 10-digit CIK, or null if EDGAR doesn't know it.
+ */
+export async function resolveCikViaEdgar(ticker: string): Promise<string | null> {
+  try {
+    const res = await secFetchResponse(EDGAR_BROWSE_URL(ticker), 'text/html');
+    if (!res.ok) return null;
+    const html = await res.text();
+    const m = html.match(/CIK=(\d{10})/);
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getCikForTicker(rawTicker: string): Promise<CikMapEntry | null> {
   const normalized = normalizeTicker(rawTicker);
   if (!normalized) return null;
@@ -134,5 +157,26 @@ export async function getCikForTicker(rawTicker: string): Promise<CikMapEntry | 
     inMemoryMap && Date.now() - lastLoadAt < REFRESH_INTERVAL_MS
       ? inMemoryMap
       : await loadCikMap();
-  return fresh.get(normalized) ?? null;
+
+  const hit = fresh.get(normalized);
+  if (hit) return hit;
+
+  // Fallback: OTC / delisted filers absent from SEC's static ticker maps.
+  // Resolve via EDGAR browse-edgar, then persist + cache so the map grows on
+  // every search (matches the "DB builds every time" repeatability mandate).
+  const cik = await resolveCikViaEdgar(normalized);
+  if (!cik) return null;
+
+  const entry: CikMapEntry = { ticker: normalized, cik, name: normalized, exchange: null };
+  try {
+    await prisma.secTickerCik.upsert({
+      where: { ticker: normalized },
+      create: { ticker: normalized, cik, name: normalized, exchange: null },
+      update: { cik, name: normalized, exchange: null, fetchedAt: new Date() },
+    });
+  } catch (err) {
+    console.warn('[sec-cik-map] persist EDGAR-resolved CIK failed:', err);
+  }
+  fresh.set(normalized, entry);
+  return entry;
 }

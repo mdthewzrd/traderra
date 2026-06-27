@@ -67,6 +67,8 @@ const SCAN_TREE: { id: string; label: string; order: number; subfolders?: { id: 
 const STRATEGY_GROUP: Record<string, string> = {
   'd1-gap': 'mikes-scans/parabolic',
   'd1-gap-potential': 'mikes-scans/parabolic',
+  'd1-gap-wide': 'mikes-scans/parabolic',
+  'd1-gap-wide-potential': 'mikes-scans/parabolic',
   'frd-gap': 'mikes-scans/mean-reversion',
   'frd-gap-lc': 'mikes-scans/mean-reversion',
   'mdr-swing': 'mdr-swing/scans',
@@ -1772,6 +1774,30 @@ export default function BacktestPage() {
   const GRADES = ['A+', 'A', 'B', 'C'] as const
   const [grades, setGrades] = useState<Record<string, string>>({})
   const [gradeFilter, setGradeFilter] = useState<string>('')  // '', 'A+', 'A', 'B', 'C'
+  // ── Tag filter (organization across the scan's annotated signals) ──
+  const [tagFilter, setTagFilter] = useState<string>('')
+  const [scanAnnotations, setScanAnnotations] = useState<{ ticker: string; signalDate: string; tags: string[] }[]>([])
+  const refreshAnnotations = useCallback(() => {
+    if (!selectedScan) return
+    fetch(`/api/backtest/annotation?scanId=${encodeURIComponent(selectedScan)}&list=1`)
+      .then(r => r.json())
+      .then(d => setScanAnnotations(d.annotations || []))
+      .catch(() => {})
+  }, [selectedScan])
+  useEffect(() => { refreshAnnotations() }, [selectedScan, refreshAnnotations])
+  // tag → count map for the filter row
+  const tagCounts = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const a of scanAnnotations) for (const t of a.tags) m[t] = (m[t] || 0) + 1
+    return m
+  }, [scanAnnotations])
+  // set of ticker|date keys that carry the active tag
+  const tagMatchKeys = useMemo(() => {
+    if (!tagFilter) return null
+    const s = new Set<string>()
+    for (const a of scanAnnotations) if (a.tags.includes(tagFilter)) s.add(`${a.ticker}|${a.signalDate}`)
+    return s
+  }, [tagFilter, scanAnnotations])
   const toggleGrade = (key: string) => {
     setGrades(prev => {
       const current = prev[key] || ''
@@ -2033,8 +2059,10 @@ export default function BacktestPage() {
   }, [filterResults, bars1mCache, bars15mCache, visibleFilters, activeFilters, signals])
 
   const filteredSignals = useMemo(() => {
-    if (activeFilters.size === 0 && hideFilters.size === 0 && !gradeFilter) return signals
+    if (activeFilters.size === 0 && hideFilters.size === 0 && !gradeFilter && !tagMatchKeys) return signals
     let result = signals
+    // Tag filter (organization)
+    if (tagMatchKeys) result = result.filter(s => tagMatchKeys.has(`${s.ticker}|${s.date}`))
     // Grade filter
     if (gradeFilter) result = result.filter(s => grades[`${s.ticker}-${s.date}`] === gradeFilter)
     if (activeFilters.size === 0 && hideFilters.size === 0) return result
@@ -2377,7 +2405,23 @@ export default function BacktestPage() {
     }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         {sig && (
-          <AnnotationBar scanId={selectedScan} ticker={sig.ticker} date={sig.date} dark={dark} T={T} />
+          <AnnotationBar scanId={selectedScan} strategy={activeStrategy} ticker={sig.ticker} date={sig.date} dark={dark} T={T} onChanged={refreshAnnotations} />
+        )}
+        {Object.keys(tagCounts).length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', padding: '5px 8px', borderBottom: `1px solid ${T.BORDER}`, background: dark ? 'rgba(212,175,55,0.03)' : 'rgba(212,175,55,0.05)' }}>
+            <span style={{ color: T.GOLD, fontSize: 8, fontWeight: 800, letterSpacing: 0.5, marginRight: 2 }}>TAGS</span>
+            {Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).map(([t, n]) => {
+              const active = tagFilter === t
+              const tc = /HELD|LONG/i.test(t) ? T.TEAL : /CRAP|FAIL|SHORT/i.test(t) ? T.RED : /WATCH/i.test(t) ? T.GOLD : T.TEXT2
+              return <button key={t} onClick={() => setTagFilter(active ? '' : t)} title={`filter signals tagged ${t}`}
+                style={{ fontSize: 8, fontWeight: 700, padding: '2px 6px', borderRadius: 3, cursor: 'pointer',
+                  border: `1px solid ${active ? tc : T.BORDER}`, background: active ? tc : 'transparent',
+                  color: active ? '#000' : tc, opacity: active ? 1 : 0.7 }}>
+                {t} <span style={{ opacity: 0.7 }}>{n}</span>
+              </button>
+            })}
+            {tagFilter && <button onClick={() => setTagFilter('')} style={{ fontSize: 8, color: T.MUTED, background: 'none', border: 'none', cursor: 'pointer', marginLeft: 2 }}>✕ clear</button>}
+          </div>
         )}
         {/* ── Signal Header + Filter Button ── */}
         <div className="flex items-center justify-between px-2 py-1.5" style={{ borderBottom: `1px solid ${T.BORDER}`, background: T.SURFACE2 }}>

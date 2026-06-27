@@ -426,6 +426,20 @@ const SCAN_SCRIPTS: Record<string, {
       ema_beaten_ratio: { label: 'EMA200 Ratio', type: 'number', default: 0.80, min: 0.1, max: 1.5, step: 0.05 },
     },
   },
+  'd1-gap-wide': {
+    script: 'run_get_d1s.py',
+    label: 'D1 Gap Wide',
+    env: { WIDE: '1' },
+    params: {
+      pm_high_min: { label: 'PM High %', type: 'number', default: 0.50, min: 0.1, max: 5.0, step: 0.05 },
+      // gap + open_vs_prev_high are ignored in WIDE mode (checks 1,4,5 only)
+      pm_vol_min: { label: 'PM Vol Min', type: 'number', default: 5000000, min: 0, max: 50000000, step: 500000 },
+      prev_close_min: { label: 'Prev Close $', type: 'number', default: 0.75, min: 0, max: 1000, step: 0.25 },
+      d2_move_min: { label: 'D2 Move %', type: 'number', default: 0.30, min: 0, max: 5.0, step: 0.05 },
+      d2_vol_min: { label: 'D2 Vol Min', type: 'number', default: 10000000, min: 0, max: 50000000, step: 1000000 },
+      ema_beaten_ratio: { label: 'EMA200 Ratio', type: 'number', default: 0.80, min: 0.1, max: 1.5, step: 0.05 },
+    },
+  },
 }
 
 export async function GET(request: NextRequest) {

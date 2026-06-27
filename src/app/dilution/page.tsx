@@ -153,6 +153,26 @@ export default function DilutionPage() {
       ? new Date(new Date(cash.asOfDate).getTime() + cash.reportedRunwayMonths * 30.44 * 86_400_000)
       : null;
 
+  // Shares staleness + YoY dilution velocity (the core signal — computed from the
+  // XBRL history we already have). Staleness is flagged because distressed/OTC
+  // filers stop reporting the DEI cover-page tag; current count then lives only
+  // in 8-K text (Loop 3 full-text recovery).
+  const shareStaleDays =
+    snapshot?.sharesLatest
+      ? Math.floor((Date.now() - new Date(snapshot.sharesLatest.period).getTime()) / 86_400_000)
+      : null;
+  const shareDilution1y = (() => {
+    const h = snapshot?.sharesHistory ?? [];
+    if (!snapshot?.sharesLatest || h.length < 2) return null;
+    const latest = snapshot.sharesLatest;
+    const latestT = new Date(latest.period).getTime();
+    const old = h
+      .filter((p) => latestT - new Date(p.period).getTime() >= 300 * 86_400_000)
+      .sort((a, b) => new Date(b.period).getTime() - new Date(a.period).getTime())[0];
+    if (!old || old.outstanding === 0) return null;
+    return ((latest.outstanding - old.outstanding) / old.outstanding) * 100;
+  })();
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       <div className="mx-auto max-w-6xl px-4 py-6">
@@ -399,14 +419,38 @@ export default function DilutionPage() {
                 <span className="text-xs uppercase tracking-wide">Shares outstanding (SEC XBRL)</span>
               </div>
               {snapshot.sharesLatest ? (
-                <div className="mt-2 flex flex-wrap items-end gap-x-6 gap-y-1">
-                  <div>
-                    <span className="text-2xl font-bold">{fmtNum(snapshot.sharesLatest.outstanding)}</span>
-                    <span className="ml-2 text-sm text-zinc-500">as of {snapshot.sharesLatest.period}</span>
+                <div className="mt-2 space-y-2">
+                  <div className="flex flex-wrap items-end gap-x-6 gap-y-1">
+                    <div>
+                      <span className="text-2xl font-bold">{fmtNum(snapshot.sharesLatest.outstanding)}</span>
+                      <span className="ml-2 text-sm text-zinc-500">as of {snapshot.sharesLatest.period}</span>
+                    </div>
+                    {/* Dilution velocity — the core signal of a dilution terminal */}
+                    {shareDilution1y !== null && (
+                      <div>
+                        <div className="text-xs text-zinc-500">YoY share growth</div>
+                        {shareDilution1y < -30 ? (
+                          // A >30% drop straddles a reverse split / restatement in the
+                          // history — showing the raw negative % would imply buybacks (wrong).
+                          <div className="text-xl font-bold text-amber-400">Reverse split</div>
+                        ) : (
+                          <div className={`text-xl font-bold ${shareDilution1y > 50 ? 'text-red-400' : shareDilution1y > 10 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                            {shareDilution1y > 0 ? '+' : ''}{shareDilution1y.toFixed(0)}%
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div className="text-xs text-zinc-500">
+                      {snapshot.sharesHistory.length} reported periods on file
+                    </div>
                   </div>
-                  <div className="text-xs text-zinc-500">
-                    {snapshot.sharesHistory.length} reported periods on file
-                  </div>
+                  {/* Staleness flag — never present stale XBRL as current */}
+                  {shareStaleDays !== null && shareStaleDays > 120 && (
+                    <div className="flex items-center gap-1.5 text-xs text-amber-400">
+                      <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-semibold uppercase tracking-wide">Stale</span>
+                      Last XBRL report {Math.round(shareStaleDays / 30)}mo ago — current count likely in recent 8-K text
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="mt-2 text-sm text-zinc-500">No XBRL share data.</div>

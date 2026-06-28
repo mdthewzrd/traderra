@@ -162,6 +162,8 @@ function ScanChartPanel({ ticker, date, onClose }: { ticker: string | null; date
   }
 
   const GOLD = '#D4AF37'
+  // Per-TF context window (days visible) for the live-feed chart
+  const TF_DAYS: Record<Timeframe, number> = { '5': 5, '15': 14, '60': 30, 'D': 90 }
   const btn = (active: boolean): React.CSSProperties => ({
     padding: '2px 9px', fontSize: 10, fontWeight: 700, borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit',
     border: `1px solid ${active ? GOLD : '#262626'}`,
@@ -232,7 +234,7 @@ function ScanChartPanel({ ticker, date, onClose }: { ticker: string | null; date
 
       {/* Chart — same ScanMiniChart as /scanner. Fills its grid cell (boxy, not a wide band). */}
       <div ref={chartWrapRef} style={{ padding: '0 2px', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        <ScanMiniChart symbol={ticker} tf={tf} date={date || todayStr()} height={chartH} settings={settings} dark={true} centerOnDate dayOffset={dayOffset} />
+        <ScanMiniChart symbol={ticker} tf={tf} date={date || todayStr()} height={chartH} settings={settings} dark={true} centerOnDate chartDays={TF_DAYS[tf]} dayOffset={dayOffset} />
       </div>
     </div>
   )

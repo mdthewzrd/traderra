@@ -12,6 +12,7 @@ import { OFFERING_FORMS } from '@/lib/sec/prospectus';
 import { REGISTRATION_FORMS } from '@/lib/sec/registration';
 import { DILUTIVE_TXN_CODES } from '@/lib/sec/form4';
 import { computeCompliance, type ComplianceResult } from '@/lib/dilution/compliance';
+import { getWarrantNotes, type ParsedWarrantNotes } from '@/lib/sec/warrant-notes';
 
 /**
  * Classify recent filings for a company and persist tags. Idempotent — safe to
@@ -186,6 +187,10 @@ export interface DilutionSnapshot {
   compliance: ComplianceResult | null;
   // Shelf remaining (Loop 3): registered capacity − gross proceeds drawn so far.
   shelfRemaining: { registered: number; raised: number; remaining: number; remainingPct: number } | null;
+  // Per-instrument warrant/convertible detail from the latest 10-K notes (Loop 4):
+  // expiry, exercisable date, convertible principal + maturity. Partial recall;
+  // null when nothing parseable. Raw clause text included for user verification.
+  warrantNotes: ParsedWarrantNotes | null;
   fromCache: boolean; // true = served from DB only (no SEC call this request)
 }
 
@@ -244,6 +249,7 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
     const remaining = registered - raised;
     return { registered, raised, remaining, remainingPct: (remaining / registered) * 100 };
   })();
+  const warrantNotes = await getWarrantNotes(cik);
 
   // Accurate 90-day dilutive-share sum from the FULL DB (not the display-capped
   // form4Rows) — heavy diluters file dozens of Form 4s inside 90 days.
@@ -340,6 +346,7 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
     inTheMoney,
     compliance,
     shelfRemaining,
+    warrantNotes,
     fromCache: true,
   };
 }

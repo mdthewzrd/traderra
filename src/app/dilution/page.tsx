@@ -703,6 +703,53 @@ export default function DilutionPage() {
               </div>
             )}
 
+            {/* Per-instrument warrant/convertible detail from latest 10-K notes (Loop 4) */}
+            {snapshot.warrantNotes && (snapshot.warrantNotes.warrants.length > 0 || snapshot.warrantNotes.convertibles.length > 0) && (
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+                <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-400">
+                  Warrant &amp; convertible detail
+                  <span className="rounded bg-zinc-700 px-1.5 py-0.5 text-[9px] text-zinc-300">10-K notes</span>
+                  <span className="ml-auto text-[10px] text-zinc-600" title={snapshot.warrantNotes.source}>{snapshot.warrantNotes.source} · parsed {snapshot.warrantNotes.parsedAt}</span>
+                </div>
+                <div className="mb-1 text-[10px] text-zinc-600">Extracted from financial-statement notes. Partial coverage — read the clause to verify.</div>
+                {snapshot.warrantNotes.warrants.length > 0 && (
+                  <div className="mb-3">
+                    <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Warrants</div>
+                    <div className="space-y-1.5">
+                      {snapshot.warrantNotes.warrants.map((w, i) => (
+                        <div key={`w${i}`} className="rounded bg-zinc-800/40 p-2 text-xs">
+                          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
+                            {w.shares !== null && <span><span className="text-zinc-500">shares:</span> <span className="font-medium text-zinc-200">{fmtNum(w.shares)}</span></span>}
+                            {w.exercisePrice !== null && <span><span className="text-zinc-500">strike:</span> <span className="font-medium text-zinc-200">${w.exercisePrice.toFixed(2)}</span></span>}
+                            {w.expiry !== null && <span><span className="text-zinc-500">expires:</span> <span className="font-medium text-amber-300">{w.expiry}</span></span>}
+                            {w.exercisableDate !== null && <span><span className="text-zinc-500">exercisable:</span> <span className="text-zinc-300">{w.exercisableDate}</span></span>}
+                          </div>
+                          <div className="mt-1 line-clamp-2 text-[10px] italic text-zinc-500">“{w.description.slice(0, 220)}{w.description.length > 220 ? '…' : ''}”</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {snapshot.warrantNotes.convertibles.length > 0 && (
+                  <div>
+                    <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Convertibles</div>
+                    <div className="space-y-1.5">
+                      {snapshot.warrantNotes.convertibles.map((c, i) => (
+                        <div key={`c${i}`} className="rounded bg-zinc-800/40 p-2 text-xs">
+                          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
+                            {c.principal !== null && <span><span className="text-zinc-500">principal:</span> <span className="font-medium text-zinc-200">${(c.principal / 1e6).toFixed(1)}M</span></span>}
+                            {c.maturity !== null && <span><span className="text-zinc-500">matures:</span> <span className="font-medium text-amber-300">{c.maturity}</span></span>}
+                            {c.conversionPrice !== null && <span><span className="text-zinc-500">conv price:</span> <span className="font-medium text-zinc-200">${c.conversionPrice.toFixed(2)}</span></span>}
+                          </div>
+                          <div className="mt-1 line-clamp-2 text-[10px] italic text-zinc-500">“{c.description.slice(0, 220)}{c.description.length > 220 ? '…' : ''}”</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Insider transactions (Form 4) */}
             {snapshot.form4Txns.length > 0 && (
               <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">

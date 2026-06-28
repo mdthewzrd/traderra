@@ -531,7 +531,7 @@ function barETMinutes(b: any): number | null {
 }
 
 // ─── MiniChart with zoom & drag ─────────────────────────
-export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset = 0, entryMarker, exitMarker, centerOnDate, legMarkers, exitEpoch, klParams }: {
+export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset = 0, entryMarker, exitMarker, centerOnDate, legMarkers, exitEpoch, klParams, chartDays }: {
   symbol: string
   tf: Timeframe
   date?: string
@@ -545,6 +545,7 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
   legMarkers?: { entry?: { price: number; epoch?: number }; exit?: { price: number; epoch?: number } }[]
   exitEpoch?: number
   klParams?: KeyLevelsParams
+  chartDays?: number
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [allBars, setAllBars] = useState<any[]>([])
@@ -565,7 +566,11 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
     const fromDate = new Date(baseDate + 'T12:00:00')
     const toDate = new Date(baseDate + 'T12:00:00')
     // Backtest: D0-3 to D0+10 (covers multi-day holds). Scan: wider range.
-    if (centerOnDate) {
+    if (chartDays) {
+      // Per-TF context view (live-feed): chartDays of context + 25d indicator warmup
+      toDate.setDate(toDate.getDate() + dayOffset * 2 + 10)
+      fromDate.setDate(fromDate.getDate() - (chartDays + 25))
+    } else if (centerOnDate) {
       fromDate.setDate(fromDate.getDate() - 3)
       toDate.setDate(toDate.getDate() + 10)
     } else {
@@ -587,6 +592,20 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
   const visibleBars = useMemo(() => {
     if (!allBars.length) return []
     if (manualZoom) return allBars.slice(manualZoom.start, manualZoom.end)
+
+    if (chartDays) {
+      // Per-TF context view (live-feed): show chartDays of bars ending at D0+dayOffset
+      const bpd = tf === '5' ? 78 : tf === '15' ? 26 : tf === '60' ? 7 : 1
+      let d0Idx = allBars.length - 1
+      if (date) {
+        for (let i = allBars.length - 1; i >= 0; i--) {
+          if (barETDate(allBars[i]) === date) { d0Idx = i; break }
+        }
+      }
+      const endIdx = Math.min(allBars.length, d0Idx + dayOffset * bpd + 1)
+      const startIdx = Math.max(0, endIdx - chartDays * bpd)
+      return allBars.slice(startIdx, endIdx)
+    }
 
     if (centerOnDate) {
       // Find D0 start index
@@ -648,7 +667,7 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
     const endIdx = Math.min(allBars.length, d0Idx + dayOffset * bpd + 1)
     const startIdx = Math.max(0, endIdx - defaultBars)
     return allBars.slice(startIdx, endIdx)
-  }, [allBars, tf, dayOffset, date, manualZoom])
+  }, [allBars, tf, dayOffset, date, manualZoom, chartDays])
 
   const draw = useCallback(() => {
     const bars = visibleBars

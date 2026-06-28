@@ -13,10 +13,13 @@
  *   - Round-lot shareholders (≥300/450/400) — shareholder registry, not XBRL
  *   - Independent directors / audit committee — proxy statements
  *
- * This is an honest best-effort flag, NOT a legal determination. Tier detection
- * from the exchange string is best-effort; defaults to Global Market with a
- * 'review' note when unknown, and surfaces BOTH Capital/Global thresholds in the
- * detail so the number is never misleading.
+ * This is an honest best-effort flag, NOT a legal determination. EXCHANGE
+ * BRANCHING: the $1 bid-price floor is universal (NYSE 802.01B, Nasdaq
+ * 5810(c), NYSE American). But equity/market-cap standards DIFFER by exchange
+ * family. For Nasdaq we apply the rulebook thresholds confidently. For NYSE/
+ * NYSE American we do NOT fabricate the differing equity numbers — we apply
+ * the common $50M market-cap standard and mark the equity rule 'review'. Never
+ * silently apply one exchange's rulebook to another's listing.
  */
 import { prisma } from '@/lib/prisma';
 
@@ -58,24 +61,30 @@ async function fetchPrice(ticker: string): Promise<{ price: number; asOf: string
   }
 }
 
-/** Detect Nasdaq tier from the exchange string. 'CM'/'Capital' → Capital Market
- *  (stricter SE, looser MVLS). 'GS'/'Global Select' → Global Select. Else Global. */
-function detectTier(exchange: string | null): { tier: string; isCapital: boolean; isGlobalSelect: boolean } {
+type ExchangeFamily = 'nasdaq' | 'nyse' | 'nyse-american' | 'other';
+
+/** Detect exchange family + Nasdaq tier from the exchange string. SEC carries
+ *  'NYSE' / 'NYSE American' / 'Nasdaq' (+ CM/GM/GS suffixes). NYSE American =
+ *  the former AMEX/MKT, smaller-company venue with its own lower thresholds. */
+function detectMarket(exchange: string | null): { family: ExchangeFamily; tier: string; isCapital: boolean } {
   const e = (exchange ?? '').toUpperCase();
-  if (/\BCM\b|CAPITAL/.test(e)) return { tier: 'Nasdaq Capital Market', isCapital: true, isGlobalSelect: false };
-  if (/GLOBAL[\s-]?SELECT|\bGS\b/.test(e)) return { tier: 'Nasdaq Global Select Market', isCapital: false, isGlobalSelect: true };
-  return { tier: 'Nasdaq Global Market', isCapital: false, isGlobalSelect: false };
+  if (/NYSE\s+AMERICAN|\bAMEX\b|NYSE\s*MKT/.test(e)) return { family: 'nyse-american', tier: 'NYSE American', isCapital: false };
+  if (/\bNYSE\b|NEW\s+YORK\s+STOCK/.test(e)) return { family: 'nyse', tier: 'NYSE', isCapital: false };
+  if (/NASDAQ.*(CM|CAPITAL)|CAPITAL/.test(e)) return { family: 'nasdaq', tier: 'Nasdaq Capital Market', isCapital: true };
+  if (/NASDAQ.*\bGS\b|GLOBAL[\s-]?SELECT/.test(e)) return { family: 'nasdaq', tier: 'Nasdaq Global Select Market', isCapital: false };
+  if (/NASDAQ/.test(e)) return { family: 'nasdaq', tier: 'Nasdaq Global Market', isCapital: false };
+  return { family: 'other', tier: 'Unknown exchange (Nasdaq Global thresholds assumed)', isCapital: false };
 }
 
 const M = 1e6;
 
-export async function computeNasdaqCompliance(
+export async function computeCompliance(
   cik: string,
   ticker: string | undefined,
   exchange: string | null,
 ): Promise<ComplianceResult | null> {
   if (!ticker) return null;
-  const { tier, isCapital } = detectTier(exchange);
+  const { family, tier, isCapital } = detectMarket(exchange);
   const px = await fetchPrice(ticker);
 
   // Shares outstanding (latest) + balance-sheet/income facts from DB.
@@ -124,8 +133,9 @@ export async function computeNasdaqCompliance(
     rules.push({ rule: 'Bid Price', threshold: '≥ $1.00', status: 'review', value: 'no price', detail: 'Price feed unavailable.' });
   }
 
-  // 2. Market Value of Listed Securities (total market cap) — tier-dependent.
-  const mvlsThr = isCapital ? 10 * M : 50 * M; // Capital $10M / Global $50M (Global Select $35M)
+  // 2. Market Value of Listed Securities (total market cap). $50M is the
+  //    common global standard (Nasdaq Global/GS, NYSE); Nasdaq Capital $10M.
+  const mvlsThr = (family === 'nasdaq' && isCapital) ? 10 * M : 50 * M;
   if (marketCap !== null) {
     const ok = marketCap >= mvlsThr;
     rules.push({
@@ -133,7 +143,7 @@ export async function computeNasdaqCompliance(
       threshold: `≥ $${(mvlsThr / M).toFixed(0)}M (${tier})`,
       status: ok ? 'pass' : 'fail',
       value: `$${(marketCap / M).toFixed(1)}M`,
-      detail: `Capital $10M · Global $50M · Global Select $35M. Computed at $${px!.price.toFixed(2)} × ${sharesOut!.toLocaleString()} shares.`,
+      detail: `Nasdaq Capital $10M · Nasdaq Global/GS $50M · NYSE ~$50M global standard. Computed at $${px!.price.toFixed(2)} × ${sharesOut!.toLocaleString()} shares.`,
     });
   } else {
     rules.push({
@@ -145,25 +155,37 @@ export async function computeNasdaqCompliance(
     });
   }
 
-  // 3. Stockholders Equity — part of the alternative continued-listing standards.
-  const seThr = isCapital ? 2.5 * M : 10 * M;
-  if (se !== null) {
-    const ok = se >= seThr;
+  // 3. Stockholders Equity — Nasdaq thresholds (Capital $2.5M / Global $10M) are
+  //    rulebook-specific. NYSE/NYSE American use DIFFERENT equity standards; we
+  //    surface SE as context but mark 'review' rather than fabricate thresholds.
+  if (family !== 'nasdaq') {
     rules.push({
       rule: 'Stockholders Equity',
-      threshold: `≥ $${(seThr / M).toFixed(1)}M (${tier})`,
-      status: ok ? 'pass' : 'fail',
-      value: `$${(se / M).toFixed(1)}M`,
-      detail: `Capital $2.5M · Global $10M. As of ${seFact!.period}. Low SE + losses = the equity-standard failure mode.`,
+      threshold: 'exchange-specific (NYSE)',
+      status: 'review',
+      value: se !== null ? `$${(se / M).toFixed(1)}M` : 'not synced',
+      detail: 'NYSE/NYSE American equity standards differ from Nasdaq. Low SE is still a red flag — verify against the specific listing agreement.',
     });
   } else {
-    rules.push({
-      rule: 'Stockholders Equity',
-      threshold: `≥ $${(seThr / M).toFixed(1)}M (${tier})`,
-      status: 'review',
-      value: 'not synced',
-      detail: 'Balance-sheet facts not yet extracted (run force-resync).',
-    });
+    const seThr = isCapital ? 2.5 * M : 10 * M;
+    if (se !== null) {
+      const ok = se >= seThr;
+      rules.push({
+        rule: 'Stockholders Equity',
+        threshold: `≥ $${(seThr / M).toFixed(1)}M (${tier})`,
+        status: ok ? 'pass' : 'fail',
+        value: `$${(se / M).toFixed(1)}M`,
+        detail: `Capital $2.5M · Global $10M. As of ${seFact!.period}. Low SE + losses = the equity-standard failure mode.`,
+      });
+    } else {
+      rules.push({
+        rule: 'Stockholders Equity',
+        threshold: `≥ $${(seThr / M).toFixed(1)}M (${tier})`,
+        status: 'review',
+        value: 'not synced',
+        detail: 'Balance-sheet facts not yet extracted (run force-resync).',
+      });
+    }
   }
 
   // 4. Profitability context — net income, last 3 fiscal years. Informational

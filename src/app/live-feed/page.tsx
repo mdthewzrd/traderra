@@ -428,9 +428,16 @@ export default function LiveFeedPage() {
           else allSigs.push(h)
         })
       }
-      // Recent signals: newest date first, top 60
+      // Recent signals: newest first, capped PER STRATEGY so one high-volume
+      // scan (e.g. eod-trig-day) can't starve the others in live mode.
       allSigs.sort((a, b) => b.date.localeCompare(a.date))
-      setRecentSignals(allSigs.slice(0, 60))
+      const PER_STRAT = 20
+      const seenCount = new Map<string, number>()
+      setRecentSignals(allSigs.filter(h => {
+        const n = seenCount.get(h.strategy) || 0
+        if (n >= PER_STRAT) return false
+        seenCount.set(h.strategy, n + 1); return true
+      }))
       // Candidates: prefer today; else most recent available day
       if (todayCands.length) {
         setRecentCandidates(todayCands)

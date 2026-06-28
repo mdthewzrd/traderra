@@ -11,7 +11,7 @@ import { computeOverhangFromDb } from '@/lib/sec/warrants';
 import { OFFERING_FORMS } from '@/lib/sec/prospectus';
 import { REGISTRATION_FORMS } from '@/lib/sec/registration';
 import { DILUTIVE_TXN_CODES } from '@/lib/sec/form4';
-import { computeNasdaqCompliance, type ComplianceResult } from '@/lib/dilution/compliance';
+import { computeCompliance, type ComplianceResult } from '@/lib/dilution/compliance';
 
 /**
  * Classify recent filings for a company and persist tags. Idempotent — safe to
@@ -226,7 +226,7 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
   const sharesLatestOutstanding = sharesHistory[0]?.outstanding ?? null;
   const overhang = await computeOverhangFromDb(cik, sharesLatestOutstanding);
   const inTheMoney = await computeInTheMoney(overhang, company?.tickers?.[0], sharesLatestOutstanding);
-  const compliance = await computeNasdaqCompliance(cik, company?.tickers?.[0], company?.exchange ?? null);
+  const compliance = await computeCompliance(cik, company?.tickers?.[0], company?.exchange ?? null);
   // Shelf remaining: registration.ts + prospectus.ts already parse these to
   // rawPayload (aggregateOffering / grossProceeds). Sum to answer "how much can
   // they STILL dilute under the existing shelf."

@@ -638,6 +638,9 @@ export default function DilutionPage() {
                   {snapshot.overhang.overhangPct !== null && snapshot.overhang.overhangPct >= 5 && snapshot.overhang.overhangPct < 20 && (
                     <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-400">med overhang</span>
                   )}
+                  {snapshot.overhang.suspect && (
+                    <span className="rounded bg-orange-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-orange-400" title="Share count exceeds 50× float — likely a unit mis-tag or contingent class. In-the-money scoring neutralizes it; raw magnitude is unreliable.">⚠ suspect magnitude</span>
+                  )}
                 </div>
                 <div className="mb-2 flex items-baseline gap-2">
                   <span className="text-2xl font-bold text-amber-300">{snapshot.overhang.overhangPct !== null ? snapshot.overhang.overhangPct.toFixed(1) + '%' : '—'}</span>

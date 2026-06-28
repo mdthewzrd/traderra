@@ -480,9 +480,23 @@ export default function LiveFeedPage() {
     : dayGroups.flatMap(g => g.hits)
 
   // Scan grouping: d1-gap + d1-gap-potential merge into one "D1 Gap" row
-  const GROUP_OF: Record<string, string> = { 'd1-gap': 'D1 Gap', 'd1-gap-potential': 'D1 Gap' }
+  const GROUP_OF: Record<string, string> = {
+    'd1-gap': 'D1 Gap', 'd1-gap-potential': 'D1 Gap', 'd1-daily': 'D1 Gap',
+    'pm-movers': 'PM Movers',
+    'eod-trig-day': 'EOD Trig Day',
+    'aparascan': 'OG Scans', 'max-scan': 'OG Scans',
+    'backside-b': "Mike's Scans", 'half-a': "Mike's Scans", 'half-a-other': "Mike's Scans",
+    'mdr-fixed': "Mike's Scans", 'mdr-signals': "Mike's Scans", 'mdr-swing': "Mike's Scans",
+    'short-fbo': "Mike's Scans", 'short-fbo-2': "Mike's Scans",
+  }
   const groupOf = (strategy: string) => GROUP_OF[strategy] || strategy
-  const GROUP_COLORS: Record<string, string> = { 'D1 Gap': '#ef5350' }
+  const GROUP_COLORS: Record<string, string> = {
+    'D1 Gap': '#ef5350',
+    'PM Movers': '#38bdf8',
+    'EOD Trig Day': '#D4AF37',
+    'OG Scans': '#a855f7',
+    "Mike's Scans": '#f59e0b',
+  }
   const groupColor = (g: string) => GROUP_COLORS[g] || colorFor(g)
 
   interface ScanRow { group: string; color: string; potential: Hit[]; valid: Hit[]; recent: Hit[] }

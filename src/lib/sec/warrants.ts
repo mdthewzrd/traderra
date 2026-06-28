@@ -80,6 +80,12 @@ export interface SecuritiesOverhang {
   convertible: WarrantOverhang | null;
   /** total dilutive shares from warrants+convertibles / shares outstanding */
   overhangPct: number | null;
+  /** C19 sanity flag: warrant/convertible shares exceed 50× shares outstanding —
+   *  almost always a unit mis-tag or contingent/authorized class captured raw
+   *  (e.g. MOBX 2.6B warrants vs 2.78M shares). In-the-money scoring already
+   *  neutralizes these (deeply OTM → dormant), but the raw overhangPct is
+   *  misleading in sorts. Surface a warning; don't silently drop the data. */
+  suspect: boolean;
 }
 
 export async function computeOverhangFromDb(
@@ -93,6 +99,15 @@ export async function computeOverhangFromDb(
     (warrant?.shares ?? 0) + (convertible?.shares ?? 0);
   const overhangPct =
     sharesOutstanding && sharesOutstanding > 0 ? (totalShares / sharesOutstanding) * 100 : null;
+  // C19 sanity guard: flag implausible overhangs. Raw XBRL occasionally
+  // captures contingent/authorized classes or mis-scales units, producing share
+  // counts dwarfing float (MOBX: 2.6B vs 2.78M out). Keep the data — the user
+  // verifies — but flag so the number isn't blindly trusted in sorts.
+  const RATIO_CAP = 50; // × shares outstanding
+  const suspect = !!(sharesOutstanding && sharesOutstanding > 0) && (
+    (warrant != null && warrant.shares > RATIO_CAP * sharesOutstanding) ||
+    (convertible != null && convertible.shares > RATIO_CAP * sharesOutstanding)
+  );
   return {
     warrant: warrant && warrant.shares != null
       ? { shares: warrant.shares, strike: warrant.strike, period: warrant.period ?? '' }
@@ -101,6 +116,7 @@ export async function computeOverhangFromDb(
       ? { shares: convertible.shares, strike: convertible.strike, period: convertible.period ?? '' }
       : null,
     overhangPct,
+    suspect,
   };
 }
 

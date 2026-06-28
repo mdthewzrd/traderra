@@ -180,6 +180,7 @@ export interface DilutionSnapshot {
     warrant: { shares: number; strike: number | null; period: string } | null;
     convertible: { shares: number; strike: number | null; period: string } | null;
     overhangPct: number | null;
+    suspect: boolean;
   };
   inTheMoney: InTheMoney | null;
   compliance: ComplianceResult | null;

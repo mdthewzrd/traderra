@@ -77,11 +77,18 @@ export function parseRegistrationHtml(html: string, formType: string): ParsedReg
     /aggregate (?:offering price|principal amount)(?:\s+of)?\s+(?:up to\s+)?a?\s*(?:maximum\s+)?(?:aggregate\s+)?(?:offering price\s+of\s+)?\$([\d,.]+\s*(?:million|billion|thousand)?)/i,
     /(?:maximum\s+aggregate|up to a maximum aggregate)\s+offering price(?:\s+of)?\s+\$([\d,.]+\s*(?:million|billion|thousand)?)/i,
     /offering.{0,30}?\$([\d,.]+\s*(?:million|billion|thousand)?)\s+(?:of|aggregate)/i,
+    // "offer up to $N of our common stock" / "we may offer $N" — verb form.
+    /(?:offer|offering)s?\s+(?:up\s+to\s+)?a?\s*\$([\d,.]+\s*(?:million|billion|thousand)?)/i,
+    // Cover-page table: "$100,000,000 Common Stock Preferred Stock Warrants..."
+    // — bare amount immediately followed by registered securities classes.
+    /\$([\d,.]+\s*(?:million|billion)?)\s+(?:Common\s+Stock|Preferred\s+Stock|Warrants?|Debt\s+Securities|Units|Securities|Shares)\b/i,
   ]) {
     const m = cover.match(re);
     if (m) {
       const v = scaleMoney(m[1]);
-      if (v && v > 0) { aggregate = Math.max(aggregate ?? 0, v); }
+      // Magnitude floor ≥ $1M: rejects par-value noise ($0.0001–$0.01) which the
+      // verb/cover patterns would otherwise match as the registered amount.
+      if (v && v >= 1e6) { aggregate = Math.max(aggregate ?? 0, v); }
     }
   }
 

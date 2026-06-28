@@ -484,6 +484,27 @@ model DilutionCompany {
   filings           DilutionFiling[]
   form4Txns         DilutionForm4Txn[]
   facts             DilutionFact[]
+  securities        DilutionSecurity[]
+}
+
+model DilutionSecurity {
+  // Warrant + convertible overhang (extracted from XBRL companyfacts).
+  // One aggregate row per cik per type: the LATEST reported strike + share
+  // count. Price-dependent in-the-money scoring is layered on later (needs a
+  // real-time price feed); the overhang % alone is a far stronger offeringRisk
+  // signal than the filing-count proxy.
+  id              String   @id @default(cuid())
+  cik             String
+  company         DilutionCompany @relation(fields: [cik], references: [cik], onDelete: Cascade)
+  type            String   // 'warrant' | 'convertible' | 'prefunded'
+  strike          Float?   // exercise/conversion price (USD/share), latest reported
+  shares          Float?   // warrants / underlying shares outstanding (latest reported)
+  period          String?  // reporting period (YYYY-MM-DD) of the latest data
+  accn            String?
+  syncedAt        DateTime @default(now())
+
+  @@unique([cik, type])
+  @@index([cik])
 }
 
 model DilutionFiling {
@@ -533,6 +554,35 @@ model DilutionForm4Txn {
   createdAt   DateTime @default(now())
 
   @@index([cik, txnDate])
+}
+
+// Historical research report store — UNIFIED for backlogged AskEdgar ground-truth
+// reports AND our own computed snapshots. `source` distinguishes provenance so we
+// can side-by-side compare and migrate off AskEdgar. Idempotent: id="ae-<csvId>"
+// for imports, cuid for our runs.
+model DilutionReport {
+  id                String   @id
+  ticker            String
+  reportDate        DateTime
+  source            String   // "askedgar" | "traderra"
+  sourceRef         String?  // discord_message_id | our run id
+  price             Float?
+  marketCap         Float?
+  floatShares       BigInt?
+  outstandingShares BigInt?
+  gainPercent       Float?
+  industry          String?
+  // Risk labels (low/medium/high) — the clone target
+  cashBurnRisk      String?
+  dilutionRisk      String?
+  offeringRisk      String?
+  scamRisk          String?
+  rawText           String   @db.Text
+  parsedJson        Json
+  importedAt        DateTime @default(now())
+
+  @@index([ticker, reportDate])
+  @@index([source])
 }
 
 // Plain-string userId/cik (no FK) — keeps User model untouched; allows watch before full ingest

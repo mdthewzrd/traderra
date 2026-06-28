@@ -22,7 +22,7 @@ export type DilutionTag =
   | 'delisting-risk';
 
 const SHELF_FORMS = new Set([
-  'S-1', 'S-1/A', 'S-3', 'S-3/A', 'F-1', 'F-1/A', 'F-3', 'F-3/A',
+  'S-1', 'S-1/A', 'S-3', 'S-3/A', 'S-3ASR', 'F-1', 'F-1/A', 'F-3', 'F-3/A', 'F-3ASR',
 ]);
 const OFFERING_FORMS = new Set([
   '424B1', '424B3', '424B4', '424B5', '424B7', '424B8',

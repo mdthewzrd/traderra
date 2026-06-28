@@ -141,8 +141,19 @@ function ScanChartPanel({ ticker, date, onClose }: { ticker: string | null; date
   })
   const [showSettings, setShowSettings] = useState(false)
   const [dayOffset, setDayOffset] = useState(0)
+  // Measure the chart wrapper so ScanMiniChart fills the row (no fixed height → no dead space)
+  const chartWrapRef = useRef<HTMLDivElement>(null)
+  const [chartH, setChartH] = useState(400)
 
   useEffect(() => { setDayOffset(0) }, [ticker, date])
+  useEffect(() => {
+    const el = chartWrapRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setChartH(el.clientHeight))
+    ro.observe(el)
+    setChartH(el.clientHeight)
+    return () => ro.disconnect()
+  }, [])
 
   const toggle = (key: keyof ChartSettings) => setSettings(s => ({ ...s, [key]: !s[key] }))
   const applyTemplate = (id: string) => {
@@ -153,28 +164,29 @@ function ScanChartPanel({ ticker, date, onClose }: { ticker: string | null; date
   const GOLD = '#D4AF37'
   const btn = (active: boolean): React.CSSProperties => ({
     padding: '2px 9px', fontSize: 10, fontWeight: 700, borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit',
-    border: `1px solid ${active ? GOLD : '#2a3050'}`,
+    border: `1px solid ${active ? GOLD : '#262626'}`,
     background: active ? GOLD + '22' : 'transparent',
-    color: active ? GOLD : '#4a6080',
+    color: active ? GOLD : '#777777',
   })
-  const navBtn = { background: 'none', border: '1px solid #2a3050', color: '#4a6080', fontSize: 11, width: 22, height: 22, borderRadius: 2, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' } as React.CSSProperties
+  const navBtn = { background: 'none', border: '1px solid #262626', color: '#777777', fontSize: 11, width: 22, height: 22, borderRadius: 2, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' } as React.CSSProperties
 
   if (!ticker) {
     return (
-      <div style={{ borderTop: '1px solid #1a2030', background: '#070a10', flexShrink: 0, padding: '44px 14px', textAlign: 'center' }}>
-        <span style={{ fontSize: 11, color: '#4a6080' }}>Click a candidate or signal above to load the chart</span>
+      <div style={{ background: '#0a0a0a', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+        <span style={{ fontSize: 26, opacity: 0.25 }}>📈</span>
+        <span style={{ fontSize: 11, color: '#666666' }}>Click a candidate or signal to load the chart</span>
       </div>
     )
   }
 
   return (
-    <div style={{ borderTop: '1px solid #1a2030', background: '#070a10', flexShrink: 0 }}>
+    <div style={{ background: '#0a0a0a', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderBottom: '1px solid #111620', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 15, fontWeight: 800, color: '#dde3f0' }}>{ticker}</span>
-        <span style={{ fontSize: 10, color: '#4a6080' }}>{date || todayStr()}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderBottom: '1px solid #1a1a1a', flexWrap: 'wrap', flexShrink: 0 }}>
+        <span style={{ fontSize: 15, fontWeight: 800, color: '#e5e5e5' }}>{ticker}</span>
+        <span style={{ fontSize: 10, color: '#666666' }}>{date || todayStr()}</span>
 
-        <div style={{ width: 1, height: 16, background: '#1a2030' }} />
+        <div style={{ width: 1, height: 16, background: '#1a1a1a' }} />
 
         {/* TF buttons */}
         <div style={{ display: 'flex', gap: 3 }}>
@@ -183,44 +195,44 @@ function ScanChartPanel({ ticker, date, onClose }: { ticker: string | null; date
           ))}
         </div>
 
-        <div style={{ width: 1, height: 16, background: '#1a2030' }} />
+        <div style={{ width: 1, height: 16, background: '#1a1a1a' }} />
 
         {/* day-by-day offset */}
         <button onClick={() => setDayOffset(d => Math.max(0, d - 1))} title="Back 1 day" style={navBtn}>◀</button>
         <button onClick={() => setDayOffset(d => d + 1)} title="Forward 1 day" style={navBtn}>▶</button>
 
-        <div style={{ width: 1, height: 16, background: '#1a2030' }} />
+        <div style={{ width: 1, height: 16, background: '#1a1a1a' }} />
 
         {/* indicator templates */}
         <div style={{ display: 'flex', gap: 3 }}>
           {IND_TEMPLATES.map(t => (
             <button key={t.id} onClick={() => applyTemplate(t.id)} style={{
               padding: '2px 7px', fontSize: 9, fontWeight: 700, borderRadius: 2, cursor: 'pointer', fontFamily: 'inherit',
-              border: '1px solid #2a3050', background: 'transparent', color: '#5a6a80',
+              border: '1px solid #262626', background: 'transparent', color: '#666666',
             }}>{t.name}</button>
           ))}
         </div>
 
         <button onClick={() => setShowSettings(s => !s)} title="Indicator toggles" style={{
-          ...navBtn, background: showSettings ? GOLD + '18' : 'transparent', color: showSettings ? GOLD : '#4a6080',
+          ...navBtn, background: showSettings ? GOLD + '18' : 'transparent', color: showSettings ? GOLD : '#777777',
         }}>⚙</button>
 
-        <a href={`/charts-terminal.html?symbol=${ticker}`} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: '#4a6080', textDecoration: 'none' }}>↗ full</a>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#4a6080', fontSize: 14, cursor: 'pointer', padding: '0 4px', marginLeft: 'auto' }}>✕</button>
+        <a href={`/charts-terminal.html?symbol=${ticker}`} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: '#666666', textDecoration: 'none' }}>↗ full</a>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#666666', fontSize: 14, cursor: 'pointer', padding: '0 4px', marginLeft: 'auto' }}>✕</button>
       </div>
 
       {/* settings toggles */}
       {showSettings && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '5px 14px', borderBottom: '1px solid #111620' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '5px 14px', borderBottom: '1px solid #1a1a1a', flexShrink: 0 }}>
           {TEMPLATE_IND_KEYS.map(([key, label]) => (
             <button key={key} onClick={() => toggle(key)} style={btn(settings[key])}>{label}</button>
           ))}
         </div>
       )}
 
-      {/* Chart — same ScanMiniChart as /scanner */}
-      <div style={{ padding: '0 2px', maxHeight: '46vh', overflow: 'hidden' }}>
-        <ScanMiniChart symbol={ticker} tf={tf} date={date || todayStr()} height={440} settings={settings} dark={true} centerOnDate dayOffset={dayOffset} />
+      {/* Chart — same ScanMiniChart as /scanner. Fills its grid cell (boxy, not a wide band). */}
+      <div ref={chartWrapRef} style={{ padding: '0 2px', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <ScanMiniChart symbol={ticker} tf={tf} date={date || todayStr()} height={chartH} settings={settings} dark={true} centerOnDate dayOffset={dayOffset} />
       </div>
     </div>
   )
@@ -494,122 +506,127 @@ export default function LiveFeedPage() {
   const toggleScan = (g: string) => setEnabledScans(prev => { const n = new Set(prev); n.has(g) ? n.delete(g) : n.add(g); return n })
   const toggleCollapse = (g: string) => setCollapsedScans(prev => { const n = new Set(prev); n.has(g) ? n.delete(g) : n.add(g); return n })
 
-  // ── Row renderers ──
+  // ── Studio theme tokens (matches globals.css / studio-theme.tsx) ──
+  const GOLD = '#D4AF37'
   const S = {
-    page: { background: '#070a10', color: '#dde3f0', height: '100vh', display: 'flex', flexDirection: 'column' as const, overflow: 'hidden', fontFamily: 'JetBrains Mono, monospace' },
-    hdr: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid #111620', background: '#0a0e16', flexShrink: 0 },
+    page: { background: '#0a0a0a', color: '#e5e5e5', minHeight: '100vh', fontFamily: 'JetBrains Mono, monospace' } as React.CSSProperties,
+    hdr: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid #1a1a1a', background: '#0a0a0a', position: 'sticky' as const, top: 0, zIndex: 20 } as React.CSSProperties,
     dot: (on: boolean) => ({ width: 8, height: 8, borderRadius: '50%', background: on ? '#4ade80' : '#ef5350', boxShadow: on ? '0 0 8px #4ade80' : 'none', flexShrink: 0 }) as React.CSSProperties,
-    navBtn: { background: 'none', border: '1px solid #2a3050', color: '#8aa0c0', fontSize: 16, width: 28, height: 28, borderRadius: 3, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' } as React.CSSProperties,
-    panelHdr: (color: string) => ({ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderBottom: '1px solid #111620', background: '#0a0e16', position: 'sticky' as const, top: 0, zIndex: 5 }) as React.CSSProperties,
-    row: { display: 'grid', alignItems: 'center', padding: '6px 12px', borderBottom: '1px solid #0d1118', cursor: 'pointer', transition: 'background .1s', fontSize: 11 } as React.CSSProperties,
+    navBtn: { background: 'none', border: '1px solid #262626', color: '#999999', fontSize: 16, width: 28, height: 28, borderRadius: 3, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' } as React.CSSProperties,
   }
 
-  // Compact hit row — adapts to column kind (potential shows trigger dots, valid/recent show pm% / date)
+  // Compact hit row — adapts to view kind (potential shows trigger dots, valid/recent show pm% / date)
   const renderHitCompact = (h: Hit, kind: 'potential' | 'valid' | 'recent', key: string) => {
     const active = chartTicker === h.ticker
     const hv = {
-      onMouseEnter: (e: any) => { if (!active) e.currentTarget.style.background = '#0d1220' },
+      onMouseEnter: (e: any) => { if (!active) e.currentTarget.style.background = '#171717' },
       onMouseLeave: (e: any) => { if (!active) e.currentTarget.style.background = 'transparent' },
       onClick: () => selectRow(h), onDoubleClick: () => openFullChart(h),
     }
-    const gapColor = (h.gap || 0) >= 0.5 ? '#5eead4' : '#6a7a90'   // teal when at trigger-level
-    const pmhColor = (h.pm_high_pct || 0) >= 0.5 ? '#4ade80' : '#8aa0c0'
+    const gapColor = (h.gap || 0) >= 0.5 ? '#5eead4' : '#666666'   // teal when at trigger-level
+    const pmhColor = (h.pm_high_pct || 0) >= 0.5 ? '#4ade80' : '#777777'
     if (kind === 'potential') return (
-      <div key={key} style={{ display: 'grid', alignItems: 'center', gridTemplateColumns: '1fr 44px 44px 78px', padding: '5px 10px', borderBottom: '1px solid #0d1118', cursor: 'pointer', fontSize: 12, background: active ? '#0d1828' : 'transparent', borderLeft: `3px solid ${(h.checks_met || 0) === 5 ? '#4ade80' : (h.checks_met || 0) === 4 ? '#f59e0b' : '#3a8c4a'}` }} {...hv}>
-        <span style={{ fontWeight: 800, color: '#dde3f0' }}>{h.ticker}</span>
+      <div key={key} style={{ display: 'grid', alignItems: 'center', gridTemplateColumns: '1fr 44px 44px 78px', padding: '5px 10px', borderBottom: '1px solid #161616', cursor: 'pointer', fontSize: 12, background: active ? '#1f1a0a' : 'transparent', borderLeft: `3px solid ${(h.checks_met || 0) === 5 ? '#4ade80' : (h.checks_met || 0) === 4 ? '#f59e0b' : '#3a8c4a'}` }} {...hv}>
+        <span style={{ fontWeight: 800, color: '#e5e5e5' }}>{h.ticker}</span>
         <span style={{ textAlign: 'right', color: gapColor, fontWeight: 700 }} title="Gap (open/prev close − 1)">{fmtPct(h.gap)}</span>
         <span style={{ textAlign: 'right', color: pmhColor, fontWeight: 700 }} title="PM high / prev close − 1">{fmtPct(h.pm_high_pct)}</span>
         <span style={{ display: 'flex', justifyContent: 'flex-end' }}><ChecksDots checks={h.checks} met={h.checks_met} total={h.checks_total} /></span>
       </div>
     )
     return (
-      <div key={key} style={{ display: 'grid', alignItems: 'center', gridTemplateColumns: kind === 'valid' ? '1fr 44px 44px 50px' : '1fr 44px 42px 50px', padding: '5px 10px', borderBottom: '1px solid #0d1118', cursor: 'pointer', fontSize: 12, background: active ? '#0d1828' : 'transparent', borderLeft: `3px solid ${colorFor(h.strategy)}` }} {...hv}>
-        <span style={{ fontWeight: 800, color: '#dde3f0' }}>{h.ticker}</span>
+      <div key={key} style={{ display: 'grid', alignItems: 'center', gridTemplateColumns: kind === 'valid' ? '1fr 44px 44px 50px' : '1fr 44px 42px 50px', padding: '5px 10px', borderBottom: '1px solid #161616', cursor: 'pointer', fontSize: 12, background: active ? '#1f1a0a' : 'transparent', borderLeft: `3px solid ${colorFor(h.strategy)}` }} {...hv}>
+        <span style={{ fontWeight: 800, color: '#e5e5e5' }}>{h.ticker}</span>
         <span style={{ textAlign: 'right', color: gapColor, fontWeight: 700 }} title="Gap (open/prev close − 1)">{fmtPct(h.gap)}</span>
         {kind === 'valid'
           ? <span style={{ textAlign: 'right', color: pmhColor, fontWeight: 700 }} title="PM high / prev close − 1">{fmtPct(h.pm_high_pct)}</span>
-          : <span style={{ textAlign: 'right', color: '#6a7a90', fontSize: 10 }}>{h.date ? h.date.slice(5) : ''}</span>}
-        <span style={{ textAlign: 'right', color: '#6a7a90' }}>{fmtVol(h.pm_vol || h.volume)}</span>
+          : <span style={{ textAlign: 'right', color: '#666666', fontSize: 10 }}>{h.date ? h.date.slice(5) : ''}</span>}
+        <span style={{ textAlign: 'right', color: '#666666' }}>{fmtVol(h.pm_vol || h.volume)}</span>
       </div>
     )
   }
 
-  const renderColumn = (title: string, color: string, kind: 'potential' | 'valid' | 'recent', hits: Hit[], group: string) => {
-    const shown = hits.slice(0, MAX_COL)
+  // ── Per-box view toggle: Potential | Valid | Recent in ONE box (saves width → more boxes fit) ──
+  type ViewKind = 'potential' | 'valid' | 'recent'
+  const [boxViews, setBoxViews] = useState<Record<string, ViewKind>>({})
+  const boxView = (g: string): ViewKind => boxViews[g] || 'potential'
+  const setBoxView = (g: string, v: ViewKind) => setBoxViews(prev => ({ ...prev, [g]: v }))
+
+  // One scan = one box. Segmented toggle switches between Potential / Valid / Recent lists.
+  const renderScanBox = (row: ScanRow, style?: React.CSSProperties) => {
+    const v = boxView(row.group)
+    const list = v === 'potential' ? row.potential : v === 'valid' ? row.valid : row.recent
+    const SEG: [ViewKind, string, string][] = [['potential', 'POTENTIAL', '#38bdf8'], ['valid', 'VALID', '#4ade80'], ['recent', 'RECENT', '#999999']]
     return (
-      <div style={{ borderRight: '1px solid #111620', minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', background: '#0c1018', borderBottom: '1px solid #111620' }}>
-          <span style={{ width: 5, height: 5, borderRadius: '50%', background: color }} />
-          <span style={{ fontSize: 9, fontWeight: 800, color, letterSpacing: 0.5 }}>{title}</span>
-          <span style={{ marginLeft: 'auto', fontSize: 9, color: '#3a4560' }}>{hits.length}</span>
+      <div key={row.group} style={{ background: '#111111', border: '1px solid #1a1a1a', display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', ...style }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px 0' }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: row.color, boxShadow: `0 0 6px ${row.color}88`, flexShrink: 0 }} />
+          <span style={{ fontSize: 11, fontWeight: 800, color: row.color, letterSpacing: 0.5 }}>{row.group.toUpperCase()}</span>
+          <span style={{ fontSize: 9, color: '#444444', marginLeft: 'auto' }}>{row.potential.length + row.valid.length} today / {row.recent.length} prior</span>
         </div>
-        {hits.length === 0
-          ? <div style={{ padding: 14, textAlign: 'center', color: '#2a3550', fontSize: 10 }}>—</div>
-          : shown.map((h, i) => renderHitCompact(h, kind, group + '-' + kind + '-' + i))}
-        {hits.length > MAX_COL && <div style={{ padding: '4px 10px', fontSize: 9, color: '#3a4560', textAlign: 'center' }}>+{hits.length - MAX_COL} more</div>}
+        <div style={{ display: 'flex', borderBottom: '1px solid #1a1a1a', marginTop: 5, flexShrink: 0 }}>
+          {SEG.map(([kind, label, color]) => {
+            const on = v === kind
+            const cnt = kind === 'potential' ? row.potential.length : kind === 'valid' ? row.valid.length : row.recent.length
+            return (
+              <button key={kind} onClick={() => setBoxView(row.group, kind)} style={{
+                flex: 1, padding: '5px 4px', fontSize: 9, fontWeight: 800, letterSpacing: 0.5, cursor: 'pointer', fontFamily: 'inherit',
+                border: 'none', borderBottom: `2px solid ${on ? color : 'transparent'}`,
+                background: on ? color + '14' : 'transparent', color: on ? color : '#555555',
+              }}>{label} <span style={{ fontSize: 8, opacity: 0.8 }}>{cnt}</span></button>
+            )
+          })}
+        </div>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          {list.length === 0
+            ? <div style={{ padding: 24, textAlign: 'center', color: '#333333', fontSize: 10 }}>—</div>
+            : list.slice(0, MAX_COL).map((h, i) => renderHitCompact(h, v, row.group + '-' + v + '-' + i))}
+          {list.length > MAX_COL && <div style={{ padding: '4px 10px', fontSize: 9, color: '#444444', textAlign: 'center' }}>+{list.length - MAX_COL} more</div>}
+        </div>
       </div>
     )
   }
 
-  // One horizontal row per scan: 3 columns (Potential | Valid | Recent)
-  const renderScanRow = (row: ScanRow) => {
-    const collapsed = collapsedScans.has(row.group)
-    return (
-      <div key={row.group} style={{ borderBottom: '2px solid #111620' }}>
-        <div onClick={() => toggleCollapse(row.group)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: '#0a0e16', cursor: 'pointer' }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: row.color, boxShadow: `0 0 6px ${row.color}66` }} />
-          <span style={{ fontSize: 12, fontWeight: 800, color: row.color, letterSpacing: 0.5 }}>{row.group.toUpperCase()}</span>
-          <span style={{ fontSize: 9, color: '#3a4560' }}>· {(row.potential.length + row.valid.length)} today / {row.recent.length} prior</span>
-          <span style={{ marginLeft: 'auto', fontSize: 10, color: '#4a6080' }}>{collapsed ? '▸' : '▾'}</span>
-        </div>
-        {!collapsed && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr' }}>
-            {renderColumn('POTENTIAL', '#38bdf8', 'potential', row.potential, row.group)}
-            {renderColumn('VALID', '#4ade80', 'valid', row.valid, row.group)}
-            {renderColumn('RECENT', '#6a7a90', 'recent', row.recent, row.group)}
-          </div>
-        )}
-      </div>
-    )
-  }
+  // Top-4 scans (by today's hits) go into the dashboard grid; the rest go in the list below.
+  const top4 = visibleRows.slice(0, 4)
+  const rest = visibleRows.slice(4)
 
   return (
     <div style={S.page}>
       {/* Header */}
       <div style={S.hdr}>
-        <span style={{ fontSize: 12, fontWeight: 800, color: '#4ade80', letterSpacing: 1 }}>📡 LIVE FEED</span>
+        <span style={{ fontSize: 12, fontWeight: 800, color: GOLD, letterSpacing: 1 }}>📡 LIVE FEED</span>
         <div style={S.dot(connected && isLive)} />
         <span style={{ fontSize: 9, color: connected && isLive ? '#4ade80' : '#ef5350', fontWeight: 700 }}>
           {isLive ? (connected ? 'LIVE' : 'RECONNECT…') : 'HISTORICAL'}
         </span>
-        <span style={{ fontSize: 9, color: '#4a6080', fontWeight: 700 }}>{now > 0 ? fmtTime(now) : '--:--:--'} ET</span>
+        <span style={{ fontSize: 9, color: '#666666', fontWeight: 700 }}>{now > 0 ? fmtTime(now) : '--:--:--'} ET</span>
 
         {/* Date nav */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
           <button style={S.navBtn} onClick={goPrevDay} title="Previous trading day">‹</button>
           <input type="date" value={isLive ? '' : (selectedDate || '')} max={now > 0 ? todayStr() : undefined}
             onChange={e => setSelectedDate(e.target.value || null)}
-            style={{ background: '#070a10', color: isLive ? '#3a4560' : '#dde3f0', border: `1px solid ${isLive ? '#1e2840' : '#4ade80'}`, borderRadius: 3, padding: '3px 6px', fontSize: 11, fontFamily: 'inherit', fontWeight: 700, cursor: 'pointer', colorScheme: 'dark' as const }} />
+            style={{ background: '#0a0a0a', color: isLive ? '#444444' : '#e5e5e5', border: `1px solid ${isLive ? '#262626' : GOLD}`, borderRadius: 3, padding: '3px 6px', fontSize: 11, fontFamily: 'inherit', fontWeight: 700, cursor: 'pointer', colorScheme: 'dark' as const }} />
           <button style={{ ...S.navBtn, opacity: isLive ? 0.35 : 1 }} onClick={goNextDay} disabled={isLive} title="Next trading day">›</button>
-          <button onClick={goLive} style={{ padding: '4px 12px', fontSize: 10, fontWeight: 800, letterSpacing: 1, borderRadius: 3, cursor: 'pointer', border: `1px solid ${isLive ? '#4ade80' : '#3a4a68'}`, background: isLive ? '#4ade8018' : 'transparent', color: isLive ? '#4ade80' : '#8aa0c0', fontFamily: 'inherit' }}>● LIVE</button>
+          <button onClick={goLive} style={{ padding: '4px 12px', fontSize: 10, fontWeight: 800, letterSpacing: 1, borderRadius: 3, cursor: 'pointer', border: `1px solid ${isLive ? '#4ade80' : '#333333'}`, background: isLive ? '#4ade8018' : 'transparent', color: isLive ? '#4ade80' : '#999999', fontFamily: 'inherit' }}>● LIVE</button>
         </div>
-        <button onClick={testPing} title="Test ping" style={{ background: 'none', border: '1px solid #2a3050', color: '#4a6080', fontSize: 9, fontWeight: 700, padding: '3px 7px', borderRadius: 3, cursor: 'pointer' }}>TEST</button>
+        <button onClick={testPing} title="Test ping" style={{ background: 'none', border: '1px solid #262626', color: '#666666', fontSize: 9, fontWeight: 700, padding: '3px 7px', borderRadius: 3, cursor: 'pointer' }}>TEST</button>
         <button onClick={() => setMuted(m => !m)} title={muted ? 'Unmute' : 'Mute'} style={{ background: 'none', border: `1px solid ${muted ? '#ef5350' : '#4ade80'}`, color: muted ? '#ef5350' : '#4ade80', fontSize: 13, width: 26, height: 26, borderRadius: 3, cursor: 'pointer' }}>{muted ? '🔇' : '🔊'}</button>
       </div>
 
       {/* Scan selector bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderBottom: '1px solid #111620', background: '#080c14', flexWrap: 'wrap', flexShrink: 0 }}>
-        <span style={{ fontSize: 9, fontWeight: 700, color: '#3a4560', textTransform: 'uppercase', marginRight: 2 }}>Scans:</span>
-        <button onClick={() => setEnabledScans(new Set())} style={{ fontSize: 8, fontWeight: 700, color: enabledScans.size === 0 ? '#4ade80' : '#4a6080', background: 'none', border: '1px solid #1e2840', borderRadius: 3, padding: '2px 7px', cursor: 'pointer', fontFamily: 'inherit' }}>ALL</button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderBottom: '1px solid #1a1a1a', background: '#0d0d0d', flexWrap: 'wrap', flexShrink: 0 }}>
+        <span style={{ fontSize: 9, fontWeight: 700, color: '#444444', textTransform: 'uppercase', marginRight: 2 }}>Scans:</span>
+        <button onClick={() => setEnabledScans(new Set())} style={{ fontSize: 8, fontWeight: 700, color: enabledScans.size === 0 ? GOLD : '#666666', background: 'none', border: `1px solid ${enabledScans.size === 0 ? GOLD : '#262626'}`, borderRadius: 3, padding: '2px 7px', cursor: 'pointer', fontFamily: 'inherit' }}>ALL</button>
         {scanRows.map(row => {
           const on = enabledScans.size === 0 || enabledScans.has(row.group)
           return (
             <button key={row.group} onClick={() => toggleScan(row.group)} style={{
               fontSize: 10, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer',
               borderRadius: 3, padding: '3px 9px', display: 'flex', alignItems: 'center', gap: 5,
-              border: `1px solid ${on ? row.color : '#1e2840'}`,
+              border: `1px solid ${on ? row.color : '#262626'}`,
               background: on ? row.color + '18' : 'transparent',
-              color: on ? row.color : '#4a6080', opacity: on ? 1 : 0.5,
+              color: on ? row.color : '#666666', opacity: on ? 1 : 0.5,
             }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: row.color }} />
               {row.group}
@@ -619,20 +636,40 @@ export default function LiveFeedPage() {
         })}
       </div>
 
-      {/* Body — one collapsible section per enabled scan */}
-      <div style={{ flex: 1, overflowY: 'auto' }}>
-        {dayLoading && !isLive ? (
-          <div style={{ padding: 40, textAlign: 'center', color: '#4a6080', fontSize: 12 }}>Loading…</div>
-        ) : visibleRows.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: '#4a6080', fontSize: 12 }}>No scans selected{isLive ? '' : ' with hits on this day'}.</div>
-        ) : (
-          visibleRows.map(renderScanRow)
-        )}
-      </div>
+      {/* Body */}
+      {dayLoading && !isLive ? (
+        <div style={{ padding: 60, textAlign: 'center', color: '#666666', fontSize: 12 }}>Loading…</div>
+      ) : visibleRows.length === 0 ? (
+        <div style={{ padding: 60, textAlign: 'center', color: '#666666', fontSize: 12 }}>No scans selected{isLive ? '' : ' with hits on this day'}.</div>
+      ) : (
+        <>
+          {/* Dashboard grid: 3 scans top row · chart (2-wide) + scan bottom row · chart cell reserved */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gridTemplateRows: '340px 600px', gap: 8, padding: 8 }}>
+            {top4[0] && renderScanBox(top4[0])}
+            {top4[1] && renderScanBox(top4[1])}
+            {top4[2] && renderScanBox(top4[2])}
+            {/* Chart cell — spans 2 columns on row 2; gold border when a ticker is loaded */}
+            <div style={{ gridColumn: '1 / span 2', gridRow: 2, background: '#0a0a0a', border: `1px solid ${chartTicker ? GOLD + '55' : '#1a1a1a'}`, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+              <ScanChartPanel ticker={chartTicker} date={chartDate} onClose={() => { setChartTicker(null); setChartDate(null) }} />
+            </div>
+            {top4[3] && renderScanBox(top4[3], { gridColumn: 3, gridRow: 2 })}
+          </div>
 
-      {/* BOTTOM — Chart */}
-      <ScanChartPanel ticker={chartTicker} date={chartDate} onClose={() => { setChartTicker(null); setChartDate(null) }} />
-
+          {/* Scan list — remaining scans below the dashboard */}
+          {rest.length > 0 && (
+            <div style={{ padding: '4px 8px 24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 6px 8px' }}>
+                <span style={{ fontSize: 10, fontWeight: 800, color: '#666666', letterSpacing: 1 }}>SCAN LIST</span>
+                <span style={{ height: 1, flex: 1, background: '#1a1a1a' }} />
+                <span style={{ fontSize: 9, color: '#444444' }}>{rest.length} more</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gridAutoRows: '360px', gap: 8 }}>
+                {rest.map(row => renderScanBox(row))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }

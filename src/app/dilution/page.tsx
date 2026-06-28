@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 
 import { DILUTION_TAG_META, type DilutionTag } from '@/lib/dilution/classify';
-import { deriveDilutionSummary } from '@/lib/dilution/summary';
+import { deriveDilutionSummary, cashBurnRiskFromRunway } from '@/lib/dilution/summary';
 
 type Filing = {
   accessionNo: string;
@@ -43,6 +43,21 @@ type Snapshot = {
   };
   filings: Filing[];
   tagSummary: Record<string, number>;
+  form4Txns: {
+    reporter: string; isOfficer: boolean; txnCode: string; securities: number;
+    price: number | null; afterShares: number | null; txnDate: string; dilutive: boolean;
+  }[];
+  offerings: {
+    accessionNo: string; formType: string; filingDate: string;
+    sharesOffered: number | null; pricePerShare: number | null; grossProceeds: number | null;
+    offeringType: string; underwriter: string | null;
+  }[];
+  registrations: {
+    accessionNo: string; formType: string; filingDate: string;
+    aggregateOffering: number | null; shelfType: string; salesChannel: string | null;
+    agent: string | null; securitiesTypes: string[];
+  }[];
+  insiderDilutiveShares90d: number;
 };
 
 const TAG_STYLES: Record<string, string> = {
@@ -143,6 +158,13 @@ export default function DilutionPage() {
           dilutionTags: f.dilutionTags,
           primaryDesc: f.primaryDesc,
         })),
+        {
+          registrations: snapshot.registrations,
+          offerings: snapshot.offerings,
+          insiderDilutiveShares90d: snapshot.insiderDilutiveShares90d,
+          sharesOutstanding: snapshot.sharesLatest?.outstanding ?? null,
+          overhang: snapshot.overhang,
+        },
       )
     : null;
 
@@ -273,6 +295,68 @@ export default function DilutionPage() {
               </div>
             </div>
 
+            {/* Nasdaq compliance + shelf capacity remaining — the "can they keep listing / dilute more" view */}
+            {snapshot?.compliance && (
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+                  <div className="flex items-center gap-2 text-zinc-400">
+                    <AlertTriangle className="h-4 w-4" />
+                    <span className="text-xs uppercase tracking-wide">Nasdaq compliance</span>
+                    <span className="ml-auto text-[10px] text-zinc-600">{snapshot.compliance.tier}</span>
+                  </div>
+                  <div className="mt-2 flex items-end gap-2">
+                    <span className={`text-2xl font-bold ${snapshot.compliance.failures === 0 ? 'text-emerald-400' : snapshot.compliance.failures === 1 ? 'text-amber-400' : 'text-red-400'}`}>
+                      {snapshot.compliance.failures === 0 ? 'PASSING' : `${snapshot.compliance.failures} FAIL`}
+                    </span>
+                    <span className="mb-0.5 text-xs text-zinc-500">{snapshot.compliance.computable} rules computable from SEC data</span>
+                  </div>
+                  <div className="mt-3 space-y-1.5">
+                    {snapshot.compliance.rules.map((r) => (
+                      <div key={r.rule} className="flex items-center justify-between text-xs">
+                        <span className="text-zinc-300">{r.rule}</span>
+                        <span className="flex items-center gap-2">
+                          <span className="text-zinc-500">{r.value}</span>
+                          <span className={`rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase ${
+                            r.status === 'pass' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' :
+                            r.status === 'fail' ? 'border-red-500/30 bg-red-500/10 text-red-400' :
+                            r.status === 'review' ? 'border-amber-500/30 bg-amber-500/10 text-amber-400' :
+                            'border-zinc-700 bg-zinc-800/50 text-zinc-500'
+                          }`}>{r.status}</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 border-t border-zinc-800/60 pt-1.5 text-[10px] text-zinc-600">
+                    Best-effort flag from SEC XBRL + live price — not a legal determination. Shareholder/director rules need proxy data.
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+                  <div className="flex items-center gap-2 text-zinc-400">
+                    <Layers className="h-4 w-4" />
+                    <span className="text-xs uppercase tracking-wide">Shelf capacity remaining</span>
+                  </div>
+                  {snapshot.shelfRemaining ? (
+                    <>
+                      <div className="mt-2 flex items-end gap-2">
+                        <span className={`text-3xl font-bold ${snapshot.shelfRemaining.remainingPct <= 0 ? 'text-red-400' : snapshot.shelfRemaining.remainingPct <= 25 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                          ${(snapshot.shelfRemaining.remaining / 1e6).toFixed(0)}M
+                        </span>
+                        <span className="mb-1 text-xs text-zinc-500">of ${(snapshot.shelfRemaining.registered / 1e6).toFixed(0)}M registered still drawable</span>
+                      </div>
+                      <div className="mt-3 space-y-1 text-xs">
+                        <div className="flex justify-between"><span className="text-zinc-500">Registered (shelf)</span><span className="text-zinc-300">${(snapshot.shelfRemaining.registered / 1e6).toFixed(1)}M</span></div>
+                        <div className="flex justify-between"><span className="text-zinc-500">Raised so far (424B5)</span><span className="text-zinc-300">${(snapshot.shelfRemaining.raised / 1e6).toFixed(1)}M</span></div>
+                        <div className="flex justify-between border-t border-zinc-800/60 pt-1"><span className="text-zinc-500">Remaining</span><span className="font-semibold text-zinc-200">${(snapshot.shelfRemaining.remaining / 1e6).toFixed(1)}M ({snapshot.shelfRemaining.remainingPct.toFixed(0)}%)</span></div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="mt-2 text-sm text-zinc-500">No active registered shelf (S-3/S-1). Offerings, if any, were standalone deals.</div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Dilution Summary + Rating — the AskEdgar dilution-tracker view */}
             {summary && (
               <div className="grid gap-4 lg:grid-cols-3">
@@ -290,6 +374,23 @@ export default function DilutionPage() {
                       {summary.tier}
                     </span>
                   </div>
+                  {/* AskEdgar-aligned risk labels (reverse-engineered from 1,758 reports) */}
+                  {(() => {
+                    const rw = snapshot?.cash?.reportedRunwayMonths ?? null;
+                    const labels = { ...summary.askedgarLabels, cashBurnRisk: cashBurnRiskFromRunway(rw) };
+                    const RISK_COLOR: Record<string, string> = { high: 'text-red-400 bg-red-500/10 border-red-500/30', medium: 'text-amber-400 bg-amber-500/10 border-amber-500/30', low: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' };
+                    const chip = (l: string | null) => l ? (
+                      <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase ${RISK_COLOR[l]}`}>{l}</span>
+                    ) : <span className="text-zinc-700">—</span>;
+                    return (
+                      <div className="mt-2 flex items-center gap-2 border-t border-zinc-800/60 pt-2 text-[11px]">
+                        <span className="text-zinc-500">AE-aligned:</span>
+                        <span className="flex items-center gap-1"><span className="text-zinc-600">cash</span>{chip(labels.cashBurnRisk)}</span>
+                        <span className="flex items-center gap-1"><span className="text-zinc-600">dil</span>{chip(labels.dilutionRisk)}</span>
+                        <span className="flex items-center gap-1"><span className="text-zinc-600">off</span>{chip(labels.offeringRisk)}</span>
+                      </div>
+                    );
+                  })()}
                   <div className="mt-3 space-y-1">
                     {summary.breakdown.map((b) => (
                       <div key={b.component} className="flex items-center justify-between text-xs">
@@ -456,6 +557,176 @@ export default function DilutionPage() {
                 <div className="mt-2 text-sm text-zinc-500">No XBRL share data.</div>
               )}
             </div>
+
+            {/* Recent offerings (424B5) — the actual dilution event */}
+            {snapshot.offerings.length > 0 && (
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+                <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-400">
+                  Recent offerings
+                  <span className="rounded bg-zinc-700 px-1.5 py-0.5 text-[9px] text-zinc-300">424B5</span>
+                </div>
+                <div className="space-y-2">
+                  {snapshot.offerings.map((o) => (
+                    <div key={o.accessionNo} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-zinc-800/60 pb-2 text-sm last:border-0 last:pb-0">
+                      <span className="text-zinc-500">{o.filingDate} · {o.formType}</span>
+                      {o.sharesOffered !== null && (
+                        <span className="font-semibold">{fmtNum(o.sharesOffered)} shares</span>
+                      )}
+                      {o.pricePerShare !== null && (
+                        <span className="text-zinc-400">@ ${o.pricePerShare.toFixed(o.pricePerShare < 1 ? 4 : 2)}</span>
+                      )}
+                      {o.grossProceeds !== null && (
+                        <span className="text-emerald-400">{fmtMoney(o.grossProceeds)} gross</span>
+                      )}
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
+                        o.offeringType === 'atm' ? 'bg-red-500/15 text-red-400' :
+                        o.offeringType === 'underwritten' ? 'bg-blue-500/15 text-blue-400' :
+                        'bg-zinc-700 text-zinc-300'}`}>{o.offeringType}</span>
+                      {o.underwriter && (
+                        <span className="text-zinc-600">{o.underwriter}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Shelf registrations (S-3) — the potential dilution PIPELINE */}
+            {snapshot.registrations.length > 0 && (
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+                <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-400">
+                  Shelf registrations
+                  <span className="rounded bg-zinc-700 px-1.5 py-0.5 text-[9px] text-zinc-300">S-3</span>
+                </div>
+                <div className="space-y-2">
+                  {snapshot.registrations.map((r) => (
+                    <div key={r.accessionNo} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-zinc-800/60 pb-2 text-sm last:border-0 last:pb-0">
+                      <span className="text-zinc-500">{r.filingDate} · {r.formType}</span>
+                      {r.aggregateOffering !== null && (
+                        <span className="font-semibold text-amber-300">{fmtMoney(r.aggregateOffering)} capacity</span>
+                      )}
+                      {r.shelfType === 'automatic-shelf' && (
+                        <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-400">ASR</span>
+                      )}
+                      {r.salesChannel === 'atm' && (
+                        <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-400">ATM</span>
+                      )}
+                      {r.salesChannel === 'underwritten' && (
+                        <span className="rounded bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-blue-400"> UW</span>
+                      )}
+                      {r.securitiesTypes.length > 0 && (
+                        <span className="text-zinc-500">{r.securitiesTypes.join(' · ')}</span>
+                      )}
+                      {r.agent && (
+                        <span className="text-zinc-600">agent: {r.agent}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Warrants & convertibles overhang (XBRL) — the price-dependent dilution threat */}
+            {snapshot.overhang && (snapshot.overhang.warrant || snapshot.overhang.convertible) && (
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+                <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-400">
+                  Warrants &amp; convertibles
+                  <span className="rounded bg-zinc-700 px-1.5 py-0.5 text-[9px] text-zinc-300">XBRL</span>
+                  {snapshot.overhang.overhangPct !== null && snapshot.overhang.overhangPct >= 20 && (
+                    <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-400">high overhang</span>
+                  )}
+                  {snapshot.overhang.overhangPct !== null && snapshot.overhang.overhangPct >= 5 && snapshot.overhang.overhangPct < 20 && (
+                    <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-400">med overhang</span>
+                  )}
+                </div>
+                <div className="mb-2 flex items-baseline gap-2">
+                  <span className="text-2xl font-bold text-amber-300">{snapshot.overhang.overhangPct !== null ? snapshot.overhang.overhangPct.toFixed(1) + '%' : '—'}</span>
+                  <span className="text-xs text-zinc-500">of shares outstanding (dilutive overhang)</span>
+                </div>
+                <div className="space-y-1.5 text-sm">
+                  {snapshot.overhang.warrant && (
+                    <div className="flex items-baseline gap-2">
+                      <span className="rounded bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-300">warrant</span>
+                      <span className="font-semibold text-zinc-200">{fmtNum(snapshot.overhang.warrant.shares)}</span>
+                      <span className="text-zinc-500">shares{snapshot.overhang.warrant.strike !== null ? ` · $${snapshot.overhang.warrant.strike.toFixed(2)} strike` : ''} · @ {snapshot.overhang.warrant.period}</span>
+                    </div>
+                  )}
+                  {snapshot.overhang.convertible && (
+                    <div className="flex items-baseline gap-2">
+                      <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-300">convert</span>
+                      <span className="font-semibold text-zinc-200">{fmtNum(snapshot.overhang.convertible.shares)}</span>
+                      <span className="text-zinc-500">shares{snapshot.overhang.convertible.strike !== null ? ` · $${snapshot.overhang.convertible.strike.toFixed(2)} conv` : ''} · @ {snapshot.overhang.convertible.period}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* In-the-money status — strike vs current price (dilutable NOW?) */}
+                {snapshot.inTheMoney && snapshot.inTheMoney.price !== null && (
+                  <div className="mt-3 border-t border-zinc-800 pt-3">
+                    <div className="mb-1.5 flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-400">
+                      In the money
+                      <span className="rounded bg-zinc-700 px-1.5 py-0.5 text-[9px] text-zinc-300">{`$${snapshot.inTheMoney.price.toFixed(2)} close`}</span>
+                    </div>
+                    {(snapshot.inTheMoney.warrant?.itm || snapshot.inTheMoney.convertible?.itm) ? (
+                      <div className="mb-2 flex items-baseline gap-2">
+                        <span className="text-2xl font-bold text-red-400">{snapshot.inTheMoney.imminentPct !== null ? `${snapshot.inTheMoney.imminentPct.toFixed(1)}%` : '—'}</span>
+                        <span className="text-xs text-zinc-500">{`dilutable NOW — ${fmtNum(snapshot.inTheMoney.imminentShares)} shares in the money`}</span>
+                      </div>
+                    ) : (
+                      <div className="mb-2 text-sm text-emerald-400">No warrants/convertibles in the money — overhang is dormant at current price.</div>
+                    )}
+                    <div className="space-y-1 text-sm">
+                      {snapshot.inTheMoney.warrant && (
+                        <div className="flex items-baseline gap-2">
+                          <span className="rounded bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-300">warrant</span>
+                          <span className={snapshot.inTheMoney.warrant.itm ? 'font-semibold text-red-400' : 'text-zinc-400'}>
+                            {snapshot.inTheMoney.warrant.itm ? `IN THE MONEY +${(snapshot.inTheMoney.warrant.intrinsicPct ?? 0).toFixed(0)}%` : 'out of the money'}
+                          </span>
+                          <span className="text-zinc-500">{`$${snapshot.inTheMoney.price.toFixed(2)} vs $${snapshot.inTheMoney.warrant.strike.toFixed(2)} strike`}</span>
+                        </div>
+                      )}
+                      {snapshot.inTheMoney.convertible && (
+                        <div className="flex items-baseline gap-2">
+                          <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-300">convert</span>
+                          <span className={snapshot.inTheMoney.convertible.itm ? 'font-semibold text-red-400' : 'text-zinc-400'}>
+                            {snapshot.inTheMoney.convertible.itm ? `IN THE MONEY +${(snapshot.inTheMoney.convertible.intrinsicPct ?? 0).toFixed(0)}%` : 'out of the money'}
+                          </span>
+                          <span className="text-zinc-500">{`$${snapshot.inTheMoney.price.toFixed(2)} vs $${snapshot.inTheMoney.convertible.strike.toFixed(2)} conv`}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Insider transactions (Form 4) */}
+            {snapshot.form4Txns.length > 0 && (
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+                <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-400">
+                  Insider transactions
+                  <span className="rounded bg-zinc-700 px-1.5 py-0.5 text-[9px] text-zinc-300">Form 4</span>
+                  {snapshot.insiderDilutiveShares90d > 0 && (
+                    <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-red-400">
+                      {fmtNum(snapshot.insiderDilutiveShares90d)} dilutive (90d)
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  {snapshot.form4Txns.slice(0, 8).map((t, i) => (
+                    <div key={i} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-xs">
+                      <span className="text-zinc-500">{t.txnDate}</span>
+                      <span className={`font-semibold ${t.dilutive ? 'text-amber-400' : 'text-zinc-300'}`}>{t.txnCode}</span>
+                      <span className="text-zinc-400">
+                        {t.txnCode === 'S' ? '−' : t.txnCode === 'P' ? '+' : ''}{fmtNum(t.securities)}
+                      </span>
+                      {t.price !== null && <span className="text-zinc-600">@ ${t.price.toFixed(2)}</span>}
+                      <span className="text-zinc-300">{t.reporter}{t.isOfficer ? ' (officer)' : ''}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Dilution tag summary */}
             {Object.keys(snapshot.tagSummary).length > 0 && (

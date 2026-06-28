@@ -133,20 +133,47 @@ const EDGAR_BROWSE_URL = (t: string) =>
 
 /**
  * Fallback resolver for tickers absent from SEC's static maps (OTC / delisted
- * filers — exactly the heavy diluters booted off an exchange). EDGAR's
- * browse-edgar accepts a ticker in the CIK field and resolves it server-side
- * for ANY filer. Returns the 10-digit CIK, or null if EDGAR doesn't know it.
+ * / renamed filers). browse-edgar is SEC's AUTHORITATIVE ticker→entity resolver:
+ * it tracks the company through ticker renames (proven: MULN→Mullen-now-Bollinger,
+ * CEI→Camber-now-CEIN, FFIE→Faraday-now-FFAI all resolve to the correct entity
+ * CIK, even though the current ticker differs). The current name/ticker is then
+ * surfaced in the snapshot so renames are transparent. efts full-text is a
+ * last-resort fallback for tickers browse-edgar can't resolve at all.
  */
 export async function resolveCikViaEdgar(ticker: string): Promise<string | null> {
+  const t = ticker.toUpperCase();
+
+  // 1. browse-edgar — authoritative (handles renames).
   try {
-    const res = await secFetchResponse(EDGAR_BROWSE_URL(ticker), 'text/html');
-    if (!res.ok) return null;
-    const html = await res.text();
-    const m = html.match(/CIK=(\d{10})/);
-    return m ? m[1] : null;
+    const res = await secFetchResponse(EDGAR_BROWSE_URL(t), 'text/html');
+    if (res.ok) {
+      const html = await res.text();
+      const m = html.match(/CIK=(\d{10})/);
+      if (m) return m[1];
+    }
   } catch {
-    return null;
+    /* try fallback */
   }
+
+  // 2. efts full-text fallback for tickers browse-edgar can't resolve.
+  try {
+    const res = await secFetchResponse(
+      `https://efts.sec.gov/LATEST/search-index?q=${encodeURIComponent(t)}`,
+      'application/json',
+    );
+    if (res.ok) {
+      const data = (await res.json()) as {
+        hits?: { hits?: Array<{ _source?: { ciks?: string[] } }> } };
+      for (const h of data.hits?.hits ?? []) {
+        const cik = h._source?.ciks?.[0];
+        if (cik) return cik;
+      }
+    }
+  } catch {
+    /* no match */
+  }
+
+  return null;
 }
 
 export async function getCikForTicker(rawTicker: string): Promise<CikMapEntry | null> {

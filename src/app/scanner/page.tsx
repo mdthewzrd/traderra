@@ -44,6 +44,7 @@ const BUILTIN_SCANS: ScanDef[] = [
   { id: 'builtin-frd-gap', name: 'FRD Gap', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['frd-gap', 'mean-reversion'], group: 'mikes-scans/mean-reversion' },
   { id: 'builtin-frd-gap-lc', name: 'FRD Gap LC', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['frd-gap-lc', 'mean-reversion'], group: 'mikes-scans/mean-reversion' },
   { id: 'builtin-d1-gap', name: 'D1 Gap', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['d1-gap', 'parabolic', 'micro-cap'], group: 'mikes-scans/parabolic' },
+  { id: 'builtin-d1-gap-wide', name: 'D1 Gap Wide', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['d1-gap-wide', 'parabolic', 'micro-cap'], group: 'mikes-scans/parabolic' },
 ]
 
 // Tree structure: project folders with subfolder groups
@@ -89,6 +90,7 @@ const BUILTIN_SPEC_MAP: Record<string, string> = {
   'builtin-frd-gap': 'frd-gap',
   'builtin-frd-gap-lc': 'frd-gap-lc',
   'builtin-d1-gap': 'd1-gap',
+  'builtin-d1-gap-wide': 'd1-gap-wide',
 }
 
 // ─── Types ──────────────────────────────────────────────
@@ -1766,23 +1768,17 @@ export default function ScanDashboardPage() {
       switch (sortCol) {
         case 'ticker': va = a.ticker; vb = b.ticker; break
         case 'date': va = a.date; vb = b.date; break
-        case 'open': va = a.open; vb = b.open; break
-        case 'close': va = a.close; vb = b.close; break
+        case 'pm_high_pct': va = (a as any).pm_high_pct ?? -99; vb = (b as any).pm_high_pct ?? -99; break
         case 'gap': va = a.gap_pct || 0; vb = b.gap_pct || 0; break
-        case 'd0': va = ((a.close - a.open) / a.open * 100); vb = ((b.close - b.open) / b.open * 100); break
-        case 'range': va = ((a.high - a.low) / a.open * 100); vb = ((b.high - b.low) / b.open * 100); break
-        case 'abs': va = a.pos_abs || 0; vb = b.pos_abs || 0; break
+        case 'pm_vol': va = (a as any).pm_vol ?? -99; vb = (b as any).pm_vol ?? -99; break
         case 'vol': va = a.volume || 0; vb = b.volume || 0; break
-        case 'pm_high_atr': va = a.pm_high_atr ?? -99; vb = b.pm_high_atr ?? -99; break
-        case 'dev69_upper': va = (a as any).dev69_upper ?? -99; vb = (b as any).dev69_upper ?? -99; break
-        case 'prev_close': va = (a as any).prev_close ?? -99; vb = (b as any).prev_close ?? -99; break
+        case 'gaps_50_5y': va = (a as any).gaps_50_5y ?? -99; vb = (b as any).gaps_50_5y ?? -99; break
+        case 'gaps_50_2y': va = (a as any).gaps_50_2y ?? -99; vb = (b as any).gaps_50_2y ?? -99; break
+        case 'gap_ft_5y': va = (a as any).gap_ft_5y ?? -99; vb = (b as any).gap_ft_5y ?? -99; break
+        case 'gap_ft_2y': va = (a as any).gap_ft_2y ?? -99; vb = (b as any).gap_ft_2y ?? -99; break
         case 'ema50': va = (a as any).ema50 ?? -99; vb = (b as any).ema50 ?? -99; break
         case 'ema100': va = (a as any).ema100 ?? -99; vb = (b as any).ema100 ?? -99; break
         case 'ema200': va = (a as any).ema200 ?? -99; vb = (b as any).ema200 ?? -99; break
-        case 'gaps_50_5y': va = (a as any).gaps_50_5y ?? -99; vb = (b as any).gaps_50_5y ?? -99; break
-        case 'gaps_50_2y': va = (a as any).gaps_50_2y ?? -99; vb = (b as any).gaps_50_2y ?? -99; break
-        case 'red_pct_5y': va = (a as any).red_pct_5y ?? -99; vb = (b as any).red_pct_5y ?? -99; break
-        case 'red_pct_2y': va = (a as any).red_pct_2y ?? -99; vb = (b as any).red_pct_2y ?? -99; break
         default: va = a.date; vb = b.date
       }
       if (va < vb) return sortDir === 'asc' ? -1 : 1
@@ -2314,26 +2310,17 @@ export default function ScanDashboardPage() {
               <tr style={{ background: T.SURFACE2, position: 'sticky', top: 0, zIndex: 2 }}>
                 <th onClick={() => toggleSort('ticker')} style={{ padding: '4px 6px', textAlign: 'left', color: sortCol === 'ticker' ? GOLD : GOLD, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 0, background: T.SURFACE2, zIndex: 3, minWidth: 56, cursor: 'pointer', userSelect: 'none' }}>Tk{sortCol === 'ticker' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                 <th onClick={() => toggleSort('date')} style={{ padding: '4px 6px', textAlign: 'left', color: sortCol === 'date' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 56, background: T.SURFACE2, zIndex: 3, minWidth: 68, borderRight: `1px solid ${T.BORDER}`, cursor: 'pointer', userSelect: 'none' }}>Date{sortCol === 'date' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                <th onClick={() => toggleSort('open')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'open' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Op{sortCol === 'open' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                <th onClick={() => toggleSort('close')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'close' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Close{sortCol === 'close' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                <th onClick={() => toggleSort('gap')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'gap' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Gap%{sortCol === 'gap' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                <th onClick={() => toggleSort('d0')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'd0' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>D0{sortCol === 'd0' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                <th onClick={() => toggleSort('range')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'range' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Rng%{sortCol === 'range' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                <th onClick={() => toggleSort('abs')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'abs' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>ABS{sortCol === 'abs' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                <th onClick={() => toggleSort('vol')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'vol' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>Vol{sortCol === 'vol' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                <th onClick={() => toggleSort('pm_high_atr')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'pm_high_atr' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>PMΔ{sortCol === 'pm_high_atr' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                <th style={{ padding: '4px 4px', textAlign: 'center', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>½ATR</th>
-                <th style={{ padding: '4px 4px', textAlign: 'center', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>¼ATR</th>
-                <th style={{ padding: '4px 4px', textAlign: 'center', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>6.9</th>
-                <th style={{ padding: '4px 4px', textAlign: 'right', color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase' }}>PM T</th>
-                <th onClick={() => toggleSort('prev_close')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'prev_close' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }}>D-1{sortCol === 'prev_close' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('pm_high_pct')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'pm_high_pct' ? GOLD : T.TEAL, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="Premarket high vs prev close">PM Hi%{sortCol === 'pm_high_pct' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('gap')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'gap' ? GOLD : T.TEAL, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="Open gap vs prev close">Gap%{sortCol === 'gap' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('pm_vol')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'pm_vol' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="Premarket volume">PM Vol{sortCol === 'pm_vol' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('vol')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'vol' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="End-of-day volume">EOD Vol{sortCol === 'vol' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('gaps_50_5y')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'gaps_50_5y' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="# of ≥50% gap days in 5y">G5y{sortCol === 'gaps_50_5y' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('gaps_50_2y')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'gaps_50_2y' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="# of ≥50% gap days in 2y">G2y{sortCol === 'gaps_50_2y' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('gap_ft_5y')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'gap_ft_5y' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="% of ≥50% gap days (5y) that closed green — low = gaps fade = short-friendly">FT5y{sortCol === 'gap_ft_5y' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('gap_ft_2y')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'gap_ft_2y' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="% of ≥50% gap days (2y) that closed green — low = gaps fade = short-friendly">FT2y{sortCol === 'gap_ft_2y' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                 <th onClick={() => toggleSort('ema50')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'ema50' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="% dist: D-1 close vs D-1 EMA50">d50{sortCol === 'ema50' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                 <th onClick={() => toggleSort('ema100')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'ema100' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="% dist: D-1 close vs D-1 EMA100">d100{sortCol === 'ema100' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                 <th onClick={() => toggleSort('ema200')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'ema200' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="% dist: D-1 close vs D-1 EMA200">d200{sortCol === 'ema200' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                <th onClick={() => toggleSort('gaps_50_5y')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'gaps_50_5y' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="# of ≥50% gap days in 5y">G5y{sortCol === 'gaps_50_5y' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                <th onClick={() => toggleSort('gaps_50_2y')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'gaps_50_2y' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="# of ≥50% gap days in 2y">G2y{sortCol === 'gaps_50_2y' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                <th onClick={() => toggleSort('red_pct_5y')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'red_pct_5y' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="% of days close < open in 5y">R5y{sortCol === 'red_pct_5y' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                <th onClick={() => toggleSort('red_pct_2y')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'red_pct_2y' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="% of days close < open in 2y">R2y{sortCol === 'red_pct_2y' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                 {/* Multi-signal type columns */}
                 {isMultiSignal && signalTypeColumns.map(st => (
                   <th key={st} style={{ padding: '4px 3px', textAlign: 'center', color: GOLD, fontSize: 7, fontWeight: 700, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{st.replace(/_/g, ' ').replace(/^d(\d)/, 'D$1')}</th>
@@ -2383,26 +2370,17 @@ export default function ScanDashboardPage() {
                   >
                     <td style={{ padding: '3px 6px', color: isActive ? GOLD : T.WHITE, fontWeight: 700, fontFamily: 'monospace', position: 'sticky', left: 0, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1 }}>{s.ticker}</td>
                     <td style={{ padding: '3px 6px', color: isActive ? GOLD : T.MUTED, position: 'sticky', left: 56, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1, borderRight: `1px solid ${T.BORDER}` }}>{(s.date || (s as any).signal_date || '').slice(2)}</td>
-                    <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>${s.open?.toFixed(2)}</td>
-                    <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>${s.close?.toFixed(2)}</td>
+                    <td style={{ padding: '3px 4px', color: T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{(s as any).pm_high_pct != null ? `${((s as any).pm_high_pct * 100).toFixed(0)}%` : '–'}</td>
                     <td style={{ padding: '3px 4px', color: T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{(s.gap_pct || 0).toFixed(0)}%</td>
-                    <td style={{ padding: '3px 4px', color: d0chg < 0 ? T.RED : T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{d0chg > 0 ? '+' : ''}{d0chg.toFixed(1)}%</td>
-                    <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{rng.toFixed(1)}%</td>
-                    <td style={{ padding: '3px 4px', color: GOLD, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(s.pos_abs || 0).toFixed(2)}</td>
+                    <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(s as any).pm_vol != null ? `${((s as any).pm_vol / 1e6).toFixed(1)}M` : '–'}</td>
                     <td style={{ padding: '3px 4px', color: T.MUTED, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{((s.volume || 0) / 1e6).toFixed(0)}M</td>
-                    <td style={{ padding: '3px 4px', color: GOLD, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{s.pm_high_atr != null ? s.pm_high_atr.toFixed(2) : (s as any).pm_ext_atr != null ? ((s as any).pm_ext_atr as number).toFixed(2) : '–'}</td>
-                    <td style={{ padding: '3px 2px', textAlign: 'center', fontSize: 9, color: (s as any).pm_hit_0_5x || (s as any)['pm_hit_0.5x'] ? GOLD : T.BORDER }}>{((s as any).pm_hit_0_5x || (s as any)['pm_hit_0.5x']) ? '✓' : '–'}</td>
-                    <td style={{ padding: '3px 2px', textAlign: 'center', fontSize: 9, color: (s as any).pm_hit_0_25x || (s as any)['pm_hit_0.25x'] ? GOLD : T.BORDER }}>{((s as any).pm_hit_0_25x || (s as any)['pm_hit_0.25x']) ? '✓' : '–'}</td>
-                    <td style={{ padding: '3px 2px', textAlign: 'center', fontSize: 9, color: (s as any).dev69_3hit ? GOLD : T.BORDER }}>{(s as any).dev69_3hit ? '✓' : '–'}</td>
-                    <td style={{ padding: '3px 4px', color: s.pm_high_time ? T.TEXT2 : T.BORDER, textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 9 }}>{s.pm_high_time || '–'}</td>
-                    <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{s.prev_close != null ? `$${s.prev_close.toFixed(2)}` : '–'}</td>
+                    <td style={{ padding: '3px 4px', color: ((s as any).gaps_50_5y || 0) > 0 ? GOLD : T.MUTED, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(s as any).gaps_50_5y != null ? (s as any).gaps_50_5y : '–'}</td>
+                    <td style={{ padding: '3px 4px', color: ((s as any).gaps_50_2y || 0) > 0 ? GOLD : T.MUTED, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(s as any).gaps_50_2y != null ? (s as any).gaps_50_2y : '–'}</td>
+                    <td style={{ padding: '3px 4px', color: ((s as any).gap_ft_5y != null && ((s as any).gaps_50_5y || 0) > 0) ? (((s as any).gap_ft_5y >= 0.5) ? T.RED : T.TEAL) : T.BORDER, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{((s as any).gap_ft_5y != null && ((s as any).gaps_50_5y || 0) > 0) ? `${((s as any).gap_ft_5y * 100).toFixed(0)}%` : '–'}</td>
+                    <td style={{ padding: '3px 4px', color: ((s as any).gap_ft_2y != null && ((s as any).gaps_50_2y || 0) > 0) ? (((s as any).gap_ft_2y >= 0.5) ? T.RED : T.TEAL) : T.BORDER, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{((s as any).gap_ft_2y != null && ((s as any).gaps_50_2y || 0) > 0) ? `${((s as any).gap_ft_2y * 100).toFixed(0)}%` : '–'}</td>
                     <td style={{ padding: '3px 4px', color: s.ema50 != null ? (s.ema50 < 0 ? T.RED : T.TEAL) : T.BORDER, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{s.ema50 != null ? `${(s.ema50 * 100).toFixed(0)}%` : '–'}</td>
                     <td style={{ padding: '3px 4px', color: s.ema100 != null ? (s.ema100 < 0 ? T.RED : T.TEAL) : T.BORDER, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{s.ema100 != null ? `${(s.ema100 * 100).toFixed(0)}%` : '–'}</td>
                     <td style={{ padding: '3px 4px', color: s.ema200 != null ? (s.ema200 < 0 ? T.RED : T.TEAL) : T.BORDER, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{s.ema200 != null ? `${(s.ema200 * 100).toFixed(0)}%` : '–'}</td>
-                    <td style={{ padding: '3px 4px', color: ((s as any).gaps_50_5y || 0) > 0 ? GOLD : T.MUTED, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(s as any).gaps_50_5y != null ? (s as any).gaps_50_5y : '–'}</td>
-                    <td style={{ padding: '3px 4px', color: ((s as any).gaps_50_2y || 0) > 0 ? GOLD : T.MUTED, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(s as any).gaps_50_2y != null ? (s as any).gaps_50_2y : '–'}</td>
-                    <td style={{ padding: '3px 4px', color: ((s as any).red_pct_5y || 0) >= 0.5 ? T.RED : T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(s as any).red_pct_5y != null ? `${((s as any).red_pct_5y * 100).toFixed(0)}%` : '–'}</td>
-                    <td style={{ padding: '3px 4px', color: ((s as any).red_pct_2y || 0) >= 0.5 ? T.RED : T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(s as any).red_pct_2y != null ? `${((s as any).red_pct_2y * 100).toFixed(0)}%` : '–'}</td>
                     {/* Multi-signal type checkmarks */}
                     {isMultiSignal && signalTypeColumns.map(st => (
                       <td key={st} style={{ padding: '3px 3px', textAlign: 'center', fontSize: 9 }}>

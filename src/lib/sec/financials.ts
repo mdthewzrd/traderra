@@ -101,25 +101,97 @@ const OP_CANDIDATES = [
   'NetCashProvidedByUsedInOperatingActivitiesContinuingOperations',
 ];
 
-// Pick the FIRST concept (by priority) that has data, return ITS entries
-// newest-first. Single-concept selection avoids mixing restricted +
-// unrestricted cash from different concepts at the same date.
+// Nasdaq quantitative listing standards need balance-sheet + income-statement
+// facts: Stockholders Equity rule (≥$2.5M Capital / ≥$10M Global), net-income
+// alternative (≥$750K, last FY or 2 of last 3), revenue alternative (≥$50M).
+// Same companyfacts payload as cash — no extra SEC fetch.
+export const SE_CANDIDATES = [
+  'StockholdersEquity',
+  'LiabilitiesAndStockholdersEquity',
+];
+export const NI_CANDIDATES = [
+  'NetIncomeLoss',
+  'ProfitLoss',
+];
+export const REVENUE_CANDIDATES = [
+  'Revenues',
+  'RevenueFromContractWithCustomerExcludingAssessedTax',
+  'SalesRevenueNet',
+];
+
+// Annual-duration entries (≈330–370 day span) for multi-year rules (2-of-3yr net
+// income, revenue). pickConceptEntries already sorts newest-end first.
+function annualEntries(entries: FactEntry[]): FactEntry[] {
+  return entries
+    .filter((e) => {
+      if (!e.start) return false;
+      const d = (new Date(e.end).getTime() - new Date(e.start).getTime()) / MS_PER_DAY;
+      return d >= 300 && d <= 370;
+    })
+    .slice(0, 3);
+}
+
+// Select the candidate concept whose LATEST entry is newest. The priority list
+// expresses a preference (broadest > narrow), but companies stop reporting
+// concepts over time (e.g. IBRX stopped the restricted-inclusive concept in
+// 2018). Picking by recency auto-falls-back to a narrower-but-current concept.
+// On a tie (same latest end-date) the FIRST concept in priority order wins (via
+// strict >), so the broadest preference is preserved when it's current.
 function pickConceptEntries(facts: FinancialsPayload['facts'], concepts: string[]): FactEntry[] {
+  if (!facts) return [];
   const usgaap = facts['us-gaap'];
   if (!usgaap) return [];
+  let best: FactEntry[] = [];
+  let bestLatestEnd = '';
   for (const c of concepts) {
     const arr = usgaap[c]?.units?.USD;
-    if (Array.isArray(arr) && arr.length) {
-      return arr
-        .filter((e) => typeof e.val === 'number' && isFinite(e.val))
-        .sort((a, b) => (a.end < b.end ? 1 : a.end > b.end ? -1 : 0));
+    if (!Array.isArray(arr) || !arr.length) continue;
+    const sorted = arr
+      .filter((e) => typeof e.val === 'number' && isFinite(e.val))
+      .sort((a, b) => (a.end < b.end ? 1 : a.end > b.end ? -1 : 0));
+    if (!sorted.length) continue;
+    const latestEnd = sorted[0].end;
+    if (latestEnd > bestLatestEnd) {
+      bestLatestEnd = latestEnd;
+      best = sorted;
     }
   }
-  return [];
+  return best;
 }
 
 function pickCashEntries(facts: FinancialsPayload['facts']): FactEntry[] {
-  return pickConceptEntries(facts, CASH_CANDIDATES);
+  if (!facts) return [];
+  const usgaap = facts['us-gaap'];
+  if (!usgaap) return [];
+  // Gather each candidate concept's newest-first entries + latest end/val.
+  const per: { concept: string; entries: FactEntry[]; latestEnd: string; latestVal: number }[] = [];
+  for (const c of CASH_CANDIDATES) {
+    const arr = usgaap[c]?.units?.USD;
+    if (!Array.isArray(arr) || !arr.length) continue;
+    const sorted = arr
+      .filter((e) => typeof e.val === 'number' && isFinite(e.val))
+      .sort((a, b) => (a.end < b.end ? 1 : a.end > b.end ? -1 : 0));
+    if (!sorted.length) continue;
+    per.push({ concept: c, entries: sorted, latestEnd: sorted[0].end, latestVal: sorted[0].val });
+  }
+  if (!per.length) return [];
+  // Scale sanity guard (C14): a foreign filer may tag its native-currency value
+  // (e.g. RMB in thousands) under a USD unit, producing absurd figures
+  // (UPC: broadest $33.5B vs narrow CashAndCashEquivalentsAtCarryingValue
+  // $14.2M). If a concept's latest value is >50× the narrow concept's, treat it
+  // as mis-scaled and drop it. Restricted cash is never 50× unrestricted.
+  const narrow = per.find((p) => p.concept === 'CashAndCashEquivalentsAtCarryingValue');
+  const filtered = narrow && narrow.latestVal !== 0
+    ? per.filter((p) => Math.abs(p.latestVal) <= Math.abs(narrow.latestVal) * 50)
+    : per;
+  const pool = filtered.length ? filtered : per;
+  // Among survivors, pick newest latest-end; tie → priority order (broadest first).
+  const order = new Map(CASH_CANDIDATES.map((c, i) => [c, i]));
+  pool.sort((a, b) => {
+    if (a.latestEnd !== b.latestEnd) return a.latestEnd < b.latestEnd ? 1 : -1;
+    return (order.get(a.concept) ?? 99) - (order.get(b.concept) ?? 99);
+  });
+  return pool[0].entries;
 }
 
 function pickOperatingEntries(facts: FinancialsPayload['facts']): FactEntry[] {
@@ -196,6 +268,9 @@ export async function syncFinancials(
   const opEntries = pickOperatingEntries(facts);
   const latestCash = cashEntries.length ? cashEntries[0] : null;
   const latestOp = latestCleanOperating(opEntries);
+  const seLatest = (() => { const a = pickConceptEntries(facts, SE_CANDIDATES); return a.length ? a[0] : null; })();
+  const niAnnuals = annualEntries(pickConceptEntries(facts, NI_CANDIDATES));
+  const revAnnuals = annualEntries(pickConceptEntries(facts, REVENUE_CANDIDATES));
 
   // Ensure company row
   await prisma.dilutionCompany.upsert({
@@ -203,6 +278,16 @@ export async function syncFinancials(
     create: { cik, name, tickers: [ticker], exchange, factsLastSynced: new Date() },
     update: { factsLastSynced: new Date() },
   });
+
+  // On force, clear any previously-persisted cash/burn facts. Earlier (buggy)
+  // selections may have written a mis-scaled or stale concept under these fact
+  // names with a NEWER period than the corrected pick; computeCashFromDb reads
+  // newest-period, so stale wrong rows would shadow the corrected value.
+  if (options?.force) {
+    await prisma.dilutionFact.deleteMany({
+      where: { cik, fact: { in: ['CashAndCashEquivalentsAtCarryingValue', 'MonthlyCashFlow', 'StockholdersEquity', 'NetIncomeLoss', 'Revenues'] } },
+    });
+  }
 
   const writes: Promise<unknown>[] = [];
   if (latestCash) {
@@ -224,6 +309,17 @@ export async function syncFinancials(
       }),
     );
   }
+  // Persist balance-sheet + income-statement facts (Nasdaq compliance inputs).
+  const persistFact = (fact: string, e: FactEntry) => writes.push(
+    prisma.dilutionFact.upsert({
+      where: { cik_fact_period: { cik, fact, period: e.end } },
+      create: { cik, fact, period: e.end, unit: 'USD', val: e.val, filed: e.filed ? new Date(e.filed) : null, accn: e.accn ?? null },
+      update: { val: e.val, filed: e.filed ? new Date(e.filed) : null, accn: e.accn ?? null },
+    }),
+  );
+  if (seLatest) persistFact('StockholdersEquity', seLatest);
+  for (const e of niAnnuals) persistFact('NetIncomeLoss', e);
+  for (const e of revAnnuals) persistFact('Revenues', e);
   if (writes.length) await Promise.all(writes);
 
   return { status: 'success', cash: computeFromValues(latestCash, latestOp) };

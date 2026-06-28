@@ -579,6 +579,13 @@ export default function LiveFeedPage() {
     const v = boxView(row.group)
     const list = v === 'potential' ? row.potential : v === 'valid' ? row.valid : row.recent
     const SEG: [ViewKind, string, string][] = [['potential', 'POTENTIAL', '#38bdf8'], ['valid', 'VALID', '#4ade80'], ['recent', 'RECENT', '#999999']]
+    // Column config + per-scan grouping (multi-scan groups show a sub-header per member)
+    const cols = v === 'potential' ? '1fr 44px 44px 78px' : v === 'valid' ? '1fr 44px 44px 50px' : '1fr 44px 42px 50px'
+    const hdrs = v === 'potential' ? ['TICKER', 'GAP', 'PM%', 'CHK'] : v === 'valid' ? ['TICKER', 'GAP', 'PM%', 'VOL'] : ['TICKER', 'GAP', 'DATE', 'VOL']
+    const scanMap = new Map<string, Hit[]>()
+    for (const h of list) { const k = h.scanName || h.strategy || row.group; if (!scanMap.has(k)) scanMap.set(k, []); scanMap.get(k)!.push(h) }
+    const scans = [...scanMap.entries()]
+    const multi = scans.length > 1
     return (
       <div key={row.group} style={{ background: '#111111', border: '1px solid #1a1a1a', display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden', ...style }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px 0' }}>
@@ -600,10 +607,27 @@ export default function LiveFeedPage() {
           })}
         </div>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-          {list.length === 0
-            ? <div style={{ padding: 24, textAlign: 'center', color: '#333333', fontSize: 10 }}>—</div>
-            : list.slice(0, MAX_COL).map((h, i) => renderHitCompact(h, v, row.group + '-' + v + '-' + i))}
-          {list.length > MAX_COL && <div style={{ padding: '4px 10px', fontSize: 9, color: '#444444', textAlign: 'center' }}>+{list.length - MAX_COL} more</div>}
+          {list.length === 0 ? (
+            <div style={{ padding: 24, textAlign: 'center', color: '#333333', fontSize: 10 }}>—</div>
+          ) : (<>
+            {/* Column header — sticky at top of the list */}
+            <div style={{ display: 'grid', gridTemplateColumns: cols, padding: '3px 10px', borderBottom: '1px solid #1a1a1a', fontSize: 8, fontWeight: 800, color: '#555555', letterSpacing: 0.5, position: 'sticky', top: 0, background: '#0d0d0d', zIndex: 2 }}>
+              {hdrs.map((hd, i) => <span key={hd} style={{ textAlign: i === 0 ? 'left' : 'right' }}>{hd}</span>)}
+            </div>
+            {scans.map(([scanName, hits], si) => (
+              <div key={scanName + si}>
+                {multi && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px 3px', background: '#0a0a0a', borderBottom: '1px solid #141414' }}>
+                    <span style={{ width: 4, height: 4, borderRadius: '50%', background: colorFor(hits[0]?.strategy || '') }} />
+                    <span style={{ fontSize: 8, fontWeight: 800, color: '#999999', letterSpacing: 0.5, textTransform: 'uppercase' }}>{scanName}</span>
+                    <span style={{ fontSize: 8, color: '#444444', marginLeft: 'auto' }}>{hits.length}</span>
+                  </div>
+                )}
+                {hits.slice(0, MAX_COL).map((h, i) => renderHitCompact(h, v, row.group + '-' + scanName + '-' + v + '-' + i))}
+              </div>
+            ))}
+            {list.length > MAX_COL && <div style={{ padding: '4px 10px', fontSize: 9, color: '#444444', textAlign: 'center' }}>+{list.length - MAX_COL} more</div>}
+          </>)}
         </div>
       </div>
     )

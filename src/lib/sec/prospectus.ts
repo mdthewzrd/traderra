@@ -43,12 +43,23 @@ function scaleNum(raw: string): number | null {
   return num * scale;
 }
 
+export interface WarrantTranche {
+  shares: number | null;
+  strike: number | null;
+  expiry: string | null;
+  exercisable: string | null;
+  description: string;
+}
+
 export interface ParsedOffering {
   sharesOffered: number | null;
   pricePerShare: number | null;
   grossProceeds: number | null;
   offeringType: string; // 'atm' | 'underwritten' | 'best-efforts' | 'unknown'
   underwriter: string | null;
+  // Per-warrant tranches registered in this offering (shares/strike/expiry/exercisable).
+  // Nexus's 'Outstanding Warrants' table sources these from 424B5 cover/securities.
+  warrantTranches: WarrantTranche[];
 }
 
 export function parseProspectusHtml(html: string): ParsedOffering {
@@ -110,7 +121,27 @@ export function parseProspectusHtml(html: string): ParsedOffering {
     text.match(/underwriters?:?\s*([A-Z][\w&.,\s]{2,40}?)[.,]/);
   if (uw) underwriter = uw[1].trim();
 
-  return { sharesOffered: shares, pricePerShare: price, grossProceeds: proceeds, offeringType, underwriter };
+  // Per-warrant tranches — scan cover for warrant clauses with strike/expiry.
+  // Common phrasing: "accompanying warrants to purchase N shares ... exercise
+  // price of $Y ... exercisable ... expiring on DATE".
+  const warrantTranches: WarrantTranche[] = [];
+  const warrantClauses = cover.match(/[A-Z][^.]{0,40}?warrant[s]?[^.]{0,400}?(?:exercis|expir|exercise\s+price)[^.]{0,300}?(?:\.|;)/gi) ?? [];
+  for (const wc of warrantClauses.slice(0, 8)) {
+    const sh = wc.match(/(?:purchase|represent|for|of|to\s+purchase)\s+([\d,.]+\s*(?:million|billion|thousand)?)\s+shares?/i);
+    const ep = wc.match(/(?:exercise|exercisable\s+at(?:\s+a)?(?:\s+price\s+of)?|strike\s+price\s+of)\s+\$?([\d,.]+(?:\.\d{1,4})?)/i)
+      ?? wc.match(/exercise\s+price[^.]{0,50}?(?:equal\s+to|of)\s+\$?([\d,.]+(?:\.\d{1,4})?)/i);
+    const ex = wc.match(/expir(?:e|es|ing|ation|y)[^.]{0,30}?(?:on)?\s*([A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})/i);
+    const ed = wc.match(/exercisable(?:\s+(?:commencing|beginning|on|immediately|until|any\s+time))?[^.]{0,25}?(?:on\s+)?([A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})/i);
+    const shares = sh ? scaleNum(sh[1]) : null;
+    const strike = ep ? parseFloat(ep[1].replace(/,/g, '')) : null;
+    const expiry = ex ? ex[1] : null;
+    const exercisable = ed ? ed[1] : null;
+    if (shares != null || strike != null || expiry != null) {
+      warrantTranches.push({ shares, strike, expiry, exercisable, description: wc.trim().replace(/\s+/g, ' ').slice(0, 300) });
+    }
+  }
+
+  return { sharesOffered: shares, pricePerShare: price, grossProceeds: proceeds, offeringType, underwriter, warrantTranches };
 }
 
 export interface SyncOfferingsResult {

@@ -59,6 +59,11 @@ const fmtVol = (v?: number) => {
 const fmtPct = (v?: number) => (v === undefined || v === null ? '-' : (v >= 0 ? '+' : '') + (v * 100).toFixed(0) + '%')
 const fmtTime = (ts: number) => new Date(ts).toLocaleTimeString('en-US', { hour12: false })
 const todayStr = () => new Date().toISOString().slice(0, 10)
+const prevTradingDayStr = (d: string) => {
+  let dt = new Date(d + 'T12:00:00')
+  do { dt = new Date(dt.getTime() - 86400000) } while (dt.getUTCDay() === 0 || dt.getUTCDay() === 6)
+  return dt.toISOString().slice(0, 10)
+}
 const fmtDay = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 const shiftDay = (d: string, dir: 1 | -1) => {
   let dt = new Date(d + 'T12:00:00')
@@ -293,7 +298,7 @@ export default function LiveFeedPage() {
     if (!incoming.length) return
     if (live) {
       // determine genuinely-new tickers (for the beep) before mutating state
-      const isPotential = spec === POTENTIAL
+      const isPotential = spec === POTENTIAL || spec.endsWith('-potential')
       const newOnes = silent ? [] : incoming.filter(h => {
         const k = h.ticker + '|' + h.strategy + '|' + (h.date || '').slice(0, 10)
         return !knownRef.current.has(k) && (knownRef.current.add(k), true)
@@ -416,7 +421,7 @@ export default function LiveFeedPage() {
           results = (await r.json()).results || []
           scanCacheRef.current.set(s.id, results)
         }
-        const isPot = s.strategy === POTENTIAL
+        const isPot = s.strategy === POTENTIAL || s.strategy.endsWith('-potential')
         results.forEach((x: any, i: number) => {
           const h: Hit = {
             id: s.id + '-' + i, ticker: x.ticker || '?', date: (x.date || '').slice(0, 10),
@@ -484,9 +489,10 @@ export default function LiveFeedPage() {
   // Scan grouping: d1-gap + d1-gap-potential merge into one "D1 Gap" row
   const GROUP_OF: Record<string, string> = {
     'd1-gap': 'D1 Gap', 'd1-gap-potential': 'D1 Gap', 'd1-daily': 'D1 Gap',
-    'pm-movers': 'PM Movers',
-    'eod-trig-day': 'EOD Trig Day',
-    'aparascan': 'OG Scans', 'max-scan': 'OG Scans',
+    'pm-movers': 'PM Movers', 'pm-movers-potential': 'PM Movers',
+    'eod-trig-day': 'EOD Trig Day', 'eod-trig-day-potential': 'EOD Trig Day',
+    'aparascan': 'OG Scans', 'max-scan': 'OG Scans', 'og-scans-potential': 'OG Scans',
+    'mikes-potential': "Mike's Scans",
     'backside-b': "Mike's Scans", 'half-a': "Mike's Scans", 'half-a-other': "Mike's Scans",
     'mdr-fixed': "Mike's Scans", 'mdr-signals': "Mike's Scans", 'mdr-swing': "Mike's Scans",
     'short-fbo': "Mike's Scans", 'short-fbo-2': "Mike's Scans",
@@ -501,10 +507,15 @@ export default function LiveFeedPage() {
   }
   const groupColor = (g: string) => GROUP_COLORS[g] || colorFor(g)
 
+  // EOD date-switch: EOD scans finalize at 4pm ET close. Before that, show prior trading day's results.
+  const EOD_GROUPS = new Set(['EOD Trig Day', 'OG Scans', "Mike's Scans"])
+
   interface ScanRow { group: string; color: string; potential: Hit[]; valid: Hit[]; recent: Hit[] }
   const MAX_COL = 24
   const scanRows: ScanRow[] = useMemo(() => {
     const today = isLive ? todayStr() : (selectedDate || todayStr())
+    const _et = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }))
+    const afterEod = _et.getHours() >= 16 && _et.getDay() >= 1 && _et.getDay() <= 5
     const byGroup = new Map<string, Hit[]>()
     for (const h of allHits) {
       const g = groupOf(h.strategy)
@@ -512,11 +523,12 @@ export default function LiveFeedPage() {
       byGroup.get(g)!.push(h)
     }
     const rows: ScanRow[] = [...byGroup.entries()].map(([group, hits]) => {
-      const isDev = (h: Hit) => h.strategy === POTENTIAL && (h.checks_met || 0) < 5
-      const potential = hits.filter(h => h.date === today && isDev(h)).sort(sortCands)
-      const valid = hits.filter(h => h.date === today && !isDev(h))
+      const isDev = (h: Hit) => h.strategy.endsWith('-potential') && (h.checks_met || 0) < 5
+      const effDate = isLive && EOD_GROUPS.has(group) && !afterEod ? prevTradingDayStr(today) : today
+      const potential = hits.filter(h => h.date === effDate && isDev(h)).sort(sortCands)
+      const valid = hits.filter(h => h.date === effDate && !isDev(h))
         .sort((a, b) => (b.pm_high_pct || 0) - (a.pm_high_pct || 0))
-      const recent = hits.filter(h => h.date < today)
+      const recent = hits.filter(h => h.date < effDate)
         .sort((a, b) => b.date.localeCompare(a.date))
       return { group, color: groupColor(group), potential, valid, recent }
     })

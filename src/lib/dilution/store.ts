@@ -166,6 +166,7 @@ export interface DilutionSnapshot {
     grossProceeds: number | null;
     offeringType: string;
     underwriter: string | null;
+    warrantTranches: { shares: number | null; strike: number | null; expiry: string | null; exercisable: string | null; description: string }[];
   }[];
   registrations: {
     accessionNo: string;
@@ -330,6 +331,7 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
           grossProceeds: (p.grossProceeds as number | null) ?? null,
           offeringType: (p.offeringType as string) ?? 'unknown',
           underwriter: (p.underwriter as string | null) ?? null,
+          warrantTranches: (p.warrantTranches as Array<{ shares: number | null; strike: number | null; expiry: string | null; exercisable: string | null; description: string }> | null) ?? [],
         };
       }),
     registrations: registrationFilings

@@ -661,6 +661,26 @@ export default function DilutionPage() {
                     </div>
                   </div>
                 )}
+                {/* Registered warrants from 424B5 offerings — per-tranche strikes/expiry */}
+                {snapshot.offerings.some((o) => (o.warrantTranches ?? []).length > 0) && (
+                  <div className="mb-3">
+                    <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Registered warrants <span className="font-normal text-zinc-600">(424B5)</span></div>
+                    <div className="space-y-1.5">
+                      {snapshot.offerings.flatMap((o, oi) => (o.warrantTranches ?? []).map((t, ti) => (
+                        <div key={`${oi}-${ti}`} className="rounded bg-zinc-800/40 p-2 text-xs">
+                          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
+                            {t.strike !== null && <span><span className="text-zinc-500">strike:</span> <span className="font-medium text-zinc-200">${t.strike.toFixed(2)}</span></span>}
+                            {t.shares !== null && <span><span className="text-zinc-500">shares:</span> <span className="font-medium text-zinc-200">{fmtNum(t.shares)}</span></span>}
+                            {t.expiry !== null && <span><span className="text-zinc-500">expires:</span> <span className="font-medium text-amber-300">{t.expiry}</span></span>}
+                            {t.exercisable !== null && <span><span className="text-zinc-500">exercisable:</span> <span className="text-zinc-300">{t.exercisable}</span></span>}
+                            <span className="text-zinc-600">· {o.filingDate}</span>
+                          </div>
+                          <div className="mt-1 line-clamp-2 text-[10px] italic text-zinc-500">“{t.description.slice(0, 200)}{t.description.length > 200 ? '…' : ''}”</div>
+                        </div>
+                      )))}
+                    </div>
+                  </div>
+                )}
                 {snapshot.warrantNotes.convertibles.length > 0 && (
                   <div>
                     <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Convertibles</div>

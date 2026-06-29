@@ -38,7 +38,7 @@ export interface CashPosition {
 // a company that has burned past its last SEC report goes NEGATIVE ("already
 // out of money on a no-new-financing basis"). The as-reported number stays
 // available separately as reportedRunwayMonths.
-function project(
+export function project(
   reportedCash: number | null,
   asOfDate: string | null,
   monthlyFlow: number | null,

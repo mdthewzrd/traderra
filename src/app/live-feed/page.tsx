@@ -87,8 +87,10 @@ const POTENTIAL = 'd1-gap-potential'
 // Merge a DB baseline with live pushes, deduping by ticker+date (live wins)
 function dedupMerge(base: Hit[], live: Hit[]): Hit[] {
   const map = new Map<string, Hit>()
-  for (const h of base) map.set(h.ticker + '|' + h.date, h)
-  for (const h of live) map.set(h.ticker + '|' + h.date, h)
+  // key includes strategy so potential (d1-gap-potential) and valid (d1-daily)
+  // for the same ticker+date both survive instead of clobbering each other
+  for (const h of base) map.set(h.ticker + '|' + h.date + '|' + h.strategy, h)
+  for (const h of live) map.set(h.ticker + '|' + h.date + '|' + h.strategy, h)
   return [...map.values()]
 }
 
@@ -525,7 +527,8 @@ export default function LiveFeedPage() {
     const rows: ScanRow[] = [...byGroup.entries()].map(([group, hits]) => {
       const isDev = (h: Hit) => h.strategy.endsWith('-potential') && (h.checks_met || 0) < 5
       const effDate = isLive && EOD_GROUPS.has(group) && !afterEod ? prevTradingDayStr(today) : today
-      const potential = hits.filter(h => h.date === effDate && isDev(h)).sort(sortCands)
+      // Potential is LIVE/forming -> always today in every box (valid uses effDate for EOD scans)
+      const potential = hits.filter(h => h.date === today && isDev(h)).sort(sortCands)
       const valid = hits.filter(h => h.date === effDate && !isDev(h))
         .sort((a, b) => (b.pm_high_pct || 0) - (a.pm_high_pct || 0))
       const recent = hits.filter(h => h.date < effDate)

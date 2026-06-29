@@ -207,6 +207,7 @@ export default function DilutionPage() {
               free SEC
             </span>
           </div>
+          <a href="/dilution/scan" className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800">Scan all →</a>
           <form
             onSubmit={(e) => { e.preventDefault(); load(input, false); }}
             className="ml-auto flex items-center gap-2"

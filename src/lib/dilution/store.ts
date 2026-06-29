@@ -6,7 +6,7 @@
 import { prisma } from '@/lib/prisma';
 import { classifyFiling, type DilutionTag } from '@/lib/dilution/classify';
 import type { CashPosition } from '@/lib/sec/financials';
-import { computeCashFromDb } from '@/lib/sec/financials';
+import { computeCashFromDb, project } from '@/lib/sec/financials';
 import { computeOverhangFromDb } from '@/lib/sec/warrants';
 import { OFFERING_FORMS } from '@/lib/sec/prospectus';
 import { REGISTRATION_FORMS } from '@/lib/sec/registration';
@@ -362,6 +362,111 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
     programTypes,
     fromCache: true,
   };
+}
+
+export interface ScanRow {
+  cik: string;
+  ticker: string;
+  name: string;
+  exchange: string | null;
+  sicCode: string | null;
+  cash: number | null;
+  monthlyCashFlow: number | null; // neg = burning
+  runwayMonths: number | null; // projected (can be NEGATIVE)
+  overhangShares: number | null;
+  overhangPct: number | null;
+  overhangSuspect: boolean; // XBRL shares > 50× outstanding — corrupt, excluded from sort but still shown
+  shelfRemaining: number | null; // $ capacity still loaded
+  goingConcern: boolean;
+  lastSynced: string | null;
+}
+
+/**
+ * Batched screening rows for ALL synced companies. Uses `distinct` per-cik to
+ * grab the latest fact of each kind in a single round-trip, then folds in
+ * securities (overhang) + recent registrations/offerings (shelf) + 10-K
+ * going-concern flag. Computes projected runway via the same project() used by
+ * the per-ticker snapshot so numbers MATCH the detail page.
+ *
+ * O(tickers) JS reduction over O(1) batched Prisma calls — designed for a
+ * table that can render hundreds of rows client-side. Does NOT compute the
+ * full rating (needs per-ticker aggregate queries); sort by the raw signals
+ * (runway, overhang, shelf) instead.
+ */
+export async function getScanRows(): Promise<ScanRow[]> {
+  const since = new Date(Date.now() - 3 * 365 * 86_400_000); // 3y window for shelf sums
+  const [companies, cashFacts, flowFacts, shareFacts, securities, regFilings, offFilings, tenKFacts] = await Promise.all([
+    prisma.dilutionCompany.findMany({
+      select: { cik: true, tickers: true, name: true, exchange: true, sicCode: true, filingsLastSynced: true },
+    }),
+    prisma.dilutionFact.findMany({ where: { fact: 'CashAndCashEquivalentsAtCarryingValue' }, distinct: ['cik'], orderBy: { period: 'desc' }, select: { cik: true, val: true, period: true } }),
+    prisma.dilutionFact.findMany({ where: { fact: 'MonthlyCashFlow' }, distinct: ['cik'], orderBy: { period: 'desc' }, select: { cik: true, val: true, period: true } }),
+    prisma.dilutionFact.findMany({ where: { fact: 'EntityCommonStockSharesOutstanding' }, distinct: ['cik'], orderBy: { period: 'desc' }, select: { cik: true, val: true } }),
+    prisma.dilutionSecurity.findMany({ select: { cik: true, type: true, shares: true } }),
+    prisma.dilutionFiling.findMany({ where: { formType: { in: REGISTRATION_FORMS }, filingDate: { gte: since } }, select: { cik: true, rawPayload: true } }),
+    prisma.dilutionFiling.findMany({ where: { formType: { in: OFFERING_FORMS }, filingDate: { gte: since } }, select: { cik: true, rawPayload: true } }),
+    prisma.dilutionFiling.findMany({ where: { formType: '10-K' }, distinct: ['cik'], orderBy: { filingDate: 'desc' }, select: { cik: true, rawPayload: true } }),
+  ]);
+
+  const cashByCik = new Map(cashFacts.map((r) => [r.cik, { val: r.val, period: r.period }]));
+  const flowByCik = new Map(flowFacts.map((r) => [r.cik, { val: r.val, period: r.period }]));
+  const sharesByCik = new Map(shareFacts.map((r) => [r.cik, r.val]));
+  // overhang shares per cik (warrant + convertible + prefunded)
+  const overhangByCik = new Map<string, number>();
+  for (const s of securities) {
+    if (typeof s.shares !== 'number') continue;
+    overhangByCik.set(s.cik, (overhangByCik.get(s.cik) ?? 0) + s.shares);
+  }
+  // shelf remaining per cik
+  const shelfByCik = new Map<string, number>();
+  const shelfAdd = (cik: string, v: number) => shelfByCik.set(cik, (shelfByCik.get(cik) ?? 0) + v);
+  for (const f of regFilings) {
+    const v = ((f.rawPayload ?? {}) as { aggregateOffering?: number | null }).aggregateOffering;
+    if (typeof v === 'number') shelfAdd(f.cik, v);
+  }
+  for (const f of offFilings) {
+    const v = ((f.rawPayload ?? {}) as { grossProceeds?: number | null }).grossProceeds;
+    if (typeof v === 'number') shelfAdd(f.cik, -v); // raised reduces remaining
+  }
+  // going concern per cik (from latest 10-K warrantNotes payload)
+  const gcByCik = new Map<string, boolean>();
+  for (const f of tenKFacts) {
+    const wn = ((f.rawPayload ?? {}) as { warrantNotes?: { goingConcern?: { present?: boolean } } }).warrantNotes;
+    if (wn?.goingConcern?.present) gcByCik.set(f.cik, true);
+  }
+
+  const rows: ScanRow[] = [];
+  for (const c of companies) {
+    const cash = cashByCik.get(c.cik) ?? null;
+    const flow = flowByCik.get(c.cik) ?? null;
+    const proj = project(cash?.val ?? null, cash?.period ?? null, flow?.val ?? null, flow?.period ?? null);
+    const sharesOut = sharesByCik.get(c.cik) ?? null;
+    const ohShares = overhangByCik.get(c.cik) ?? null;
+    const ohPct = ohShares != null && sharesOut && sharesOut > 0 ? (ohShares / sharesOut) * 100 : null;
+    // 50× rule matches the detail-page C19 suspect guard: XBRL warrant/convert
+    // shares that exceed outstanding by >50× are reporting corruption, not real
+    // overhang. Kept for display (trader sees the raw number + ⚠) but nulled for
+    // the sort so corrupt rows can't dominate a 'most overhang' ranking.
+    const overhangSuspect = ohPct !== null && ohPct > 5000;
+    const shelf = shelfByCik.get(c.cik) ?? null;
+    rows.push({
+      cik: c.cik,
+      ticker: c.tickers[0] ?? c.cik,
+      name: c.name,
+      exchange: c.exchange,
+      sicCode: c.sicCode,
+      cash: cash?.val ?? null,
+      monthlyCashFlow: flow?.val ?? null,
+      runwayMonths: proj.cashRemainingMonths ?? proj.reportedRunwayMonths,
+      overhangShares: ohShares,
+      overhangPct: ohPct,
+      overhangSuspect,
+      shelfRemaining: shelf != null && shelf > 0 ? shelf : null,
+      goingConcern: gcByCik.get(c.cik) ?? false,
+      lastSynced: c.filingsLastSynced?.toISOString().slice(0, 10) ?? null,
+    });
+  }
+  return rows;
 }
 
 // accessionNo in submissions.json uses dashes (0000320193-26-000013); the

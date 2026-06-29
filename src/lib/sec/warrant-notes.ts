@@ -83,10 +83,19 @@ export interface ConvertibleNoteRow {
   conversionPrice: number | null;
 }
 
+export interface EquityLineNoteRow {
+  description: string;
+  counterparty: string | null; // e.g. "GEM Global Yield LLC"
+  maxCommitment: number | null; // $ facility ceiling if stated
+  pricing: string | null; // 'VWAP-based' / 'fixed $N'
+  ownershipCap: number | null; // % (9.99 common)
+}
+
 export interface ParsedWarrantNotes {
   warrantNotesParsed: true;
   warrants: WarrantNoteRow[];
   convertibles: ConvertibleNoteRow[];
+  equityLines: EquityLineNoteRow[]; // pre-existing SEPA/SPA facilities (GEM-style)
   source: string; // '10-K <accessionNo>' for traceability
   parsedAt: string;
 }
@@ -99,6 +108,7 @@ export function parseWarrantNotesHtml(html: string, accessionNo: string): Parsed
 
   const warrants: WarrantNoteRow[] = [];
   const convertibles: ConvertibleNoteRow[] = [];
+  const equityLines: EquityLineNoteRow[] = [];
 
   for (const c of chunks) {
     const lower = c.toLowerCase();
@@ -141,6 +151,27 @@ export function parseWarrantNotesHtml(html: string, accessionNo: string): Parsed
         convertibles.push({ description: c, principal, maturity, conversionPrice });
       }
     }
+
+    // EQUITY-LINE / SEPA / SPA clauses (pre-existing facilities disclosed in
+    // annual notes — NOT new 8-K events). GEM-style share subscription facility.
+    // These are the toxic standing facilities Nexus surfaces as 'Equity Lines'.
+    if (/(standby\s+equity|share\s+purchase\s+agreement|equity\s+purchase\s+agreement|share\s+subscription\s+facility|purchase\s+facility|\bsepa\b)/i.test(c)) {
+      let counterparty: string | null = null;
+      let maxCommitment: number | null = null;
+      let pricing: string | null = null;
+      let ownershipCap: number | null = null;
+      // Counterparty: capitalized entity name ending in LLC/Inc/Capital/Global/Yield.
+      const cp = c.match(/(?:with|by)\s+([A-Z][A-Za-z0-9&.,'\s]{3,40}?(?:LLC|Inc|Ltd|Capital|Partners|Global|CS|Yield)[A-Za-z]{0,15})/);
+      if (cp) counterparty = cp[1].trim().replace(/\s+/g, ' ');
+      const mc = c.match(/\$\s*([\d,.]+\s*(?:million|billion|thousand)?)/i);
+      if (mc) maxCommitment = scaleMoney(mc[1]);
+      if (/vwap|volume[\s-]?weighted/i.test(c)) pricing = 'VWAP-based';
+      const oc = c.match(/([\d.]+)\s*(?:%|percent)[^.]{0,30}?(?:beneficial|ownership|outstanding)/i);
+      if (oc) ownershipCap = parseFloat(oc[1]);
+      if (counterparty != null || maxCommitment != null) {
+        equityLines.push({ description: c, counterparty, maxCommitment, pricing, ownershipCap });
+      }
+    }
     void DATE; void YEAR;
   }
 
@@ -159,6 +190,7 @@ export function parseWarrantNotesHtml(html: string, accessionNo: string): Parsed
     warrantNotesParsed: true,
     warrants: dedup(warrants).slice(0, 6),
     convertibles: dedup(convertibles).slice(0, 6),
+    equityLines: dedup(equityLines).slice(0, 6),
     source: `10-K ${accessionNo}`,
     parsedAt: new Date().toISOString().slice(0, 10),
   };

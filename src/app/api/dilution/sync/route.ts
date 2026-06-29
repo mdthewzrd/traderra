@@ -13,6 +13,7 @@ import { syncOfferings } from '@/lib/sec/prospectus';
 import { syncRegistrations } from '@/lib/sec/registration';
 import { syncSecurities } from '@/lib/sec/warrants';
 import { syncWarrantNotes } from '@/lib/sec/warrant-notes';
+import { syncMaterialAgreements } from '@/lib/sec/filings8k';
 import { backfillTags, getSnapshot } from '@/lib/dilution/store';
 import { prisma } from '@/lib/prisma';
 
@@ -44,12 +45,13 @@ export async function POST(req: Request) {
 
     // Form 4 + 424B5 parsers run AFTER filings are in the DB (they query
     // DilutionFiling for their target forms). Sequential to the filings sync.
-    const [form4Res, offeringsRes, registrationsRes, securitiesRes, warrantNotesRes] = await Promise.all([
+    const [form4Res, offeringsRes, registrationsRes, securitiesRes, warrantNotesRes, programsRes] = await Promise.all([
       syncForm4Txns(entry.cik),
       syncOfferings(entry.cik),
       syncRegistrations(entry.cik),
       syncSecurities(ticker),
       syncWarrantNotes(entry.cik),
+      syncMaterialAgreements(entry.cik),
     ]);
 
     const tagsChanged = await backfillTags(entry.cik);
@@ -100,6 +102,7 @@ export async function POST(req: Request) {
         offerings: { status: offeringsRes.status, parsed: offeringsRes.parsed, withDetail: offeringsRes.withDetail },
         registrations: { status: registrationsRes.status, parsed: registrationsRes.parsed, withDetail: registrationsRes.withDetail },
         warrantNotes: { status: warrantNotesRes.status, withDetail: warrantNotesRes.withDetail },
+        programs: { status: programsRes.status, parsed: programsRes.parsed, withDetail: programsRes.withDetail },
         tagsChanged,
       },
       snapshot,

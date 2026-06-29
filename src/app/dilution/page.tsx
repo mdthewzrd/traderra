@@ -445,6 +445,58 @@ export default function DilutionPage() {
               </div>
             )}
 
+            {/* Dilution programs — active mechanisms: ATM, equity-line/SEPA, promissory notes,
+                convertibles (from 8-K material agreements + 10-K facility notes). Matches
+                Nexus 'Offering Ability / ATM / Equity Lines / Convertible Notes' coverage. */}
+            {((snapshot?.programs?.length ?? 0) > 0 || (snapshot?.warrantNotes?.equityLines?.length ?? 0) > 0) && (
+              <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+                <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-400">
+                  Dilution programs
+                  <span className="rounded bg-zinc-700 px-1.5 py-0.5 text-[9px] text-zinc-300">8-K + 10-K</span>
+                </div>
+                <div className="mb-2 text-[10px] text-zinc-600">Active financing mechanisms — standing facilities + new agreements. Read the clause to verify terms.</div>
+                <div className="space-y-1.5">
+                  {/* Equity lines / SEPA from 10-K notes (pre-existing standing facilities) */}
+                  {snapshot!.warrantNotes?.equityLines?.map((el, i) => (
+                    <div key={`el${i}`} className="rounded border border-red-500/20 bg-red-500/5 p-2">
+                      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-xs">
+                        <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-400">Equity Line / SEPA</span>
+                        {el.counterparty && <span className="font-medium text-zinc-200">{el.counterparty}</span>}
+                        {el.maxCommitment !== null && <span className="text-zinc-400">· ${'$'}{(el.maxCommitment / 1e6).toFixed(0)}M max</span>}
+                        {el.pricing && <span className="text-zinc-400">· {el.pricing}</span>}
+                        {el.ownershipCap !== null && <span className="text-zinc-400">· {el.ownershipCap}% cap</span>}
+                      </div>
+                      <div className="mt-1 line-clamp-2 text-[10px] italic text-zinc-500">“{el.description.slice(0, 240)}{el.description.length > 240 ? '…' : ''}”</div>
+                    </div>
+                  ))}
+                  {/* 8-K material agreements (new) */}
+                  {snapshot!.programs?.map((pr, i) => {
+                    const label: Record<string,string> = { 'atm':'ATM Offering','equity-line':'Equity Line / SEPA','convertible':'Convertible Note','promissory-note':'Promissory Note','warrant-offering':'Warrant Offering','material-agreement':'Material Agreement' };
+                    const tone: Record<string,string> = { 'atm':'red','equity-line':'red','convertible':'amber','promissory-note':'amber','warrant-offering':'blue','material-agreement':'zinc' };
+                    const t = tone[pr.programType] ?? 'zinc';
+                    const tc = t==='red'?'border-red-500/20 bg-red-500/5':t==='amber'?'border-amber-500/20 bg-amber-500/5':t==='blue'?'border-blue-500/20 bg-blue-500/5':'border-zinc-700 bg-zinc-800/40';
+                    const bc = t==='red'?'bg-red-500/20 text-red-400':t==='amber'?'bg-amber-500/20 text-amber-400':t==='blue'?'bg-blue-500/20 text-blue-400':'bg-zinc-700 text-zinc-300';
+                    return (
+                      <div key={`pr${i}`} className={`rounded border p-2 ${tc}`}>
+                        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-xs">
+                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${bc}`}>{label[pr.programType] ?? pr.programType}</span>
+                          {pr.counterparty && <span className="font-medium text-zinc-200">{pr.counterparty}</span>}
+                          <span className="text-zinc-600">{pr.filingDate}</span>
+                          {pr.maxCommitment !== null && <span className="text-zinc-400">· ${'$'}{(pr.maxCommitment / 1e6).toFixed(0)}M max</span>}
+                          {pr.pricing && <span className="text-zinc-400">· {pr.pricing}</span>}
+                          {pr.ownershipCap !== null && <span className="text-zinc-400">· {pr.ownershipCap}% cap</span>}
+                          {pr.maturity && <span className="text-zinc-400">· matures {pr.maturity}</span>}
+                          {pr.drawCapPerPeriod && <span className="text-zinc-400">· {pr.drawCapPerPeriod}</span>}
+                          {pr.securities.length > 0 && <span className="text-zinc-500">· {pr.securities.join(', ')}</span>}
+                        </div>
+                        <div className="mt-1 line-clamp-2 text-[10px] italic text-zinc-500">“{pr.description.slice(0, 240)}{pr.description.length > 240 ? '…' : ''}”</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Shelf capacity remaining — primary "way to dilute": registered capacity not yet drawn */}
             {snapshot?.shelfRemaining && (
               <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">

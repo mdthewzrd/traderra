@@ -13,6 +13,7 @@ import { REGISTRATION_FORMS } from '@/lib/sec/registration';
 import { DILUTIVE_TXN_CODES } from '@/lib/sec/form4';
 import { computeCompliance, type ComplianceResult } from '@/lib/dilution/compliance';
 import { getWarrantNotes, type ParsedWarrantNotes } from '@/lib/sec/warrant-notes';
+import { getPrograms, type CompanyProgram, type ProgramType } from '@/lib/sec/filings8k';
 
 /**
  * Classify recent filings for a company and persist tags. Idempotent — safe to
@@ -191,6 +192,12 @@ export interface DilutionSnapshot {
   // expiry, exercisable date, convertible principal + maturity. Partial recall;
   // null when nothing parseable. Raw clause text included for user verification.
   warrantNotes: ParsedWarrantNotes | null;
+  // Dilution programs parsed from 8-K material-agreement bodies (Item 1.01):
+  // ATM, equity-line/SEPA, convertible, promissory-note, warrant-offering.
+  // Each row carries extracted terms (max $, pricing, cap, maturity) + raw text.
+  programs: CompanyProgram[];
+  // Type filter helper exposed for UI grouping.
+  programTypes: ProgramType[];
   fromCache: boolean; // true = served from DB only (no SEC call this request)
 }
 
@@ -250,6 +257,8 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
     return { registered, raised, remaining, remainingPct: (remaining / registered) * 100 };
   })();
   const warrantNotes = await getWarrantNotes(cik);
+  const programs = await getPrograms(cik);
+  const programTypes = [...new Set(programs.map((p) => p.programType))];
 
   // Accurate 90-day dilutive-share sum from the FULL DB (not the display-capped
   // form4Rows) — heavy diluters file dozens of Form 4s inside 90 days.
@@ -347,6 +356,8 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
     compliance,
     shelfRemaining,
     warrantNotes,
+    programs,
+    programTypes,
     fromCache: true,
   };
 }

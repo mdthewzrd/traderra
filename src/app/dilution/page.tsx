@@ -396,6 +396,13 @@ export default function DilutionPage() {
                   <div className="mt-2 text-sm text-zinc-500">No XBRL cash/operating data reported.</div>
                 ) : (
                   <div className="mt-2 space-y-3">
+                    {/* Going-concern banner — substantial-doubt language from the 10-K */}
+                    {snapshot.warrantNotes?.goingConcern?.present && (
+                      <div className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-red-400">⚠ Going concern</div>
+                        <div className="mt-0.5 text-[11px] leading-snug text-red-200/80">{snapshot.warrantNotes.goingConcern.text}</div>
+                      </div>
+                    )}
                     {/* HERO: runway in months — the headline number for a short-bias view */}
                     <div className="rounded-md border border-zinc-600/60 bg-zinc-800/40 px-4 py-3">
                       <div className="flex items-end justify-between gap-4">
@@ -515,6 +522,26 @@ export default function DilutionPage() {
                   <div className="flex justify-between"><span className="text-zinc-500">Raised so far (424B5)</span><span className="text-zinc-300">${(snapshot.shelfRemaining.raised / 1e6).toFixed(1)}M</span></div>
                   <div className="flex justify-between border-t border-zinc-800/60 pt-1"><span className="text-zinc-500">Remaining</span><span className="font-semibold text-zinc-200">${(snapshot.shelfRemaining.remaining / 1e6).toFixed(1)}M ({snapshot.shelfRemaining.remainingPct.toFixed(0)}%)</span></div>
                 </div>
+                {/* Per-shelf breakdown — each registration statement with amount/type/ATM. */}
+                {snapshot.registrations.filter((r) => r.aggregateOffering !== null).length > 0 && (
+                  <div className="mt-3">
+                    <div className="mb-1 text-[10px] uppercase tracking-wide text-zinc-500">Per-shelf registrations</div>
+                    <div className="space-y-1">
+                      {snapshot.registrations.filter((r) => r.aggregateOffering !== null).map((r) => (
+                        <div key={r.accessionNo} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded bg-zinc-800/40 px-2 py-1 text-[11px]">
+                          <span className="text-zinc-300">${(r.aggregateOffering! / 1e6).toFixed(0)}M</span>
+                          <span className="text-zinc-600">·</span>
+                          <span className="text-zinc-500">{r.filingDate}</span>
+                          <span className="rounded bg-zinc-700 px-1 text-[9px] text-zinc-300">{r.shelfType === 'automatic-shelf' ? 'S-3ASR' : r.formType}</span>
+                          {r.salesChannel === 'atm' && <span className="rounded bg-red-500/20 px-1 text-[9px] font-semibold uppercase text-red-400">ATM</span>}
+                          {r.agent && <span className="text-zinc-500">· agent {r.agent}</span>}
+                          {r.securitiesTypes.length > 0 && <span className="text-zinc-600">· {r.securitiesTypes.join(', ')}</span>}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-1 text-[9px] text-zinc-600">Per-shelf "raised" not attributable from SEC data; global raised/remaining shown above.</div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -608,17 +635,29 @@ export default function DilutionPage() {
                   <div className="mb-3">
                     <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Warrants</div>
                     <div className="space-y-1.5">
-                      {snapshot.warrantNotes.warrants.map((w, i) => (
+                      {snapshot.warrantNotes.warrants.map((w, i) => {
+                        const now = Date.now();
+                        const expTs = w.expiry ? Date.parse(w.expiry) : NaN;
+                        const exTs = w.exercisableDate ? Date.parse(w.exercisableDate) : NaN;
+                        const expired = !isNaN(expTs) && expTs < now;
+                        const notYet = !isNaN(exTs) && exTs > now;
+                        const hasDates = !isNaN(expTs) || !isNaN(exTs);
+                        // Only assert 'In play' when we have real date evidence;
+                        // null dates → 'Status unknown' (don't fake confidence).
+                        const statusLabel = expired ? 'Expired' : notYet ? `Exercisable ${w.exercisableDate}` : hasDates ? 'In play' : 'Status unknown';
+                        const statusClass = expired ? 'bg-zinc-700 text-zinc-400' : notYet ? 'bg-zinc-700 text-zinc-300' : hasDates ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-700 text-zinc-500';
+                        return (
                         <div key={`w${i}`} className="rounded bg-zinc-800/40 p-2 text-xs">
                           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
+                            <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase ${statusClass}`} title="Derived from expiry/exercisable dates in the 10-K clause">{statusLabel}</span>
                             {w.shares !== null && <span><span className="text-zinc-500">shares:</span> <span className="font-medium text-zinc-200">{fmtNum(w.shares)}</span></span>}
                             {w.exercisePrice !== null && <span><span className="text-zinc-500">strike:</span> <span className="font-medium text-zinc-200">${w.exercisePrice.toFixed(2)}</span></span>}
                             {w.expiry !== null && <span><span className="text-zinc-500">expires:</span> <span className="font-medium text-amber-300">{w.expiry}</span></span>}
-                            {w.exercisableDate !== null && <span><span className="text-zinc-500">exercisable:</span> <span className="text-zinc-300">{w.exercisableDate}</span></span>}
                           </div>
                           <div className="mt-1 line-clamp-2 text-[10px] italic text-zinc-500">“{w.description.slice(0, 220)}{w.description.length > 220 ? '…' : ''}”</div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}

@@ -91,11 +91,17 @@ export interface EquityLineNoteRow {
   ownershipCap: number | null; // % (9.99 common)
 }
 
+export interface GoingConcern {
+  present: boolean;
+  text: string | null; // the going-concern clause (~400 chars) for display
+}
+
 export interface ParsedWarrantNotes {
   warrantNotesParsed: true;
   warrants: WarrantNoteRow[];
   convertibles: ConvertibleNoteRow[];
   equityLines: EquityLineNoteRow[]; // pre-existing SEPA/SPA facilities (GEM-style)
+  goingConcern: GoingConcern; // substantial-doubt language from 10-K/10-Q
   source: string; // '10-K <accessionNo>' for traceability
   parsedAt: string;
 }
@@ -175,6 +181,12 @@ export function parseWarrantNotesHtml(html: string, accessionNo: string): Parsed
     void DATE; void YEAR;
   }
 
+  // Going-concern language — scan the FULL text (not clause-split) since the
+  // phrasing spans sentences. Extract ~400 chars around the first hit.
+  let goingConcern: GoingConcern = { present: false, text: null };
+  const gc = text.match(/[A-Z][^.]{0,60}?(?:substantial doubt about(?:	s+its)? ability to continue as a going concern|going concern qualification|ability to continue as a going concern)[^.]{0,400}/i);
+  if (gc) goingConcern = { present: true, text: gc[0].trim().replace(/\s+/g, ' ').slice(0, 500) };
+
   // De-dup by description (note tables repeat clauses).
   const dedup = <T extends { description: string }>(arr: T[]): T[] => {
     const seen = new Set<string>();
@@ -191,6 +203,7 @@ export function parseWarrantNotesHtml(html: string, accessionNo: string): Parsed
     warrants: dedup(warrants).slice(0, 6),
     convertibles: dedup(convertibles).slice(0, 6),
     equityLines: dedup(equityLines).slice(0, 6),
+    goingConcern,
     source: `10-K ${accessionNo}`,
     parsedAt: new Date().toISOString().slice(0, 10),
   };

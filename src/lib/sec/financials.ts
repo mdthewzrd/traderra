@@ -42,7 +42,18 @@ function project(
   reportedCash: number | null,
   asOfDate: string | null,
   monthlyFlow: number | null,
+  flowEnd: string | null = null,
 ): Pick<CashPosition, 'reportedRunwayMonths' | 'projectedCash' | 'cashRemainingMonths' | 'projectedAsOf'> {
+  // Period-mismatch guard: runway is only meaningful when cash and burn
+  // describe the same reporting era. If the cash fact and the operating-flow
+  // fact are >1yr apart (UPC: 2022 cash vs a stale 2025 flow from old code),
+  // the pairing is invalid — don't compute runway. Surfaces as '—' not '0'.
+  if (asOfDate && flowEnd && monthlyFlow != null) {
+    const gapDays = Math.abs(new Date(asOfDate).getTime() - new Date(flowEnd).getTime()) / MS_PER_DAY;
+    if (gapDays > 450) {
+      return { reportedRunwayMonths: null, projectedCash: null, cashRemainingMonths: null, projectedAsOf: null };
+    }
+  }
   const reportedRunwayMonths =
     reportedCash !== null && monthlyFlow !== null && monthlyFlow < 0
       ? reportedCash / Math.abs(monthlyFlow)
@@ -198,17 +209,53 @@ function pickOperatingEntries(facts: FinancialsPayload['facts']): FactEntry[] {
   return pickConceptEntries(facts, OP_CANDIDATES);
 }
 
-// latest by end-date, that looks like a quarter or a year (80–370 day span)
-function latestCleanOperating(entries: FactEntry[]): FactEntry | null {
-  const spanDays = (e: FactEntry) =>
-    e.start ? (new Date(e.end).getTime() - new Date(e.start).getTime()) / MS_PER_DAY : 90;
-  const valid = entries
-    .filter((e) => typeof e.val === 'number' && isFinite(e.val))
-    .sort((a, b) => (a.end < b.end ? 1 : a.end > b.end ? -1 : 0));
-  return valid.find((e) => {
-    const d = spanDays(e);
-    return d >= 80 && d <= 370;
-  }) ?? valid[0] ?? null;
+// Trailing-twelve-month operating burn — matches AskEdgar/Nexus methodology.
+// Build-up: TTM = most-recent-FY − prior-year matching stub + current stub.
+// A single quarter's stub is noisy (DCOY Q1 ran 2.4× the TTM rate → we showed
+// 7mo vs Nexus 15). TTM smooths that. Falls back to latest-FY/12, then to
+// stub-normalized (old behavior) only when nothing better exists.
+function ttmMonthlyBurn(entries: FactEntry[]): { monthly: number; end: string } | null {
+  if (!entries.length) return null;
+  const span = (e: FactEntry) =>
+    e.start ? (new Date(e.end).getTime() - new Date(e.start).getTime()) / MS_PER_DAY : 0;
+  const isAnnual = (e: FactEntry) => {
+    const d = span(e);
+    return d >= 300 && d <= 370;
+  };
+  const isStub = (e: FactEntry) => {
+    const d = span(e);
+    return d >= 60 && d < 300; // Q1(90) / Q2(180) / Q3(270) cumulative
+  };
+  const annuals = entries.filter(isAnnual);
+  const stubs = entries.filter(isStub).sort((a, b) => (a.end < b.end ? 1 : a.end > b.end ? -1 : 0));
+
+  // Build-up from the newest stub (TTM ending at the latest quarter).
+  if (stubs.length) {
+    const pivot = stubs[0];
+    // FY covering the fiscal year just completed before the pivot stub.
+    const fy = annuals.find(
+      (a) =>
+        new Date(a.end) <= new Date(pivot.end) &&
+        new Date(pivot.end).getTime() - new Date(a.end).getTime() <= 400 * MS_PER_DAY,
+    );
+    // Prior-year matching stub: same stub length, end ≈ pivot.end minus 1yr.
+    const py = stubs.find((s) => {
+      if (s === pivot) return false;
+      if (Math.abs(span(s) - span(pivot)) > 20) return false;
+      const yearAgo = new Date(pivot.end).getTime() - 365 * MS_PER_DAY;
+      return Math.abs(new Date(s.end).getTime() - yearAgo) <= 50 * MS_PER_DAY;
+    });
+    if (fy && py) {
+      const ttm = fy.val - py.val + pivot.val;
+      return { monthly: ttm / 12, end: pivot.end };
+    }
+  }
+  // Fallback 1: latest annual / 12 (stable full-year).
+  if (annuals.length) return { monthly: annuals[0].val / 12, end: annuals[0].end };
+  // Fallback 2: latest stub normalized by its own span (old behavior).
+  const newest = entries[0];
+  if (newest && span(newest) > 0) return { monthly: monthlyRate(newest), end: newest.end };
+  return null;
 }
 
 function monthlyRate(e: FactEntry): number {
@@ -267,7 +314,7 @@ export async function syncFinancials(
   const cashEntries = pickCashEntries(facts);
   const opEntries = pickOperatingEntries(facts);
   const latestCash = cashEntries.length ? cashEntries[0] : null;
-  const latestOp = latestCleanOperating(opEntries);
+  const ttm = ttmMonthlyBurn(opEntries);
   const seLatest = (() => { const a = pickConceptEntries(facts, SE_CANDIDATES); return a.length ? a[0] : null; })();
   const niAnnuals = annualEntries(pickConceptEntries(facts, NI_CANDIDATES));
   const revAnnuals = annualEntries(pickConceptEntries(facts, REVENUE_CANDIDATES));
@@ -299,13 +346,12 @@ export async function syncFinancials(
       }),
     );
   }
-  if (latestOp) {
-    const mf = monthlyRate(latestOp);
+  if (ttm) {
     writes.push(
       prisma.dilutionFact.upsert({
-        where: { cik_fact_period: { cik, fact: 'MonthlyCashFlow', period: latestOp.end } },
-        create: { cik, fact: 'MonthlyCashFlow', period: latestOp.end, unit: 'USD', val: mf, filed: latestOp.filed ? new Date(latestOp.filed) : null, accn: latestOp.accn ?? null },
-        update: { val: mf, filed: latestOp.filed ? new Date(latestOp.filed) : null, accn: latestOp.accn ?? null },
+        where: { cik_fact_period: { cik, fact: 'MonthlyCashFlow', period: ttm.end } },
+        create: { cik, fact: 'MonthlyCashFlow', period: ttm.end, unit: 'USD', val: ttm.monthly },
+        update: { val: ttm.monthly },
       }),
     );
   }
@@ -322,20 +368,20 @@ export async function syncFinancials(
   for (const e of revAnnuals) persistFact('Revenues', e);
   if (writes.length) await Promise.all(writes);
 
-  return { status: 'success', cash: computeFromValues(latestCash, latestOp) };
+  return { status: 'success', cash: computeFromValues(latestCash, ttm) };
 }
 
-function computeFromValues(latestCash: FactEntry | null, latestOp: FactEntry | null): CashPosition {
+function computeFromValues(latestCash: FactEntry | null, ttm: { monthly: number; end: string } | null): CashPosition {
   const estimatedCash = latestCash ? latestCash.val : null;
-  const monthlyCashFlow = latestOp ? monthlyRate(latestOp) : null;
+  const monthlyCashFlow = ttm ? ttm.monthly : null;
   const asOfDate = latestCash?.end ?? null;
-  const asOfOperatingEnd = latestOp?.end ?? null;
+  const asOfOperatingEnd = ttm?.end ?? null;
   return {
     estimatedCash,
     asOfDate,
     monthlyCashFlow,
     asOfOperatingEnd,
-    ...project(estimatedCash, asOfDate, monthlyCashFlow),
+    ...project(estimatedCash, asOfDate, monthlyCashFlow, asOfOperatingEnd),
   };
 }
 
@@ -356,6 +402,6 @@ export async function computeCashFromDb(cik: string): Promise<CashPosition> {
     asOfDate,
     monthlyCashFlow,
     asOfOperatingEnd,
-    ...project(estimatedCash, asOfDate, monthlyCashFlow),
+    ...project(estimatedCash, asOfDate, monthlyCashFlow, asOfOperatingEnd),
   };
 }

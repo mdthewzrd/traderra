@@ -437,6 +437,10 @@ export async function getScanRows(): Promise<ScanRow[]> {
 
   const rows: ScanRow[] = [];
   for (const c of companies) {
+    // Skip filers with no current ticker — defunct/delisted, not tradeable, so
+    // they're noise in a short-bias screen (would dominate 'lowest runway' with
+    // stale/meaningless projections). ~5% of the synced universe.
+    if (c.tickers.length === 0) continue;
     const cash = cashByCik.get(c.cik) ?? null;
     const flow = flowByCik.get(c.cik) ?? null;
     const proj = project(cash?.val ?? null, cash?.period ?? null, flow?.val ?? null, flow?.period ?? null);

@@ -51,6 +51,7 @@ type Snapshot = {
     accessionNo: string; formType: string; filingDate: string;
     sharesOffered: number | null; pricePerShare: number | null; grossProceeds: number | null;
     offeringType: string; underwriter: string | null;
+    warrantTranches: { shares: number | null; strike: number | null; expiry: string | null; exercisable: string | null; description: string }[];
   }[];
   registrations: {
     accessionNo: string; formType: string; filingDate: string;
@@ -58,6 +59,14 @@ type Snapshot = {
     agent: string | null; securitiesTypes: string[];
   }[];
   insiderDilutiveShares90d: number;
+  inTheMoney: {
+    price: number | null; asOf: string | null; volume: number | null; marketCap: number | null;
+    imminentShares: number; imminentPct: number | null;
+    warrant: { strike: number; itm: boolean; intrinsicPct: number | null } | null;
+    convertible: { strike: number; itm: boolean; intrinsicPct: number | null } | null;
+  } | null;
+  authorizedShares: { authorized: number; outstanding: number; available: number; asOf: string } | null;
+  reverseSplits: { ratio: string; executionDate: string | null; announcementDate: string; accessionNo: string; url: string }[];
 };
 
 const TAG_STYLES: Record<string, string> = {
@@ -275,6 +284,14 @@ export default function DilutionPage() {
                   {snapshot.company?.exchange ? ` · ${snapshot.company.exchange}` : ''}
                   {snapshot.company ? ` · CIK ${snapshot.company.cik}` : ''}
                 </div>
+                {/* Market data (Polygon) — price + market cap + day volume */}
+                {snapshot.inTheMoney?.price != null && (
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                    <span><span className="text-zinc-500">Price</span> <span className="font-semibold text-zinc-200">${snapshot.inTheMoney.price.toFixed(2)}</span></span>
+                    {snapshot.inTheMoney.marketCap != null && <span><span className="text-zinc-500">Mkt cap</span> <span className="font-semibold text-zinc-200">{fmtMoney(snapshot.inTheMoney.marketCap)}</span></span>}
+                    {snapshot.inTheMoney.volume != null && <span><span className="text-zinc-500">Vol</span> <span className="font-semibold text-zinc-200">{fmtNum(snapshot.inTheMoney.volume)}</span></span>}
+                  </div>
+                )}
               </div>
               <div
                 className={`rounded-lg border p-4 ${
@@ -813,7 +830,44 @@ export default function DilutionPage() {
               ) : (
                 <div className="mt-2 text-sm text-zinc-500">No XBRL share data.</div>
               )}
+              {/* Authorized share headroom — XBRL authorized − outstanding. The
+                  core 'how much can they print without a shareholder vote' number. */}
+              {snapshot.authorizedShares && (
+                <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-amber-400">Dilution headroom</span>
+                    <span className="text-[11px] text-zinc-500">authorized − outstanding (XBRL, as of {snapshot.authorizedShares.asOf})</span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-baseline gap-x-5 gap-y-0.5 text-sm">
+                    <span><span className="text-zinc-500">Authorized</span> <span className="font-semibold text-zinc-200">{fmtNum(snapshot.authorizedShares.authorized)}</span></span>
+                    <span><span className="text-zinc-500">Outstanding</span> <span className="font-semibold text-zinc-200">{fmtNum(snapshot.authorizedShares.outstanding)}</span></span>
+                    <span><span className="text-zinc-500">Available</span> <span className="font-bold text-amber-300">{fmtNum(snapshot.authorizedShares.available)}</span></span>
+                    <span className="text-[11px] text-zinc-500">{(snapshot.authorizedShares.available / snapshot.authorizedShares.authorized * 100).toFixed(0)}% of authorized unissued</span>
+                  </div>
+                </div>
+              )}
             </div>
+
+            {/* Reverse-split history — high-value short-bias signal (8-K Item 3.03) */}
+            {snapshot.reverseSplits.length > 0 && (
+              <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-4">
+                <div className="flex items-center gap-2 text-red-400">
+                  <AlertTriangle className="h-4 w-4" />
+                  <span className="text-xs font-semibold uppercase tracking-wide">Reverse splits</span>
+                  <span className="text-[10px] text-zinc-500">8-K Item 3.03 · classic dilution/avoidance precursor</span>
+                </div>
+                <div className="mt-2 space-y-1.5">
+                  {snapshot.reverseSplits.map((s, i) => (
+                    <div key={i} className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5 text-sm">
+                      <span className="text-lg font-bold text-red-300">{s.ratio}</span>
+                      {s.executionDate && <span><span className="text-zinc-500">effective</span> <span className="font-medium text-zinc-200">{s.executionDate}</span></span>}
+                      <span><span className="text-zinc-500">filed</span> <span className="text-zinc-300">{s.announcementDate}</span></span>
+                      <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-xs text-cyan-400 hover:underline">8-K ↗</a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Insider transactions (Form 4) */}
             {snapshot.form4Txns.length > 0 && (

@@ -130,6 +130,16 @@ export const REVENUE_CANDIDATES = [
   'SalesRevenueNet',
 ];
 
+// Authorized share capital — the ceiling for future dilution before a
+// shareholder vote is required. sharesAvailable = authorized − outstanding is
+// the core 'how much can they print' number. CommonStockSharesAuthorized is the
+// dominant us-gaap tag; some filers use the dei AuthorizedShares element.
+export const AUTHORIZED_CANDIDATES = [
+  'CommonStockSharesAuthorized',
+  'AuthorizedShares',
+  'OtherStockholdersEquityInformation', // rare fallback
+];
+
 // Annual-duration entries (≈330–370 day span) for multi-year rules (2-of-3yr net
 // income, revenue). pickConceptEntries already sorts newest-end first.
 function annualEntries(entries: FactEntry[]): FactEntry[] {
@@ -351,6 +361,19 @@ export async function syncFinancials(
   const seLatest = (() => { const a = pickConceptEntries(facts, SE_CANDIDATES); return a.length ? a[0] : null; })();
   const niAnnuals = annualEntries(pickConceptEntries(facts, NI_CANDIDATES));
   const revAnnuals = annualEntries(pickConceptEntries(facts, REVENUE_CANDIDATES));
+  // Authorized shares live under units.shares (not USD like the financials).
+  const authLatest = (() => {
+    if (!facts) return null;
+    const usgaap = facts['us-gaap'];
+    if (!usgaap) return null;
+    for (const c of AUTHORIZED_CANDIDATES) {
+      const arr = usgaap[c]?.units?.shares;
+      if (!Array.isArray(arr) || !arr.length) continue;
+      const sorted = arr.filter((e) => typeof e.val === 'number' && isFinite(e.val)).sort((a, b) => (a.end < b.end ? 1 : a.end > b.end ? -1 : 0));
+      if (sorted.length) return sorted[0];
+    }
+    return null;
+  })();
 
   // Ensure company row
   await prisma.dilutionCompany.upsert({
@@ -365,7 +388,7 @@ export async function syncFinancials(
   // newest-period, so stale wrong rows would shadow the corrected value.
   if (options?.force) {
     await prisma.dilutionFact.deleteMany({
-      where: { cik, fact: { in: ['CashAndCashEquivalentsAtCarryingValue', 'MonthlyCashFlow', 'StockholdersEquity', 'NetIncomeLoss', 'Revenues'] } },
+      where: { cik, fact: { in: ['CashAndCashEquivalentsAtCarryingValue', 'MonthlyCashFlow', 'StockholdersEquity', 'NetIncomeLoss', 'Revenues', 'AuthorizedShares'] } },
     });
   }
 
@@ -397,6 +420,7 @@ export async function syncFinancials(
     }),
   );
   if (seLatest) persistFact('StockholdersEquity', seLatest);
+  if (authLatest) persistFact('AuthorizedShares', authLatest);
   for (const e of niAnnuals) persistFact('NetIncomeLoss', e);
   for (const e of revAnnuals) persistFact('Revenues', e);
   if (writes.length) await Promise.all(writes);

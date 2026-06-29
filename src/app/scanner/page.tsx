@@ -531,7 +531,7 @@ function barETMinutes(b: any): number | null {
 }
 
 // ─── MiniChart with zoom & drag ─────────────────────────
-export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset = 0, entryMarker, exitMarker, centerOnDate, legMarkers, exitEpoch, klParams, chartDays }: {
+export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset = 0, entryMarker, exitMarker, centerOnDate, legMarkers, exitEpoch, klParams, chartDays, stackDays }: {
   symbol: string
   tf: Timeframe
   date?: string
@@ -546,6 +546,7 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
   exitEpoch?: number
   klParams?: KeyLevelsParams
   chartDays?: number
+  stackDays?: number   // stacked: show N trading days centered on D0 (e.g. 3 = D-1, D0, D+1)
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [allBars, setAllBars] = useState<any[]>([])
@@ -648,6 +649,32 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
         }
       }
       return allBars.slice(sliceStart, sliceEnd)
+    }
+
+    // STACK MODE: N trading days centered on D0 (D-1, D0, D+1)
+    if (stackDays) {
+      const dates = allBars.map(barETDate)
+      const uniq: string[] = []
+      for (const d of dates) if (uniq[uniq.length - 1] !== d) uniq.push(d)
+      let d0Idx = allBars.length - 1
+      if (date) {
+        for (let i = allBars.length - 1; i >= 0; i--) {
+          if (barETDate(allBars[i]) === date) { d0Idx = i; break }
+        }
+      }
+      const d0Uniq = uniq.indexOf(dates[d0Idx])
+      if (d0Uniq >= 0) {
+        const half = Math.floor(stackDays / 2)
+        const startUniq = Math.max(0, d0Uniq - half)
+        const endUniq = Math.min(uniq.length - 1, d0Uniq + (stackDays - 1 - half))
+        let startIdx = allBars.length, endIdx = 0
+        for (let i = 0; i < allBars.length; i++) {
+          const d = dates[i]
+          if (d === uniq[startUniq] && startIdx === allBars.length) startIdx = i
+          if (d === uniq[endUniq]) endIdx = i + 1
+        }
+        return allBars.slice(startIdx, endIdx)
+      }
     }
 
     // SCAN MODE: default window around D0
@@ -876,8 +903,8 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
       }
     }
 
-    // ── 7:00 AM ET vertical marker (intraday) ──
-    if (tf !== 'D' && bars.length > 1) {
+    // ── 7:00 AM ET vertical marker (5m only — on 15m/1H bars the tick is arbitrary; stacked view stays clean) ──
+    if (tf === '5' && bars.length > 1) {
       const getBarMinET7 = (b: any): number | null => barETMinutes(b)
       const TARGET7 = 7 * 60 // 7:00 AM ET (DST-aware via barETMinutes)
       const drawn7 = new Set<string>()
@@ -2736,7 +2763,7 @@ export default function ScanDashboardPage() {
               <ScanMiniChart symbol={sig!.ticker} tf="D" date={sig!.date} height={360} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
               <ScanMiniChart symbol={sig!.ticker} tf="60" date={sig!.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
               <ScanMiniChart symbol={sig!.ticker} tf="15" date={sig!.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
-              <ScanMiniChart symbol={sig!.ticker} tf="5" date={sig!.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
+              <ScanMiniChart symbol={sig!.ticker} tf="5" date={sig!.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} stackDays={3} />
             </div>
           )}
 

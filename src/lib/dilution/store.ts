@@ -14,6 +14,7 @@ import { DILUTIVE_TXN_CODES } from '@/lib/sec/form4';
 import { computeCompliance, type ComplianceResult } from '@/lib/dilution/compliance';
 import { getWarrantNotes, type ParsedWarrantNotes } from '@/lib/sec/warrant-notes';
 import { getPrograms, type CompanyProgram, type ProgramType } from '@/lib/sec/filings8k';
+import { getReverseSplits, type ReverseSplit } from '@/lib/sec/reverse-splits';
 
 /**
  * Classify recent filings for a company and persist tags. Idempotent — safe to
@@ -54,7 +55,7 @@ const POLY_BASE = 'https://api.polygon.io';
 
 /** Latest price (last close) for a ticker. Returns null on any failure
  *  (delisted, illiquid, rate-limited) so the page degrades gracefully. */
-async function fetchLatestPrice(ticker: string): Promise<{ price: number; asOf: string } | null> {
+async function fetchLatestPrice(ticker: string): Promise<{ price: number; asOf: string; volume: number | null } | null> {
   try {
     const r = await fetch(
       `${POLY_BASE}/v2/snapshot/locale/us/markets/stocks/tickers/${encodeURIComponent(ticker)}?apiKey=${POLY_KEY}`,
@@ -63,15 +64,41 @@ async function fetchLatestPrice(ticker: string): Promise<{ price: number; asOf: 
     if (!r.ok) return null;
     const j = (await r.json()) as {
       status?: string;
-      ticker?: { day?: { c?: number }; last?: { price?: number } };
+      ticker?: { day?: { c?: number; v?: number }; last?: { price?: number } };
     };
     if (j.status !== 'OK' || !j.ticker) return null;
     const price = j.ticker.last?.price ?? j.ticker.day?.c ?? null;
+    const volume = j.ticker.day?.v ?? null;
     if (price == null || price <= 0) return null;
-    return { price, asOf: new Date().toISOString().slice(0, 10) };
+    return { price, asOf: new Date().toISOString().slice(0, 10), volume: typeof volume === 'number' ? volume : null };
   } catch {
     return null;
   }
+}
+
+/** Market cap via Polygon ticker-details (separate endpoint). Returns null on
+ *  any failure so a missing cap never blocks the price display. */
+async function fetchMarketCap(ticker: string): Promise<number | null> {
+  try {
+    const r = await fetch(
+      `${POLY_BASE}/v3/reference/tickers/${encodeURIComponent(ticker)}?apiKey=${POLY_KEY}`,
+      { headers: { Accept: 'application/json' }, next: { revalidate: 0 } },
+    );
+    if (!r.ok) return null;
+    const j = (await r.json()) as { results?: { market_cap?: number } };
+    const mc = j.results?.market_cap;
+    return typeof mc === 'number' && mc > 0 ? mc : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Combined market data: price + volume (snapshot) + marketCap (details),
+ *  fetched in parallel. */
+async function fetchMarketData(ticker: string): Promise<{ price: number; asOf: string; volume: number | null; marketCap: number | null } | null> {
+  const [px, mc] = await Promise.all([fetchLatestPrice(ticker), fetchMarketCap(ticker)]);
+  if (!px) return null;
+  return { price: px.price, asOf: px.asOf, volume: px.volume, marketCap: mc };
 }
 
 export interface InTheMoneyInstrument {
@@ -83,6 +110,8 @@ export interface InTheMoneyInstrument {
 export interface InTheMoney {
   price: number | null; // null if price fetch failed
   asOf: string | null;
+  volume: number | null; // day volume from Polygon snapshot
+  marketCap: number | null; // from Polygon ticker-details
   warrant: InTheMoneyInstrument | null; // null if no instrument or no strike
   convertible: InTheMoneyInstrument | null;
   imminentShares: number; // ITM warrant + convert shares — dilutable right now
@@ -100,12 +129,18 @@ async function computeInTheMoney(
   ticker: string | undefined,
   sharesOutstanding: number | null,
 ): Promise<InTheMoney | null> {
-  if (!overhang || (!overhang.warrant && !overhang.convertible)) return null;
+  // Always fetch market data when we have a ticker — price/marketCap/volume
+  // surface in the header regardless of whether overhang/ITM scoring applies.
   if (!ticker) return null;
-  const px = await fetchLatestPrice(ticker);
-  if (!px) {
-    return { price: null, asOf: null, warrant: null, convertible: null, imminentShares: 0, imminentPct: null };
+  const mkt = await fetchMarketData(ticker);
+  if (!mkt) {
+    return { price: null, asOf: null, volume: null, marketCap: null, warrant: null, convertible: null, imminentShares: 0, imminentPct: null };
   }
+  // No overhang → no ITM scoring, but still return the market data.
+  if (!overhang || (!overhang.warrant && !overhang.convertible)) {
+    return { price: mkt.price, asOf: mkt.asOf, volume: mkt.volume, marketCap: mkt.marketCap, warrant: null, convertible: null, imminentShares: 0, imminentPct: null };
+  }
+  const px = mkt;
   const score = (inst: { shares: number; strike: number | null } | null): InTheMoneyInstrument | null => {
     if (!inst || inst.strike == null || inst.strike <= 0) return null;
     return {
@@ -121,7 +156,7 @@ async function computeInTheMoney(
     (convertible?.itm ? overhang.convertible!.shares : 0);
   const imminentPct =
     sharesOutstanding && sharesOutstanding > 0 ? (imminentShares / sharesOutstanding) * 100 : null;
-  return { price: px.price, asOf: px.asOf, warrant, convertible, imminentShares, imminentPct };
+  return { price: px.price, asOf: px.asOf, volume: px.volume, marketCap: px.marketCap, warrant, convertible, imminentShares, imminentPct };
 }
 
 export interface DilutionSnapshot {
@@ -199,12 +234,18 @@ export interface DilutionSnapshot {
   programs: CompanyProgram[];
   // Type filter helper exposed for UI grouping.
   programTypes: ProgramType[];
+  // Authorized share capital (XBRL) + headroom for future dilution. The core
+  // 'how much can they print without a vote' number.
+  authorizedShares: { authorized: number; outstanding: number; available: number; asOf: string } | null;
+  // Reverse-split history (8-K Item 3.03 + proxy). High-value short-bias signal —
+  // reverse splits precede/accompany toxic financing.
+  reverseSplits: ReverseSplit[];
   fromCache: boolean; // true = served from DB only (no SEC call this request)
 }
 
 /** Build the dilution snapshot entirely from the DB (no SEC call). */
 export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
-  const [company, factRows, filings, form4Rows, offeringFilings, registrationFilings, cash] = await Promise.all([
+  const [company, factRows, filings, form4Rows, offeringFilings, registrationFilings, cash, authorizedFactRow, reverseSplits] = await Promise.all([
     prisma.dilutionCompany.findUnique({ where: { cik } }),
     prisma.dilutionFact.findMany({
       where: { cik, fact: 'EntityCommonStockSharesOutstanding' },
@@ -234,10 +275,19 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
       select: { accessionNo: true, formType: true, filingDate: true, primaryDesc: true, rawPayload: true },
     }),
     computeCashFromDb(cik),
+    prisma.dilutionFact.findFirst({ where: { cik, fact: 'AuthorizedShares' }, orderBy: { period: 'desc' } }),
+    getReverseSplits(cik),
   ]);
 
   const sharesHistory = factRows.map((r) => ({ period: r.period, outstanding: r.val }));
   const sharesLatestOutstanding = sharesHistory[0]?.outstanding ?? null;
+  // Authorized headroom: XBRL authorized − latest outstanding. Null when the
+  // filer doesn't tag authorized shares (common for smaller filers).
+  const authorizedFact = authorizedFactRow;
+  const authorizedShares =
+    authorizedFact && sharesLatestOutstanding && sharesLatestOutstanding > 0
+      ? { authorized: authorizedFact.val, outstanding: sharesLatestOutstanding, available: authorizedFact.val - sharesLatestOutstanding, asOf: authorizedFact.period }
+      : null;
   const overhang = await computeOverhangFromDb(cik, sharesLatestOutstanding);
   const inTheMoney = await computeInTheMoney(overhang, company?.tickers?.[0], sharesLatestOutstanding);
   const compliance = await computeCompliance(cik, company?.tickers?.[0], company?.exchange ?? null);
@@ -360,6 +410,8 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
     warrantNotes,
     programs,
     programTypes,
+    authorizedShares,
+    reverseSplits,
     fromCache: true,
   };
 }

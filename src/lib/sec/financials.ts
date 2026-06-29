@@ -148,6 +148,31 @@ function annualEntries(entries: FactEntry[]): FactEntry[] {
 // 2018). Picking by recency auto-falls-back to a narrower-but-current concept.
 // On a tie (same latest end-date) the FIRST concept in priority order wins (via
 // strict >), so the broadest preference is preserved when it's current.
+// Foreign filers (20-F) often tag the same concept at two unit scales: a real
+// value AND a ×1000 mis-scaled copy (native currency in thousands under a USD
+// unit). Real entries cluster near the MEDIAN magnitude; a ×1000 entry sits
+// >100× above it. Divide those down so the series is internally consistent.
+// Handles same-date sibling corruption (UPC 2024: $29.5M + $29.5B) AND lone
+// corruption (UPC 2025: only the ×1000 copy exists). No effect on clean series.
+function normalizeScale(entries: FactEntry[]): FactEntry[] {
+  if (entries.length < 2) return entries;
+  const out = entries.map((e) => ({ ...e }));
+  for (let pass = 0; pass < 3; pass++) {
+    const vals = out.map((e) => Math.abs(e.val)).sort((a, b) => a - b);
+    const median = vals[Math.floor(vals.length / 2)];
+    if (median <= 0) break;
+    let changed = false;
+    for (const e of out) {
+      if (Math.abs(e.val) > median * 100) {
+        e.val = e.val / 1000;
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+  return out;
+}
+
 function pickConceptEntries(facts: FinancialsPayload['facts'], concepts: string[]): FactEntry[] {
   if (!facts) return [];
   const usgaap = facts['us-gaap'];
@@ -157,9 +182,11 @@ function pickConceptEntries(facts: FinancialsPayload['facts'], concepts: string[
   for (const c of concepts) {
     const arr = usgaap[c]?.units?.USD;
     if (!Array.isArray(arr) || !arr.length) continue;
-    const sorted = arr
-      .filter((e) => typeof e.val === 'number' && isFinite(e.val))
-      .sort((a, b) => (a.end < b.end ? 1 : a.end > b.end ? -1 : 0));
+    const sorted = normalizeScale(
+      arr
+        .filter((e) => typeof e.val === 'number' && isFinite(e.val))
+        .sort((a, b) => (a.end < b.end ? 1 : a.end > b.end ? -1 : 0)),
+    );
     if (!sorted.length) continue;
     const latestEnd = sorted[0].end;
     if (latestEnd > bestLatestEnd) {
@@ -179,9 +206,11 @@ function pickCashEntries(facts: FinancialsPayload['facts']): FactEntry[] {
   for (const c of CASH_CANDIDATES) {
     const arr = usgaap[c]?.units?.USD;
     if (!Array.isArray(arr) || !arr.length) continue;
-    const sorted = arr
-      .filter((e) => typeof e.val === 'number' && isFinite(e.val))
-      .sort((a, b) => (a.end < b.end ? 1 : a.end > b.end ? -1 : 0));
+    const sorted = normalizeScale(
+      arr
+        .filter((e) => typeof e.val === 'number' && isFinite(e.val))
+        .sort((a, b) => (a.end < b.end ? 1 : a.end > b.end ? -1 : 0)),
+    );
     if (!sorted.length) continue;
     per.push({ concept: c, entries: sorted, latestEnd: sorted[0].end, latestVal: sorted[0].val });
   }
@@ -229,8 +258,12 @@ function ttmMonthlyBurn(entries: FactEntry[]): { monthly: number; end: string } 
   const annuals = entries.filter(isAnnual);
   const stubs = entries.filter(isStub).sort((a, b) => (a.end < b.end ? 1 : a.end > b.end ? -1 : 0));
 
-  // Build-up from the newest stub (TTM ending at the latest quarter).
-  if (stubs.length) {
+  // Build-up only when a stub is at least as current as the latest annual —
+  // i.e. a fresh quarter past the last 10-K/20-F. If the annual is newer (an
+  // annual report was just filed), annual/12 below is the more current figure;
+  // building from an older stub would regress the as-of date (UPC: newest stub
+  // 2024-03 vs newest annual 2025-09 → annual must win).
+  if (stubs.length && (!annuals.length || stubs[0].end >= annuals[0].end)) {
     const pivot = stubs[0];
     // FY covering the fiscal year just completed before the pivot stub.
     const fy = annuals.find(

@@ -151,7 +151,7 @@ export async function syncReverseSplits(cik: string): Promise<{ parsed: number; 
   const since = new Date(Date.now() - 2 * 365 * 86_400_000); // 2y window
   const filings = await prisma.dilutionFiling.findMany({
     where: { cik, formType: { in: SPLIT_FORMS }, filingDate: { gte: since } },
-    select: { accessionNo: true, formType: true, filingDate: true, primaryDoc: true, items: true, rawPayload: true },
+    select: { accessionNo: true, formType: true, filingDate: true, primaryDoc: true, items: true, rawPayload: true, dilutionTags: true },
     orderBy: { filingDate: 'desc' },
     take: 40,
   });
@@ -199,7 +199,15 @@ export async function syncReverseSplits(cik: string): Promise<{ parsed: number; 
       };
       await prisma.dilutionFiling.update({
         where: { accessionNo: f.accessionNo },
-        data: { rawPayload: payload },
+        data: {
+          rawPayload: payload,
+          // Promote the detected split to the 'reverse-split' tag. classify.ts
+          // only tags 8-Ks at ingest; proxy/10-K detections land here via the
+          // body scanner, so this is the authoritative tagger for those forms.
+          ...(split
+            ? { dilutionTags: [...new Set([...(f.dilutionTags ?? []), 'reverse-split'])] }
+            : {}),
+        },
       });
       if (split) found++;
     } catch {

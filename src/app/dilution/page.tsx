@@ -242,25 +242,31 @@ function ProgramTabs({ snapshot }: { snapshot: any }) {
   ) : null;
   const ShelfBody = () => shelf.length ? (
     <div className="divide-y divide-zinc-800/60">{shelf.map((r: any) => {
-      // Baby shelf = S-3 filed by a NON-WKSI (not automatic-shelf). Non-baby
-      // WKSI shelves use S-3ASR (automatic-shelf). Baby shelves are capped at
-      // 1/3 of public float over 12 months — materially limits dilution speed.
-      const isBaby = /^S-3$/.test(r.formType) && r.shelfType !== 'automatic-shelf';
+      // Baby shelf = non-WKSI company filing a standard S-3 (not S-3ASR).
+      // WKSI = worldwide public float ≥ $700M. S-3ASR is the automatic-shelf
+      // form (definitively WKSI). A plain S-3 by a small company is a baby
+      // shelf: capped at 1/3 of public float in primary offerings / 12mo.
+      const px2 = snapshot?.inTheMoney?.price ?? null;
+      const floatSharesVal = snapshot?.publicFloat?.value
+        ?? (snapshot?.computedFloat?.shares != null && px2 != null ? snapshot.computedFloat.shares * px2 : null);
+      const isWksi = floatSharesVal != null && floatSharesVal >= 700e6;
+      const isBaby = /^S-3$/.test(r.formType) && !isWksi;
       const sh = sharesFor(r.aggregateOffering);
-      const floatShares = snapshot?.computedFloat?.shares ?? snapshot?.publicFloat?.shares ?? null;
-      const babyPct = isBaby && floatShares ? Math.min(100, ((floatShares / 3) / floatShares) * 100) : null;
+      // Baby-shelf cap: primary offerings ≤ 1/3 of float value over 12mo.
+      const babyCap = isBaby && floatSharesVal != null ? floatSharesVal / 3 : null;
       return (
       <div key={r.accessionNo} className="py-1.5">
         <div className="flex flex-wrap items-baseline gap-x-2 text-xs">
           <span className="font-medium text-zinc-200">${(r.aggregateOffering / M).toFixed(0)}M</span>
           <span className="text-zinc-600">filed {r.filingDate}</span>
-          <span className="rounded bg-zinc-800 px-1 text-[9px] text-zinc-500">{r.shelfType === 'automatic-shelf' ? 'S-3ASR' : r.formType}</span>
-          {isBaby && <span className="rounded bg-amber-500/20 px-1 text-[9px] font-semibold uppercase text-amber-300" title="Non-WKSI shelf: limited to 1/3 of public float in any 12-month period">baby shelf</span>}
+          <span className="rounded bg-zinc-800 px-1 text-[9px] text-zinc-500">{r.formType}</span>
+          {isWksi && <span className="rounded bg-emerald-500/15 px-1 text-[9px] font-semibold uppercase text-emerald-300" title="Well-known seasoned issuer (float ≥ $700M): no baby-shelf limit">WKSI</span>}
+          {isBaby && <span className="rounded bg-amber-500/20 px-1 text-[9px] font-semibold uppercase text-amber-300" title="Non-WKSI S-3: limited to 1/3 of public float in primary offerings / 12-month period">baby shelf</span>}
           {r.salesChannel === 'atm' && <span className="rounded bg-red-500/20 px-1 text-[9px] font-semibold uppercase text-red-400">ATM</span>}
           {sh != null && <span className="text-zinc-500">· {(sh / M).toFixed(1)}M sh avail</span>}
         </div>
         {r.agent && <div className="text-[11px] text-zinc-500">agent {r.agent}</div>}
-        {isBaby && babyPct != null && <div className="text-[10px] text-amber-400/70">Baby-shelf cap: ≤ 1/3 float ({babyPct.toFixed(0)}%) / 12mo</div>}
+        {isBaby && babyCap != null && <div className="text-[10px] text-amber-400/70">Baby-shelf cap: ≤ ${fmtMoney(babyCap)} primary offerings / 12mo</div>}
       </div>
       );
     })}</div>

@@ -52,7 +52,7 @@ export async function POST(req: Request) {
     const [form4Res, offeringsRes, registrationsRes, securitiesRes, warrantNotesRes, programsRes, splitsRes, eftsRes, drawsRes, floatRes] = await Promise.all([
       syncForm4Txns(entry.cik),
       syncOfferings(entry.cik),
-      syncRegistrations(entry.cik),
+      syncRegistrations(entry.cik, { force: body?.force === true }),
       syncSecurities(ticker),
       syncWarrantNotes(entry.cik, { force: body?.force === true }),
       syncMaterialAgreements(entry.cik, { force: body?.force === true }),

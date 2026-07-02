@@ -292,15 +292,15 @@ export async function getWarrantNotes(cik: string): Promise<ParsedWarrantNotes |
     if (!wn) continue;
     if (!source) source = wn.source;
     if (wn.goingConcern?.present) gc = wn.goingConcern;
-    for (const w of wn.warrants) {
+    for (const w of wn.warrants ?? []) {
       const k = `${w.shares}|${w.exercisePrice}`;
       if (!seenW.has(k)) seenW.set(k, w);
     }
-    for (const c of wn.convertibles) {
+    for (const c of wn.convertibles ?? []) {
       const k = `${c.principal}|${c.conversionPrice}`;
       if (!seenC.has(k)) seenC.set(k, c);
     }
-    for (const e of wn.equityLines) {
+    for (const e of wn.equityLines ?? []) {
       const k = `${e.counterparty}|${e.maxCommitment}`;
       if (!seenE.has(k)) seenE.set(k, e);
     }

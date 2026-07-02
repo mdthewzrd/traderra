@@ -3,9 +3,17 @@ import { NextRequest, NextResponse } from 'next/server'
 /**
  * GET /api/chart-data/bars — Proxy to Polygon.io for OHLCV data.
  * Moves API key server-side so it's not exposed in client JS.
+ * In-memory cache: historical bars never change (past trading days are
+ * immutable), so we cache aggressively. "Live" data (to >= today) gets a
+ * short TTL; fully-historical ranges cache for an hour.
  */
 const POLY_KEY = process.env.POLYGON_API_KEY || 'd95jSGsXx6ZoqYG1_GXaqnmP6y64ZO_r'
 const POLY_BASE = 'https://api.polygon.io'
+
+// Module-level cache (persists across requests in pm2's long-running process)
+const barCache = new Map<string, { data: any; ts: number }>()
+const LIVE_TTL = 2 * 60 * 1000      // 2 min for data including today
+const HIST_TTL = 60 * 60 * 1000     // 1 hr for fully-historical ranges
 
 function tfToPolygon(tf: string): { multiplier: number; timespan: string } {
   const map: Record<string, { multiplier: number; timespan: string }> = {
@@ -40,6 +48,16 @@ export async function GET(request: NextRequest) {
   // Default date range if not specified
   const toDate = to || new Date().toISOString().split('T')[0]
   const fromDate = from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+
+  // Cache key includes everything that affects the response
+  const cacheKey = `${symbol}|${tf}|${fromDate}|${toDate}`
+  const today = new Date().toISOString().slice(0, 10)
+  const isLive = toDate >= today
+  const ttl = isLive ? LIVE_TTL : HIST_TTL
+  const hit = barCache.get(cacheKey)
+  if (hit && Date.now() - hit.ts < ttl) {
+    return NextResponse.json(hit.data)
+  }
 
   try {
     // Paginated fetch — Polygon caps each response (~880 bars on this tier) and
@@ -78,7 +96,15 @@ export async function GET(request: NextRequest) {
       n: r.n,
     }))
 
-    return NextResponse.json({ bars, symbol, tf, pages })
+    const payload = { bars, symbol, tf, pages }
+    // store in cache
+    barCache.set(cacheKey, { data: payload, ts: Date.now() })
+    // prevent unbounded growth — evict oldest entries past 400 keys
+    if (barCache.size > 400) {
+      const oldest = [...barCache.entries()].sort((a, b) => a[1].ts - b[1].ts)[0]
+      if (oldest) barCache.delete(oldest[0])
+    }
+    return NextResponse.json(payload)
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }

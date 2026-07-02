@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getAuthUserId } from '@/lib/auth-helpers'
 
 const DIRECTIONS = ['short', 'long']
-const ALLOWED = ['direction', 'routeStart', 'routeEnd', 'grade', 'trendStage', 'entryPrice', 'exitPrice', 'qty', 'sections', 'notes', 'date']
+const ALLOWED = ['direction', 'setup', 'routeStart', 'routeEnd', 'grade', 'trendStage', 'entryPrice', 'exitPrice', 'qty', 'sections', 'notes', 'date']
 
 // GET — list trades for this user. Optional ?setupRowId= to filter to one setup.
 export async function GET(request: NextRequest) {

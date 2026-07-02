@@ -296,6 +296,10 @@ export async function getPrograms(cik: string): Promise<CompanyProgram[]> {
       const pm = pricing.match(/\$([\d,.]+)/);
       const v = pm ? parseFloat(pm[1].replace(/,/g, '')) : null;
       if (v != null && (v > 1000 || v < 0.01)) pricing = null;
+      // Null pricing that is actually a book-value / tangible-book-value FORMULA
+      // reference (common in equity-line conversion clauses) — not a fixed
+      // per-share strike. Catches SOUN-style '$71.7/$41.9 per share'.
+      if (pricing && /book value|tangible|net asset/i.test(d.description)) pricing = null;
     }
     all.push({
       programType: d.programType,

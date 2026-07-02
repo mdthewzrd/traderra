@@ -860,7 +860,7 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
           const dd = String(d.getDate()).padStart(2, '0')
           const mm = String(d.getMonth() + 1).padStart(2, '0')
           const yyyy = d.getFullYear()
-          dateStr = `${dd}/${mm}/${yyyy}`
+          dateStr = `${mm}/${dd}/${yyyy}`
           const hh = String(d.getHours()).padStart(2, '0')
           const min = String(d.getMinutes()).padStart(2, '0')
           timeStr = `${hh}:${min}`
@@ -974,27 +974,33 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
 
     // ── Indicators (bands, VWAP, prev close, legend) ──
     if (tf !== 'D' && bars.length > 89) {
-      // Helper: compute EMA array
+      // Compute indicators over FULL history (allBars) so values are STABLE and
+      // don't repaint when the visible window changes (pan/zoom/nav buttons).
+      // bars[] is allBars.slice(visStart, visStart+len) — same element refs, so
+      // indexOf finds the offset. Result is sliced back to the visible window.
+      const visStart = Math.max(0, allBars.indexOf(bars[0]))
+      const sliceVis = (full: number[]) => full.slice(visStart, visStart + bars.length)
+      // Helper: compute EMA array over allBars, sliced to visible window
       const calcEMA = (period: number): number[] => {
         const k = 2 / (period + 1)
-        const vals: number[] = [bars[0].close]
-        for (let i = 1; i < bars.length; i++) {
-          vals.push(bars[i].close * k + vals[i - 1] * (1 - k))
+        const vals: number[] = [allBars[0].close]
+        for (let i = 1; i < allBars.length; i++) {
+          vals.push(allBars[i].close * k + vals[i - 1] * (1 - k))
         }
-        return vals
+        return sliceVis(vals)
       }
-      // Helper: compute ATR array (using EMA smoothing like main chart)
+      // Helper: compute ATR array over allBars, sliced to visible window
       const calcATR = (period: number): number[] => {
-        const tr: number[] = [bars[0].high - bars[0].low]
-        for (let i = 1; i < bars.length; i++) {
-          tr.push(Math.max(bars[i].high - bars[i].low, Math.abs(bars[i].high - bars[i - 1].close), Math.abs(bars[i].low - bars[i - 1].close)))
+        const tr: number[] = [allBars[0].high - allBars[0].low]
+        for (let i = 1; i < allBars.length; i++) {
+          tr.push(Math.max(allBars[i].high - allBars[i].low, Math.abs(allBars[i].high - allBars[i - 1].close), Math.abs(allBars[i].low - allBars[i - 1].close)))
         }
         const k = 2 / (period + 1)
         const vals: number[] = [tr[0]]
         for (let i = 1; i < tr.length; i++) {
           vals.push(tr[i] * k + vals[i - 1] * (1 - k))
         }
-        return vals
+        return sliceVis(vals)
       }
 
       // Draw band helper
@@ -1065,7 +1071,7 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
 
       // ── 9/20 EMA Band ──
       if (settings.showEma9_20) {
-        drawEMABand(ema9, ema20, 'rgba(34,197,94,.15)', 'rgba(239,68,68,.15)', 'rgba(34,197,94,.50)', 'rgba(239,68,68,.50)')
+        drawEMABand(ema9, ema20, 'rgba(34,197,94,.26)', 'rgba(239,68,68,.26)', 'rgba(34,197,94,.60)', 'rgba(239,68,68,.60)')
       }
 
       // ── 9/20 Deviation Band ──

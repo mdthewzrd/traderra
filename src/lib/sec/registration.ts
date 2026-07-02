@@ -92,10 +92,13 @@ export function parseRegistrationHtml(html: string, formType: string): ParsedReg
     }
   }
 
-  // Shelf type — form-driven (authoritative) + keyword confirmation.
+  // Shelf type — FORM-DRIVEN (authoritative). Only S-3ASR is an automatic
+  // shelf; a plain S-3 must NOT be promoted via cover keywords (boilerplate
+  // cross-references like 'pursuant to an automatic shelf registration'
+  // otherwise mis-tag non-WKSI shelves as WKSI, breaking baby-shelf detection).
   const f = formType.toUpperCase();
   let shelfType: ParsedRegistration['shelfType'] = 'unknown';
-  if (f === 'S-3ASR' || /automatic shelf|rule 462\(e\)/i.test(cover)) shelfType = 'automatic-shelf';
+  if (f === 'S-3ASR') shelfType = 'automatic-shelf';
   else if (f.startsWith('F-3') || f.startsWith('F-1')) shelfType = 'foreign';
   else if (f.startsWith('S-3') || f.startsWith('S-1')) shelfType = 'shelf';
 
@@ -139,8 +142,9 @@ export interface SyncRegistrationsResult {
   error?: string;
 }
 
-/** Query recent shelf filings, fetch + parse each, store detail on rawPayload. */
-export async function syncRegistrations(cik: string): Promise<SyncRegistrationsResult> {
+/** Query recent shelf filings, fetch + parse each, store detail on rawPayload.
+ *  Idempotent per filing unless force=true (re-parse to pick up parser fixes). */
+export async function syncRegistrations(cik: string, opts: { force?: boolean } = {}): Promise<SyncRegistrationsResult> {
   try {
     const filings = await prisma.dilutionFiling.findMany({
       where: { cik, formType: { in: REGISTRATION_FORMS } },
@@ -154,7 +158,7 @@ export async function syncRegistrations(cik: string): Promise<SyncRegistrationsR
     for (const f of filings) {
       if (!f.primaryDoc) continue;
       const existing = (f.rawPayload ?? null) as { registrationParsed?: boolean } | null;
-      if (existing?.registrationParsed) {
+      if (existing?.registrationParsed && !opts.force) {
         withDetail++;
         continue; // idempotent
       }

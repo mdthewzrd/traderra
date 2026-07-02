@@ -130,6 +130,7 @@ model CorpusTrade {
   setupRow   CorpusRow @relation(fields: [setupRowId], references: [id], onDelete: Cascade)
 
   direction  String   // 'short' | 'long'
+  setup     String?  // per-trade setup (inherits parent row.setup if unset; override here)
   routeStart String?  // user-defined: where the route starts (custom enum)
   routeEnd   String?  // user-defined: where the route ends (custom enum)
   entryPrice Float?

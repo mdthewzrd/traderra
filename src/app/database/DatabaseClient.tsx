@@ -1627,7 +1627,6 @@ function RowDrawer({
   const [chartExpanded, setChartExpanded] = useState(false)
   const [panOffset, setPanOffset] = useState(0)   // extra days beyond base dayOffset (◀/▶)
   const [extraDays, setExtraDays] = useState(0)   // widened view (+=3/7/14)
-  const [showNav, setShowNav] = useState(false)
   const navDayOffset = (tf === 'D' ? 6 : 1) + panOffset
   const [mounted, setMounted] = useState(false)
   const chartWrapRef = useRef<HTMLDivElement>(null)
@@ -1707,24 +1706,17 @@ function RowDrawer({
                   style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}`, opacity: 0.8 }}>
                   <Maximize2 className="w-3 h-3" />
                 </button>
-                <button onClick={() => setShowNav(s => !s)} title="Navigate / extend chart"
-                  className="ml-1 p-0.5 rounded flex items-center justify-center transition-colors"
-                  style={{ color: showNav ? C.GOLD : C.MUTED, background: C.SURFACE2, border: `1px solid ${showNav ? C.GOLD : C.BORDER}` }}>
-                  <span className="text-[11px] font-mono leading-none">⇆</span>
-                </button>
               </div>
             </div>
-            {showNav && (
-              <div className="flex items-center gap-1 shrink-0">
-                <button onClick={() => setPanOffset(p => p - 1)} title="Pan left" className="text-[11px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>◀</button>
-                <button onClick={() => { setPanOffset(0); setExtraDays(0) }} title="Reset to D0" className="text-[10px] px-1.5 py-0.5 rounded font-mono font-bold" style={{ color: C.BG, background: C.GOLD }}>D0</button>
-                <button onClick={() => setPanOffset(p => p + 1)} title="Pan right" className="text-[11px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>▶</button>
-                <span className="w-px h-3" style={{ background: C.BORDER }} />
-                <button onClick={() => setExtraDays(d => d + 3)} className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>+3d</button>
-                <button onClick={() => setExtraDays(d => d + 7)} className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>+7d</button>
-                <button onClick={() => setExtraDays(d => d + 14)} className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>+14d</button>
-              </div>
-            )}
+            <div className="flex items-center gap-1 shrink-0">
+              <button onClick={() => setPanOffset(p => p - 1)} title="Pan back 1 day" className="text-[11px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>◀</button>
+              <button onClick={() => { setPanOffset(0); setExtraDays(0) }} title="Reset to D0" className="text-[10px] px-1.5 py-0.5 rounded font-mono font-bold" style={{ color: C.BG, background: C.GOLD }}>D0</button>
+              <button onClick={() => setPanOffset(p => p + 1)} title="Pan forward 1 day" className="text-[11px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>▶</button>
+              <span className="w-px h-3" style={{ background: C.BORDER }} />
+              <button onClick={() => { setPanOffset(p => p + 3); setExtraDays(d => d + 3) }} title="Progress forward 3 days" className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>+3d</button>
+              <button onClick={() => { setPanOffset(p => p + 7); setExtraDays(d => d + 7) }} title="Progress forward 7 days" className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>+7d</button>
+              <button onClick={() => { setPanOffset(p => p + 14); setExtraDays(d => d + 14) }} title="Progress forward 14 days" className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>+14d</button>
+            </div>
             <div ref={chartWrapRef} className="flex-1 min-h-0 overflow-hidden">
               <ScanMiniChart symbol={row.symbol} tf={tf} date={row.signalDate} height={Math.max(80, chartH - 22)} settings={settings} dark={C === DARK as any} dayOffset={navDayOffset} extraDays={extraDays} compact />
             </div>
@@ -1892,7 +1884,7 @@ function RowDrawer({
                       <div className="flex items-center gap-1 px-2 py-1.5 rounded-md border flex-wrap" style={{ background: C.SURFACE, borderColor: open ? C.GOLD_BORDER : C.BORDER }}>
                         <button onClick={() => setOpenTradeId(open ? null : t.id)} className="shrink-0 text-[9px]" style={{ color: C.MUTED }}>{open ? '▼' : '▶'}</button>
                         <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded shrink-0" style={{ background: dColor + '22', color: dColor }}>{t.direction}</span>
-                        <div className="w-[68px]"><ThemedSelect mini value={row.setup} options={enumOpts('setup')} colors={enumColors('setup')} placeholder="setup" allowCreate onCreate={(l) => { addEnumOption('setup', l); onUpdate({ setup: l }) }} onChange={(v) => onUpdate({ setup: v })} /></div>
+                        <div className="w-[68px]"><ThemedSelect mini value={t.setup ?? row.setup} options={enumOpts('setup')} colors={enumColors('setup')} placeholder="setup" allowCreate onCreate={(l) => { addEnumOption('setup', l); onUpdateTrade(t.id, { setup: l }) }} onChange={(v) => onUpdateTrade(t.id, { setup: v })} /></div>
                         <div className="w-[72px]"><ThemedSelect mini value={row.move} options={enumOpts('move')} colors={enumColors('move')} placeholder="move" allowCreate onCreate={(l) => { addEnumOption('move', l); onUpdate({ move: l }) }} onChange={(v) => onUpdate({ move: v })} /></div>
                         <div className="w-[78px]"><ThemedSelect mini value={t.trendStage} options={enumOpts('trendStage')} colors={enumColors('trendStage')} placeholder="stage" allowCreate onCreate={(l) => { addEnumOption('trendStage', l); onUpdateTrade(t.id, { trendStage: l }) }} onChange={(v) => onUpdateTrade(t.id, { trendStage: v })} /></div>
                         <div className="w-[58px]"><ThemedSelect mini value={t.routeStart} options={enumOpts('routeStart')} colors={enumColors('routeStart')} placeholder="start" allowCreate onCreate={(l) => { addEnumOption('routeStart', l); onUpdateTrade(t.id, { routeStart: l }) }} onChange={(v) => onUpdateTrade(t.id, { routeStart: v })} /></div>
@@ -1966,7 +1958,16 @@ function RowDrawer({
                   ))}
                 </div>
               </div>
-              <button onClick={() => setChartExpanded(false)} className="p-1 rounded" style={{ color: C.MUTED }}><X className="w-5 h-5" /></button>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setPanOffset(p => p - 1)} title="Pan back 1 day" className="text-[12px] px-2 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>◀</button>
+                <button onClick={() => { setPanOffset(0); setExtraDays(0) }} title="Reset to D0" className="text-[11px] px-2 py-0.5 rounded font-mono font-bold" style={{ color: C.BG, background: C.GOLD }}>D0</button>
+                <button onClick={() => setPanOffset(p => p + 1)} title="Pan forward 1 day" className="text-[12px] px-2 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>▶</button>
+                <span className="w-px h-4" style={{ background: C.BORDER }} />
+                <button onClick={() => { setPanOffset(p => p + 3); setExtraDays(d => d + 3) }} title="Progress forward 3 days" className="text-[11px] px-2 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>+3d</button>
+                <button onClick={() => { setPanOffset(p => p + 7); setExtraDays(d => d + 7) }} title="Progress forward 7 days" className="text-[11px] px-2 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>+7d</button>
+                <button onClick={() => { setPanOffset(p => p + 14); setExtraDays(d => d + 14) }} title="Progress forward 14 days" className="text-[11px] px-2 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>+14d</button>
+              </div>
+              <button onClick={() => setChartExpanded(false)} className="p-1 rounded ml-2" style={{ color: C.MUTED }}><X className="w-5 h-5" /></button>
             </div>
             <div className="flex-1 min-h-0 p-2">
               <ScanMiniChart symbol={row.symbol} tf={tf} date={row.signalDate}

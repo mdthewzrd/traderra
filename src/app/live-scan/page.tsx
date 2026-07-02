@@ -193,7 +193,7 @@ export default function LiveScanPage() {
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const [showInd, setShowInd] = useState(false)
   const [settings, setSettings] = useState<ChartSettings>(() => ({
-    showEma9_20: false, showEma72_89: false, showDevBands9_20: false, showDevBands72_89: false, showDevBands72_89Tight: false, showKeyLevels: false,
+    showEma9_20: false, showEma72_89: false, showDevBands9_20: false, showDevBands72_89: false, showDevBands72_89Tight: false, showAnchoredLight: false, showAnchoredMain: false, showKeyLevels: false,
     showVwap: true, showPrevClose: true, showAhPmShade: true,
     showVolume: true, showCrosshair: true, showLegend: false,
     ...IND_TEMPLATES.find(t => t.id === 'mikes-bands')!.settings,

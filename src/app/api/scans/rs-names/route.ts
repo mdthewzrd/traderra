@@ -7,10 +7,11 @@ import { NextRequest, NextResponse } from 'next/server'
  * Dilution-DB-derived: emits one signal per reverse-split FILING. The
  * reverse-split date is the setup anchor. Each row carries the offerings that
  * fired AFTER the split (the fade triggers), the cycle state, prior-split count,
- * and a nullable d1GapDate (joined from d1-gap* scans).
+ * and the documented gap day AFTER the split (joined from the d1-gap* scan
+ * results blobs).
  *
- * Writes the result array to SavedScan.results (the store the scanner reads,
- * same model as eod-trig-day). No Python, no SEC calls at runtime.
+ * Writes the result array to SavedScan.results (the store the scanner reads).
+ * No Python, no SEC calls at runtime — DB + existing scan results are source of truth.
  *
  * Query: ?lookback=24 (months)
  */
@@ -41,12 +42,30 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  // 2. d1-gap* scan ids for the (nullable) d1GapDate join
-  const d1Scans = await prisma.savedScan.findMany({
-    where: { name: { contains: 'd1', mode: 'insensitive' } },
-    select: { id: true },
+  // 2. Load gap-day data from the d1-gap* scan RESULTS BLOBS (not ScanSignal,
+  //    which is empty for these scans). Build ticker -> sorted gap-date list.
+  //    Scan results store one row per gap event with {ticker, date, gap, pm_high,...}
+  const GAP_STRATEGIES = ['d1-gap-potential', 'd1-gap-wide', 'd1-gap']
+  const gapScans = await prisma.savedScan.findMany({
+    where: { strategy: { in: GAP_STRATEGIES } },
+    select: { strategy: true, results: true },
   })
-  const d1ScanIds = d1Scans.map((s) => s.id)
+  const gapByTicker = new Map<string, { date: string; gap: number | null; pmHigh: number | null }[]>()
+  for (const g of gapScans) {
+    if (!g.results) continue
+    let arr: any[]
+    try { arr = JSON.parse(g.results) } catch { continue }
+    if (!Array.isArray(arr)) continue
+    for (const r of arr) {
+      const t = (r.ticker || '').toUpperCase().trim()
+      if (!t || !r.date) continue
+      const list = gapByTicker.get(t) || []
+      list.push({ date: r.date, gap: r.gap ?? r.gap_pct ?? null, pmHigh: r.pm_high ?? null })
+      gapByTicker.set(t, list)
+    }
+  }
+  // sort each ticker's gaps ascending by date for fast lookup
+  for (const list of gapByTicker.values()) list.sort((a, b) => (a.date < b.date ? -1 : 1))
 
   // 3. Universe: reverse-split filings within lookback (the anchors)
   const rsFilings = await prisma.dilutionFiling.findMany({
@@ -55,8 +74,7 @@ export async function GET(req: NextRequest) {
     orderBy: { filingDate: 'asc' },
   })
 
-  // 4. Gather ALL cycle-relevant filings per cik (splits + offerings) so each
-  //    split can be paired with its subsequent offerings in one pass.
+  // 4. Gather ALL cycle-relevant filings per cik (splits + offerings) in one pass
   const ciks = [...new Set(rsFilings.map((f) => f.cik))]
   const allByCik = new Map<string, any[]>()
   if (ciks.length) {
@@ -86,6 +104,7 @@ export async function GET(req: NextRequest) {
   const results: any[] = []
   let postSplit = 0
   let offered = 0
+  let withGap = 0
   let dateMin: string | null = null
   let dateMax: string | null = null
 
@@ -125,36 +144,37 @@ export async function GET(req: NextRequest) {
     const rp = split.rawPayload as any
     if (rp && rp.reverseSplit && rp.reverseSplit.ratio) rsRatio = rp.reverseSplit.ratio
 
-    // d1GapDate join — nullable (populates as d1-gap* scans run)
+    // gap-day join: earliest documented gap AFTER this split (from gap-scan results)
     let d1GapDate: string | null = null
-    if (d1ScanIds.length) {
-      const gap = await prisma.scanSignal.findFirst({
-        where: { scanId: { in: d1ScanIds }, ticker, signalDate: { gt: splitDate } },
-        orderBy: { signalDate: 'asc' },
-        select: { signalDate: true },
-      })
-      d1GapDate = gap?.signalDate || null
+    let d1GapPct: number | null = null
+    const gaps = gapByTicker.get(ticker)
+    if (gaps) {
+      const nextGap = gaps.find((g) => g.date > splitDate)
+      if (nextGap) {
+        d1GapDate = nextGap.date
+        d1GapPct = nextGap.gap
+        withGap++
+      }
     }
 
     results.push({
       ticker,
       symbol: ticker,
       date: splitDate,
-      // No OHLCV — this is a filing event, not a price bar. Chart fetches its
-      // own bars via /api/chart-data; these zeros are just structural.
+      // No OHLCV — filing event, not a price bar. Chart fetches its own bars.
       open: 0,
       high: 0,
       low: 0,
       close: 0,
       volume: 0,
-      signal: state, // 'post-split' | 'offered' — filterable signal type
-      // Dilution context (rides along as extra columns in the detail panel)
+      signal: state, // 'post-split' | 'offered'
       rsRatio,
       priorSplits12mo,
       offeringsSince,
       offeringsCount: offeringsSince.length,
       state,
       d1GapDate,
+      d1GapPct,
       companyName: split.company?.name || null,
       cik: split.cik,
     })
@@ -182,6 +202,7 @@ export async function GET(req: NextRequest) {
     signals: results.length,
     postSplit,
     offered,
+    withGap, // how many rows have a documented post-split gap day
     dateRange: { from: dateMin, to: dateMax },
   })
 }

@@ -160,6 +160,16 @@ function ProgramTabs({ snapshot }: { snapshot: any }) {
   const [tab, setTab] = useState(0);
   const M = 1e6;
   const px = snapshot?.inTheMoney?.price ?? null;
+  // Most-recent equity-line draw date — 'last time used' for SEPA/ATM.
+  const draws = (snapshot?.draws ?? []) as { date?: string; facilityType?: string; amount?: number | null }[];
+  const lastUsed = (() => {
+    const elDraws = draws.filter((d) => d.facilityType === 'equity-line' && d.date).map((d) => d.date!);
+    return elDraws.length ? elDraws.sort().reverse()[0] : null;
+  })();
+  // Shares available for a $ capacity at the current price. Approximate — ATM/
+  // equity-line ceilings are in $; dividing by price gives share dilution.
+  const sharesFor = (maxDollars: number | null | undefined) =>
+    px != null && maxDollars != null && maxDollars > 0 ? Math.round(maxDollars / px) : null;
   const eqLines = [
     ...((snapshot?.warrantNotes?.equityLines ?? []).map((el: any, i: number) => ({ key: 'el' + i, src: el.description, date: '', who: el.counterparty, max: el.maxCommitment, extra: [el.pricing, el.ownershipCap != null ? el.ownershipCap + '% cap' : null].filter(Boolean).join(' · ') }))),
     ...((snapshot?.programs ?? []).filter((p: any) => p.programType === 'equity-line').map((p: any, i: number) => ({ key: 'pr' + i, src: p.description, date: p.filingDate, who: p.counterparty, max: p.maxCommitment, extra: [p.pricing, p.ownershipCap != null ? p.ownershipCap + '% cap' : null].filter(Boolean).join(' · ') }))),
@@ -199,6 +209,7 @@ function ProgramTabs({ snapshot }: { snapshot: any }) {
               {st && <span className="text-zinc-600">{r.date} · {st.rel}</span>}
             </div>
             {r.extra && <div className="text-[11px] text-zinc-500">{r.extra}</div>}
+            {lastUsed && <div className="text-[10px] text-emerald-500/70">last used {lastUsed}</div>}
             <div className="mt-0.5 line-clamp-2 text-[10px] italic text-zinc-600">{r.src.slice(0, 140)}{r.src.length > 140 ? '…' : ''}</div>
           </div>
         );
@@ -230,17 +241,61 @@ function ProgramTabs({ snapshot }: { snapshot: any }) {
     </div>
   ) : null;
   const ShelfBody = () => shelf.length ? (
-    <div className="divide-y divide-zinc-800/60">{shelf.map((r: any) => (<div key={r.accessionNo} className="py-1.5"><div className="flex flex-wrap items-baseline gap-x-2 text-xs"><span className="font-medium text-zinc-200">${(r.aggregateOffering / M).toFixed(0)}M</span><span className="text-zinc-600">{r.filingDate}</span><span className="rounded bg-zinc-800 px-1 text-[9px] text-zinc-500">{r.shelfType === 'automatic-shelf' ? 'S-3ASR' : r.formType}</span>{r.salesChannel === 'atm' && <span className="rounded bg-red-500/20 px-1 text-[9px] font-semibold uppercase text-red-400">ATM</span>}</div>{r.agent && <div className="text-[11px] text-zinc-500">agent {r.agent}</div>}</div>))}</div>
+    <div className="divide-y divide-zinc-800/60">{shelf.map((r: any) => {
+      // Baby shelf = S-3 filed by a NON-WKSI (not automatic-shelf). Non-baby
+      // WKSI shelves use S-3ASR (automatic-shelf). Baby shelves are capped at
+      // 1/3 of public float over 12 months — materially limits dilution speed.
+      const isBaby = /^S-3$/.test(r.formType) && r.shelfType !== 'automatic-shelf';
+      const sh = sharesFor(r.aggregateOffering);
+      const floatShares = snapshot?.computedFloat?.shares ?? snapshot?.publicFloat?.shares ?? null;
+      const babyPct = isBaby && floatShares ? Math.min(100, ((floatShares / 3) / floatShares) * 100) : null;
+      return (
+      <div key={r.accessionNo} className="py-1.5">
+        <div className="flex flex-wrap items-baseline gap-x-2 text-xs">
+          <span className="font-medium text-zinc-200">${(r.aggregateOffering / M).toFixed(0)}M</span>
+          <span className="text-zinc-600">filed {r.filingDate}</span>
+          <span className="rounded bg-zinc-800 px-1 text-[9px] text-zinc-500">{r.shelfType === 'automatic-shelf' ? 'S-3ASR' : r.formType}</span>
+          {isBaby && <span className="rounded bg-amber-500/20 px-1 text-[9px] font-semibold uppercase text-amber-300" title="Non-WKSI shelf: limited to 1/3 of public float in any 12-month period">baby shelf</span>}
+          {r.salesChannel === 'atm' && <span className="rounded bg-red-500/20 px-1 text-[9px] font-semibold uppercase text-red-400">ATM</span>}
+          {sh != null && <span className="text-zinc-500">· {(sh / M).toFixed(1)}M sh avail</span>}
+        </div>
+        {r.agent && <div className="text-[11px] text-zinc-500">agent {r.agent}</div>}
+        {isBaby && babyPct != null && <div className="text-[10px] text-amber-400/70">Baby-shelf cap: ≤ 1/3 float ({babyPct.toFixed(0)}%) / 12mo</div>}
+      </div>
+      );
+    })}</div>
   ) : null;
   const S1Body = () => s1.length ? (
     <div className="divide-y divide-zinc-800/60">{s1.map((f: any, i: number) => (<div key={i} className="flex items-start gap-2 py-1.5"><span className="mt-0.5 shrink-0 text-[10px] text-zinc-600">{f.filingDate}</span><div className="min-w-0"><span className="text-xs text-zinc-200">{f.formType}</span>{f.items?.length > 0 && <span className="ml-1 text-[10px] text-zinc-600">{f.items.join(', ')}</span>}<div className="truncate text-[11px] text-zinc-500">{f.primaryDesc ?? '—'}</div></div></div>))}</div>
+  ) : null;
+  const AtmBody = () => atm.length ? (
+    <div className="divide-y divide-zinc-800/60">
+      {atm.map((r) => {
+        const sh = sharesFor(r.max);
+        const st = statusFor(r.date);
+        return (
+          <div key={r.key} className="py-1.5">
+            <div className="flex flex-wrap items-baseline gap-x-2 text-xs">
+              {r.who && <span className="font-medium text-zinc-200">{r.who}</span>}
+              {r.max != null && <span className="text-zinc-400">· ${(Number(r.max) / M).toFixed(0)}M</span>}
+              {sh != null && <span className="text-zinc-500">· {(sh / M).toFixed(1)}M sh avail</span>}
+              {st && <span className={`rounded px-1 py-px text-[9px] font-semibold uppercase ${st.cls}`}>{st.label}</span>}
+              {st ? <span className="text-zinc-600">filed {r.date} · {st.rel}</span> : <span className="text-[10px] text-zinc-600">no date</span>}
+            </div>
+            {lastUsed ? <div className="text-[10px] text-emerald-500/70">last used {lastUsed}</div> : <div className="text-[10px] text-zinc-600">no draws parsed yet</div>}
+            {r.extra && <div className="text-[11px] text-zinc-500">{r.extra}</div>}
+            {r.src && <div className="mt-0.5 line-clamp-2 text-[10px] italic text-zinc-600">{r.src.slice(0, 140)}{r.src.length > 140 ? '…' : ''}</div>}
+          </div>
+        );
+      })}
+    </div>
   ) : null;
   const TONE_BG: Record<string, string> = { red: 'bg-red-500/15 text-red-400', amber: 'bg-amber-500/15 text-amber-300', purple: 'bg-purple-500/15 text-purple-400', orange: 'bg-orange-500/15 text-orange-300', blue: 'bg-blue-500/15 text-blue-400' };
   const SECTIONS = [
     { label: 'Equity Lines', tone: 'red', n: eqLines.length, body: EqBody },
     { label: 'Warrants', tone: 'amber', n: warrants.length, body: WarrantBody },
     { label: 'Converts', tone: 'purple', n: converts.length, body: () => list(converts) },
-    { label: 'ATM', tone: 'orange', n: atm.length, body: () => list(atm) },
+    { label: 'ATM', tone: 'orange', n: atm.length, body: () => AtmBody() },
     { label: 'Shelf', tone: 'orange', n: shelf.length, body: ShelfBody },
     { label: 'S-1', tone: 'blue', n: s1.length, body: S1Body },
   ];

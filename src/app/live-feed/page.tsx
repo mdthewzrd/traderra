@@ -141,7 +141,7 @@ function ScanChartPanel({ ticker, date, onClose }: { ticker: string | null; date
   const [tf, setTf] = useState<Timeframe>('5')
   const mikes = IND_TEMPLATES.find(t => t.id === 'mikes-bands')!.settings
   const [settings, setSettings] = useState<ChartSettings>({
-    showEma9_20: false, showEma72_89: false, showDevBands9_20: false, showDevBands72_89: false, showDevBands72_89Tight: false, showKeyLevels: false,
+    showEma9_20: false, showEma72_89: false, showDevBands9_20: false, showDevBands72_89: false, showDevBands72_89Tight: false, showAnchoredLight: false, showAnchoredMain: false, showKeyLevels: false,
     showVwap: true, showPrevClose: true, showAhPmShade: true,
     showVolume: true, showCrosshair: true, showLegend: false,
     ...mikes, // default to Mike's Bands layout

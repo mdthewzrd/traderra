@@ -135,8 +135,19 @@ export function parseClause(
   let pricing: string | null = null;
   if (/volume[\s-]?weighted\s+average\s+price|VWAP/i.test(sect)) pricing = 'VWAP-based';
   else {
-    const fix = sect.match(/\$\s*([\d,.]+)\s*(?:per\s+share)?/);
-    if (fix) pricing = `fixed $${fix[1]} per share`;
+    // Per-share price ONLY: must be explicitly tied to a share price. Avoids
+    // grabbing the max commitment ($50,000,000) or par value ($0.001) that
+    // appear earlier in the clause. Prefer 'X per share'; reject implausible
+    // per-share values (commitment bleeds, par). Real equity: $0.01–$1,000.
+    const fix =
+      sect.match(/(?:price|prices)\s+of\s+\$\s*([\d,.]+)\s+per\s+share/i) ??
+      sect.match(/\$\s*([\d,.]+)\s+per\s+share\b/i) ??
+      sect.match(/(?:purchase|sale|offering)\s+price\s+of\s+\$\s*([\d,.]+)/i) ??
+      null;
+    if (fix) {
+      const v = parseFloat(fix[1].replace(/,/g, ''));
+      if (v >= 0.01 && v <= 1000) pricing = `fixed $${v} per share`;
+    }
   }
 
   // Ownership cap (9.99% classic in SEPA/converts).
@@ -173,8 +184,27 @@ export function parseClause(
     maturity,
     drawCapPerPeriod,
     securities,
-    description: sect.slice(0, 1200),
+    // Description: trim the raw clause to the first ~2 meaningful sentences.
+    // Full 1200-char dumps are unreadable in the UI (mid-clause starts, legal
+    // boilerplate). Find the first sentence mentioning the deal terms.
+    description: cleanDescription(sect),
   };
+}
+
+/** Trim a raw 8-K clause to a readable summary: collapse whitespace, drop the
+ *  Item header, keep the first ~2 sentences up to ~240 chars. ATM agreements
+ *  often lead with boilerplate ('Indemnification', 'Regulation M') — search
+ *  for the first sentence with a $ amount or 'share' to start there. */
+function cleanDescription(sect: string): string {
+  const t = sect.replace(/\s+/g, ' ').trim();
+  // Find the first sentence with deal content (a $ amount or 'share'/'price').
+  const sentences = t.split(/(?<=[.;])\s+/);
+  let start = 0;
+  for (let i = 0; i < sentences.length && i < 6; i++) {
+    if (/\$|\bshar\w*|\bpric/i.test(sentences[i])) { start = i; break; }
+  }
+  const picked = sentences.slice(start, start + 2).join(' ');
+  return picked.length > 240 ? picked.slice(0, 237) + '...' : picked;
 }
 
 export interface SyncProgramsResult {
@@ -184,8 +214,9 @@ export interface SyncProgramsResult {
   error?: string;
 }
 
-/** Fetch + parse item-1.01/2.03/3.02 8-Ks for a CIK. Idempotent per filing. */
-export async function syncMaterialAgreements(cik: string): Promise<SyncProgramsResult> {
+/** Fetch + parse item-1.01/2.03/3.02 8-Ks for a CIK. Idempotent per filing
+ *  unless force=true (re-parse to pick up parser improvements). */
+export async function syncMaterialAgreements(cik: string, opts: { force?: boolean } = {}): Promise<SyncProgramsResult> {
   try {
     // Only 8-Ks with material-agreement items.
     const candidates = await prisma.dilutionFiling.findMany({
@@ -202,7 +233,7 @@ export async function syncMaterialAgreements(cik: string): Promise<SyncProgramsR
     let withDetail = 0;
     for (const f of candidates) {
       const existing = (f.rawPayload ?? null) as { programDetail?: ProgramDetail; programParsed?: boolean } | null;
-      if (existing?.programParsed) continue; // idempotent
+      if (existing?.programParsed && !opts.force) continue; // idempotent
       if (!f.primaryDoc) continue;
       let html: string;
       try {
@@ -257,17 +288,26 @@ export async function getPrograms(cik: string): Promise<CompanyProgram[]> {
     const rp = (r.rawPayload ?? null) as { programDetail?: ProgramDetail } | null;
     const d = rp?.programDetail;
     if (!d) continue;
+    // Read-time cleanup (parser improvements applied to stored data without
+    // re-sync): null pricing that grabbed a commitment/par as per-share, and
+    // re-trim descriptions that were stored as 1200-char raw dumps.
+    let pricing = d.pricing;
+    if (pricing) {
+      const pm = pricing.match(/\$([\d,.]+)/);
+      const v = pm ? parseFloat(pm[1].replace(/,/g, '')) : null;
+      if (v != null && (v > 1000 || v < 0.01)) pricing = null;
+    }
     all.push({
       programType: d.programType,
       filingDate: d.filingDate,
       counterparty: d.counterparty,
       maxCommitment: d.maxCommitment,
-      pricing: d.pricing,
+      pricing,
       ownershipCap: d.ownershipCap,
       maturity: d.maturity,
       drawCapPerPeriod: d.drawCapPerPeriod,
       securities: d.securities,
-      description: d.description,
+      description: cleanDescription(d.description),
       filingAccession: d.filingAccession,
     });
   }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { computeAnchoredTrendline } from '@/lib/charts/anchored-trend'
 import {
   Search, Loader2, ChevronLeft, ChevronRight,
   BarChart3, TrendingUp, List, MessageSquare,
@@ -381,6 +382,8 @@ export interface ChartSettings {
   showDevBands9_20: boolean
   showDevBands72_89: boolean
   showDevBands72_89Tight: boolean
+  showAnchoredLight: boolean
+  showAnchoredMain: boolean
   showVwap: boolean
   showVwap: boolean
   showPrevClose: boolean
@@ -428,6 +431,7 @@ export const IND_TEMPLATES: IndTemplate[] = [
     settings: {
       showEma9_20: true, showEma72_89: true,
       showDevBands9_20: true, showDevBands72_89: true, showDevBands72_89Tight: true,
+      showAnchoredLight: true, showAnchoredMain: true,
       showVwap: true, showPrevClose: false, showAhPmShade: true,
       showVolume: true, showCrosshair: true, showLegend: false, showKeyLevels: true,
     },
@@ -450,6 +454,8 @@ export const TEMPLATE_IND_KEYS: [keyof ChartSettings, string][] = [
   ['showDevBands9_20', 'Dev Band 9/20'],
   ['showDevBands72_89', 'Dev Band 72/89'],
   ['showDevBands72_89Tight', 'Dev Band 72/89 Tight'],
+  ['showAnchoredLight', 'Anchored TL Light 15/5'],
+  ['showAnchoredMain', 'Anchored TL Main 25/10'],
   ['showVwap', 'VWAP'],
   ['showPrevClose', 'Prev Close'],
   ['showAhPmShade', 'AH/PM Shade'],
@@ -1097,6 +1103,41 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
         drawBand(dbt_dn1, dbt_dn2, 'rgba(34,197,94,.10)', 'rgba(34,197,94,.30)')
       }
 
+      // ── Anchored Trendlines (Light 15/5 + Main 25/10) ──
+      if (settings.showAnchoredLight || settings.showAnchoredMain) {
+        const aHi = bars.map((b: any) => b.high as number)
+        const aLo = bars.map((b: any) => b.low as number)
+        const aCl = bars.map((b: any) => b.close as number)
+        const tl = computeAnchoredTrendline(aHi, aLo, aCl, 1, 15, 5, 3, 25, 10, 3, 0, 0)
+        const drawSeg = (segs: any[], main: boolean) => {
+          for (const seg of segs) {
+            if (seg.main !== main) continue
+            const col = main
+              ? (seg.dir === 1 ? 'rgba(86,156,214,.95)' : 'rgba(230,150,40,.95)')
+              : (seg.dir === 1 ? 'rgba(96,165,250,.55)' : 'rgba(248,113,113,.55)')
+            const w = main ? 2 : 1.3
+            // solid confirmed history
+            ctx.strokeStyle = col; ctx.lineWidth = w; ctx.setLineDash([]); ctx.beginPath(); let s = false
+            for (let k = 0; k < seg.confirmed.length; k++) {
+              const v = seg.confirmed[k]; if (isNaN(v)) continue
+              const x = xFor(k), y = yFor(v)
+              if (!s) { ctx.moveTo(x, y); s = true } else ctx.lineTo(x, y)
+            }
+            ctx.stroke()
+            // dotted forward projection
+            ctx.setLineDash(main ? [6, 3] : [4, 3]); ctx.lineWidth = main ? 1.6 : 1; ctx.beginPath(); s = false
+            for (let k = 0; k < seg.proj.length; k++) {
+              const v = seg.proj[k]; if (isNaN(v)) continue
+              const x = xFor(k), y = yFor(v)
+              if (!s) { ctx.moveTo(x, y); s = true } else ctx.lineTo(x, y)
+            }
+            ctx.stroke(); ctx.setLineDash([])
+          }
+        }
+        if (settings.showAnchoredLight) drawSeg(tl.segments, false)
+        if (settings.showAnchoredMain) drawSeg(tl.segments, true)
+      }
+
       // ── Key Levels (Bjorgum-style pivot zones) ──
       if (settings.showKeyLevels) {
         const klDef = klParams || { lookLeft: 48, lookRight: 24, numPivots: 1, atrLength: 36, zoneWidth: 0.5, maxZonePercent: 1, extendRight: true }
@@ -1517,7 +1558,7 @@ export default function ScanDashboardPage() {
     atrLength: 36, zoneWidth: 0.5, maxZonePercent: 1, extendRight: true,
   })
   const [chartSettings, setChartSettings] = useState<ChartSettings>({
-    showEma9_20: false, showEma72_89: false, showDevBands9_20: false, showDevBands72_89: false, showDevBands72_89Tight: false, showKeyLevels: false,
+    showEma9_20: false, showEma72_89: false, showDevBands9_20: false, showDevBands72_89: false, showDevBands72_89Tight: false, showAnchoredLight: false, showAnchoredMain: false, showKeyLevels: false,
     showVwap: true, showPrevClose: true, showAhPmShade: true,
     showVolume: true, showCrosshair: true, showLegend: true,
   })
@@ -2740,6 +2781,8 @@ export default function ScanDashboardPage() {
                     ['showDevBands9_20', 'Dev Band 9/20'],
                     ['showDevBands72_89', 'Dev Band 72/89'],
                     ['showDevBands72_89Tight', 'Dev Band 72/89 Tight'],
+                    ['showAnchoredLight', 'Anchored TL Light 15/5'],
+                    ['showAnchoredMain', 'Anchored TL Main 25/10'],
                     ['showVwap', 'VWAP'],
                     ['showVwap', 'VWAP Line'],
                     ['showPrevClose', 'Prev Close Line'],

@@ -55,7 +55,7 @@ export async function POST(req: Request) {
       syncRegistrations(entry.cik),
       syncSecurities(ticker),
       syncWarrantNotes(entry.cik, { force: body?.force === true }),
-      syncMaterialAgreements(entry.cik),
+      syncMaterialAgreements(entry.cik, { force: body?.force === true }),
       syncReverseSplits(entry.cik),
       syncEftsFacilities(entry.cik),
       syncDraws(entry.cik),

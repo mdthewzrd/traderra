@@ -24,6 +24,38 @@ function isOffering(f: { dilutionTags: string[]; formType: string }): boolean {
   )
 }
 
+/**
+ * Cluster a CIK's reverse-split filings into distinct SPLIT EVENTS.
+ * Multiple forms (DEF 14A + 8-K Item 5.03 + 8-A + 10-Q note) often reference
+ * the SAME split and land within days of each other. Group filings within
+ * `gapDays` into one event. Anchor = earliest filing date in the cluster
+ * (effectiveDate is never populated in rawPayload — 0/902 — so filing date is
+ * the best proxy). Ratio comes from whichever filing the body scanner parsed.
+ */
+function clusterSplits(
+  filings: any[],
+  gapDays = 30
+): { anchor: Date; filings: any[]; ratio: string | null }[] {
+  const sorted = [...filings].sort((a, b) => (a.filingDate < b.filingDate ? -1 : 1))
+  const clusters: { anchor: Date; filings: any[]; ratio: string | null }[] = []
+  for (const f of sorted) {
+    const last = clusters[clusters.length - 1]
+    if (last && (f.filingDate.getTime() - last.anchor.getTime()) / 86400000 <= gapDays) {
+      last.filings.push(f)
+      const rp = f.rawPayload as any
+      if (!last.ratio && rp?.reverseSplit?.ratio) last.ratio = rp.reverseSplit.ratio
+    } else {
+      const rp = f.rawPayload as any
+      clusters.push({
+        anchor: f.filingDate,
+        filings: [f],
+        ratio: rp?.reverseSplit?.ratio || null,
+      })
+    }
+  }
+  return clusters
+}
+
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams
   const lookbackMonths = parseInt(sp.get('lookback') || '24', 10)
@@ -100,7 +132,10 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 5. Build the results array (shape matches the scanner's Signal interface)
+  // 5. Build the results array (shape matches the scanner's Signal interface).
+  //    DE-DUP: cluster same-CIK RS filings within 30d into one SPLIT EVENT so a
+  //    single real split isn't emitted as N rows (DEF14A + 8-K Item 5.03 + 8-A
+  //    all reference the same event). Anchor = earliest filing date in cluster.
   const results: any[] = []
   let postSplit = 0
   let offered = 0
@@ -108,46 +143,60 @@ export async function GET(req: NextRequest) {
   let dateMin: string | null = null
   let dateMax: string | null = null
 
-  for (const split of rsFilings) {
-    const ticker = (split.company?.tickers || [])[0]
+  // Pre-cluster: group rsFilings by cik, then into 30d events.
+  const rsByCik = new Map<string, any[]>()
+  for (const f of rsFilings) {
+    const arr = rsByCik.get(f.cik) || []
+    arr.push(f)
+    rsByCik.set(f.cik, arr)
+  }
+  type Signal = { anchor: Date; cik: string; ticker: string; name: string | null; ratio: string | null }
+  const signals: Signal[] = []
+  for (const [cik, fils] of rsByCik) {
+    const ticker = (fils[0]?.company?.tickers || [])[0]
     if (!ticker) continue
-    const splitDate = split.filingDate.toISOString().slice(0, 10)
+    const name = fils[0]?.company?.name || null
+    for (const c of clusterSplits(fils)) {
+      signals.push({ anchor: c.anchor, cik, ticker, name, ratio: c.ratio })
+    }
+  }
+  signals.sort((a, b) => (a.anchor < b.anchor ? 1 : -1))
+
+  for (const sig of signals) {
+    const splitDate = sig.anchor.toISOString().slice(0, 10)
     if (!dateMin || splitDate < dateMin) dateMin = splitDate
     if (!dateMax || splitDate > dateMax) dateMax = splitDate
 
-    const companyFilings = allByCik.get(split.cik) || []
+    const companyFilings = allByCik.get(sig.cik) || []
 
-    // offerings AFTER this split (the fade triggers)
+    // offerings AFTER this split event (the fade triggers)
     const offeringsSince = companyFilings
-      .filter((f) => f.filingDate > split.filingDate && isOffering(f))
+      .filter((f) => f.filingDate > sig.anchor && isOffering(f))
       .map((f) => ({
         date: f.filingDate.toISOString().slice(0, 10),
         formType: f.formType,
         type: (f.dilutionTags || []).find((t: string) => OFFERING_TAGS.includes(t)) || 'offering',
       }))
 
-    // prior reverse-splits within 12mo before this one
-    const yBefore = new Date(split.filingDate.getTime() - 365 * 86400000)
-    const priorSplits12mo = companyFilings.filter(
-      (f) =>
-        (f.dilutionTags || []).includes('reverse-split') &&
-        f.filingDate < split.filingDate &&
-        f.filingDate >= yBefore
+    // prior split EVENTS within 12mo before this one (clustered, not raw filings,
+    // so a multi-form split counts once)
+    const rsFilingsForCik = companyFilings.filter((f) =>
+      (f.dilutionTags || []).includes('reverse-split')
+    )
+    const priorEvents = clusterSplits(rsFilingsForCik)
+    const yBefore = new Date(sig.anchor.getTime() - 365 * 86400000)
+    const priorSplits12mo = priorEvents.filter(
+      (c) => c.anchor < sig.anchor && c.anchor >= yBefore
     ).length
 
     const state = offeringsSince.length ? 'offered' : 'post-split'
     if (state === 'post-split') postSplit++
     else offered++
 
-    // ratio from rawPayload.reverseSplit if the sync stored it
-    let rsRatio: string | null = null
-    const rp = split.rawPayload as any
-    if (rp && rp.reverseSplit && rp.reverseSplit.ratio) rsRatio = rp.reverseSplit.ratio
-
     // gap-day join: earliest documented gap AFTER this split (from gap-scan results)
     let d1GapDate: string | null = null
     let d1GapPct: number | null = null
-    const gaps = gapByTicker.get(ticker)
+    const gaps = gapByTicker.get(sig.ticker)
     if (gaps) {
       const nextGap = gaps.find((g) => g.date > splitDate)
       if (nextGap) {
@@ -158,8 +207,8 @@ export async function GET(req: NextRequest) {
     }
 
     results.push({
-      ticker,
-      symbol: ticker,
+      ticker: sig.ticker,
+      symbol: sig.ticker,
       date: splitDate,
       // No OHLCV — filing event, not a price bar. Chart fetches its own bars.
       open: 0,
@@ -168,15 +217,15 @@ export async function GET(req: NextRequest) {
       close: 0,
       volume: 0,
       signal: state, // 'post-split' | 'offered'
-      rsRatio,
+      rsRatio: sig.ratio,
       priorSplits12mo,
       offeringsSince,
       offeringsCount: offeringsSince.length,
       state,
       d1GapDate,
       d1GapPct,
-      companyName: split.company?.name || null,
-      cik: split.cik,
+      companyName: sig.name,
+      cik: sig.cik,
     })
   }
 

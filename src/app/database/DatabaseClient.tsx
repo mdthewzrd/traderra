@@ -69,8 +69,8 @@ const DEFAULT_SETTINGS: ChartSettings = {
   showVolume: true, showCrosshair: true, showLegend: false,
   ...IND_TEMPLATES.find((t) => t.id === 'mikes-bands')!.settings,
 }
-const TF_OPTIONS: Timeframe[] = ['D', '240', '60', '15', '5']
-const TF_LABELS: Record<Timeframe, string> = { D: '1D', '240': '4H', '60': '1H', '15': '15m', '5': '5m' }
+const TF_OPTIONS: Timeframe[] = ['D', '240', '120', '60', '15', '5']
+const TF_LABELS: Record<Timeframe, string> = { D: '1D', '240': '4H', '120': '2H', '60': '1H', '15': '15m', '5': '5m' }
 
 interface CorpusRow {
   id: string

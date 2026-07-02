@@ -138,7 +138,7 @@ interface ScanRun {
   rawDateRange?: { from?: string; to?: string } | null
 }
 
-export type Timeframe = '5' | '15' | '60' | '240' | 'D'
+export type Timeframe = '5' | '15' | '60' | '120' | '240' | 'D'
 type ChartMode = 'single' | 'stacked'
 type PageMode = 'scanner' | 'backtest'
 
@@ -587,6 +587,7 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
       if (tf === '5') fromDate.setDate(fromDate.getDate() - 3)
       else if (tf === '15') fromDate.setDate(fromDate.getDate() - 12)
       else if (tf === '60') fromDate.setDate(fromDate.getDate() - 70)
+      else if (tf === '120') fromDate.setDate(fromDate.getDate() - 90)
       else if (tf === '240') fromDate.setDate(fromDate.getDate() - 150)
       else fromDate.setDate(fromDate.getDate() - 360)
     }
@@ -691,6 +692,7 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
     if (tf === '5') defaultBars = Math.min(allBars.length, 156)
     else if (tf === '15') defaultBars = Math.min(allBars.length, 104)
     else if (tf === '60') defaultBars = Math.min(allBars.length, 98)
+    else if (tf === '120') defaultBars = Math.min(allBars.length, 110)
     else if (tf === '240') defaultBars = Math.min(allBars.length, 120)
     else defaultBars = Math.min(allBars.length, 120)
 
@@ -700,7 +702,7 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
         if (barETDate(allBars[i]) === date) { d0Idx = i; break }
       }
     }
-    const bpd = tf === '5' ? 78 : tf === '15' ? 26 : tf === '60' ? 7 : tf === '240' ? 2 : 1
+    const bpd = tf === '5' ? 78 : tf === '15' ? 26 : tf === '60' ? 7 : tf === '120' ? 4 : tf === '240' ? 2 : 1
     if (extraDays) defaultBars = Math.min(allBars.length, defaultBars + extraDays * bpd)
     const endIdx = Math.min(allBars.length, d0Idx + dayOffset * bpd + 1)
     const startIdx = Math.max(0, endIdx - defaultBars)
@@ -1338,7 +1340,7 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
     }
     draw()
   }
-  const tfLabel = tf === '5' ? '5m' : tf === '15' ? '15m' : tf === '60' ? '1H' : tf === '240' ? '4H' : '1D'
+  const tfLabel = tf === '5' ? '5m' : tf === '15' ? '15m' : tf === '60' ? '1H' : tf === '120' ? '2H' : tf === '240' ? '4H' : '1D'
   const Th = dark
     ? { bg: BG, surface: SURFACE, border: BORDER, muted: MUTED }
     : { bg: LIGHT.BG, surface: LIGHT.SURFACE, border: LIGHT.BORDER, muted: LIGHT.MUTED }

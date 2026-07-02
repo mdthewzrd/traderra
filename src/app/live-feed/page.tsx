@@ -247,12 +247,163 @@ function ScanChartPanel({ ticker, date, onClose }: { ticker: string | null; date
   )
 }
 
+// ── Gap Stats Checker (modal overlay) ──────────────────────
+function medianHodHelper_median(arr: number[]): number {
+  if (!arr.length) return 0
+  const s = [...arr].sort((a, b) => a - b)
+  const mid = Math.floor(s.length / 2)
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2
+}
+function medianHodHelper_fmt(mins: number): string {
+  const h24 = Math.floor(mins / 60) % 24
+  const m = mins % 60
+  const ap = h24 < 12 ? 'AM' : 'PM'
+  let h12 = h24 % 12; if (h12 === 0) h12 = 12
+  return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ap}`
+}
+function GapChecker({ onClose }: { onClose: () => void }) {
+  const [sym, setSym] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [gaps, setGaps] = useState<any[] | null>(null)
+  const [stats, setStats] = useState<{ total: number; faded: number; fadePct: number; medianHod: string | null; hodSample: number } | null>(null)
+  const [hodLoading, setHodLoading] = useState(false)
+  const GOLD = '#D4AF37'
+
+  const run = async (ticker: string) => {
+    const t = ticker.trim().toUpperCase()
+    if (!t) return
+    setLoading(true); setError(''); setGaps(null)
+    try {
+      const to = new Date().toISOString().slice(0, 10)
+      const from = new Date(Date.now() - 730 * 86400000).toISOString().slice(0, 10)
+      const r = await fetch(`/api/chart-data/bars?symbol=${encodeURIComponent(t)}&tf=D&from=${from}&to=${to}`)
+      if (!r.ok) { setError('Fetch failed (' + r.status + ')'); setLoading(false); return }
+      const bars: any[] = (await r.json()).bars || []
+      if (bars.length < 2) { setError('Not enough history'); setLoading(false); return }
+      const out: any[] = []
+      for (let i = 1; i < bars.length; i++) {
+        const prevClose = bars[i - 1].close
+        if (!prevClose) continue
+        const gap = (bars[i].open - prevClose) / prevClose
+        if (gap >= 0.30 && (bars[i].volume || 0) >= 500000) {
+          const intraday = (bars[i].close - bars[i].open) / bars[i].open
+          const next = i + 1 < bars.length ? (bars[i + 1].close - bars[i].close) / bars[i].close : null
+          out.push({ date: bars[i].time, gap, open: bars[i].open, close: bars[i].close, prevClose, volume: bars[i].volume, intraday, next })
+        }
+      }
+      out.sort((a, b) => b.date.localeCompare(a.date))
+      setGaps(out)
+      // ── Fader analysis ── daily-only stats first (instant) ──
+      const faded = out.filter(g => g.close < g.open)
+      setStats({ total: out.length, faded: faded.length, fadePct: out.length ? faded.length / out.length : 0, medianHod: null, hodSample: 0 })
+      setLoading(false)
+      // ── Median HOD time on faded names: fetch intraday 5m bars per faded day ──
+      const fadedSample = faded.slice(0, 20) // cap to most recent 20
+      if (fadedSample.length) {
+        setHodLoading(true)
+        const hodMins: number[] = []
+        for (const g of fadedSample) {
+          try {
+            const ir = await fetch(`/api/chart-data/bars?symbol=${encodeURIComponent(t)}&tf=5&from=${g.date}&to=${g.date}`)
+            if (!ir.ok) continue
+            const ib: any[] = (await ir.json()).bars || []
+            if (!ib.length) continue
+            let best = ib[0]
+            for (const b of ib) if (b.high > best.high) best = b
+            const d = new Date((best.time as number) * 1000)
+            const ts = d.toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour12: false, hour: '2-digit', minute: '2-digit' })
+            const [hstr, mstr] = ts.split(':')
+            let eh = parseInt(hstr); if (eh === 24) eh = 0
+            hodMins.push(eh * 60 + parseInt(mstr))
+          } catch { /* skip this day */ }
+        }
+        const mh = hodMins.length ? medianHodHelper_fmt(medianHodHelper_median(hodMins)) : null
+        setStats(prev => prev ? ({ ...prev, medianHod: mh, hodSample: hodMins.length }) : prev)
+        setHodLoading(false)
+      }
+    } catch (e: any) { setError(e.message || 'Error'); setLoading(false); setHodLoading(false) }
+    setLoading(false)
+  }
+
+  const pct = (v: number) => (v >= 0 ? '+' : '') + (v * 100).toFixed(0) + '%'
+  const col = (v: number) => v >= 0 ? '#4ade80' : '#ef5350'
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.78)', zIndex: 100, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#0d0d0d', border: `1px solid ${GOLD}55`, borderRadius: 4, width: '100%', maxWidth: 720, maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderBottom: '1px solid #1a1a1a', flexShrink: 0 }}>
+          <span style={{ fontSize: 12, fontWeight: 800, color: GOLD, letterSpacing: 1 }}>📊 GAP STATS</span>
+          <span style={{ fontSize: 8, color: '#666', fontWeight: 700 }}>&gt;30% · 500K vol · split-adj</span>
+          <form onSubmit={e => { e.preventDefault(); run(sym) }} style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
+            <input autoFocus value={sym} onChange={e => setSym(e.target.value)} placeholder="SYMBOL" style={{ background: '#0a0a0a', color: '#e5e5e5', border: '1px solid #262626', borderRadius: 3, padding: '5px 9px', fontSize: 12, fontFamily: 'inherit', fontWeight: 700, width: 110, textTransform: 'uppercase', letterSpacing: 1 }} />
+            <button type="submit" style={{ background: GOLD + '18', border: `1px solid ${GOLD}`, color: GOLD, borderRadius: 3, padding: '4px 12px', fontSize: 10, fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>GO</button>
+          </form>
+          <button onClick={onClose} style={{ background: 'none', border: '1px solid #262626', color: '#666', fontSize: 14, width: 26, height: 26, borderRadius: 3, cursor: 'pointer' }}>✕</button>
+        </div>
+        <div style={{ overflow: 'auto', flex: 1 }}>
+          {loading && <div style={{ padding: 30, textAlign: 'center', color: '#666', fontSize: 12 }}>Loading bars…</div>}
+          {error && <div style={{ padding: 30, textAlign: 'center', color: '#ef5350', fontSize: 12 }}>{error}</div>}
+          {gaps && gaps.length === 0 && !loading && <div style={{ padding: 30, textAlign: 'center', color: '#666', fontSize: 12 }}>No gaps &gt;30% with 500K+ volume found.</div>}
+          {gaps && gaps.length > 0 && (
+            <>
+              {stats && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', borderBottom: '1px solid #1a1a1a' }}>
+                  <div style={{ padding: '8px 14px' }}>
+                    <div style={{ fontSize: 7.5, color: '#555', fontWeight: 800, letterSpacing: 0.5 }}>GAPS &gt;30% · 500K+</div>
+                    <div style={{ fontSize: 18, color: '#e5e5e5', fontWeight: 800 }}>{stats.total}</div>
+                  </div>
+                  <div style={{ padding: '8px 14px', borderLeft: '1px solid #1a1a1a' }}>
+                    <div style={{ fontSize: 7.5, color: '#555', fontWeight: 800, letterSpacing: 0.5 }}>FADED · CLOSE &lt; OPEN</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: stats.fadePct >= 0.6 ? '#ef5350' : (stats.fadePct >= 0.4 ? '#f59e0b' : '#888') }}>
+                      {stats.faded}<span style={{ fontSize: 11, color: '#555' }}>/{stats.total}</span>
+                      <span style={{ fontSize: 11, marginLeft: 5 }}>({Math.round(stats.fadePct * 100)}%)</span>
+                    </div>
+                  </div>
+                  <div style={{ padding: '8px 14px', borderLeft: '1px solid #1a1a1a' }}>
+                    <div style={{ fontSize: 7.5, color: '#555', fontWeight: 800, letterSpacing: 0.5 }}>MEDIAN HOD TIME · FADED</div>
+                    <div style={{ fontSize: 18, color: GOLD, fontWeight: 800 }}>
+                      {hodLoading ? <span style={{ fontSize: 10, color: '#666' }}>…</span> : (stats.medianHod ? <>{stats.medianHod}<span style={{ fontSize: 8, color: '#555', marginLeft: 4 }}>ET · n{stats.hodSample}</span></> : '—')}
+                    </div>
+                  </div>
+                </div>
+              )}
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                <thead>
+                  <tr style={{ position: 'sticky', top: 0, background: '#0d0d0d' }}>
+                    {['Date', 'Gap%', 'Open', 'PrevC', 'Vol', 'Intraday', 'NextDay'].map(h => <th key={h} style={{ textAlign: 'right', padding: '6px 10px', fontSize: 8, fontWeight: 800, color: '#555', letterSpacing: 0.5, borderBottom: '1px solid #1a1a1a' }}>{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {gaps.map(g => (
+                    <tr key={g.date} style={{ borderBottom: '1px solid #161616' }}>
+                      <td style={{ padding: '5px 10px', textAlign: 'right', fontWeight: 700 }}>{g.date}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'right', color: '#4ade80', fontWeight: 700 }}>+{(g.gap * 100).toFixed(0)}%</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'right' }}>${g.open.toFixed(2)}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'right', color: '#888' }}>${g.prevClose.toFixed(2)}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'right', color: '#888' }}>{fmtVol(g.volume)}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'right', color: col(g.intraday), fontWeight: 700 }}>{pct(g.intraday)}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'right', color: g.next === null ? '#444' : col(g.next), fontWeight: 700 }}>{g.next === null ? '—' : pct(g.next)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+          {!gaps && !loading && !error && <div style={{ padding: 40, textAlign: 'center', color: '#444', fontSize: 12 }}>Enter a symbol to see its 30%+ gap history</div>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ──────────────────────────────────────────
 export default function LiveFeedPage() {
   const router = useRouter()
   const [liveHits, setLiveHits] = useState<Hit[]>([])
   const [connected, setConnected] = useState(false)
   const [muted, setMuted] = useState(false)
+  const [gapOpen, setGapOpen] = useState(false)
   const [now, setNow] = useState(0) // 0 = pre-mount placeholder (avoids hydration mismatch)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [dayGroups, setDayGroups] = useState<DayGroup[]>([])
@@ -672,6 +823,7 @@ export default function LiveFeedPage() {
           <button style={{ ...S.navBtn, opacity: isLive ? 0.35 : 1 }} onClick={goNextDay} disabled={isLive} title="Next trading day">›</button>
           <button onClick={goLive} style={{ padding: '4px 12px', fontSize: 10, fontWeight: 800, letterSpacing: 1, borderRadius: 3, cursor: 'pointer', border: `1px solid ${isLive ? '#4ade80' : '#333333'}`, background: isLive ? '#4ade8018' : 'transparent', color: isLive ? '#4ade80' : '#999999', fontFamily: 'inherit' }}>● LIVE</button>
         </div>
+        <button onClick={() => setGapOpen(true)} title="Gap stats checker" style={{ background: 'none', border: `1px solid ${GOLD}55`, color: GOLD, fontSize: 9, fontWeight: 800, padding: '3px 9px', borderRadius: 3, cursor: 'pointer' }}>📊 GAP</button>
         <button onClick={testPing} title="Test ping" style={{ background: 'none', border: '1px solid #262626', color: '#666666', fontSize: 9, fontWeight: 700, padding: '3px 7px', borderRadius: 3, cursor: 'pointer' }}>TEST</button>
         <button onClick={() => setMuted(m => !m)} title={muted ? 'Unmute' : 'Mute'} style={{ background: 'none', border: `1px solid ${muted ? '#ef5350' : '#4ade80'}`, color: muted ? '#ef5350' : '#4ade80', fontSize: 13, width: 26, height: 26, borderRadius: 3, cursor: 'pointer' }}>{muted ? '🔇' : '🔊'}</button>
       </div>
@@ -698,6 +850,7 @@ export default function LiveFeedPage() {
         })}
       </div>
 
+      {gapOpen && <GapChecker onClose={() => setGapOpen(false)} />}
       {/* Body */}
       {dayLoading && !isLive ? (
         <div style={{ padding: 60, textAlign: 'center', color: '#666666', fontSize: 12 }}>Loading…</div>

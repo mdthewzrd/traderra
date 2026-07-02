@@ -20,6 +20,13 @@ export interface ProgramRow {
   blurb: string;
 }
 
+export interface SubRating {
+  score: number; // 0–100
+  tier: 'Low' | 'Moderate' | 'High' | 'Toxic';
+  bullets: string[]; // 1–3 short facts driving this score
+  grid?: { cols: string[]; rows: { label: string; cells: (number | string)[] }[] }; // optional table (e.g. offering-frequency time windows)
+}
+
 export interface RatingBreakdown {
   component: string;
   weight: number;
@@ -43,6 +50,16 @@ export interface DilutionSummary {
     offeringRisk: 'low' | 'medium' | 'high' | null;
     note: string;
   };
+  // 5 Nexus-aligned sub-scores. Overall blends them, weighted toward the
+  // short-bias thesis (need cash + can dilute + history of doing it).
+  subRatings: {
+    cashNeed: SubRating;
+    dilutionAbility: SubRating;
+    offeringFrequency: SubRating;
+    warrantExercise: SubRating;
+    compliance: SubRating;
+  };
+  bullets: string[]; // top-level narrative (AskEdgar-style explainer)
 }
 
 const MS_PER_DAY = 86_400_000;
@@ -79,6 +96,24 @@ export interface MagnitudeInput {
     convertible: { shares: number; strike: number | null; period: string } | null;
     overhangPct: number | null;
   } | null;
+  draws?: {
+    amount: number | null;
+    shares: number | null;
+    facilityType: string;
+    date: string | null;
+  }[];
+  // --- inputs for the 5 named sub-scores (Nexus-aligned) ---
+  runwayMonths?: number | null; // cash need (≤6mo = desperate for cash)
+  cashValue?: number | null; // last reported cash (USD), for narrative
+  monthlyBurn?: number | null; // for narrative
+  price?: number | null; // latest price (in-the-money warrant + bid logic)
+  compliance?: { rules: { rule: string; status: 'pass' | 'fail' | 'review' | 'n/a' }[]; failures: number } | null;
+  shelfRemaining?: { registered: number; raised: number; remaining: number } | null;
+  publicFloat?: { value: number; shares: number | null; asOf: string } | null;
+  // Parsed 8-K material agreements — the authoritative source for tappable
+  // facilities (SEPA/equity-line max commitment, ATM). More accurate than filing
+  // tags for 'can they dilute right now' because it carries actual capacity.
+  programs?: { programType: string; maxCommitment: number | null; filingDate: string; counterparty: string | null }[];
 }
 
 export function deriveDilutionSummary(
@@ -241,6 +276,25 @@ export function deriveDilutionSummary(
     : 'none';
   const overhangPct = magnitude?.overhang?.overhangPct ?? null;
 
+  // --- Draw pressure (the most direct short-bias signal) ---
+  // ACTUAL cash raised under dilution facilities in recent quarterlies.
+  // A company drawing right now is a far stronger short than one with a dormant
+  // facility. Two tiers: any recent draw (180d), and heavy cumulative draws
+  // ($10M+ in 180d) flagging sustained, material dilution.
+  const draws = magnitude?.draws ?? [];
+  const DRAW_RECENT_DAYS = 180;
+  const HEAVY_DRAW_USD = 10_000_000;
+  const recentDraws = draws.filter((d) => d.date != null && daysSince(d.date) <= DRAW_RECENT_DAYS);
+  const recentDrawTotal = recentDraws.reduce((s, d) => s + (d.amount ?? 0), 0);
+  const hasRecentDraw = recentDraws.length > 0;
+  const hasHeavyDraw = recentDrawTotal >= HEAVY_DRAW_USD;
+  const drawDetail = draws.length
+    ? hasHeavyDraw
+      ? `${recentDraws.length} draws, $${(recentDrawTotal / 1e6).toFixed(1)}M in 180d`
+      : `${draws.length} total${hasRecentDraw ? `, latest ${recentDraws[0].date}` : ''}`
+    : 'none';
+
+  // Keep the component-level breakdown for the transparency detail view.
   const breakdown: RatingBreakdown[] = [
     { component: 'Shelf active (24mo)', weight: 25, fired: shelfRecent, detail: shelfCapacityDetail },
     { component: 'Large shelf capacity ($100M+)', weight: 10, fired: hasLargeShelf, detail: shelfCapacity > 0 ? `$${(shelfCapacity / 1e6).toFixed(0)}M registered` : 'none' },
@@ -251,12 +305,138 @@ export function deriveDilutionSummary(
     { component: 'Large warrant overhang (20%+)', weight: 10, fired: warrantHas && overhangPct !== null && overhangPct >= 20, detail: overhangPct !== null ? `${overhangPct.toFixed(0)}% of shares out.` : 'none' },
     { component: 'Reverse split (12mo)', weight: 15, fired: rsRecent, detail: reverseSplit.length ? `${reverseSplit.length}` : 'none' },
     { component: 'Offering recent', weight: 10, fired: offeringDetails.some((o) => daysSince(o.filingDate) <= 90), detail: offeringDetail },
+    { component: 'Active facility draw (180d)', weight: 20, fired: hasRecentDraw, detail: drawDetail },
+    { component: 'Heavy recent draws ($10M+/180d)', weight: 15, fired: hasHeavyDraw, detail: hasHeavyDraw ? `$${(recentDrawTotal / 1e6).toFixed(1)}M drawn` : 'none' },
     { component: 'Insider dilution (90d)', weight: 15, fired: dil90d > 0, detail: insiderDetail },
   ];
 
-  const rating = Math.min(100, breakdown.filter((b) => b.fired).reduce((s, b) => s + b.weight, 0));
-  const tier = rating <= 20 ? 'Low' : rating <= 45 ? 'Moderate' : rating <= 70 ? 'High' : 'Toxic';
+  const tierFromScore = (s: number): SubRating['tier'] => (s <= 20 ? 'Low' : s <= 45 ? 'Moderate' : s <= 70 ? 'High' : 'Toxic');
+  const clamp100 = (n: number) => Math.max(0, Math.min(100, n));
+  const usd = (n: number | null | undefined, m = true) => (n == null ? '—' : m ? `$${(n / 1e6).toFixed(1)}M` : `$${(n / 1e3).toFixed(0)}k`);
+
+  // --- Cash Need: urgency to raise (runway). <6mo = desperate, >12mo = funded. ---
+  const runway = magnitude?.runwayMonths ?? null;
+  let cashScore = 0;
+  const cashBullets: string[] = [];
+  if (runway == null) {
+    cashBullets.push('No burn data — cash need unknown.');
+  } else {
+    cashScore = runway <= 0 ? 100 : runway <= 3 ? 100 : runway <= 6 ? 85 : runway <= 12 ? 55 : runway <= 24 ? 25 : 5;
+    cashBullets.push(
+      `${runway <= 0 ? 'Out of cash' : runway.toFixed(1) + 'mo runway'}${magnitude?.cashValue != null ? ` · ${usd(magnitude.cashValue)} cash` : ''}${magnitude?.monthlyBurn != null ? ` · ${usd(Math.abs(magnitude.monthlyBurn), false)}/mo burn` : ''}${runway <= 6 ? ' (desperate for cash)' : runway > 12 ? ' (well-funded)' : ''}.`,
+    );
+  }
+  const cashNeed: SubRating = { score: clamp100(cashScore), tier: tierFromScore(clamp100(cashScore)), bullets: cashBullets };
+
+  // --- Dilution Ability: CAN they sell? shelf remaining, equity line, ATM, converts, S-1.
+  //     Programs (parsed 8-K material agreements) are preferred over filing tags —
+  //     they carry actual committed capacity ($50M SEPA etc.) and catch facilities
+  //     that aren't separately tagged on a filing.
+  let abilScore = 0;
+  const abilBullets: string[] = [];
+  const progs = magnitude?.programs ?? [];
+  const eqProg = progs.filter((p) => p.programType === 'equity-line');
+  const atmProg = progs.filter((p) => p.programType === 'atm');
+  const convProg = progs.filter((p) => p.programType === 'convertible');
+  const sr = magnitude?.shelfRemaining ?? null;
+  if (sr && sr.remaining > 0) { abilScore += sr.remaining >= 50e6 ? 40 : 30; abilBullets.push(`Shelf: $${(sr.remaining / 1e6).toFixed(0)}M of $${(sr.registered / 1e6).toFixed(0)}M remaining (tappable).`); }
+  else if (shelfRecent) { abilScore += 10; abilBullets.push('Shelf active; remaining capacity unclear.'); }
+  // Equity line / SEPA — from programs (with capacity) OR filing tag fallback.
+  if (eqProg.length) {
+    abilScore += 35;
+    const cap = Math.max(0, ...eqProg.map((p) => p.maxCommitment ?? 0));
+    abilBullets.push(`Equity line / SEPA${cap > 0 ? ` up to $${(cap / 1e6).toFixed(0)}M` : ''}${eqProg[0].counterparty ? ` (${eqProg[0].counterparty})` : ''}.`);
+  } else if (equityLine.length) { abilScore += 35; abilBullets.push(`Equity line / SEPA active (${equityLine.length}).`); }
+  if (atmProg.length) { abilScore += 25; abilBullets.push(`ATM agreement (${atmProg.length}).`); }
+  else if (atm.length) { abilScore += 25; abilBullets.push(`ATM agreement (${atm.length}).`); }
+  if (convProg.length || convertible.length) { abilScore += 20; abilBullets.push(`Convertible outstanding (${convProg.length || convertible.length}).`); }
+  const s1Filed = tagged('shelf').filter((f) => /^S-1(\/A)?$/.test(f.formType));
+  if (s1Filed.length) { abilScore += 10; abilBullets.push('S-1 filed (good to go pending effectiveness).'); }
+  // Warrant overhang is dilution ability (sell-side capacity) — merged here.
+  const wpx = magnitude?.price ?? null;
+  if (warrantHas) {
+    abilScore += overhangPct != null && overhangPct >= 20 ? 40 : overhangPct != null && overhangPct >= 5 ? 20 : 8;
+    const w = warrantOverhang!;
+    const itm = w.strike != null && wpx != null && wpx > w.strike;
+    if (itm) abilScore += 15;
+    abilBullets.push(`${(w.shares / 1e6).toFixed(2)}M warrants${w.strike != null ? ` @ $${w.strike.toFixed(2)}` : ''}${overhangPct != null ? ` · ${overhangPct.toFixed(0)}% of shares` : ''}${itm ? ' · IN THE MONEY (exercise likely)' : wpx != null ? ' · out of the money' : ''}.`);
+  }
+  if (!abilBullets.length) abilBullets.push('No tappable dilution facilities detected.');
+  const dilutionAbility: SubRating = { score: clamp100(abilScore), tier: tierFromScore(clamp100(abilScore)), bullets: abilBullets };
+
+  // --- Offering Frequency: tendency to dump (history: offerings, draws, splits, insiders). ---
+  let freqScore = 0;
+  const freqBullets: string[] = [];
+  if (recentGross > 0) { freqScore += 30; freqBullets.push(`${usd(recentGross)} raised in offerings (90d).`); }
+  else if (offeringDetails.length) { freqScore += 10; freqBullets.push(`${offeringDetails.length} historical offering(s).`); }
+  if (hasHeavyDraw) { freqScore += 35; freqBullets.push(`Heavy draws: ${usd(recentDrawTotal)} in 180d.`); }
+  else if (hasRecentDraw) { freqScore += 20; freqBullets.push('Active facility draws (180d).'); }
+  if (rsRecent) { freqScore += 25; freqBullets.push('Reverse split within 12mo (dilution pattern).'); }
+  if (dil90d > 0) { freqScore += 15; freqBullets.push(`${insiderDetail}.`); }
+  if (!freqBullets.length) freqBullets.push('No recent offerings, draws, or splits.');
+  // Time-windowed counts (6mo / 1yr / 3yr / 5yr). Offerings, draws, reverse splits are
+  // real per-event counts. ATM / equity-line are shown as active-facility FLAGS only —
+  // per-tap usage is NOT parsed from SEC (reported as aggregates in 10-Qs), so we do
+  // not fabricate tap counts. Honest over precise.
+  const WINS = [{ l: '6mo', d: 182 }, { l: '1yr', d: 365 }, { l: '3yr', d: 1095 }, { l: '5yr', d: 1825 }];
+  const anyDate = (x: unknown): string | null => {
+    if (!x || typeof x !== 'object') return null;
+    const o = x as Record<string, unknown>;
+    return (typeof o.filingDate === 'string' && o.filingDate) || (typeof o.date === 'string' && o.date) || (typeof o.effectiveDate === 'string' && o.effectiveDate) || (typeof o.announcedDate === 'string' && o.announcedDate) || null;
+  };
+  const countIn = (arr: unknown[], days: number) => arr.filter((x) => { const ds = anyDate(x); return !!ds && daysSince(ds) <= days; }).length;
+  const drawsAll = magnitude?.draws ?? [];
+  const progsAll = magnitude?.programs ?? [];
+  const activeFac: string[] = [];
+  if (atm.length || progsAll.some((p) => p.programType === 'atm')) activeFac.push('ATM');
+  if (equityLine.length || progsAll.some((p) => p.programType === 'equity-line')) activeFac.push('SEPA/equity line');
+  if (convertible.length || progsAll.some((p) => p.programType === 'convertible')) activeFac.push('convertible');
+  if (activeFac.length) freqBullets.push(`Active facilities: ${activeFac.join(', ')} (per-tap usage not disclosed in filings).`);
+  const freqGrid = {
+    cols: WINS.map((w) => w.l),
+    rows: [
+      { label: 'Offerings', cells: WINS.map((w) => countIn(offeringDetails, w.d)) },
+      { label: 'Draws', cells: WINS.map((w) => countIn(drawsAll, w.d)) },
+      { label: 'Reverse splits', cells: WINS.map((w) => countIn(reverseSplit, w.d)) },
+    ],
+  };
+  const offeringFrequency: SubRating = { score: clamp100(freqScore), tier: tierFromScore(clamp100(freqScore)), bullets: freqBullets, grid: freqGrid };
+
+  // --- Compliance: forced-dilution / listing modifier (NUANCED per trader logic). ---
+  // NC stockholders-equity = real distress → GOOD short (high). NC bid <$1 often
+  // forces a reverse split / relief rally → NOT a clean short (low weight).
+  const comp = magnitude?.compliance ?? null;
+  let compScore = 0;
+  const compBullets: string[] = [];
+  if (comp && comp.rules.length) {
+    const findFail = (re: RegExp) => comp!.rules.find((r) => re.test(r.rule) && r.status === 'fail');
+    const eqFail = findFail(/equity/i);
+    const mvFail = findFail(/market value/i);
+    const bidFail = findFail(/bid/i);
+    if (eqFail) { compScore += 70; compBullets.push('Stockholders-equity deficiency — real distress (good short).'); }
+    if (mvFail) { compScore += 50; compBullets.push('Market-value listing deficiency.'); }
+    if (bidFail) { compScore += 20; compBullets.push('Bid <$1 (reverse-split risk — may rally, not a clean short).'); }
+    if (compScore === 0) compBullets.push('Passing all listing standards.');
+  }
+  if (!compBullets.length) compBullets.push('Compliance data unavailable.');
+  const compliance: SubRating = { score: clamp100(compScore), tier: tierFromScore(clamp100(compScore)), bullets: compBullets };
+
+  const subRatings = { cashNeed, dilutionAbility, offeringFrequency, compliance };
+
+  // Overall blends the 5 — weighted toward the short thesis (need + can + history).
+  const rating = Math.round(
+    cashNeed.score * 0.25 + dilutionAbility.score * 0.40 + offeringFrequency.score * 0.25 + compliance.score * 0.10,
+  );
+  const tier = tierFromScore(rating);
   const tierColor = rating <= 20 ? 'emerald' : rating <= 45 ? 'amber' : rating <= 70 ? 'orange' : 'red';
+
+  // Top-level narrative bullets — highest-signal facts across all sub-scores.
+  const bullets: string[] = [
+    ...cashBullets,
+    ...abilBullets,
+    ...(hasRecentDraw ? [drawDetail === 'none' ? 'Recent dilution draws.' : `Dilution draws: ${drawDetail}.`] : []),
+    ...compBullets,
+  ].slice(0, 8);
 
   // --- AskEdgar-aligned risk labels (reverse-engineered from 1,758 labeled reports) ---
   // cashBurnRisk: cloned from prose-cited runway thresholds (68.5% acc on AE's own
@@ -290,14 +470,14 @@ export function deriveDilutionSummary(
     if (toxicCount >= 3) dilutionRisk = 'high';
     else if (toxicCount >= 2) dilutionRisk = 'medium';
     return {
-      cashBurnRisk: null, // populated by caller (needs runway from cash snapshot)
+      cashBurnRisk: runway == null ? null : runway <= 7 ? 'high' : runway <= 12 ? 'medium' : 'low',
       dilutionRisk,
       offeringRisk,
-      note: 'cashBurnRisk cloned (runway ≤7/≤12mo); offeringRisk overhang-aware (warrant+convertible % of shares); in-the-money scoring pending price feed',
+      note: 'cashBurnRisk from runway (≤7/≤12mo); offeringRisk overhang-aware (warrant+convertible % of shares); dilutionRisk from facility breadth.',
     };
   })();
 
-  return { programs, rating, tier, tierColor, breakdown, askedgarLabels };
+  return { programs, rating, tier, tierColor, breakdown, askedgarLabels, subRatings, bullets };
 }
 
 /** Apply the cashBurnRisk threshold using an actual runway value (months).

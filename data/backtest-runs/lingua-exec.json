@@ -1,0 +1,22 @@
+{
+  "id": "lingua-exec",
+  "file": "/home/mdwzrd/.wzrd-pi-dev/projects/edge-dev/assets/backtest/exec-backtest-result.json",
+  "name": "Lingua Exec · SPY 1H",
+  "engine": "lingua-exec",
+  "meta": {
+    "symbol": "SPY",
+    "tf": "60",
+    "from": "2024-03-27",
+    "to": "2024-06-27"
+  },
+  "summary": {
+    "trades": 0,
+    "wins": 0,
+    "winRate": 0,
+    "totR": 0,
+    "profitFactor": 0,
+    "longs": 0,
+    "shorts": 0
+  },
+  "trades": []
+}

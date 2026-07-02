@@ -392,6 +392,29 @@ export default function LabPage() {
     finally { setBusy(false) }
   }
 
+  const copy = async () => {
+    const c = fc.current; if (!c) return
+    setMsg('Copying…')
+    try {
+      // toDataURL→fetch→blob is bulletproof across fabric versions (toBlob callback sig varies)
+      const dataUrl = c.toDataURL({ format: 'png', multiplier: 2 })
+      const blob = await (await fetch(dataUrl)).blob()
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+      setMsg('✓ Copied — paste into a database annotation.')
+    } catch (e: any) {
+      // Fallback: clipboard write needs HTTPS/localhost — download the PNG instead
+      try {
+        const c2 = fc.current!; if (!c2) { setMsg('Copy failed: ' + e.message); return }
+        const dataUrl = c2.toDataURL({ format: 'png', multiplier: 2 })
+        const a = document.createElement('a')
+        a.href = dataUrl
+        a.download = `lab-${Date.now()}.png`
+        document.body.appendChild(a); a.click(); a.remove()
+        setMsg('⬇ Downloaded — drag the PNG into a database annotation.')
+      } catch (e2: any) { setMsg('Copy failed: ' + e.message) }
+    }
+  }
+
   const Btn = (p: { on?: boolean; onClick: () => void; children: React.ReactNode; title?: string; disabled?: boolean }) => (
     <button title={p.title} onClick={p.onClick} disabled={p.disabled} style={btn(!!p.on, p.disabled)}>{p.children}</button>
   )
@@ -432,6 +455,11 @@ export default function LabPage() {
         <Btn title="Redo (Cmd+Shift+Z)" onClick={redo}>↷ Redo</Btn>
         <Btn title="Clear all annotations" onClick={clearAll}>✕ Clear</Btn>
 
+        <button onClick={copy} disabled={!hasImage}
+          style={{ ...btn(false, !hasImage) }}
+          title="Copy the canvas image to clipboard (paste into a database annotation)">
+          📋 Copy
+        </button>
         <button onClick={save} disabled={busy || !hasImage}
           style={{ ...btn(false, !hasImage), background: hasImage ? '#2ea043' : '#21262d', color: hasImage ? '#fff' : '#6e7681', cursor: hasImage ? 'pointer' : 'not-allowed' }}>
           {busy ? 'Saving…' : '💾 Save to Renata'}

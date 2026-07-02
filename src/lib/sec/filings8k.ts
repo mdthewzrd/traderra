@@ -101,14 +101,27 @@ export function parse8kMaterialAgreement(html: string, accessionNo: string, fili
     text.match(/Item\s*3\.0[23][\s\S]{0,80}?(?:Unregistered|Material\s+Modif)([\s\S]{0,6000}?)(?=Item\s*\d)/i);
   if (!sectMatch) return null;
   const sect = sectMatch[0].trim();
+  return parseClause(sect, accessionNo, filingDate, items);
+}
 
+/** Parse a single facility clause (already-extracted text window) into a
+ *  ProgramDetail. Exported so the EFTS recall layer (efts.ts) can reuse the
+ *  same term-extraction logic on exhibit text that has no Item headers. */
+export function parseClause(
+  sect: string,
+  accessionNo: string,
+  filingDate: string,
+  items: string[],
+): ProgramDetail | null {
   const programType = detectType(sect);
   if (!programType) return null; // not a modeled dilution facility
 
   // Counterparty — usually "with X (the "Lender"/"Purchaser"/"Agent")".
+  // Broadened for exhibit text: catches "GEM Global Yield LLC SCS",
+  // "Lincoln Park Capital Fund, LLC", etc. via a trailing entity suffix.
   const cp =
-    sect.match(/(?:with|by\s+and\s+between)\s+([A-Z][A-Za-z0-9&.,'\s]{2,40}?)(?:\s*\(\s*(?:the\s+)?["']?(?:Lender|Purchaser|Agent|Investor|Counterparty|Buyer)["']?\s*\))/)?.[1]?.trim() ??
-    sect.match(/(?:with|by\s+and\s+between)\s+(GEM|[A-Z][A-Za-z0-9&.]{2,30})\s+(?:Global\s+Equity|Capital|Partners|Management|Lender|Purchaser)/)?.[1]?.trim() ??
+    sect.match(/(?:with|by\s+and\s+between|between)\s+([A-Z][A-Za-z0-9&.,'\s]{3,50}?(?:LLC|L\.L\.C\.|Inc|Ltd|Capital|Partners|Group|Securities|Management|Advisors|Global\s+\w+|Markets))\b/)?.[1]?.trim() ??
+    sect.match(/(?:with|by\s+and\s+between)\s+([A-Z][A-Za-z0-9&.]{2,30})\s+(?:Global\s+Equity|Global\s+Yield|Capital|Partners|Management|Lender|Purchaser)/)?.[1]?.trim() ??
     null;
 
   // Max commitment — "aggregate principal amount of up to $N" / "up to $N" / "maximum ... $N".
@@ -228,19 +241,23 @@ export interface CompanyProgram {
   filingAccession: string;
 }
 
-/** Read all parsed material-agreement programs for a CIK (no SEC call). */
+/** Read all parsed material-agreement programs for a CIK (no SEC call).
+ *  Dedupes by (type + amount) — EFTS recall surfaces the same facility across
+ *  many filings (amendments, prospectus re-filings, 8-K + S-4 definitions);
+ *  collapsing to one row per facility keeps the programs card scannable.
+ *  Prefers rows with an extracted counterparty; falls back to newest date. */
 export async function getPrograms(cik: string): Promise<CompanyProgram[]> {
   const rows = await prisma.dilutionFiling.findMany({
-    where: { cik, formType: '8-K', rawPayload: { path: ['programDetail'], not: null } },
+    where: { cik, rawPayload: { path: ['programDetail'], not: null } },
     select: { rawPayload: true, filingDate: true },
     orderBy: { filingDate: 'desc' },
   });
-  const out: CompanyProgram[] = [];
+  const all: CompanyProgram[] = [];
   for (const r of rows) {
     const rp = (r.rawPayload ?? null) as { programDetail?: ProgramDetail } | null;
     const d = rp?.programDetail;
     if (!d) continue;
-    out.push({
+    all.push({
       programType: d.programType,
       filingDate: d.filingDate,
       counterparty: d.counterparty,
@@ -254,5 +271,17 @@ export async function getPrograms(cik: string): Promise<CompanyProgram[]> {
       filingAccession: d.filingAccession,
     });
   }
-  return out;
+  // Dedup: group by type + amount (rounded to avoid float noise). Keep the
+  // row with a counterparty if any in the group has one; else newest.
+  const byKey = new Map<string, CompanyProgram>();
+  for (const p of all) {
+    const key = `${p.programType}|${p.maxCommitment != null ? Math.round(p.maxCommitment) : 'null'}`;
+    const cur = byKey.get(key);
+    if (!cur) { byKey.set(key, p); continue; }
+    const curHasCp = !!cur.counterparty;
+    const pHasCp = !!p.counterparty;
+    const replace = pHasCp && !curHasCp;
+    if (replace) byKey.set(key, p);
+  }
+  return [...byKey.values()].sort((a, b) => (b.filingDate ?? '').localeCompare(a.filingDate ?? ''));
 }

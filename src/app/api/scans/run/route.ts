@@ -597,7 +597,7 @@ async function runSpecJob(specName: string, from?: string, to?: string): Promise
   }
   await saveJobs({ ...await loadJobs(), [jobId]: job })
 
-  const child = spawn('bash', ['-c', `${pythonPath} -u ${scanScript} --spec ${specName} --start ${fromDate} --end ${toDate} > ${logFile} 2>&1`], {
+  const child = spawn('bash', ['-c', `${pythonPath} -u ${scanScript} --spec ${specName} --start ${fromDate} --end ${toDate} --push > ${logFile} 2>&1`], {
     env,
     cwd,
     stdio: 'ignore',

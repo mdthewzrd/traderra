@@ -1,0 +1,86 @@
+[
+  {
+    "id": "mb-spy-2024-2026",
+    "name": "Mike's Bands · SPY 15m",
+    "engine": "mikes-bands",
+    "meta": {
+      "symbol": "SPY",
+      "tf": "15",
+      "from": "2024-01-01",
+      "to": "2026-06-27"
+    },
+    "summary": {
+      "trades": 722,
+      "wins": 191,
+      "winRate": 26.5,
+      "totR": -31.69,
+      "profitFactor": 0.903,
+      "longs": 449,
+      "shorts": 273
+    },
+    "createdAt": "2026-07-01T01:41:57.797Z"
+  },
+  {
+    "id": "spy-1631-920",
+    "name": "16/31 + 9/20 · SPY",
+    "engine": "16-31-920",
+    "meta": {
+      "symbol": "SPY",
+      "tf": "15",
+      "from": "2024-01-01",
+      "to": "2026-06-27"
+    },
+    "summary": {
+      "trades": 747,
+      "wins": 185,
+      "winRate": 24.8,
+      "totR": -32.56,
+      "profitFactor": 0.908,
+      "longs": 464,
+      "shorts": 283
+    },
+    "createdAt": "2026-07-01T01:41:57.800Z"
+  },
+  {
+    "id": "lingua-exec",
+    "name": "Lingua Exec · SPY 1H",
+    "engine": "lingua-exec",
+    "meta": {
+      "symbol": "SPY",
+      "tf": "60",
+      "from": "2024-03-27",
+      "to": "2024-06-27"
+    },
+    "summary": {
+      "trades": 0,
+      "wins": 0,
+      "winRate": 0,
+      "totR": 0,
+      "profitFactor": 0,
+      "longs": 0,
+      "shorts": 0
+    },
+    "createdAt": "2026-07-01T01:41:57.801Z"
+  },
+  {
+    "id": "scalp-920-spy",
+    "name": "9/20 Scalp · SPY 15m",
+    "engine": "scalp-920",
+    "meta": {
+      "symbol": "SPY",
+      "tf": "15",
+      "from": "2024-01-01",
+      "to": "2026-06-27"
+    },
+    "summary": {
+      "trades": 914,
+      "wins": 290,
+      "winRate": 31.7,
+      "totR": 399.24,
+      "profitFactor": 1.648,
+      "longs": 480,
+      "shorts": 434
+    },
+    "createdAt": "2026-07-01T01:41:57.803Z"
+  }
+]

@@ -479,7 +479,7 @@ function drawArrow(
   ctx.restore()
 }
 
-function drawWedge(
+export function drawWedge(
   ctx: CanvasRenderingContext2D, x: number, apexY: number, size: number,
   dir: 'up' | 'down', color: string,
 ) {

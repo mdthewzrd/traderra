@@ -22,7 +22,7 @@ import { renderDevZones } from '@/lib/charts/render-devzones'
 import { renderCurlTrend } from '@/lib/charts/render-curltrend'
 import { renderLinguaFast } from '@/lib/charts/render-linguafast'
 import { renderAdaptiveBands } from '@/lib/charts/render-adaptive-bands'
-import { renderLinguaExec, setLinguaExecPitch } from '@/lib/charts/render-lingua-exec'
+import { renderLinguaExec, setLinguaExecPitch, drawWedge } from '@/lib/charts/render-lingua-exec'
 import { renderLinguaCycle, renderAnchoredTrendline, renderConsolidation, renderRegime, renderLinguaPitchOverlay, setLinguaMtfBars, htfOf, ltfOf } from '@/lib/charts/render-lingua'
 import { isIntraday } from '@/lib/charts/format'
 import { C } from '@/lib/charts/theme'
@@ -444,6 +444,37 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
             drawEMABand(rc, ic.ema[ef], ic.ema[es],
               'rgba(34,197,94,.15)', 'rgba(239,68,68,.15)',
               'rgba(34,197,94,.50)', 'rgba(239,68,68,.50)')
+          }
+        }
+      }
+
+      // EMA Cross Switch — wedges ONLY (no cloud). Green ▲ below bar on a bullish
+      // cross (fast crosses above slow), red ▼ above bar on a bearish cross. Same
+      // ic.ema cache + proven crossover/drawWedge logic as the Lingua regime cloud.
+      if (inds.ema_cross) {
+        for (const t of toolOverrides.filter((x: any) => x.indKey === 'ema_cross')) {
+          const ef = Number(t.params?.fast) || 9
+          const es = Number(t.params?.slow) || 20
+          if (!ic.ema[ef] || !ic.ema[es]) continue
+          const eFast = ic.ema[ef], eSlow = ic.ema[es]
+          const size = Math.max(3, Number(t.params?.wedgeSize) || 6)
+          const colUp = toolColor('ema_cross', 'wedge_up', 'rgba(34,197,94,0.95)')
+          const colDn = toolColor('ema_cross', 'wedge_down', 'rgba(239,68,68,0.95)')
+          let prevSign = 0
+          for (let i = 0; i < eFast.length; i++) {
+            if (eFast[i] == null || eSlow[i] == null) { prevSign = 0; continue }
+            const sign = eFast[i]! > eSlow[i]! ? 1 : (eFast[i]! < eSlow[i]! ? -1 : 0)
+            if (sign !== 0 && prevSign !== 0 && sign !== prevSign && i >= rc.vs && i <= rc.ve) {
+              const bar = rc.data[i]
+              const x = rc.xCtr(i - rc.vs)
+              // Anchor the wedge apex at the close price (≈ next bar's open) — the level
+              // where the cross is confirmed. Bullish ▲ apex points up at close, bearish
+              // ▼ apex points down at close.
+              const apexY = rc.pToY(bar.close)
+              if (sign > 0) drawWedge(ctx, x, apexY, size, 'up', colUp)
+              else drawWedge(ctx, x, apexY, size, 'down', colDn)
+            }
+            if (sign !== 0) prevSign = sign
           }
         }
       }

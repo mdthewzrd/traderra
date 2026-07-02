@@ -18,6 +18,7 @@
 import { prisma } from '@/lib/prisma';
 import { SecHttpError, secFetchJson } from '@/lib/sec/client';
 import { getCikForTicker, padCik } from '@/lib/sec/cik-map';
+import { fxToUsd } from '@/lib/sec/fx';
 
 const MS_PER_DAY = 86_400_000;
 const MS_PER_MONTH = MS_PER_DAY * 30.44; // SEC periods are ~30.44-day months
@@ -31,6 +32,20 @@ export interface CashPosition {
   projectedCash: number | null; // forward-projected to TODAY (can be NEGATIVE) — matches AskEdgar/Nexus/DilutionTracker
   cashRemainingMonths: number | null; // projectedCash / |burn| (can be NEGATIVE) — the headline runway
   projectedAsOf: string | null; // today's date (ISO) the projection is valid for
+  // C20 honesty guard: cash facts internally inconsistent with the burn
+  // trajectory (flat across periods under nonzero burn, or near-zero
+  // placeholders) are flagged. When false, the projection is suppressed — a
+  // -3mo headline off a stale XBRL value is worse than no number.
+  cashReliable: boolean;
+  reliabilityNote: string | null;
+  // Reporting currency of the source facts. 'USD' for domestic issuers; the
+  // native ISO code (ILS/CAD/EUR…) for Foreign Private Issuers whose facts were
+  // FX-converted to USD. UI flags when ≠ USD; runway is currency-neutral.
+  currency: string;
+  // C-acceleration guard: true when the most recent half-year+ stub burns >1.3x
+  // the smoothed TTM rate. Headline monthlyCashFlow already switches to the
+  // recent run-rate in that case; this flag lets the UI say "accelerating".
+  acceleratingBurn: boolean;
 }
 
 // Forward-project last-reported cash to today assuming burn continues at the
@@ -84,13 +99,17 @@ interface FactEntry {
   filed?: string;
   accn?: string;
   form?: string;
+  unit?: string; // ISO currency of the source fact (USD, ILS, CAD…); USD unless FX-converted
 }
 
 interface FinancialsPayload {
   facts: {
     // companyfacts has hundreds of us-gaap concepts; index signature keeps the
     // picker generic so it works across issuers (e.g. SDOT reports under `Cash`).
-    'us-gaap'?: Record<string, { units?: { USD?: FactEntry[] } } | undefined>;
+    // companyfacts has hundreds of concepts across us-gaap (domestic, USD) and
+    // ifrs-full (Foreign Private Issuers / 20-F, often a native currency).
+    'us-gaap'?: Record<string, { units?: Record<string, FactEntry[]> } | undefined>;
+    'ifrs-full'?: Record<string, { units?: Record<string, FactEntry[]> } | undefined>;
   };
 }
 
@@ -129,6 +148,26 @@ export const REVENUE_CANDIDATES = [
   'RevenueFromContractWithCustomerExcludingAssessedTax',
   'SalesRevenueNet',
 ];
+// IFRS concept equivalents for Foreign Private Issuers (20-F filers reporting
+// under ifrs-full, often in a native currency). Maps each us-gaap candidate to
+// its ifrs-full counterpart so pickConceptEntries/pickCashEntries can fall back
+// to the IFRS namespace + FX-convert to USD.
+// Each us-gaap candidate → its ifrs-full equivalent(s). Arrays handle taxonomy
+// variants across filers (operating CF alone has 3 valid IFRS tag names).
+// Grounded in actual 20-F companyfacts (SVRE CIK 1894693): the canonical IFRS
+// operating-CF tag is CashFlowsFromUsedInOperatingActivities (note the "From").
+const IFRS_EQUIV: Record<string, string[]> = {
+  StockholdersEquity: ['Equity', 'EquityAttributableToOwnersOfParent'],
+  LiabilitiesAndStockholdersEquity: ['Equity'],
+  NetIncomeLoss: ['ProfitLoss', 'ComprehensiveIncome'],
+  ProfitLoss: ['ProfitLoss', 'ComprehensiveIncome'],
+  Revenues: ['Revenue', 'RevenueFromContractsWithCustomers'],
+  RevenueFromContractWithCustomerExcludingAssessedTax: ['Revenue', 'RevenueFromContractsWithCustomers'],
+  SalesRevenueNet: ['Revenue', 'RevenueFromContractsWithCustomers'],
+  NetCashProvidedByUsedInOperatingActivities: ['CashFlowsFromUsedInOperatingActivities', 'CashFlowsUsedInOperatingActivities', 'CashFlowsFromOperatingActivities'],
+  NetCashProvidedByUsedInOperatingActivitiesContinuingOperations: ['CashFlowsFromUsedInOperatingActivities', 'CashFlowsUsedInOperatingActivities', 'CashFlowsFromOperatingActivities'],
+};
+const IFRS_CASH = ['CashAndCashEquivalents', 'Cash'];
 
 // Authorized share capital — the ceiling for future dilution before a
 // shareholder vote is required. sharesAvailable = authorized − outstanding is
@@ -167,84 +206,142 @@ function annualEntries(entries: FactEntry[]): FactEntry[] {
 function normalizeScale(entries: FactEntry[]): FactEntry[] {
   if (entries.length < 2) return entries;
   const out = entries.map((e) => ({ ...e }));
-  for (let pass = 0; pass < 3; pass++) {
-    const vals = out.map((e) => Math.abs(e.val)).sort((a, b) => a - b);
+  // ×1000 mis-scaling (foreign filers / 20-F) appears as TWO entries at the
+  // SAME period end differing by ~1000× (e.g. UPC: $29.5M + $29.5B). Divide the
+  // outlier down WITHIN each date group. We deliberately do NOT use a global
+  // median: a transformed company (de-SPAC, reverse merger) legitimately spans
+  // scales over time (VWAV: $885 shell cash → $14.2M post-deal), and a global
+  // median mis-fires ÷1000 on the real latest value.
+  const byEnd = new Map<string, FactEntry[]>();
+  for (const e of out) {
+    const g = byEnd.get(e.end) ?? [];
+    g.push(e);
+    byEnd.set(e.end, g);
+  }
+  for (const g of byEnd.values()) {
+    if (g.length < 2) continue;
+    const vals = g.map((e) => Math.abs(e.val)).sort((a, b) => a - b);
     const median = vals[Math.floor(vals.length / 2)];
-    if (median <= 0) break;
-    let changed = false;
-    for (const e of out) {
-      if (Math.abs(e.val) > median * 100) {
-        e.val = e.val / 1000;
-        changed = true;
-      }
+    if (median <= 0) continue;
+    for (const e of g) {
+      if (Math.abs(e.val) > median * 100) e.val = e.val / 1000;
     }
-    if (!changed) break;
   }
   return out;
 }
 
-function pickConceptEntries(facts: FinancialsPayload['facts'], concepts: string[]): FactEntry[] {
+async function pickConceptEntries(facts: FinancialsPayload['facts'], concepts: string[]): Promise<FactEntry[]> {
   if (!facts) return [];
+  const desc = (a: FactEntry, b: FactEntry) => (a.end < b.end ? 1 : a.end > b.end ? -1 : 0);
+  // --- us-gaap (domestic issuers, USD) ---
   const usgaap = facts['us-gaap'];
-  if (!usgaap) return [];
-  let best: FactEntry[] = [];
-  let bestLatestEnd = '';
-  for (const c of concepts) {
-    const arr = usgaap[c]?.units?.USD;
-    if (!Array.isArray(arr) || !arr.length) continue;
-    const sorted = normalizeScale(
-      arr
-        .filter((e) => typeof e.val === 'number' && isFinite(e.val))
-        .sort((a, b) => (a.end < b.end ? 1 : a.end > b.end ? -1 : 0)),
-    );
-    if (!sorted.length) continue;
-    const latestEnd = sorted[0].end;
-    if (latestEnd > bestLatestEnd) {
-      bestLatestEnd = latestEnd;
-      best = sorted;
+  if (usgaap) {
+    let best: FactEntry[] = [];
+    let bestLatestEnd = '';
+    for (const c of concepts) {
+      const arr = usgaap[c]?.units?.USD;
+      if (!Array.isArray(arr) || !arr.length) continue;
+      const sorted = normalizeScale(arr.filter((e) => typeof e.val === 'number' && isFinite(e.val)).sort(desc));
+      if (!sorted.length) continue;
+      if (sorted[0].end > bestLatestEnd) { bestLatestEnd = sorted[0].end; best = sorted; }
+    }
+    if (best.length) return best;
+  }
+  // --- ifrs-full fallback (Foreign Private Issuers / 20-F) ---
+  // IFRS tags differ; map each us-gaap candidate to its ifrs-full equivalent.
+  // Non-USD units (ILS/CAD/EUR…) are FX-converted to USD so downstream numbers
+  // (runway, burn, compliance) stay comparable. Runway is currency-neutral
+  // regardless; conversion serves the USD headline + cross-company sort.
+  const ifrs = facts['ifrs-full'];
+  if (ifrs) {
+    let best: FactEntry[] = [];
+    let bestLatestEnd = '';
+    for (const c of concepts) {
+      const variants = IFRS_EQUIV[c];
+      if (!variants?.length) continue;
+      for (const ic of variants) {
+        const unitsObj = ifrs[ic]?.units;
+        if (!unitsObj) continue;
+        const collected: FactEntry[] = [];
+        for (const [unit, arr] of Object.entries(unitsObj)) {
+          if (!Array.isArray(arr)) continue;
+          for (const e of arr) {
+            if (typeof e.val !== 'number' || !isFinite(e.val)) continue;
+            if (unit === 'USD') collected.push({ ...e, unit: 'USD' });
+            else {
+              const usd = await fxToUsd(e.val, unit, e.end);
+              if (usd == null) continue;
+              collected.push({ ...e, val: usd, unit });
+            }
+          }
+        }
+        if (!collected.length) continue;
+        // normalize per-variant (NOT merged) to avoid the same-date division
+        // guard halving values when two variants report the same period.
+        const sorted = normalizeScale(collected.sort(desc));
+        if (sorted.length && sorted[0].end > bestLatestEnd) { bestLatestEnd = sorted[0].end; best = sorted; }
+      }
+    }
+    if (best.length) return best;
+  }
+  return [];
+}
+
+async function pickCashEntries(facts: FinancialsPayload['facts']): Promise<{ entries: FactEntry[]; currency: string }> {
+  if (!facts) return { entries: [], currency: 'USD' };
+  const desc = (a: FactEntry, b: FactEntry) => (a.end < b.end ? 1 : a.end > b.end ? -1 : 0);
+  // --- us-gaap path (domestic, USD) — existing C14 scale guard + priority ---
+  const usgaap = facts['us-gaap'];
+  if (usgaap) {
+    const per: { concept: string; entries: FactEntry[]; latestEnd: string; latestVal: number }[] = [];
+    for (const c of CASH_CANDIDATES) {
+      const arr = usgaap[c]?.units?.USD;
+      if (!Array.isArray(arr) || !arr.length) continue;
+      const sorted = normalizeScale(arr.filter((e) => typeof e.val === 'number' && isFinite(e.val)).sort(desc));
+      if (!sorted.length) continue;
+      per.push({ concept: c, entries: sorted, latestEnd: sorted[0].end, latestVal: sorted[0].val });
+    }
+    if (per.length) {
+      const narrow = per.find((p) => p.concept === 'CashAndCashEquivalentsAtCarryingValue');
+      const filtered = narrow && narrow.latestVal !== 0
+        ? per.filter((p) => Math.abs(p.latestVal) <= Math.abs(narrow.latestVal) * 1000)
+        : per;
+      const pool = filtered.length ? filtered : per;
+      const order = new Map(CASH_CANDIDATES.map((c, i) => [c, i]));
+      pool.sort((a, b) => (a.latestEnd !== b.latestEnd ? (a.latestEnd < b.latestEnd ? 1 : -1) : (order.get(a.concept) ?? 99) - (order.get(b.concept) ?? 99)));
+      return { entries: pool[0].entries, currency: 'USD' };
     }
   }
-  return best;
-}
-
-function pickCashEntries(facts: FinancialsPayload['facts']): FactEntry[] {
-  if (!facts) return [];
-  const usgaap = facts['us-gaap'];
-  if (!usgaap) return [];
-  // Gather each candidate concept's newest-first entries + latest end/val.
-  const per: { concept: string; entries: FactEntry[]; latestEnd: string; latestVal: number }[] = [];
-  for (const c of CASH_CANDIDATES) {
-    const arr = usgaap[c]?.units?.USD;
-    if (!Array.isArray(arr) || !arr.length) continue;
-    const sorted = normalizeScale(
-      arr
-        .filter((e) => typeof e.val === 'number' && isFinite(e.val))
-        .sort((a, b) => (a.end < b.end ? 1 : a.end > b.end ? -1 : 0)),
-    );
-    if (!sorted.length) continue;
-    per.push({ concept: c, entries: sorted, latestEnd: sorted[0].end, latestVal: sorted[0].val });
+  // --- ifrs-full path (FPI / 20-F) — FX-convert non-USD to USD ---
+  const ifrs = facts['ifrs-full'];
+  if (ifrs) {
+    for (const c of IFRS_CASH) {
+      const unitsObj = ifrs[c]?.units;
+      if (!unitsObj) continue;
+      const collected: FactEntry[] = [];
+      let cur = 'USD';
+      for (const [unit, arr] of Object.entries(unitsObj)) {
+        if (!Array.isArray(arr)) continue;
+        for (const e of arr) {
+          if (typeof e.val !== 'number' || !isFinite(e.val)) continue;
+          if (unit === 'USD') collected.push({ ...e, unit: 'USD' });
+          else {
+            const usd = await fxToUsd(e.val, unit, e.end);
+            if (usd == null) continue;
+            collected.push({ ...e, val: usd, unit });
+            cur = unit;
+          }
+        }
+      }
+      if (!collected.length) continue;
+      const sorted = normalizeScale(collected.sort(desc));
+      if (sorted.length) return { entries: sorted, currency: cur };
+    }
   }
-  if (!per.length) return [];
-  // Scale sanity guard (C14): a foreign filer may tag its native-currency value
-  // (e.g. RMB in thousands) under a USD unit, producing absurd figures
-  // (UPC: broadest $33.5B vs narrow CashAndCashEquivalentsAtCarryingValue
-  // $14.2M). If a concept's latest value is >50× the narrow concept's, treat it
-  // as mis-scaled and drop it. Restricted cash is never 50× unrestricted.
-  const narrow = per.find((p) => p.concept === 'CashAndCashEquivalentsAtCarryingValue');
-  const filtered = narrow && narrow.latestVal !== 0
-    ? per.filter((p) => Math.abs(p.latestVal) <= Math.abs(narrow.latestVal) * 50)
-    : per;
-  const pool = filtered.length ? filtered : per;
-  // Among survivors, pick newest latest-end; tie → priority order (broadest first).
-  const order = new Map(CASH_CANDIDATES.map((c, i) => [c, i]));
-  pool.sort((a, b) => {
-    if (a.latestEnd !== b.latestEnd) return a.latestEnd < b.latestEnd ? 1 : -1;
-    return (order.get(a.concept) ?? 99) - (order.get(b.concept) ?? 99);
-  });
-  return pool[0].entries;
+  return { entries: [], currency: 'USD' };
 }
 
-function pickOperatingEntries(facts: FinancialsPayload['facts']): FactEntry[] {
+async function pickOperatingEntries(facts: FinancialsPayload['facts']): Promise<FactEntry[]> {
   return pickConceptEntries(facts, OP_CANDIDATES);
 }
 
@@ -289,8 +386,25 @@ function ttmMonthlyBurn(entries: FactEntry[]): { monthly: number; end: string } 
       return Math.abs(new Date(s.end).getTime() - yearAgo) <= 50 * MS_PER_DAY;
     });
     if (fy && py) {
-      const ttm = fy.val - py.val + pivot.val;
-      return { monthly: ttm / 12, end: pivot.end };
+      const ttmVal = fy.val - py.val + pivot.val;
+      const ttmMonthly = ttmVal / 12;
+      // Recent run-rate = the pivot stub normalized by its own span. We take the
+      // WORSE-OF (recent vs TTM) as the headline whenever the stub is >=60d and
+      // recent is meaningfully worse (>=1.1x the smoothed TTM rate). Deliberately
+      // conservative for dilution DD: a short-bias trader would rather assume the
+      // worse run-rate than miss an acceleration. The old 150d gate false-negatived
+      // quarterly filers (SVRA: 89d Q1 stub burning 1.34x TTM, genuinely
+      // accelerating, was NOT flagged — 0/16 in the generalization sample).
+      // Lowering to 60d catches Q1/Q2/Q3 stubs. The 1.1x floor avoids flagging on
+      // sub-10% quarterly rounding noise (was 1.3x + 150d). We accept that a
+      // noisy quarter (DCOY: 2.4x) now flags conservatively — for dilution timing,
+      // assuming the higher burn is the safer, actionable call.
+      const recentMonthly = monthlyRate(pivot);
+      const accelerating =
+        recentMonthly < 0 && ttmMonthly < 0 &&
+        Math.abs(recentMonthly) >= Math.abs(ttmMonthly) * 1.1 &&
+        span(pivot) >= 60;
+      return { monthly: accelerating ? recentMonthly : ttmMonthly, end: pivot.end, accelerating };
     }
   }
   // Fallback 1: latest annual / 12 (stable full-year).
@@ -322,6 +436,9 @@ export async function syncFinancials(
   const empty: CashPosition = {
     estimatedCash: null, asOfDate: null, monthlyCashFlow: null, asOfOperatingEnd: null,
     reportedRunwayMonths: null, projectedCash: null, cashRemainingMonths: null, projectedAsOf: null,
+    cashReliable: true, reliabilityNote: null,
+    currency: 'USD',
+    acceleratingBurn: false,
   };
   const entry = await getCikForTicker(rawTicker);
   if (!entry) return { status: 'error', cash: empty, error: `No CIK for ${rawTicker}` };
@@ -354,13 +471,15 @@ export async function syncFinancials(
   }
 
   const facts = payload.facts;
-  const cashEntries = pickCashEntries(facts);
-  const opEntries = pickOperatingEntries(facts);
-  const latestCash = cashEntries.length ? cashEntries[0] : null;
+  const cashPick = await pickCashEntries(facts);
+  const cashEntries = cashPick.entries;
+  const reportingCurrency = cashPick.currency;
+  const opEntries = await pickOperatingEntries(facts);
+  const latestCash = cashEntries[0] ?? null;
   const ttm = ttmMonthlyBurn(opEntries);
-  const seLatest = (() => { const a = pickConceptEntries(facts, SE_CANDIDATES); return a.length ? a[0] : null; })();
-  const niAnnuals = annualEntries(pickConceptEntries(facts, NI_CANDIDATES));
-  const revAnnuals = annualEntries(pickConceptEntries(facts, REVENUE_CANDIDATES));
+  const seLatest = (await pickConceptEntries(facts, SE_CANDIDATES))[0] ?? null;
+  const niAnnuals = annualEntries(await pickConceptEntries(facts, NI_CANDIDATES));
+  const revAnnuals = annualEntries(await pickConceptEntries(facts, REVENUE_CANDIDATES));
   // Authorized shares live under units.shares (not USD like the financials).
   const authLatest = (() => {
     if (!facts) return null;
@@ -388,17 +507,32 @@ export async function syncFinancials(
   // newest-period, so stale wrong rows would shadow the corrected value.
   if (options?.force) {
     await prisma.dilutionFact.deleteMany({
-      where: { cik, fact: { in: ['CashAndCashEquivalentsAtCarryingValue', 'MonthlyCashFlow', 'StockholdersEquity', 'NetIncomeLoss', 'Revenues', 'AuthorizedShares'] } },
+      where: { cik, fact: { in: ['CashAndCashEquivalentsAtCarryingValue', 'MonthlyCashFlow', 'StockholdersEquity', 'NetIncomeLoss', 'Revenues', 'AuthorizedShares', 'ReportingCurrency'] } },
     });
   }
 
   const writes: Promise<unknown>[] = [];
+  // Persist the latest few periods of the chosen cash series so the snapshot
+  // (computeCashFromDb) reads FRESH values on cache hits and the C20 reliability
+  // guard has ≥2 periods to compare. (Previously only the single latest entry
+  // was persisted, leaving a stale relic when scale logic changed.)
+  for (const e of cashEntries.slice(0, 4)) {
+    writes.push(
+      prisma.dilutionFact.upsert({
+        where: { cik_fact_period: { cik, fact: 'CashAndCashEquivalentsAtCarryingValue', period: e.end } },
+        create: { cik, fact: 'CashAndCashEquivalentsAtCarryingValue', period: e.end, unit: 'USD', val: e.val, filed: e.filed ? new Date(e.filed) : null, accn: e.accn ?? null },
+        update: { val: e.val, filed: e.filed ? new Date(e.filed) : null, accn: e.accn ?? null },
+      }),
+    );
+  }
+  // Persist reporting currency so the DB-only snapshot path (computeCashFromDb)
+  // can flag FX-converted foreign issuers. unit holds the ISO code (e.g. 'ILS').
   if (latestCash) {
     writes.push(
       prisma.dilutionFact.upsert({
-        where: { cik_fact_period: { cik, fact: 'CashAndCashEquivalentsAtCarryingValue', period: latestCash.end } },
-        create: { cik, fact: 'CashAndCashEquivalentsAtCarryingValue', period: latestCash.end, unit: 'USD', val: latestCash.val, filed: latestCash.filed ? new Date(latestCash.filed) : null, accn: latestCash.accn ?? null },
-        update: { val: latestCash.val, filed: latestCash.filed ? new Date(latestCash.filed) : null, accn: latestCash.accn ?? null },
+        where: { cik_fact_period: { cik, fact: 'ReportingCurrency', period: latestCash.end } },
+        create: { cik, fact: 'ReportingCurrency', period: latestCash.end, unit: reportingCurrency, val: 0 },
+        update: { unit: reportingCurrency },
       }),
     );
   }
@@ -408,6 +542,15 @@ export async function syncFinancials(
         where: { cik_fact_period: { cik, fact: 'MonthlyCashFlow', period: ttm.end } },
         create: { cik, fact: 'MonthlyCashFlow', period: ttm.end, unit: 'USD', val: ttm.monthly },
         update: { val: ttm.monthly },
+      }),
+    );
+    // Acceleration flag (0/1) so the DB-only snapshot path can surface the
+    // "burn accelerating" badge without recomputing from raw operating CF.
+    writes.push(
+      prisma.dilutionFact.upsert({
+        where: { cik_fact_period: { cik, fact: 'BurnAcceleratingFlag', period: ttm.end } },
+        create: { cik, fact: 'BurnAcceleratingFlag', period: ttm.end, unit: 'flag', val: ttm.accelerating ? 1 : 0 },
+        update: { val: ttm.accelerating ? 1 : 0 },
       }),
     );
   }
@@ -425,40 +568,95 @@ export async function syncFinancials(
   for (const e of revAnnuals) persistFact('Revenues', e);
   if (writes.length) await Promise.all(writes);
 
-  return { status: 'success', cash: computeFromValues(latestCash, ttm) };
+  return { status: 'success', cash: computeFromValues(latestCash, ttm, cashEntries, reportingCurrency) };
 }
 
-function computeFromValues(latestCash: FactEntry | null, ttm: { monthly: number; end: string } | null): CashPosition {
+// C20 honesty guard — detect cash facts that can't be trusted for runway.
+// Proven failure (VWAV): XBRL reports 15,723 flat across 12/31->3/31 while the
+// company burns ~$965K/mo. A real company cannot hold identical cash two
+// periods running under nonzero burn — the signature of a stale, placeholder,
+// or mis-scaled XBRL fact. Flag it and suppress the fabricated projection;
+// real cash under burn MUST move.
+function assessCashReliability(
+  latestTwo: Array<{ val: number; end: string }>,
+  burn: number | null,
+): { reliable: boolean; note: string | null } {
+  if (!latestTwo.length) return { reliable: true, note: null };
+  const latest = latestTwo[0];
+  if (
+    latestTwo.length >= 2 &&
+    latestTwo[0].val === latestTwo[1].val &&
+    burn !== null &&
+    Math.abs(burn) > 1
+  ) {
+    return {
+      reliable: false,
+      note: 'Cash unchanged across consecutive reports while burning — XBRL value looks stale or mis-scaled.',
+    };
+  }
+  if (Math.abs(latest.val) < 1000) {
+    return { reliable: false, note: 'Cash under $1,000 — likely a placeholder XBRL value.' };
+  }
+  // Implausibly tiny vs burn: cash under one month of operating burn. Two
+  // honest causes we can't separate from XBRL alone — the company is genuinely
+  // cash-starved (common for the microcaps this terminal targets; verified on
+  // TC/Token Cat: $140K cash vs ~$2.1M/mo burn is REAL, not mis-scaled) OR the
+  // fact is mis-scaled. normalizeScale already corrected same-date ×1000
+  // corruption upstream, but a lone mis-scaled fact can still slip through.
+  // Surface for manual verify rather than asserting one cause — better honest
+  // than misleading.
+  if (burn !== null && Math.abs(burn) > 0 && Math.abs(latest.val) < Math.abs(burn)) {
+    return { reliable: false, note: 'Cash below one month of operating burn — verify against the filing (genuinely depleted or mis-scaled).' };
+  }
+  return { reliable: true, note: null };
+}
+
+function computeFromValues(
+  latestCash: { val: number; end: string } | null,
+  ttm: { monthly: number; end: string; accelerating?: boolean } | null,
+  cashEntries: Array<{ val: number; end: string }> = [],
+  currency: string = 'USD',
+): CashPosition {
   const estimatedCash = latestCash ? latestCash.val : null;
   const monthlyCashFlow = ttm ? ttm.monthly : null;
   const asOfDate = latestCash?.end ?? null;
   const asOfOperatingEnd = ttm?.end ?? null;
+  const proj = project(estimatedCash, asOfDate, monthlyCashFlow, asOfOperatingEnd);
+  const { reliable, note } = assessCashReliability(cashEntries.slice(0, 2), monthlyCashFlow);
   return {
     estimatedCash,
     asOfDate,
     monthlyCashFlow,
     asOfOperatingEnd,
-    ...project(estimatedCash, asOfDate, monthlyCashFlow, asOfOperatingEnd),
+    reportedRunwayMonths: proj.reportedRunwayMonths,
+    // Suppress the fabricated projection when the underlying fact is unreliable
+    // — keep raw estimatedCash so the trader still sees the reported number.
+    projectedCash: reliable ? proj.projectedCash : null,
+    cashRemainingMonths: reliable ? proj.cashRemainingMonths : null,
+    projectedAsOf: reliable ? proj.projectedAsOf : null,
+    cashReliable: reliable,
+    reliabilityNote: note,
+    currency,
+    acceleratingBurn: ttm?.accelerating ?? false,
   };
 }
 
 export async function computeCashFromDb(cik: string): Promise<CashPosition> {
   // The persisted MonthlyCashFlow fact is ALREADY a monthly rate — do not pass it
   // back through monthlyRate() (which would re-normalize by a default 90-day
-  // span and corrupt the burn). Use the stored values directly.
-  const [cashRows, flowRows] = await Promise.all([
-    prisma.dilutionFact.findMany({ where: { cik, fact: 'CashAndCashEquivalentsAtCarryingValue' }, orderBy: { period: 'desc' }, take: 1 }),
+  // span and corrupt the burn). Use the stored values directly. take:2 on cash
+  // so the C20 reliability guard can compare the two latest periods.
+  const [cashRows, flowRows, curRow, accelRow] = await Promise.all([
+    prisma.dilutionFact.findMany({ where: { cik, fact: 'CashAndCashEquivalentsAtCarryingValue' }, orderBy: { period: 'desc' }, take: 2 }),
     prisma.dilutionFact.findMany({ where: { cik, fact: 'MonthlyCashFlow' }, orderBy: { period: 'desc' }, take: 1 }),
+    prisma.dilutionFact.findFirst({ where: { cik, fact: 'ReportingCurrency' }, orderBy: { period: 'desc' } }),
+    prisma.dilutionFact.findFirst({ where: { cik, fact: 'BurnAcceleratingFlag' }, orderBy: { period: 'desc' } }),
   ]);
-  const estimatedCash = cashRows[0]?.val ?? null;
-  const monthlyCashFlow = flowRows[0]?.val ?? null;
-  const asOfDate = cashRows[0]?.period ?? null;
-  const asOfOperatingEnd = flowRows[0]?.period ?? null;
-  return {
-    estimatedCash,
-    asOfDate,
-    monthlyCashFlow,
-    asOfOperatingEnd,
-    ...project(estimatedCash, asOfDate, monthlyCashFlow, asOfOperatingEnd),
-  };
+  const currency = curRow?.unit || 'USD';
+  const cashEntries = cashRows
+    .map((r) => ({ val: r.val, end: r.period }))
+    .sort((a, b) => (a.end < b.end ? 1 : a.end > b.end ? -1 : 0));
+  const latestCash = cashEntries[0] ?? null;
+  const ttm = flowRows[0] ? { monthly: flowRows[0].val, end: flowRows[0].period, accelerating: accelRow?.val === 1 } : null;
+  return computeFromValues(latestCash, ttm, cashEntries, currency);
 }

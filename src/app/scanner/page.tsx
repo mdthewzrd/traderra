@@ -93,6 +93,10 @@ const BUILTIN_SPEC_MAP: Record<string, string> = {
   'builtin-d1-gap-wide': 'd1-gap-wide',
 }
 
+// Scanners WITHOUT a YAML spec — these use the legacy SCAN_SCRIPTS param system (old ⚙ Edit panel).
+// Everything else in BUILTIN_SPEC_MAP is spec-backed and opens the Param Vault popup.
+const NO_SPEC_SCANNERS = new Set(['frd-gap', 'frd-gap-lc', 'd1-gap', 'd1-gap-wide'])
+
 // ─── Types ──────────────────────────────────────────────
 interface Signal {
   ticker: string
@@ -134,7 +138,7 @@ interface ScanRun {
   rawDateRange?: { from?: string; to?: string } | null
 }
 
-export type Timeframe = '5' | '15' | '60' | 'D'
+export type Timeframe = '5' | '15' | '60' | '240' | 'D'
 type ChartMode = 'single' | 'stacked'
 type PageMode = 'scanner' | 'backtest'
 
@@ -378,6 +382,7 @@ export interface ChartSettings {
   showDevBands72_89: boolean
   showDevBands72_89Tight: boolean
   showVwap: boolean
+  showVwap: boolean
   showPrevClose: boolean
   showAhPmShade: boolean
   showVolume: boolean
@@ -531,7 +536,7 @@ function barETMinutes(b: any): number | null {
 }
 
 // ─── MiniChart with zoom & drag ─────────────────────────
-export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset = 0, entryMarker, exitMarker, centerOnDate, legMarkers, exitEpoch, klParams, chartDays, stackDays }: {
+export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset = 0, entryMarker, exitMarker, centerOnDate, legMarkers, exitEpoch, klParams, chartDays, stackDays, compact, extraDays, volH }: {
   symbol: string
   tf: Timeframe
   date?: string
@@ -547,6 +552,9 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
   klParams?: KeyLevelsParams
   chartDays?: number
   stackDays?: number   // stacked: show N trading days centered on D0 (e.g. 3 = D-1, D0, D+1)
+  compact?: boolean    // tighter margins for small embedded charts (less dead space)
+  extraDays?: number   // widen the view window by N extra days (navigation extend buttons)
+  volH?: number        // explicit volume pane height in px (overrides PAD_B-based default)
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [allBars, setAllBars] = useState<any[]>([])
@@ -576,9 +584,10 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
       toDate.setDate(toDate.getDate() + 10)
     } else {
       toDate.setDate(toDate.getDate() + dayOffset * 2 + 10)
-      if (tf === '5') fromDate.setDate(fromDate.getDate() - 10)
-      else if (tf === '15') fromDate.setDate(fromDate.getDate() - 25)
+      if (tf === '5') fromDate.setDate(fromDate.getDate() - 3)
+      else if (tf === '15') fromDate.setDate(fromDate.getDate() - 12)
       else if (tf === '60') fromDate.setDate(fromDate.getDate() - 70)
+      else if (tf === '240') fromDate.setDate(fromDate.getDate() - 150)
       else fromDate.setDate(fromDate.getDate() - 360)
     }
     params.set('from', fromDate.toISOString().slice(0, 10))
@@ -682,6 +691,7 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
     if (tf === '5') defaultBars = Math.min(allBars.length, 156)
     else if (tf === '15') defaultBars = Math.min(allBars.length, 104)
     else if (tf === '60') defaultBars = Math.min(allBars.length, 98)
+    else if (tf === '240') defaultBars = Math.min(allBars.length, 120)
     else defaultBars = Math.min(allBars.length, 120)
 
     let d0Idx = allBars.length - 1
@@ -690,11 +700,12 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
         if (barETDate(allBars[i]) === date) { d0Idx = i; break }
       }
     }
-    const bpd = tf === '5' ? 78 : tf === '15' ? 26 : tf === '60' ? 7 : 1
+    const bpd = tf === '5' ? 78 : tf === '15' ? 26 : tf === '60' ? 7 : tf === '240' ? 2 : 1
+    if (extraDays) defaultBars = Math.min(allBars.length, defaultBars + extraDays * bpd)
     const endIdx = Math.min(allBars.length, d0Idx + dayOffset * bpd + 1)
     const startIdx = Math.max(0, endIdx - defaultBars)
     return allBars.slice(startIdx, endIdx)
-  }, [allBars, tf, dayOffset, date, manualZoom, chartDays])
+  }, [allBars, tf, dayOffset, date, manualZoom, chartDays, extraDays])
 
   const draw = useCallback(() => {
     const bars = visibleBars
@@ -708,9 +719,10 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
     ctx.scale(dpr, dpr)
     const W = rect.width
     const H = rect.height
-    const PAD_R = 54
-    const PAD_B = 28
-    const CHART_H = H - PAD_B
+    const PAD_R = compact ? 38 : 54
+    const PAD_B = compact ? 18 : 28
+    const VOL_PANE = volH ?? (compact ? PAD_B * 0.8 : PAD_B * 0.8)
+    const CHART_H = H - Math.max(PAD_B, VOL_PANE + 4)
     const T = dark
       ? { bg: BG, surface: SURFACE, border: BORDER, muted: MUTED, white: WHITE, red: RED, volUp: VOL_UP, volDn: VOL_DN }
       : { bg: LIGHT.BG, surface: LIGHT.SURFACE, border: LIGHT.BORDER, muted: LIGHT.MUTED, white: LIGHT.WHITE, red: LIGHT.RED, volUp: LIGHT.VOL_UP, volDn: LIGHT.VOL_DN }
@@ -738,12 +750,13 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
     const bodyW = Math.max(1, candleW * 0.7)
     const xFor = (i: number) => (i / bars.length) * (W - PAD_R) + candleW / 2
     const maxVol = Math.max(...bars.map(b => b.volume))
+    const volBase = H - PAD_B   // baseline above time labels
 
     if (settings.showVolume) { bars.forEach((bar, i) => {
       const x = xFor(i)
-      const h = (bar.volume / maxVol) * PAD_B * 0.8
+      const bh = (bar.volume / maxVol) * VOL_PANE   // bar height, grows up from baseline
       ctx.fillStyle = bar.close >= bar.open ? T.volUp : T.volDn
-      ctx.fillRect(x - bodyW / 2, H - PAD_B + PAD_B * 0.2 + (PAD_B * 0.8 - h), bodyW, h)
+      ctx.fillRect(x - bodyW / 2, volBase - bh, bodyW, bh)
     }) }
     bars.forEach((bar, i) => {
       const x = xFor(i)
@@ -1325,14 +1338,14 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
     }
     draw()
   }
-  const tfLabel = tf === '5' ? '5m' : tf === '15' ? '15m' : tf === '60' ? '1H' : '1D'
+  const tfLabel = tf === '5' ? '5m' : tf === '15' ? '15m' : tf === '60' ? '1H' : tf === '240' ? '4H' : '1D'
   const Th = dark
     ? { bg: BG, surface: SURFACE, border: BORDER, muted: MUTED }
     : { bg: LIGHT.BG, surface: LIGHT.SURFACE, border: LIGHT.BORDER, muted: LIGHT.MUTED }
 
   return (
-    <div style={{ background: Th.bg, borderRadius: 6, overflow: 'hidden', border: `1px solid ${Th.border}` }}>
-      <div className="flex items-center justify-between px-2 py-1" style={{ background: Th.surface, borderBottom: `1px solid ${Th.border}` }}>
+    <div style={{ background: Th.bg, borderRadius: compact ? 4 : 6, overflow: 'hidden', border: `1px solid ${Th.border}` }}>
+      <div className="flex items-center justify-between" style={{ background: Th.surface, borderBottom: `1px solid ${Th.border}`, padding: compact ? '1px 6px' : '4px 8px' }}>
         <span style={{ color: GOLD, fontSize: 10, fontWeight: 700 }}>{tfLabel}</span>
         <span style={{ color: Th.muted, fontSize: 9 }}>{visibleBars.length}/{allBars.length} bars</span>
       </div>
@@ -1444,6 +1457,54 @@ export default function ScanDashboardPage() {
   const [rerunFrom, setRerunFrom] = useState('')
   const [rerunTo, setRerunTo] = useState('')
   const [rerunRunning, setRerunRunning] = useState(false)
+  // ── Param Vault: per-scan YAML spec params (parsed → editable in popup) ──
+  const [paramPopup, setParamPopup] = useState<string | null>(null) // spec name of open popup
+  const [paramManifest, setParamManifest] = useState<any[]>([]) // parsed params from /api/scans/specs/[name]/params
+  const [paramMeta, setParamMeta] = useState<{ name: string; description: string; paramCount: number } | null>(null)
+  const [paramEdits, setParamEdits] = useState<Record<string, string>>({}) // working copy: paramId → raw input string (parse at save)
+  const [paramLoading, setParamLoading] = useState(false)
+  const [paramSaving, setParamSaving] = useState(false)
+  const [paramStatus, setParamStatus] = useState<string | null>(null) // 'saved N' | 'error: …' | null
+  const openParams = useCallback(async (specName: string) => {
+    setParamPopup(specName); setParamLoading(true); setParamEdits({}); setParamStatus(null); setParamManifest([]); setParamMeta(null)
+    try {
+      const r = await fetch(`/api/scans/specs/${specName}/params`)
+      const d = await r.json()
+      if (d.error) { alert(d.error); setParamPopup(null); return }
+      setParamManifest(d.params || [])
+      setParamMeta({ name: d.name, description: d.description, paramCount: d.paramCount })
+    } catch (e: any) { alert(`Error: ${e.message}`); setParamPopup(null) }
+    finally { setParamLoading(false) }
+  }, [])
+  // Persist param edits back to the YAML spec file (single source of truth).
+  const saveParams = useCallback(async (specName: string) => {
+    setParamSaving(true); setParamStatus(null)
+    try {
+      // Convert raw input strings → numbers; drop anything that isn't a finite
+      // number (empty fields, stray dashes, etc.). parseFloat(NaN) would
+      // JSON-serialize to null and be silently skipped by the route → 'saved 0'.
+      const numEdits: Record<string, number> = {}
+      let dropped = 0
+      for (const [id, raw] of Object.entries(paramEdits)) {
+        const n = parseFloat(raw)
+        if (Number.isFinite(n)) numEdits[id] = n
+        else dropped++
+      }
+      if (dropped) setParamStatus(`skipped ${dropped} invalid entr${dropped === 1 ? 'y' : 'ies'}`)
+      if (!Object.keys(numEdits).length) { setParamSaving(false); return }
+      const r = await fetch(`/api/scans/specs/${specName}/params`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ edits: numEdits }),
+      })
+      const d = await r.json()
+      if (d.error) { setParamStatus(`error: ${d.error}`); return }
+      if (d.skipped?.length) setParamStatus(`saved ${d.applied}, skipped ${d.skipped.length}`)
+      else setParamStatus(`saved ${d.applied} param${d.applied === 1 ? '' : 's'}`)
+      setParamEdits({})
+      await openParams(specName) // refetch so the file's new values show (clears highlights)
+    } catch (e: any) { setParamStatus(`error: ${e.message}`) }
+    finally { setParamSaving(false) }
+  }, [paramEdits, openParams])
   const [scanRange, setScanRange] = useState<'today' | '1w' | '1m' | '3m' | 'ytd' | 'custom'>('1m')
   const [scanFromDate, setScanFromDate] = useState(new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10))
   const [scanToDate, setScanToDate] = useState(new Date().toISOString().slice(0, 10))
@@ -1511,6 +1572,21 @@ export default function ScanDashboardPage() {
           return { ...job, status: d.status, elapsed: d.elapsed, progress: d.progress, signalCount: d.signalCount, error: d.error, log: d.log }
         } catch { return job }
       }))
+      // Drive pendingRuns from job status (source of truth): update live progress from the
+      // job log, and clear the Runs-list card the moment the job ends — even if the push failed
+      // or returned 0 signals. (The old DB-detection poller can't clear a card whose run never landed.)
+      setPendingRuns(prev => {
+        const next: typeof prev = []
+        for (const p of prev) {
+          const job: any = updated.find(j => j.id === p.id)
+          if (!job) { next.push(p); continue }                       // not a job-backed pending — leave it
+          if (job.status === 'done' || job.status === 'error') continue  // drop card — refreshScans() loaded the real run
+          const lines = (job.log || '').match(/Scanning\s+([\d-]+)\s+\((\d+)\/(\d+)\)/g)
+          const last = lines && lines.length ? lines[lines.length - 1].match(/Scanning\s+([\d-]+)\s+\((\d+)\/(\d+)\)/) : null
+          next.push(last ? { ...p, progress: { currentDay: last[1], currentIndex: parseInt(last[2]), totalDays: parseInt(last[3]), signalsSoFar: job.signalCount || 0 } } : p)
+        }
+        return next
+      })
       setActiveJobs(updated.filter(j => j.status === 'running' || (j.status === 'done' && Date.now() - 0 < Infinity)))
       // Auto-remove done/error jobs after 10s
       setTimeout(() => setActiveJobs(prev => prev.filter(j => j.status === 'running')), 10000)
@@ -1557,9 +1633,9 @@ export default function ScanDashboardPage() {
               <div className="flex items-center justify-between" style={{ width: '100%' }}>
                 <span style={{ color: isActive ? GOLD : T.TEXT, fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{scan.name}</span>
                 {scan.type === 'builtin' && (
-                  <span onClick={e => { e.stopPropagation(); setShowScanParams(showScanParams === scan.id ? null : scan.id) }}
+                  <span onClick={e => { e.stopPropagation(); const _sn = BUILTIN_SPEC_MAP[scan.id] || ""; if (_sn && !NO_SPEC_SCANNERS.has(_sn)) { openParams(_sn) } else { setShowScanParams(showScanParams === scan.id ? null : scan.id) } }}
                     style={{ cursor: 'pointer', color: showScanParams === scan.id ? GOLD : T.MUTED, fontSize: 9, fontWeight: 700, padding: '2px 6px', border: `1px solid ${showScanParams === scan.id ? GOLD : T.BORDER}`, borderRadius: 3, background: showScanParams === scan.id ? `${GOLD}15` : 'transparent', textTransform: 'uppercase', letterSpacing: 0.5, marginLeft: 4, flexShrink: 0 }}>
-                    {showScanParams === scan.id ? '▼ Params' : '⚙ Edit'}
+                    {showScanParams === scan.id ? '▼ Params' : '⚙ Params'}
                   </span>
                 )}
               </div>
@@ -1621,9 +1697,9 @@ export default function ScanDashboardPage() {
                     <div className="flex items-center justify-between" style={{ width: '100%' }}>
                       <span style={{ color: isActive ? GOLD : T.TEXT, fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{scan.name}</span>
                       {scan.type === 'builtin' && (
-                        <span onClick={e => { e.stopPropagation(); setShowScanParams(showScanParams === scan.id ? null : scan.id) }}
+                        <span onClick={e => { e.stopPropagation(); const _sn = BUILTIN_SPEC_MAP[scan.id] || ""; if (_sn && !NO_SPEC_SCANNERS.has(_sn)) { openParams(_sn) } else { setShowScanParams(showScanParams === scan.id ? null : scan.id) } }}
                           style={{ cursor: 'pointer', color: showScanParams === scan.id ? GOLD : T.MUTED, fontSize: 9, fontWeight: 700, padding: '2px 6px', border: `1px solid ${showScanParams === scan.id ? GOLD : T.BORDER}`, borderRadius: 3, background: showScanParams === scan.id ? `${GOLD}15` : 'transparent', textTransform: 'uppercase', letterSpacing: 0.5, marginLeft: 4, flexShrink: 0 }}>
-                          {showScanParams === scan.id ? '▼ Params' : '⚙ Edit'}
+                          {showScanParams === scan.id ? '▼ Params' : '⚙ Params'}
                         </span>
                       )}
                     </div>
@@ -2247,60 +2323,114 @@ export default function ScanDashboardPage() {
         )
       })()}
 
+      {/* Param Vault popup — editable YAML spec params, grouped by section */}
+      {paramPopup && (() => {
+        const di: React.CSSProperties = { background: T.SURFACE, border: `1px solid ${T.BORDER}`, borderRadius: 3, padding: '4px 6px', color: T.TEXT, fontSize: 11, fontFamily: 'monospace', outline: 'none' }
+        const sections = [...new Set(paramManifest.map((p: any) => p.section))]
+        const editedCount = Object.keys(paramEdits).length
+        return (
+          <div onClick={() => setParamPopup(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: T.SURFACE, border: `1px solid ${T.BORDER}`, borderRadius: 6, padding: 16, width: 460, maxWidth: '90vw', maxHeight: '85vh', overflowY: 'auto' }}>
+              <div className="flex items-center justify-between" style={{ marginBottom: 2 }}>
+                <div style={{ color: GOLD, fontSize: 12, fontWeight: 700 }}>⚙ PARAM VAULT</div>
+                <span style={{ color: T.MUTED, fontSize: 9, fontFamily: 'monospace' }}>{paramMeta?.paramCount ?? paramManifest.length} knobs</span>
+              </div>
+              <div style={{ color: T.TEXT, fontSize: 14, fontWeight: 700, marginBottom: 2 }}>{paramMeta?.name || paramPopup}</div>
+              {paramMeta?.description ? <div style={{ color: T.MUTED, fontSize: 10, lineHeight: 1.4, marginBottom: 10 }}>{paramMeta.description}</div> : <div style={{ height: 10 }} />}
+              {paramLoading ? <div style={{ color: T.MUTED, fontSize: 11, padding: '20px 0', textAlign: 'center' }}>Parsing spec…</div> : (
+                <>
+                  {sections.map(sec => {
+                    const items = paramManifest.filter((p: any) => p.section === sec)
+                    return (
+                      <div key={sec} style={{ marginBottom: 12 }}>
+                        <div style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4, borderBottom: `1px solid ${T.BORDER}`, paddingBottom: 3 }}>{sec} <span style={{ color: T.MUTED }}>({items.length})</span></div>
+                        {items.map((p: any) => {
+                          const edited = paramEdits[p.id] !== undefined
+                          const val = edited ? paramEdits[p.id] : p.value
+                          return (
+                            <div key={p.id} className="flex items-center" style={{ padding: '3px 0', gap: 8 }}>
+                              <span title={p.column} style={{ flex: 1, color: edited ? GOLD : T.TEXT2, fontSize: 10, fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.column}</span>
+                              <span style={{ color: T.MUTED, fontSize: 9, fontFamily: 'monospace', width: 24, textAlign: 'center' }}>{p.op}</span>
+                              <input type="number" step={String(val).includes('.') ? '0.1' : '1'} value={val} onChange={e => setParamEdits(prev => ({ ...prev, [p.id]: e.target.value }))} style={{ ...di, width: 90, textAlign: 'right', color: edited ? GOLD : T.TEAL, borderColor: edited ? GOLD : T.BORDER }} />
+                              {edited && <button onClick={() => setParamEdits(prev => { const n = { ...prev }; delete n[p.id]; return n })} title="Reset to spec default" style={{ color: T.MUTED, fontSize: 11, cursor: 'pointer', background: 'none', border: 'none', padding: '0 2px' }}>↺</button>}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })}
+                  <div className="flex items-center justify-between" style={{ borderTop: `1px solid ${T.BORDER}`, paddingTop: 10, marginTop: 4 }}>
+                    <div className="flex items-center" style={{ gap: 8 }}>
+                      {editedCount > 0 && <button onClick={() => setParamEdits({})} style={{ color: T.MUTED, fontSize: 10, padding: '5px 8px', borderRadius: 3, border: `1px solid ${T.BORDER}`, background: T.SURFACE, cursor: 'pointer' }}>Reset all ({editedCount})</button>}
+                      {paramStatus && <span style={{ color: paramStatus.startsWith('error') ? '#f87171' : T.TEAL, fontSize: 9, fontFamily: 'monospace' }}>{paramStatus}</span>}
+                    </div>
+                    <div className="flex items-center" style={{ gap: 6 }}>
+                      <button onClick={() => saveParams(paramPopup)} disabled={editedCount === 0 || paramSaving} style={{ padding: '6px 14px', borderRadius: 3, border: `1px solid ${editedCount > 0 ? GOLD : T.BORDER}`, background: editedCount > 0 ? GOLD : T.SURFACE, color: editedCount > 0 ? '#000' : T.MUTED, fontSize: 10, fontWeight: 700, cursor: editedCount > 0 && !paramSaving ? 'pointer' : 'default', opacity: paramSaving ? 0.6 : 1 }}>Save {editedCount > 0 ? `(${editedCount})` : ''}</button>
+                      <button onClick={() => { setParamPopup(null); setParamStatus(null) }} style={{ padding: '6px 14px', borderRadius: 3, border: `1px solid ${T.BORDER}`, background: 'transparent', color: T.MUTED, fontSize: 10, cursor: 'pointer' }}>Close</button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Run panel */}
       <div style={{ borderTop: `1px solid ${T.BORDER}` }}>
         {showRunPanel && activeScan ? (() => {
           const specName = BUILTIN_SPEC_MAP[activeScan.id] || activeScan.name.toLowerCase().replace(/\s+/g, '-')
-          const effectiveSpec = runFilters.includes('am-push') && specName === 'backside-b' ? 'backside-b-push' : specName
-          const dates = runCustomMode ? { from: runFrom, to: runTo } : (() => { const d = parseInt(runRange); const t = new Date(); return { from: new Date(t.getTime() - d * 86400000).toISOString().slice(0, 10), to: t.toISOString().slice(0, 10) } })()
-          const cmd = `cd ~/.wzrd-pi-dev/projects/edge-dev/assets && PYTHONPATH=scan-engine:~/edge.dev/src ~/edge.dev/.venv/bin/python sandbox.py --spec ${effectiveSpec} --start ${dates.from} --end ${dates.to}${runFilters.length ? ' --filters ' + runFilters.join(',') : ''} --push`
           const dateInputStyle = { background: T.SURFACE, border: `1px solid ${T.BORDER}`, borderRadius: 3, padding: '6px 8px', color: T.TEXT, fontSize: 11, width: '100%', fontFamily: 'monospace', outline: 'none' as const }
+          const chip = (on: boolean) => ({ padding: '4px 9px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: on ? GOLD : T.SURFACE, color: on ? '#000' : T.MUTED, border: `1px solid ${on ? GOLD : T.BORDER}`, cursor: 'pointer' as const })
+          const applyPreset = (days: number) => { const t = new Date(); setRunFrom(new Date(t.getTime() - days * 86400000).toISOString().slice(0, 10)); setRunTo(t.toISOString().slice(0, 10)); setRunRange(String(days)); setRunCustomMode(false) }
+          const applyYtd = () => { const y = new Date().getFullYear(); setRunFrom(`${y}-01-01`); setRunTo(new Date().toISOString().slice(0, 10)); setRunRange('ytd'); setRunCustomMode(false) }
+          const runJob = async () => {
+            setShowRunPanel(false)
+            const label = `${activeScan.name} · ${runFrom} → ${runTo}`
+            try {
+              const resp = await fetch('/api/scans/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ spec: specName, from: runFrom, to: runTo }) })
+              const result = await resp.json()
+              if (result.ok && result.jobId) {
+                setActiveJobs(prev => [...prev, { id: result.jobId, label, status: 'running', elapsed: 0 }])
+                // Also add to pendingRuns so it shows as a running card in the Runs list immediately,
+                // and auto-resolves to the real run when the push lands in the DB.
+                setPendingRuns(prev => [...prev, { id: result.jobId, spec: specName, label, startedAt: new Date().toLocaleTimeString(), from: runFrom, to: runTo }])
+              } else { alert(`Error: ${result.error || 'unknown'}`) }
+            } catch (e: any) { alert(`Error: ${e.message}`) }
+          }
           return (
             <div style={{ padding: '12px 14px', background: T.SURFACE2, borderBottom: `1px solid ${T.BORDER}` }}>
-              <div style={{ color: GOLD, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>{activeScan.name}</div>
-              {/* Date range */}
-              {!runCustomMode ? (
-                <div className="flex gap-1 flex-wrap" style={{ marginBottom: 8 }}>
-                  {['7', '14', '30', '60', '90', '180', '365'].map(d => (
-                    <button key={d} onClick={() => setRunRange(d)} style={{ padding: '4px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: runRange === d ? GOLD : T.SURFACE, color: runRange === d ? '#000' : T.MUTED, border: `1px solid ${runRange === d ? GOLD : T.BORDER}` }}>{d}d</button>
-                  ))}
-                  <button onClick={() => setRunCustomMode(true)} style={{ padding: '4px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: T.SURFACE, color: T.MUTED, border: `1px solid ${T.BORDER}`, cursor: 'pointer' }}>Custom</button>
+              <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
+                <div>
+                  <div style={{ color: GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Run Scan</div>
+                  <div style={{ color: T.TEXT, fontSize: 13, fontWeight: 700 }}>{activeScan.name}</div>
                 </div>
-              ) : (
-                <div style={{ marginBottom: 8 }}>
-                  <div className="flex gap-2">
-                    <input type="date" value={runFrom} onChange={e => setRunFrom(e.target.value)} style={dateInputStyle} />
-                    <input type="date" value={runTo} onChange={e => setRunTo(e.target.value)} style={dateInputStyle} />
-                  </div>
-                  <button onClick={() => setRunCustomMode(false)} style={{ padding: '2px 6px', borderRadius: 2, fontSize: 9, fontWeight: 600, background: T.SURFACE, color: T.MUTED, border: `1px solid ${T.BORDER}`, cursor: 'pointer', marginTop: 4 }}>← Quick</button>
-                </div>
-              )}
-              {/* Filters */}
-              {(activeScan.filters || []).length > 0 && (
-                <div className="flex gap-1" style={{ marginBottom: 8 }}>
-                  {activeScan.filters!.map(f => {
-                    const isOn = runFilters.includes(f)
-                    return <button key={f} onClick={() => setRunFilters(prev => isOn ? prev.filter(x => x !== f) : [...prev, f])} style={{ padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 700, background: isOn ? `${GOLD}30` : T.SURFACE, color: isOn ? GOLD : T.MUTED, border: `1px solid ${isOn ? GOLD : T.BORDER}`, cursor: 'pointer' }}>{f}</button>
-                  })}
-                </div>
-              )}
-              {/* Command preview */}
-              <pre style={{ background: '#0a0a10', border: `1px solid ${T.BORDER}`, borderRadius: 4, padding: '8px 10px', fontSize: 9, fontFamily: 'monospace', color: T.TEAL, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 80, overflowY: 'auto', marginBottom: 8 }}>{cmd}</pre>
-              {/* Actions */}
-              <div className="flex gap-1">
-                <button onClick={() => {
-                  navigator.clipboard.writeText(cmd)
-                  setCopied(true)
-                  const spec = BUILTIN_SPEC_MAP[activeScan.id] || ''
-                  const pendingId = `pending-${Date.now()}`
-                  setPendingRuns(prev => [...prev, { id: pendingId, spec, label: `${activeScan.name} · ${dates.from} → ${dates.to}`, startedAt: new Date().toLocaleTimeString(), from: dates.from, to: dates.to }])
-                  setTimeout(() => setCopied(false), 2000)
-                  setShowRunPanel(false)
-                }} style={{ flex: 1, padding: '7px', borderRadius: 3, fontSize: 11, fontWeight: 700, background: GOLD, color: '#000', border: 'none', cursor: 'pointer' }}>
-                  {copied ? '✓ Copied!' : '📋 Copy & Run'}
-                </button>
-                <button onClick={() => setShowRunPanel(false)} style={{ padding: '7px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: T.SURFACE, color: T.MUTED, border: `1px solid ${T.BORDER}`, cursor: 'pointer' }}>Cancel</button>
+                <button onClick={() => openParams(specName)} title="Edit scan parameters" style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', color: T.MUTED, fontSize: 9, fontFamily: 'monospace', padding: '3px 7px', border: `1px solid ${T.BORDER}`, borderRadius: 3, background: T.SURFACE }}>⚙ {specName}</button>
               </div>
+              {/* Date presets */}
+              <div className="flex gap-1 flex-wrap" style={{ marginBottom: 8 }}>
+                <button onClick={applyYtd} style={chip(!runCustomMode && runRange === 'ytd')}>YTD</button>
+                <button onClick={() => applyPreset(30)} style={chip(!runCustomMode && runRange === '30')}>1M</button>
+                <button onClick={() => applyPreset(90)} style={chip(!runCustomMode && runRange === '90')}>3M</button>
+                <button onClick={() => applyPreset(180)} style={chip(!runCustomMode && runRange === '180')}>6M</button>
+                <button onClick={() => applyPreset(365)} style={chip(!runCustomMode && runRange === '365')}>1Y</button>
+                <button onClick={() => setRunCustomMode(true)} style={chip(runCustomMode)}>Custom</button>
+              </div>
+              {/* Date inputs */}
+              <div className="flex gap-2" style={{ marginBottom: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', marginBottom: 3 }}>Start</div>
+                  <input type="date" value={runFrom} onChange={e => { setRunFrom(e.target.value); setRunCustomMode(true) }} style={dateInputStyle} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ color: T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', marginBottom: 3 }}>End</div>
+                  <input type="date" value={runTo} onChange={e => { setRunTo(e.target.value); setRunCustomMode(true) }} style={dateInputStyle} />
+                </div>
+              </div>
+              {/* Run in background */}
+              <button onClick={runJob} style={{ width: '100%', padding: '9px', borderRadius: 3, border: 'none', background: GOLD, color: '#000', fontSize: 11, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <Play className="h-3.5 w-3.5" /> Run in Background
+              </button>
             </div>
           )
         })() : null}
@@ -2547,12 +2677,12 @@ export default function ScanDashboardPage() {
             {/* TF */}
             {chartMode === 'single' && (
               <div className="flex gap-1">
-                {(['5', '15', '60', 'D'] as Timeframe[]).map(t => (
+                {(['5', '15', '60', '240', 'D'] as Timeframe[]).map(t => (
                   <button key={t} onClick={() => setTf(t)} style={{
                     padding: '2px 12px', borderRadius: 3, fontSize: 10, fontWeight: 600,
                     background: tf === t ? GOLD : T.SURFACE, color: tf === t ? '#000' : T.MUTED,
                     border: `1px solid ${tf === t ? GOLD : T.BORDER}`,
-                  }}>{t === '5' ? '5m' : t === '15' ? '15m' : t === '60' ? '1H' : '1D'}</button>
+                  }}>{t === '5' ? '5m' : t === '15' ? '15m' : t === '60' ? '1H' : t === '240' ? '4H' : '1D'}</button>
                 ))}
               </div>
             )}
@@ -2608,6 +2738,7 @@ export default function ScanDashboardPage() {
                     ['showDevBands9_20', 'Dev Band 9/20'],
                     ['showDevBands72_89', 'Dev Band 72/89'],
                     ['showDevBands72_89Tight', 'Dev Band 72/89 Tight'],
+                    ['showVwap', 'VWAP'],
                     ['showVwap', 'VWAP Line'],
                     ['showPrevClose', 'Prev Close Line'],
                     ['showAhPmShade', 'AH/PM Shading'],

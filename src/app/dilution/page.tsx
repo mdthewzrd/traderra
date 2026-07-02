@@ -67,6 +67,7 @@ type Snapshot = {
   } | null;
   authorizedShares: { authorized: number; outstanding: number; available: number; asOf: string } | null;
   reverseSplits: { ratio: string; executionDate: string | null; announcementDate: string; accessionNo: string; url: string }[];
+  publicFloat: { value: number; shares: number | null; asOf: string } | null;
 };
 
 const TAG_STYLES: Record<string, string> = {
@@ -94,6 +95,586 @@ function fmtMoney(n: number | null): string {
   if (abs >= 1e6) return sign + '$' + (abs / 1e6).toFixed(2) + 'M';
   if (abs >= 1e3) return sign + '$' + (abs / 1e3).toFixed(1) + 'K';
   return sign + '$' + abs.toFixed(0);
+}
+
+const TONE: Record<string, string> = {
+  red: 'text-red-400', amber: 'text-amber-300', zinc: 'text-zinc-300',
+  purple: 'text-purple-400', emerald: 'text-emerald-400', orange: 'text-orange-300',
+};
+
+/** Compact summary of ACTIVE dilution mechanisms — colored facts, not counts.
+ *  Warrants (shares/strike/ITM), equity lines (max), ATM/shelf (sold/remaining),
+ *  converts (shares). Powers the dilution-ability sub-score line. */
+function mechanicsSummary(snap: any): { label: string; value: string; tone: string; title?: string }[] {
+  const out: { label: string; value: string; tone: string; title?: string }[] = [];
+  const px = snap?.inTheMoney?.price ?? null;
+  // Warrants — 10-K notes + registered tranches from 424B5
+  const wnWarr = snap?.warrantNotes?.warrants ?? [];
+  const regWarr = (snap?.offerings ?? []).flatMap((o: any) => o.warrantTranches ?? []);
+  const allWarr = [...wnWarr, ...regWarr];
+  const warrShares = allWarr.reduce((a: number, w: any) => a + (w.shares ?? 0), 0);
+  if (warrShares > 0) {
+    const itmShares = allWarr.filter((w: any) => w.exercisePrice != null && px != null && px >= w.exercisePrice)
+      .reduce((a: number, w: any) => a + (w.shares ?? 0), 0);
+    const strikes = allWarr.map((w: any) => w.exercisePrice).filter((x: any): x is number => typeof x === 'number');
+    const minStrike = strikes.length ? Math.min(...strikes) : null;
+    out.push({
+      label: 'Warrants',
+      value: fmtNum(warrShares) + ' sh' + (minStrike != null ? ' @ $' + minStrike.toFixed(minStrike < 1 ? 4 : 2) : '') + (itmShares > 0 ? ' · ' + fmtNum(itmShares) + ' ITM' : ''),
+      tone: itmShares > 0 ? 'red' : 'amber',
+      title: itmShares > 0 ? 'In-the-money warrants are dilutive at the current price' : 'Out of the money — not yet dilutive',
+    });
+  }
+  // Equity lines / SEPA (10-K notes + 8-K agreements)
+  const eqLines = [...(snap?.warrantNotes?.equityLines ?? []), ...((snap?.programs ?? []).filter((p: any) => p.programType === 'equity-line'))];
+  if (eqLines.length > 0) {
+    const eqMax = eqLines.reduce((a: number, e: any) => a + (e.maxCommitment ?? 0), 0);
+    out.push({ label: 'Eq line', value: eqMax > 0 ? '$' + (eqMax / 1e6).toFixed(0) + 'M max' : eqLines.length + ' active', tone: 'red', title: 'Equity-line / SEPA facility — issuer can sell shares into the market' });
+  }
+  // ATM / shelf remaining capacity
+  const sh = snap?.shelfRemaining;
+  if (sh && sh.registered > 0) {
+    const sold = sh.raised ?? 0;
+    const left = sh.remaining ?? Math.max(0, sh.registered - sold);
+    out.push({ label: 'ATM/shelf', value: '$' + (left / 1e6).toFixed(1) + 'M left of $' + (sh.registered / 1e6).toFixed(0) + 'M', tone: left > 0 ? 'orange' : 'zinc', title: sold > 0 ? '$' + (sold / 1e6).toFixed(1) + 'M already sold off this shelf' : 'Registered but untapped' });
+  }
+  // Convertible notes
+  const convs = snap?.warrantNotes?.convertibles ?? [];
+  const convShares = convs.reduce((a: number, c: any) => a + (c.shares ?? 0), 0);
+  if (convShares > 0) out.push({ label: 'Converts', value: fmtNum(convShares) + ' sh', tone: 'purple', title: 'Convertible notes — share count on conversion' });
+  // Other 8-K agreements (atm / purchase-agreement) if no eq line already shown
+  const otherProgs = (snap?.programs ?? []).filter((p: any) => p.programType !== 'equity-line');
+  if (otherProgs.length > 0 && eqLines.length === 0) {
+    const otherMax = otherProgs.reduce((a: number, p: any) => a + (p.maxCommitment ?? 0), 0);
+    out.push({ label: otherProgs[0].programType, value: otherMax > 0 ? '$' + (otherMax / 1e6).toFixed(0) + 'M' : otherProgs.length + ' filed', tone: 'amber' });
+  }
+  return out;
+}
+
+// Dilution programs organized into typed sub-tabs: equity lines / warrants /
+// converts / ATM / shelf / S-1. Pulls from the richest available snapshot
+// sources per type (parsed 8-K agreements, 10-K notes, registrations, filings).
+// Detail-led: each row names the mechanism + where it came from, no scores.
+function ProgramTabs({ snapshot }: { snapshot: any }) {
+  const [view, setView] = useState<'sum' | 'det'>('sum');
+  const [tab, setTab] = useState(0);
+  const M = 1e6;
+  const px = snapshot?.inTheMoney?.price ?? null;
+  const eqLines = [
+    ...((snapshot?.warrantNotes?.equityLines ?? []).map((el: any, i: number) => ({ key: 'el' + i, src: el.description, date: '', who: el.counterparty, max: el.maxCommitment, extra: [el.pricing, el.ownershipCap != null ? el.ownershipCap + '% cap' : null].filter(Boolean).join(' · ') }))),
+    ...((snapshot?.programs ?? []).filter((p: any) => p.programType === 'equity-line').map((p: any, i: number) => ({ key: 'pr' + i, src: p.description, date: p.filingDate, who: p.counterparty, max: p.maxCommitment, extra: [p.pricing, p.ownershipCap != null ? p.ownershipCap + '% cap' : null].filter(Boolean).join(' · ') }))),
+  ];
+  const warrants = snapshot?.warrants ?? [];
+  const converts = [
+    ...((snapshot?.programs ?? []).filter((p: any) => p.programType === 'convertible').map((p: any, i: number) => ({ key: 'cv' + i, src: p.description, date: p.filingDate, who: p.counterparty, max: p.maxCommitment, extra: [p.maturity ? 'matures ' + p.maturity : null, p.pricing].filter(Boolean).join(' · ') }))),
+  ];
+  const overhangConv = snapshot?.overhang?.convertible;
+  if (overhangConv) converts.push({ key: 'ovc', src: 'XBRL convertible overhang', date: overhangConv.period, who: null, max: null, extra: overhangConv.shares + ' shares' + (overhangConv.strike != null ? ' · $' + overhangConv.strike : '') });
+  const atm = [
+    ...((snapshot?.programs ?? []).filter((p: any) => p.programType === 'atm').map((p: any, i: number) => ({ key: 'at' + i, src: p.description, date: p.filingDate, who: p.counterparty, max: p.maxCommitment, extra: [p.pricing].filter(Boolean).join(' · ') }))),
+    ...((snapshot?.registrations ?? []).filter((r: any) => r.salesChannel === 'atm').map((r: any, i: number) => ({ key: 'ra' + i, src: (r.shelfType === 'automatic-shelf' ? 'S-3ASR' : r.formType) + ' ATM registration', date: r.filingDate, who: r.agent, max: r.aggregateOffering, extra: null }))),
+  ];
+  const shelf = (snapshot?.registrations ?? []).filter((r: any) => r.aggregateOffering != null);
+  const s1 = (snapshot?.filings ?? []).filter((f: any) => /^S-1/.test(f.formType)).slice(0, 12);
+  // ITM = price over strike (exercise likely, dilution imminent). NEAR =
+  // within 20% below strike (watch). OTM (further below) is unremarkable.
+  const stt = (strike: number | null) => {
+    if (strike == null || px == null) return null;
+    if (px >= strike) return { label: 'ITM', border: 'border-l-2 border-red-500/70 pl-2', txt: 'text-red-300', bg: 'bg-red-500/15' };
+    if (px >= strike * 0.8) return { label: 'NEAR', border: 'border-l-2 border-amber-500/70 pl-2', txt: 'text-amber-300', bg: 'bg-amber-500/15' };
+    return null;
+  };
+  // Per-type body renderers — shared by Sum (all expanded) and Det (one tab).
+  const EqBody = () => eqLines.length ? (
+    <div className="divide-y divide-zinc-800/60">
+      {eqLines.map((r) => {
+        const st = statusFor(r.date);
+        return (
+          <div key={r.key} className="py-1.5">
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs">
+              {r.who && <span className="font-medium text-zinc-200">{r.who}</span>}
+              {r.max != null && <span className="text-zinc-400">· ${(Number(r.max) / M).toFixed(0)}M</span>}
+              {st && <span className={`rounded px-1 py-px text-[9px] font-semibold uppercase ${st.cls}`}>{st.label}</span>}
+              {!st && <span className="text-[10px] text-zinc-600">no date</span>}
+              {st && <span className="text-zinc-600">{r.date} · {st.rel}</span>}
+            </div>
+            {r.extra && <div className="text-[11px] text-zinc-500">{r.extra}</div>}
+            <div className="mt-0.5 line-clamp-2 text-[10px] italic text-zinc-600">{r.src.slice(0, 140)}{r.src.length > 140 ? '…' : ''}</div>
+          </div>
+        );
+      })}
+      <div className="py-1.5 text-[10px] leading-snug text-zinc-600">SEPA / equity-line usage is disclosed only as a 10-Q aggregate — per-tap dates aren't available, so the filing agreement's recency is the best 'idle vs active' proxy.</div>
+    </div>
+  ) : null;
+  const WarrantBody = () => warrants.length ? (
+    <div className="divide-y divide-zinc-800/60">
+      {px != null && <div className="pb-1.5 text-[10px] text-zinc-500">Current price ${px}. <span className="text-red-400">Red</span> = in-the-money (exercise likely); <span className="text-amber-400">amber</span> = within 20% of strike; <span className="text-fuchsia-400">pre-funded</span> = already paid, exercise near-certain.</div>}
+      {warrants.map((w: any, i: number) => {
+        const st = stt(w.strike);
+        const stat = w.status && w.status !== 'active';
+        const statCls = w.status === 'pre-funded' ? 'bg-fuchsia-500/15 text-fuchsia-300' : w.status === 'expired' ? 'bg-zinc-700 text-zinc-500 line-through' : 'bg-zinc-700 text-zinc-400';
+        return (
+          <div key={i} className={`py-1.5 ${st ? st.border : ''}`}>
+            <div className="flex flex-wrap items-baseline gap-x-2 text-xs">
+              <span className={`font-medium ${st ? st.txt : 'text-zinc-200'}`}>{w.shares != null ? (w.shares / M).toFixed(2) + 'M sh' : 'shares n/a'}</span>
+              {w.strike != null && <span className={st ? st.txt : 'text-zinc-400'}>@ ${w.strike}</span>}
+              {st && <span className={`rounded px-1 text-[9px] font-semibold uppercase ${st.bg} ${st.txt}`} title="Strike vs current price">{st.label}</span>}
+              {stat && <span className={`rounded px-1 text-[9px] font-semibold uppercase ${statCls}`} title="Warrant lifecycle status">{w.status}</span>}
+              {w.expiry && <span className="text-zinc-600">exp {w.expiry}</span>}
+              <span className="ml-auto rounded bg-zinc-800 px-1 text-[9px] text-zinc-500">{w.source}</span>
+            </div>
+            <div className="mt-0.5 line-clamp-2 text-[10px] italic text-zinc-600">{w.description.slice(0, 140)}</div>
+          </div>
+        );
+      })}
+    </div>
+  ) : null;
+  const ShelfBody = () => shelf.length ? (
+    <div className="divide-y divide-zinc-800/60">{shelf.map((r: any) => (<div key={r.accessionNo} className="py-1.5"><div className="flex flex-wrap items-baseline gap-x-2 text-xs"><span className="font-medium text-zinc-200">${(r.aggregateOffering / M).toFixed(0)}M</span><span className="text-zinc-600">{r.filingDate}</span><span className="rounded bg-zinc-800 px-1 text-[9px] text-zinc-500">{r.shelfType === 'automatic-shelf' ? 'S-3ASR' : r.formType}</span>{r.salesChannel === 'atm' && <span className="rounded bg-red-500/20 px-1 text-[9px] font-semibold uppercase text-red-400">ATM</span>}</div>{r.agent && <div className="text-[11px] text-zinc-500">agent {r.agent}</div>}</div>))}</div>
+  ) : null;
+  const S1Body = () => s1.length ? (
+    <div className="divide-y divide-zinc-800/60">{s1.map((f: any, i: number) => (<div key={i} className="flex items-start gap-2 py-1.5"><span className="mt-0.5 shrink-0 text-[10px] text-zinc-600">{f.filingDate}</span><div className="min-w-0"><span className="text-xs text-zinc-200">{f.formType}</span>{f.items?.length > 0 && <span className="ml-1 text-[10px] text-zinc-600">{f.items.join(', ')}</span>}<div className="truncate text-[11px] text-zinc-500">{f.primaryDesc ?? '—'}</div></div></div>))}</div>
+  ) : null;
+  const TONE_BG: Record<string, string> = { red: 'bg-red-500/15 text-red-400', amber: 'bg-amber-500/15 text-amber-300', purple: 'bg-purple-500/15 text-purple-400', orange: 'bg-orange-500/15 text-orange-300', blue: 'bg-blue-500/15 text-blue-400' };
+  const SECTIONS = [
+    { label: 'Equity Lines', tone: 'red', n: eqLines.length, body: EqBody },
+    { label: 'Warrants', tone: 'amber', n: warrants.length, body: WarrantBody },
+    { label: 'Converts', tone: 'purple', n: converts.length, body: () => list(converts) },
+    { label: 'ATM', tone: 'orange', n: atm.length, body: () => list(atm) },
+    { label: 'Shelf', tone: 'orange', n: shelf.length, body: ShelfBody },
+    { label: 'S-1', tone: 'blue', n: s1.length, body: S1Body },
+  ];
+  const Row = ({ src, date, who, max, extra }: { src: string; date: string; who: any; max: any; extra: any }) => (
+    <div className="py-1.5">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs">
+        {who && <span className="font-medium text-zinc-200">{who}</span>}
+        {max != null && <span className="text-zinc-400">· ${(Number(max) / M).toFixed(0)}M</span>}
+        {date && <span className="text-zinc-600">{date}</span>}
+      </div>
+      {extra && <div className="text-[11px] text-zinc-500">{extra}</div>}
+      <div className="mt-0.5 line-clamp-2 text-[10px] italic text-zinc-600">{src.slice(0, 160)}{src.length > 160 ? '…' : ''}</div>
+    </div>
+  );
+  const empty = <div className="py-4 text-center text-xs text-zinc-500">None detected.</div>;
+  const DAY = 86400000;
+  // Equity-line status from filing age: a freshly-filed SEPA is tappable; one
+  // filed 2yr+ ago is likely drained/expired. This is the honest 'idle vs
+  // active' proxy because SEPA tap dates aren't itemized in filings (10-Q only).
+  const statusFor = (ds: string): { label: string; cls: string; rel: string } | null => {
+    if (!ds) return null;
+    const days = Math.floor((Date.now() - new Date(ds).getTime()) / DAY);
+    if (Number.isNaN(days)) return null;
+    const rel = days < 30 ? days + 'd ago' : days < 365 ? Math.round(days / 30) + 'mo ago' : (days / 365).toFixed(1) + 'yr ago';
+    let label: string, cls: string;
+    if (days <= 90) { label = 'new'; cls = 'bg-emerald-500/15 text-emerald-400'; }
+    else if (days <= 730) { label = 'active'; cls = 'bg-zinc-700 text-zinc-300'; }
+    else { label = 'aging'; cls = 'bg-amber-500/15 text-amber-400'; }
+    return { label, cls, rel };
+  };
+  const list = (arr: any[]) => arr.length ? <div className="divide-y divide-zinc-800/60">{arr.map((r) => <Row key={r.key} {...r} />)}</div> : empty;
+  return (
+    <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+      <div className="mb-2 flex items-center gap-2 text-zinc-400">
+        <Layers className="h-4 w-4" />
+        <span className="text-xs uppercase tracking-wide">Dilution programs</span>
+        <div className="ml-auto flex rounded-md border border-zinc-700 p-0.5">
+          <button onClick={() => setView('sum')} className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition ${view === 'sum' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}>Sum</button>
+          <button onClick={() => setView('det')} className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition ${view === 'det' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}>Det</button>
+        </div>
+      </div>
+      {view === 'det' && (
+        <div className="mb-2 flex flex-wrap gap-1">
+          {SECTIONS.map((t, i) => (
+            <button key={t.label} onClick={() => setTab(i)} className={`rounded px-2 py-1 text-[11px] transition ${tab === i ? 'bg-zinc-700 text-zinc-100' : 'bg-zinc-800/60 text-zinc-400 hover:text-zinc-200'}`}>
+              {t.label}{t.n > 0 && <span className={`ml-1 ${tab === i ? 'text-zinc-400' : 'text-zinc-600'}`}>{t.n}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="max-h-80 overflow-y-auto pr-1">
+        {view === 'sum' ? (
+          <div className="space-y-3">
+            {SECTIONS.filter((s) => s.n > 0).map((s) => (
+              <div key={s.label}>
+                <div className="mb-1 flex items-center gap-2">
+                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${TONE_BG[s.tone] ?? 'bg-zinc-700 text-zinc-300'}`}>{s.label}</span>
+                  <span className="text-[10px] text-zinc-600">{s.n}</span>
+                </div>
+                {s.body()}
+              </div>
+            ))}
+            {SECTIONS.every((s) => s.n === 0) && <div className="py-4 text-center text-xs text-zinc-500">No dilution facilities detected.</div>}
+          </div>
+        ) : (
+          SECTIONS[tab]?.body() ?? <div className="py-4 text-center text-xs text-zinc-500">None detected.</div>
+        )}
+      </div>
+      {snapshot?.shelfRemaining && (
+        <div className="mt-2 border-t border-zinc-800/60 pt-2 text-[10px] text-zinc-500">
+          Shelf drawable: ${(snapshot.shelfRemaining.remaining / M).toFixed(1)}M of ${(snapshot.shelfRemaining.registered / M).toFixed(1)}M registered
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Bottom tabbed block — consolidates the scattered bottom cards into three tabs.
+ * Nexus-parity: Past Offerings (default) · Recent Filings · Shares & Float.
+ * The user explicitly asked for this structure (replacing the flat filings list).
+ */
+function BottomTabs({ snapshot }: { snapshot: any }) {
+  const [tab, setTab] = useState(0);
+  const offerings = snapshot?.offerings ?? [];
+  const registrations = snapshot?.registrations ?? [];
+  const draws = snapshot?.draws ?? [];
+  const filings = snapshot?.filings ?? [];
+  const sharesHistory = (snapshot?.sharesHistory ?? []) as { period: string; outstanding: number }[];
+  const authorized = snapshot?.authorizedShares ?? null;
+  const reverseSplits = snapshot?.reverseSplits ?? [];
+
+  // Insider ownership — aggregate latest afterShares per reporter from Form 4.
+  // Honest: transaction-derived (not a holdings filing); institutional (13F)
+  // data is not pulled. Each person's most-recent transaction's afterShares.
+  const form4 = (snapshot?.form4Txns ?? []) as { reporter: string; isOfficer: boolean; txnCode: string; securities: number; price: number | null; afterShares: number | null; txnDate: string; dilutive: boolean }[];
+  const insiderMap = new Map<string, { name: string; shares: number; isOfficer: boolean; latest: string }>();
+  for (const t of form4) {
+    if (t.afterShares == null) continue;
+    const ex = insiderMap.get(t.reporter);
+    if (!ex || Date.parse(t.txnDate) > Date.parse(ex.latest)) {
+      insiderMap.set(t.reporter, { name: t.reporter, shares: t.afterShares, isOfficer: t.isOfficer, latest: t.txnDate });
+    }
+  }
+  const insiders = [...insiderMap.values()].filter((x) => x.shares > 0).sort((a, b) => b.shares - a.shares);
+  const outstandingRef = sharesHistory[0]?.outstanding ?? null;
+
+  // Merge offerings + SEPA draws into one chronological offering history.
+  type PastRow = { date: string; type: string; shares: number | null; price: number | null; amount: number | null; underwriter: string | null; };
+  const pastOfferings: PastRow[] = [
+    ...offerings.map((o: any) => ({
+      date: o.filingDate, type: o.offeringType ?? o.formType,
+      shares: o.sharesOffered, price: o.pricePerShare,
+      amount: o.grossProceeds, underwriter: o.underwriter,
+    })),
+    // Registrations (S-3/F-3/F-1/S-1) as timeline events — the company filed
+    // intent to raise, not an executed sale. No shares/price; amount = the
+    // aggregate registered ceiling. Amber badge distinguishes from sales.
+    ...registrations.map((r: any) => ({
+      date: r.filingDate, type: r.formType,
+      shares: null, price: null,
+      amount: r.aggregateOffering, underwriter: r.agent,
+    })),
+    ...draws.map((d: any) => ({
+      date: d.filingDate ?? d.date ?? '', type: 'SEPA draw',
+      shares: d.shares ?? null, price: d.pricePerShare ?? d.price ?? null,
+      amount: d.proceeds ?? d.grossAmount ?? null, underwriter: d.counterparty ?? d.partner ?? null,
+    })),
+  ].sort((a, b) => (a.date < b.date ? 1 : -1));
+
+  const tabs = [
+    { label: 'Past Offerings', n: pastOfferings.length },
+    { label: 'Recent Filings', n: filings.length },
+    { label: 'Shares & Float', n: sharesHistory.length },
+    { label: 'Ownership', n: insiders.length },
+  ];
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-zinc-800">
+      {/* Tab bar */}
+      <div className="flex border-b border-zinc-800 bg-zinc-900/50">
+        {tabs.map((t, i) => (
+          <button key={t.label} onClick={() => setTab(i)}
+            className={`relative px-4 py-2.5 text-xs font-medium uppercase tracking-wide transition-colors ${
+              tab === i ? 'text-amber-300' : 'text-zinc-500 hover:text-zinc-300'}`}
+          >
+            {t.label}
+            <span className="ml-1.5 rounded bg-zinc-800 px-1.5 py-0.5 text-[9px] text-zinc-400">{t.n}</span>
+            {tab === i && <span className="absolute inset-x-0 -bottom-px h-0.5 bg-amber-400" />}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab 0: Past Offerings (default) */}
+      {tab === 0 && (pastOfferings.length ? (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
+              <th className="px-3 py-2 font-medium">Date</th>
+              <th className="px-3 py-2 font-medium">Type</th>
+              <th className="px-3 py-2 text-right font-medium">Shares</th>
+              <th className="px-3 py-2 text-right font-medium">Price</th>
+              <th className="px-3 py-2 text-right font-medium">Amount</th>
+              <th className="px-3 py-2 font-medium">Underwriter</th>
+            </tr></thead>
+            <tbody>
+              {pastOfferings.map((o, i) => (
+                <tr key={i} className="border-b border-zinc-800/60 last:border-0 hover:bg-zinc-900/40">
+                  <td className="whitespace-nowrap px-3 py-2 text-zinc-400">{o.date || '—'}</td>
+                  <td className="whitespace-nowrap px-3 py-2">
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
+                      o.type === 'atm' ? 'bg-red-500/15 text-red-400' :
+                      o.type === 'underwritten' ? 'bg-blue-500/15 text-blue-400' :
+                      o.type === 'SEPA draw' ? 'bg-purple-500/15 text-purple-400' :
+                      /^(S-\d|F-\d)/.test(o.type) ? 'bg-amber-500/15 text-amber-300' :
+                      'bg-zinc-700 text-zinc-300'}`}>{o.type}</span>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right text-zinc-300">{o.shares != null ? fmtNum(o.shares) : '—'}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right text-zinc-300">{o.price != null ? '$' + o.price.toFixed(o.price < 1 ? 4 : 2) : '—'}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right font-medium text-emerald-400">{o.amount != null ? fmtMoney(o.amount) : '—'}</td>
+                  <td className="px-3 py-2 text-zinc-600">{o.underwriter ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="px-4 py-8 text-center text-sm text-zinc-600">No offerings or SEPA draws on file.</div>
+      ))}
+
+      {/* Tab 1: Recent Filings */}
+      {tab === 1 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
+              <th className="px-3 py-2 font-medium">Date</th>
+              <th className="px-3 py-2 font-medium">Form</th>
+              <th className="px-3 py-2 font-medium">Tags</th>
+              <th className="px-3 py-2 font-medium">Description</th>
+              <th className="px-3 py-2"></th>
+            </tr></thead>
+            <tbody>
+              {filings.map((f: Filing) => (
+                <tr key={f.accessionNo} className="border-b border-zinc-800/60 last:border-0 hover:bg-zinc-900/40">
+                  <td className="whitespace-nowrap px-3 py-2 text-zinc-400">{f.filingDate}</td>
+                  <td className="whitespace-nowrap px-3 py-2 font-medium">{f.formType}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap gap-1">
+                      {f.dilutionTags.length === 0 ? (
+                        <span className="text-xs text-zinc-600">—</span>
+                      ) : (
+                        f.dilutionTags.map((t) => {
+                          const meta = DILUTION_TAG_META[t];
+                          return (
+                            <span key={t} title={meta.tooltip}
+                              className={`rounded border px-1.5 py-0.5 text-[10px] ${TAG_STYLES[meta.color]}`}
+                            >{meta.label}</span>
+                          );
+                        })
+                      )}
+                    </div>
+                  </td>
+                  <td className="max-w-md px-3 py-2 text-zinc-400">{f.primaryDesc ?? '—'}</td>
+                  <td className="px-3 py-2">
+                    <a href={f.url} target="_blank" rel="noreferrer" className="text-zinc-500 hover:text-zinc-300">
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Tab 2: Shares & Float */}
+      {tab === 2 && (
+        <div className="p-4">
+          {/* Public float — the headline number for this tab. Prefer SEC cover
+              (authoritative, ~18% coverage); fall back to COMPUTED
+              (outstanding − insiders) which fills the other 82%. */}
+          {(() => {
+            const pf = snapshot?.publicFloat;
+            const cf = snapshot?.computedFloat;
+            const floatShares = pf?.shares ?? cf?.shares ?? null;
+            const outstanding = cf?.outstanding ?? sharesHistory[0]?.outstanding ?? null;
+            if (floatShares == null) return null;
+            const floatPct = outstanding && outstanding > 0 ? (floatShares / outstanding) * 100 : null;
+            return (
+              <div className="mb-4 rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+                <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-400">
+                  Public float
+                  {pf ? (
+                    <span className="rounded bg-zinc-700 px-1.5 py-0.5 text-[9px] text-zinc-300">SEC cover</span>
+                  ) : (
+                    <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] text-amber-300">computed</span>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2">
+                  <div>
+                    <div className="text-3xl font-bold text-zinc-100">{fmtNum(floatShares)}</div>
+                    <div className="text-xs text-zinc-500">shares {floatPct != null ? `· ${floatPct.toFixed(1)}% of outstanding` : ''}</div>
+                  </div>
+                  {cf && (
+                    <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-zinc-400">
+                      <span>{fmtNum(cf.outstanding)} outstanding</span>
+                      <span className="text-amber-400/80">− {fmtNum(cf.insiderShares)} insider</span>
+                      <span className="text-emerald-400">= {fmtNum(floatShares)} float</span>
+                    </div>
+                  )}
+                  {pf && pf.value > 0 && (
+                    <div className="text-xs text-zinc-500">{fmtMoney(pf.value)} non-affiliate mkt value · as of {pf.asOf}</div>
+                  )}
+                </div>
+                {!pf && cf && (
+                  <div className="mt-2 text-[10px] text-zinc-600">Computed = shares outstanding − aggregate insider holdings (Form 4 afterShares). Excludes non-filing institutions; approximate.</div>
+                )}
+              </div>
+            );
+          })()}
+          {/* Summary row — latest outstanding, authorized, dilution velocity */}
+          <div className="mb-4 flex flex-wrap items-end gap-x-8 gap-y-2">
+            {sharesHistory[0] && (
+              <div>
+                <div className="text-xs uppercase tracking-wide text-zinc-500">Shares outstanding</div>
+                <div className="text-2xl font-bold text-zinc-100">{fmtNum(sharesHistory[0].outstanding)}</div>
+                <div className="text-xs text-zinc-500">as of {sharesHistory[0].period}</div>
+              </div>
+            )}
+            {authorized && (
+              <div>
+                <div className="text-xs uppercase tracking-wide text-zinc-500">Authorized</div>
+                <div className="text-lg font-semibold text-zinc-300">{fmtNum(authorized.authorized)}</div>
+                <div className="text-xs text-zinc-500">{fmtNum(authorized.available)} avail to issue</div>
+              </div>
+            )}
+            {sharesHistory.length >= 2 && (
+              <div>
+                <div className="text-xs uppercase tracking-wide text-zinc-500">YoY growth</div>
+                {(() => {
+                  const yoy = ((sharesHistory[0].outstanding - sharesHistory[1].outstanding) / sharesHistory[1].outstanding) * 100;
+                  if (yoy < -30) return <div className="text-lg font-bold text-amber-400">Reverse split</div>;
+                  return (
+                    <div className={`text-lg font-bold ${yoy > 50 ? 'text-red-400' : yoy > 10 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                      {yoy > 0 ? '+' : ''}{yoy.toFixed(0)}%
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
+          {reverseSplits.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {reverseSplits.map((rs: any) => (
+                <span key={rs.accessionNo} className="rounded bg-amber-500/15 px-2 py-1 text-[11px] text-amber-400">
+                  {rs.executionDate ?? rs.announcementDate}: {rs.ratio} reverse split
+                </span>
+              ))}
+            </div>
+          )}
+          {/* History table — the dilution trend, period by period */}
+          {sharesHistory.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
+                  <th className="px-3 py-2 font-medium">Period</th>
+                  <th className="px-3 py-2 text-right font-medium">Outstanding</th>
+                  <th className="px-3 py-2 text-right font-medium">Δ vs prior</th>
+                </tr></thead>
+                <tbody>
+                  {sharesHistory.map((s, i) => {
+                    const prev = sharesHistory[i + 1];
+                    const delta = prev ? ((s.outstanding - prev.outstanding) / prev.outstanding) * 100 : null;
+                    return (
+                      <tr key={s.period} className="border-b border-zinc-800/60 last:border-0 hover:bg-zinc-900/40">
+                        <td className="whitespace-nowrap px-3 py-2 text-zinc-400">{s.period}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right font-medium text-zinc-200">{fmtNum(s.outstanding)}</td>
+                        <td className={`whitespace-nowrap px-3 py-2 text-right ${delta == null ? 'text-zinc-600' : delta > 50 ? 'text-red-400' : delta > 5 ? 'text-amber-400' : delta < -30 ? 'text-amber-400' : 'text-zinc-500'}`}>
+                          {delta == null ? '—' : (delta > 0 ? '+' : '') + delta.toFixed(1) + '%'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <div className="mt-2 text-[10px] text-zinc-600">
+                Float = outstanding − restricted/insider shares. Exact float needs 13F/proxy data; the outstanding trend above is the SEC-reported dilution signal.
+              </div>
+            </div>
+          ) : (
+            <div className="py-4 text-center text-sm text-zinc-600">No share history on file.</div>
+          )}
+        </div>
+      )}
+
+      {/* Tab 3: Ownership — insider holdings from Form 4, or transaction
+          activity when holdings aren't reportable (afterShares null, e.g.
+          option grants). Many micro-caps have Form 4 sales but no holding
+          figure — showing the transaction log fills the tab with real signal. */}
+      {tab === 3 && (
+        <div className="p-4">
+          {insiders.length ? (
+            <>
+              <div className="mb-3 flex flex-wrap items-end gap-x-8 gap-y-2">
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-zinc-500">Insider holdings</div>
+                  <div className="text-2xl font-bold text-zinc-100">{fmtNum(insiders.reduce((a, x) => a + x.shares, 0))}</div>
+                  {outstandingRef && <div className="text-xs text-zinc-500">{((insiders.reduce((a, x) => a + x.shares, 0) / outstandingRef) * 100).toFixed(1)}% of {fmtNum(outstandingRef)} out</div>}
+                </div>
+                <div className="text-[11px] text-zinc-600">Latest reported holding per person, from Form 4 transactions. Institutional (13F) data not pulled.</div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
+                    <th className="px-3 py-2 font-medium">Reporter</th>
+                    <th className="px-3 py-2 text-right font-medium">Shares</th>
+                    <th className="px-3 py-2 text-right font-medium">% out</th>
+                    <th className="px-3 py-2 font-medium">Role</th>
+                    <th className="px-3 py-2 font-medium">Last txn</th>
+                  </tr></thead>
+                  <tbody>
+                    {insiders.slice(0, 25).map((x, i) => (
+                      <tr key={i} className="border-b border-zinc-800/60 last:border-0 hover:bg-zinc-900/40">
+                        <td className="px-3 py-2 text-zinc-200">{x.name}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right font-medium text-zinc-300">{fmtNum(x.shares)}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right text-zinc-400">{outstandingRef ? ((x.shares / outstandingRef) * 100).toFixed(2) + '%' : '—'}</td>
+                        <td className="px-3 py-2"><span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${x.isOfficer ? 'bg-blue-500/15 text-blue-300' : 'bg-zinc-700 text-zinc-400'}`}>{x.isOfficer ? 'Officer' : 'Director'}</span></td>
+                        <td className="whitespace-nowrap px-3 py-2 text-zinc-500">{x.latest}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : form4.length > 0 ? (
+            <>
+              <div className="mb-3 flex flex-wrap items-end gap-x-8 gap-y-2">
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-zinc-500">Insider transactions</div>
+                  <div className="text-2xl font-bold text-zinc-100">{form4.length}</div>
+                  <div className="text-xs text-zinc-500">Form 4 filings on record</div>
+                </div>
+                <div className="text-[11px] text-zinc-600">Holdings not reportable (afterShares null), but transaction activity below.</div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
+                    <th className="px-3 py-2 font-medium">Date</th>
+                    <th className="px-3 py-2 font-medium">Reporter</th>
+                    <th className="px-3 py-2 font-medium">Code</th>
+                    <th className="px-3 py-2 text-right font-medium">Shares</th>
+                    <th className="px-3 py-2 font-medium">Role</th>
+                  </tr></thead>
+                  <tbody>
+                    {form4.slice(0, 25).map((t, i) => (
+                      <tr key={i} className="border-b border-zinc-800/60 last:border-0 hover:bg-zinc-900/40">
+                        <td className="whitespace-nowrap px-3 py-2 text-zinc-400">{t.txnDate}</td>
+                        <td className="px-3 py-2 text-zinc-200">{t.reporter}</td>
+                        <td className="px-3 py-2"><span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${t.dilutive ? 'bg-red-500/15 text-red-300' : 'bg-zinc-700 text-zinc-400'}`}>{t.txnCode}</span></td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right text-zinc-300">{t.securities ? fmtNum(t.securities) : '—'}</td>
+                        <td className="px-3 py-2"><span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${t.isOfficer ? 'bg-blue-500/15 text-blue-300' : 'bg-zinc-700 text-zinc-400'}`}>{t.isOfficer ? 'Officer' : 'Director'}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <div className="py-8 text-center text-sm text-zinc-600">No Form 4 insider transactions on file. (Micro-caps often have sparse insider reporting.)</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function DilutionPage() {
@@ -173,9 +754,37 @@ export default function DilutionPage() {
           insiderDilutiveShares90d: snapshot.insiderDilutiveShares90d,
           sharesOutstanding: snapshot.sharesLatest?.outstanding ?? null,
           overhang: snapshot.overhang,
+          // Wire the named sub-score inputs that were previously dropped —
+          // without these the rating showed 'No burn data' / 'Compliance data
+          // unavailable' even though the snapshot carried both.
+          runwayMonths: snapshot.cash?.cashRemainingMonths ?? null,
+          cashValue: snapshot.cash?.estimatedCash ?? null,
+          monthlyBurn: snapshot.cash?.monthlyCashFlow ?? null,
+          compliance: snapshot.compliance ?? null,
+          draws: (snapshot.draws ?? []).map((d: any) => ({
+            amount: d.amount, shares: d.shares, facilityType: d.facilityType, date: d.date,
+          })),
+          programs: (snapshot.programs ?? []).map((p: any) => ({
+            programType: p.programType, maxCommitment: p.maxCommitment,
+            filingDate: p.filingDate, counterparty: p.counterparty,
+          })),
+          publicFloat: snapshot.publicFloat ?? null,
+          price: snapshot.inTheMoney?.price ?? null,
         },
       )
     : null;
+
+  // Equity-line remaining capacity = Σ facility max − Σ equity-line draws.
+  // Per-facility draw attribution is unreliable (draws carry a generic
+  // facilityName like 'SEPA', not the counterparty), so this is an honest
+  // aggregate across all standing equity-line facilities — matches Nexus's
+  // 'Raised So Far / Remaining' at the section level.
+  const eqLineMax = [...(snapshot?.warrantNotes?.equityLines ?? []), ...((snapshot?.programs ?? []).filter((p: any) => p.programType === 'equity-line'))]
+    .reduce((s: number, e: any) => s + (e.maxCommitment ?? 0), 0);
+  const eqLineDrawn = (snapshot?.draws ?? [])
+    .filter((d: any) => d.facilityType === 'equity-line')
+    .reduce((s: number, d: any) => s + (d.amount ?? 0), 0);
+  const eqLineRemaining = eqLineMax > 0 ? Math.max(0, eqLineMax - eqLineDrawn) : null;
 
   const cash = snapshot?.cash ?? null;
   const cashOutOfMoney = cash !== null && cash.cashRemainingMonths !== null && cash.cashRemainingMonths < 0;
@@ -321,79 +930,142 @@ export default function DilutionPage() {
                     <Gauge className="h-4 w-4" />
                     <span className="text-xs uppercase tracking-wide">Dilution rating</span>
                   </div>
-                  <div className="mt-2 flex items-end gap-2">
-                    <span className={`text-4xl font-bold ${summary.rating <= 20 ? 'text-emerald-400' : summary.rating <= 45 ? 'text-amber-400' : summary.rating <= 70 ? 'text-orange-400' : 'text-red-400'}`}>
-                      {summary.rating}
-                    </span>
-                    <span className="mb-1 text-sm text-zinc-500">/ 100</span>
-                    <span className={`mb-1 ml-auto rounded border px-2 py-0.5 text-xs ${summary.rating <= 20 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' : summary.rating <= 45 ? 'border-amber-500/30 bg-amber-500/10 text-amber-400' : summary.rating <= 70 ? 'border-orange-500/30 bg-orange-500/10 text-orange-400' : 'border-red-500/30 bg-red-500/10 text-red-400'}`}>
-                      {summary.tier}
-                    </span>
+                  <div className="mt-2 flex items-baseline gap-1.5">
+                    <span className="text-2xl font-bold text-zinc-100">{summary.rating}</span>
+                    <span className="text-xs text-zinc-600">/100</span>
+                    <span className="ml-1 text-xs text-zinc-400">{summary.tier} dilution risk</span>
                   </div>
-                  {/* AskEdgar-aligned risk labels (reverse-engineered from 1,758 reports) */}
+                  <div className="mt-2 text-[11px] leading-relaxed text-zinc-500">{summary.bullets.slice(0, 3).join('  ·  ')}</div>
+                  {/* Sub-scores — DETAIL-LED: facts lead, no bars/score-numbers/icons. */}
                   {(() => {
+                    const sr = summary.subRatings;
                     const rw = snapshot?.cash?.reportedRunwayMonths ?? null;
-                    const labels = { ...summary.askedgarLabels, cashBurnRisk: cashBurnRiskFromRunway(rw) };
-                    const RISK_COLOR: Record<string, string> = { high: 'text-red-400 bg-red-500/10 border-red-500/30', medium: 'text-amber-400 bg-amber-500/10 border-amber-500/30', low: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30' };
-                    const chip = (l: string | null) => l ? (
-                      <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase ${RISK_COLOR[l]}`}>{l}</span>
-                    ) : <span className="text-zinc-700">—</span>;
+                    const tw = (s: number) => s <= 20 ? 'Low' : s <= 45 ? 'Moderate' : s <= 70 ? 'High' : 'Toxic';
+                    const cashTail = sr.cashNeed.bullets[0]?.split(' · ').slice(1).join(' · ') || '';
                     return (
-                      <div className="mt-2 flex items-center gap-2 border-t border-zinc-800/60 pt-2 text-[11px]">
-                        <span className="text-zinc-500">AE-aligned:</span>
-                        <span className="flex items-center gap-1"><span className="text-zinc-600">cash</span>{chip(labels.cashBurnRisk)}</span>
-                        <span className="flex items-center gap-1"><span className="text-zinc-600">dil</span>{chip(labels.dilutionRisk)}</span>
-                        <span className="flex items-center gap-1"><span className="text-zinc-600">off</span>{chip(labels.offeringRisk)}</span>
+                      <div className="mt-3 space-y-2 border-t border-zinc-800/60 pt-3">
+                        <div>
+                          <div className="text-[10px] uppercase tracking-wide text-zinc-600">Cash need <span className="text-zinc-700">· {tw(sr.cashNeed.score)}</span></div>
+                          <div className="mt-0.5 text-sm text-zinc-200">
+                            {rw == null ? <span className="text-zinc-500">No burn data</span>
+                              : <><span className={`font-semibold ${rw <= 6 ? 'text-red-400' : rw <= 12 ? 'text-orange-300' : 'text-emerald-300'}`}>{rw <= 0 ? 'Out of cash' : `${rw.toFixed(1)} mo runway`}</span>{snapshot?.cash?.acceleratingBurn && <span className="text-red-400"> · accelerating</span>}{cashTail ? <span className="text-zinc-500"> — {cashTail}</span> : null}</>}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] uppercase tracking-wide text-zinc-600">Dilution ability <span className="text-zinc-700">· {tw(sr.dilutionAbility.score)}</span></div>
+                          <div className="mt-0.5 text-xs leading-relaxed">
+                            {(() => {
+                              const chips = mechanicsSummary(snapshot);
+                              if (!chips.length) return <span className="text-zinc-500">No tappable facilities detected.</span>;
+                              return chips.map((c, i) => (
+                                <span key={i} className={i > 0 ? 'ml-2' : ''} title={c.title}>
+                                  <span className="text-zinc-600">{c.label}:</span> <span className={`font-medium ${TONE[c.tone] ?? 'text-zinc-300'}`}>{c.value}</span>
+                                </span>
+                              ));
+                            })()}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] uppercase tracking-wide text-zinc-600">Offering frequency</div>
+                          <div className="mt-0.5 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs leading-relaxed">
+                            {(() => {
+                              const facts: { v: string; s?: string; tone: string }[] = [];
+                              const DAY = 86400000;
+                              const cutoff90 = Date.now() - 90 * DAY;
+                              // Raised in offerings (424B5) — last 90d
+                              const off90 = (snapshot as any)?.offerings?.filter((o: any) => Date.parse(o.filingDate) >= cutoff90) ?? [];
+                              const raised90 = off90.reduce((a: number, o: any) => a + (o.grossProceeds ?? 0), 0);
+                              if (raised90 > 0) facts.push({ v: fmtMoney(raised90) + ' raised', s: off90.length + ' offerings · 90d', tone: 'red' });
+                              // ATM / shelf drawn (amount sold off a registration)
+                              const sh = (snapshot as any)?.shelfRemaining;
+                              if (sh && (sh.raised ?? 0) > 0) facts.push({ v: fmtMoney(sh.raised) + ' drawn off shelf', s: 'of ' + fmtMoney(sh.registered), tone: 'orange' });
+                              // SEPA / equity-line draws — 90d
+                              const draws90 = (snapshot as any)?.draws?.filter((d: any) => { const dt = d.filingDate ?? d.date; return dt && Date.parse(dt) >= cutoff90; }) ?? [];
+                              const drawAmt = draws90.reduce((a: number, d: any) => a + (d.proceeds ?? d.grossAmount ?? d.amount ?? 0), 0);
+                              if (drawAmt > 0) facts.push({ v: fmtMoney(drawAmt) + ' SEPA draws', s: draws90.length + ' · 90d', tone: 'purple' });
+                              // Reverse split — 12mo
+                              const rs = (snapshot as any)?.reverseSplits?.find((r: any) => { const d = r.executionDate ?? r.announcementDate; return d && Date.now() - Date.parse(d) < 365 * DAY; });
+                              if (rs) facts.push({ v: 'Reverse split', s: (rs.ratio ?? '') + ' · ' + (rs.executionDate ?? rs.announcementDate), tone: 'amber' });
+                              // Equity-line / SEPA facilities — standing capacity
+                              const eqLines = [...((snapshot as any)?.warrantNotes?.equityLines ?? []), ...(((snapshot as any)?.programs ?? []).filter((p: any) => p.programType === 'equity-line'))];
+                              if (eqLines.length > 0) {
+                                const eqMax = eqLines.reduce((a: number, e: any) => a + (e.maxCommitment ?? 0), 0);
+                                facts.push({ v: eqLines.length + ' eq line' + (eqLines.length > 1 ? 's' : ''), s: eqMax > 0 ? fmtMoney(eqMax) + ' capacity' : '', tone: 'red' });
+                              }
+                              // Shelf / ATM registrations — capacity not counted above
+                              if (!sh) {
+                                const shelfCap = ((snapshot as any)?.registrations ?? []).reduce((a: number, r: any) => a + (r.aggregateOffering ?? 0), 0);
+                                if (shelfCap > 0) facts.push({ v: fmtMoney(shelfCap) + ' shelf', s: 'registered', tone: 'orange' });
+                              }
+                              if (!facts.length) return <span className="text-zinc-500">No recent dilution activity or registered capacity.</span>;
+                              return facts.map((f, i) => <span key={i}><span className={`font-semibold ${TONE[f.tone] ?? 'text-zinc-300'}`}>{f.v}</span>{f.s && <span className="text-zinc-500"> {f.s}</span>}</span>);
+                            })()}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] uppercase tracking-wide text-zinc-600">Compliance</div>
+                          <div className="mt-0.5 text-sm text-zinc-300">{sr.compliance.bullets[0] ?? '—'}</div>
+                        </div>
                       </div>
                     );
                   })()}
-                  <div className="mt-3 space-y-1">
-                    {summary.breakdown.map((b) => (
-                      <div key={b.component} className="flex items-center justify-between text-xs">
-                        <span className={b.fired ? 'text-zinc-300' : 'text-zinc-600'}>
-                          {b.fired ? '◉' : '○'} {b.component}
-                        </span>
-                        <span className={b.fired ? 'text-zinc-400' : 'text-zinc-700'}>
-                          +{b.weight}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
                 </div>
 
-                <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 lg:col-span-2">
-                  <div className="mb-2 flex items-center gap-2 text-zinc-400">
-                    <Layers className="h-4 w-4" />
-                    <span className="text-xs uppercase tracking-wide">Dilution programs (from SEC filings)</span>
+                <div className="lg:col-span-2 space-y-4">
+                  {/* Dilution ability — BIG: what they can sell & where (shelf/SEPA/ATM/converts/warrants). Detail-led, no score. */}
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+                    <div className="mb-2 text-xs uppercase tracking-wide text-zinc-400">Dilution ability — what they can sell & where</div>
+                    {summary.subRatings.dilutionAbility.bullets.length === 0 ? (
+                      <div className="py-3 text-sm text-zinc-500">No tappable dilution facilities detected.</div>
+                    ) : (
+                      <ul className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+                        {summary.subRatings.dilutionAbility.bullets.map((bl, i) => (
+                          <li key={i} className="flex items-start gap-2 text-xs text-zinc-300">
+                            <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-zinc-500" />
+                            <span>{bl}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
-                  {summary.programs.length === 0 ? (
-                    <div className="py-6 text-center text-sm text-zinc-500">
-                      No dilution-relevant filings detected in the synced window.
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-zinc-800/60">
-                      {summary.programs.map((p) => (
-                        <div key={p.key} className="flex items-start gap-3 py-2">
-                          <span
-                            className={`mt-1 h-2 w-2 shrink-0 rounded-full ${
-                              p.severity === 'danger' ? 'bg-red-500' : p.severity === 'warn' ? 'bg-amber-500' : 'bg-zinc-600'
-                            }`}
-                          />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-baseline justify-between gap-2">
-                              <span className="text-sm font-medium">{p.label}</span>
-                              <span className="shrink-0 text-xs text-zinc-500">
-                                {p.count} filing{p.count > 1 ? 's' : ''}{p.latestDate ? ` · latest ${p.latestDate}` : ''}
-                              </span>
-                            </div>
-                            <div className="truncate text-xs text-zinc-500">{p.blurb}</div>
+
+                  {/* Programs (scroll) + News side by side — programs made SHORTER, news in freed space */}
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {/* Dilution programs — tabbed by type (equity lines / warrants / converts / ATM / shelf / S-1) */}
+                    <ProgramTabs snapshot={snapshot} />
+
+                    {/* News — 8-K catalysts + press releases, recency-sorted; last 24h highlighted */}
+                    <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+                      <div className="mb-1 flex items-center gap-2 text-zinc-400">
+                        <FileText className="h-4 w-4" />
+                        <span className="text-xs uppercase tracking-wide">News</span>
+                        <span className="ml-auto text-[10px] text-zinc-600">8-K catalysts + press</span>
+                      </div>
+                      {(() => {
+                        const news = snapshot?.news ?? [];
+                        if (!news.length) return <div className="py-3 text-center text-xs text-zinc-500">No recent news.</div>;
+                        const today = new Date().toISOString().slice(0, 10);
+                        const yest = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+                        return (
+                          <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
+                            {news.map((n, i) => {
+                              const recent = n.date === today || n.date === yest;
+                              const sec = n.source === 'sec-8k';
+                              return (
+                                <div key={i} className={`flex items-start gap-2 ${recent ? '-mx-1 rounded bg-amber-500/5 px-1' : ''}`}>
+                                  <span className="mt-0.5 shrink-0 text-[10px] text-zinc-600">{n.date}</span>
+                                  <span className={`mt-0.5 shrink-0 rounded px-1 text-[9px] font-semibold uppercase ${sec ? 'bg-blue-500/15 text-blue-300' : 'bg-zinc-700 text-zinc-300'}`}>{sec ? '8-K' : 'news'}</span>
+                                  <div className="min-w-0">
+                                    <span className="text-xs leading-snug text-zinc-200">{n.title}</span>
+                                    {n.url && <a href={n.url} target="_blank" rel="noreferrer" className="ml-1 text-[10px] text-blue-400 hover:underline">↗</a>}
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })()}
                     </div>
-                  )}
-                  <div className="mt-2 border-t border-zinc-800/60 pt-2 text-[11px] text-zinc-600">
-                    Metadata-derived (form type + 8-K items). Deeper program status — capacity remaining, shares sold — arrives with full-text document parsing.
                   </div>
                 </div>
               </div>
@@ -428,6 +1100,9 @@ export default function DilutionPage() {
                           <div className="flex items-center gap-1.5 text-xs text-zinc-400">
                             <span>Cash runway</span>
                             <span className="rounded bg-zinc-700 px-1 py-px text-[9px] uppercase tracking-wide text-zinc-300">reported</span>
+                            {snapshot.cash.acceleratingBurn && (
+                              <span className="rounded border border-red-500/40 bg-red-500/10 px-1 py-px text-[9px] font-semibold uppercase text-red-400" title="Recent half-year+ stub burns >1.3× the smoothed TTM rate — runway shown uses the recent run-rate.">accelerating</span>
+                            )}
                           </div>
                           {snapshot.cash.reportedRunwayMonths === null ? (
                             <div className="text-3xl font-bold text-emerald-400">
@@ -480,6 +1155,15 @@ export default function DilutionPage() {
                   <span className="rounded bg-zinc-700 px-1.5 py-0.5 text-[9px] text-zinc-300">8-K + 10-K</span>
                 </div>
                 <div className="mb-2 text-[10px] text-zinc-600">Active financing mechanisms — standing facilities + new agreements. Read the clause to verify terms.</div>
+                {eqLineMax > 0 && (
+                  <div className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 rounded border border-zinc-700/60 bg-zinc-800/30 px-2 py-1 text-[11px]">
+                    <span className="font-semibold uppercase tracking-wide text-zinc-400">Equity-line capacity</span>
+                    <span className="text-zinc-300">${(eqLineMax / 1e6).toFixed(1)}M max</span>
+                    <span className="text-emerald-400">${(eqLineDrawn / 1e6).toFixed(1)}M raised</span>
+                    <span className="font-semibold text-amber-300">${(eqLineRemaining! / 1e6).toFixed(1)}M remaining</span>
+                    {eqLineDrawn === 0 && <span className="text-[10px] text-zinc-600">(no draws parsed yet)</span>}
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   {/* Equity lines / SEPA from 10-K notes (pre-existing standing facilities) */}
                   {snapshot!.warrantNotes?.equityLines?.map((el, i) => (
@@ -569,6 +1253,9 @@ export default function DilutionPage() {
                 <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-400">
                   Warrants &amp; convertibles
                   <span className="rounded bg-zinc-700 px-1.5 py-0.5 text-[9px] text-zinc-300">XBRL</span>
+                  {snapshot.overhang.splitNote && (
+                    <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-300" title={`Strike/shares adjusted for a stock split effective after the reported period: ${snapshot.overhang.splitNote}`}>⚠ split-adj</span>
+                  )}
                   {snapshot.overhang.overhangPct !== null && snapshot.overhang.overhangPct >= 20 && (
                     <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-400">high overhang</span>
                   )}
@@ -651,7 +1338,12 @@ export default function DilutionPage() {
                 <div className="mb-1 text-[10px] text-zinc-600">Extracted from financial-statement notes. Partial coverage — read the clause to verify.</div>
                 {snapshot.warrantNotes.warrants.length > 0 && (
                   <div className="mb-3">
-                    <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Warrants</div>
+                    <div className="mb-1 flex items-center gap-2">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Warrants</span>
+                      {snapshot.inTheMoney?.price != null && (
+                        <span className="text-[10px] text-zinc-500">at <span className="font-semibold text-emerald-400">${snapshot.inTheMoney.price.toFixed(2)}</span> today</span>
+                      )}
+                    </div>
                     <div className="space-y-1.5">
                       {snapshot.warrantNotes.warrants.map((w, i) => {
                         const now = Date.now();
@@ -664,12 +1356,19 @@ export default function DilutionPage() {
                         // null dates → 'Status unknown' (don't fake confidence).
                         const statusLabel = expired ? 'Expired' : notYet ? `Exercisable ${w.exercisableDate}` : hasDates ? 'In play' : 'Status unknown';
                         const statusClass = expired ? 'bg-zinc-700 text-zinc-400' : notYet ? 'bg-zinc-700 text-zinc-300' : hasDates ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-700 text-zinc-500';
+                        // Moneyness coloring — matches ProgramTabs. Price-aware:
+                        // ITM (red, exercise likely) / NEAR (amber, within 20% below) / OTM (plain).
+                        const px = snapshot.inTheMoney?.price;
+                        const itm = w.exercisePrice !== null && px != null && px >= w.exercisePrice;
+                        const near = w.exercisePrice !== null && px != null && px >= w.exercisePrice * 0.8 && px < w.exercisePrice;
+                        const strikeClass = itm ? 'text-red-400' : near ? 'text-amber-400' : 'text-zinc-200';
+                        const moneyLabel = itm ? ' · ITM' : near ? ' · near' : '';
                         return (
                         <div key={`w${i}`} className="rounded bg-zinc-800/40 p-2 text-xs">
                           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
                             <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase ${statusClass}`} title="Derived from expiry/exercisable dates in the 10-K clause">{statusLabel}</span>
                             {w.shares !== null && <span><span className="text-zinc-500">shares:</span> <span className="font-medium text-zinc-200">{fmtNum(w.shares)}</span></span>}
-                            {w.exercisePrice !== null && <span><span className="text-zinc-500">strike:</span> <span className="font-medium text-zinc-200">${w.exercisePrice.toFixed(2)}</span></span>}
+                            {w.exercisePrice !== null && <span><span className="text-zinc-500">strike:</span> <span className={`font-medium ${strikeClass}`}>${w.exercisePrice.toFixed(w.exercisePrice < 1 ? 4 : 2)}{moneyLabel}</span></span>}
                             {w.expiry !== null && <span><span className="text-zinc-500">expires:</span> <span className="font-medium text-amber-300">{w.expiry}</span></span>}
                           </div>
                           <div className="mt-1 line-clamp-2 text-[10px] italic text-zinc-500">“{w.description.slice(0, 220)}{w.description.length > 220 ? '…' : ''}”</div>
@@ -716,39 +1415,6 @@ export default function DilutionPage() {
                     </div>
                   </div>
                 )}
-              </div>
-            )}
-
-            {/* Recent offerings (424B5) — the actual dilution event */}
-            {snapshot.offerings.length > 0 && (
-              <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-                <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-400">
-                  Recent offerings
-                  <span className="rounded bg-zinc-700 px-1.5 py-0.5 text-[9px] text-zinc-300">424B5</span>
-                </div>
-                <div className="space-y-2">
-                  {snapshot.offerings.map((o) => (
-                    <div key={o.accessionNo} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-b border-zinc-800/60 pb-2 text-sm last:border-0 last:pb-0">
-                      <span className="text-zinc-500">{o.filingDate} · {o.formType}</span>
-                      {o.sharesOffered !== null && (
-                        <span className="font-semibold">{fmtNum(o.sharesOffered)} shares</span>
-                      )}
-                      {o.pricePerShare !== null && (
-                        <span className="text-zinc-400">@ ${o.pricePerShare.toFixed(o.pricePerShare < 1 ? 4 : 2)}</span>
-                      )}
-                      {o.grossProceeds !== null && (
-                        <span className="text-emerald-400">{fmtMoney(o.grossProceeds)} gross</span>
-                      )}
-                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
-                        o.offeringType === 'atm' ? 'bg-red-500/15 text-red-400' :
-                        o.offeringType === 'underwritten' ? 'bg-blue-500/15 text-blue-400' :
-                        'bg-zinc-700 text-zinc-300'}`}>{o.offeringType}</span>
-                      {o.underwriter && (
-                        <span className="text-zinc-600">{o.underwriter}</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
               </div>
             )}
 
@@ -844,6 +1510,31 @@ export default function DilutionPage() {
                     <span><span className="text-zinc-500">Available</span> <span className="font-bold text-amber-300">{fmtNum(snapshot.authorizedShares.available)}</span></span>
                     <span className="text-[11px] text-zinc-500">{(snapshot.authorizedShares.available / snapshot.authorizedShares.authorized * 100).toFixed(0)}% of authorized unissued</span>
                   </div>
+                </div>
+              )}
+              {/* Public float — prefer SEC 10-K/20-F cover (EntityPublicFloat:
+                  authoritative, ~18% coverage, annual); fall back to COMPUTED
+                  (outstanding − insiders) for the majority with no cover float.
+                  Labeled distinctly so a derived figure is never mistaken for
+                  the SEC-reported one. */}
+              {(snapshot.publicFloat || snapshot.computedFloat) && (
+                <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-0.5 border-t border-zinc-800/60 pt-2 text-sm">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Est. public float</span>
+                  {snapshot.publicFloat ? (
+                    <>
+                      {snapshot.publicFloat.shares != null && (
+                        <span className="font-semibold text-zinc-200">{fmtNum(snapshot.publicFloat.shares)} sh</span>
+                      )}
+                      <span className="text-zinc-400">{fmtMoney(snapshot.publicFloat.value)} non-affiliate mkt value</span>
+                      <span className="text-[11px] text-zinc-600">SEC cover, as of {snapshot.publicFloat.asOf}</span>
+                    </>
+                  ) : snapshot.computedFloat ? (
+                    <>
+                      <span className="font-semibold text-zinc-200">{fmtNum(snapshot.computedFloat.shares)} sh</span>
+                      <span className="text-zinc-400">{fmtNum(snapshot.computedFloat.insiderShares)} insider subtr.</span>
+                      <span className="text-[11px] text-amber-500/80">computed: outstanding − insiders</span>
+                    </>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -956,64 +1647,10 @@ export default function DilutionPage() {
               </div>
             )}
 
-            {/* Filings table */}
-            <div className="overflow-hidden rounded-lg border border-zinc-800">
-              <div className="border-b border-zinc-800 bg-zinc-900/50 px-4 py-2 text-xs uppercase tracking-wide text-zinc-400">
-                Recent filings ({snapshot.filings.length})
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
-                      <th className="px-3 py-2 font-medium">Date</th>
-                      <th className="px-3 py-2 font-medium">Form</th>
-                      <th className="px-3 py-2 font-medium">Tags</th>
-                      <th className="px-3 py-2 font-medium">Description</th>
-                      <th className="px-3 py-2"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {snapshot.filings.map((f) => (
-                      <tr key={f.accessionNo} className="border-b border-zinc-800/60 last:border-0 hover:bg-zinc-900/40">
-                        <td className="whitespace-nowrap px-3 py-2 text-zinc-400">{f.filingDate}</td>
-                        <td className="whitespace-nowrap px-3 py-2 font-medium">{f.formType}</td>
-                        <td className="px-3 py-2">
-                          <div className="flex flex-wrap gap-1">
-                            {f.dilutionTags.length === 0 ? (
-                              <span className="text-xs text-zinc-600">—</span>
-                            ) : (
-                              f.dilutionTags.map((t) => {
-                                const meta = DILUTION_TAG_META[t];
-                                return (
-                                  <span
-                                    key={t}
-                                    title={meta.tooltip}
-                                    className={`rounded border px-1.5 py-0.5 text-[10px] ${TAG_STYLES[meta.color]}`}
-                                  >
-                                    {meta.label}
-                                  </span>
-                                );
-                              })
-                            )}
-                          </div>
-                        </td>
-                        <td className="max-w-md px-3 py-2 text-zinc-400">{f.primaryDesc ?? '—'}</td>
-                        <td className="px-3 py-2">
-                          <a
-                            href={f.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-zinc-500 hover:text-zinc-300"
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                          </a>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            {/* Bottom tabbed block — Past Offerings (default) · Recent Filings · Shares & Float.
+                Consolidates the old scattered offerings/filings/shares cards into one
+                Nexus-parity tabbed section (user-requested structure). */}
+            <BottomTabs snapshot={snapshot} />
           </div>
         ) : null}
       </div>

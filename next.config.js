@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Traderra lives at ~/traderra but a stray ~/package-lock.json makes Next.js
+  // infer ~ as the workspace root, breaking the final build-trace step
+  // (ENOENT .../app/_not-found/page.js.nft.json). Pin the root explicitly.
+  outputFileTracingRoot: __dirname,
   typescript: {
     // Dangerously allow production builds to successfully complete even if TypeScript errors are present
     ignoreBuildErrors: true,

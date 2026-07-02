@@ -497,7 +497,18 @@ function safeISO(ts: number): string {
   return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
 }
 
-function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset = 0 }: {
+// Convert a US/Eastern wall-clock string "YYYY-MM-DD HH:MM" → unix seconds.
+// IMPORTANT: the chart DB stores bars in market-time-as-UTC (a 09:30 ET bar has
+// time = Date.UTC(...,9,30)). So we return the plain UTC seconds of the ET clock
+// reading with NO DST offset added — adding one puts wedges ~5h off the candle.
+function etWallToUnix(s: string): number {
+  const m = s.match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/)
+  if (!m) return NaN
+  const Y = +m[1], Mo = +m[2], D = +m[3], H = +m[4], Mi = +m[5]
+  return Math.floor(Date.UTC(Y, Mo - 1, D, H, Mi) / 1000)
+}
+
+function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset = 0, btMarkers }: {
   symbol: string
   tf: Timeframe
   date?: string
@@ -505,6 +516,7 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
   settings: ChartSettings
   dark: boolean
   dayOffset?: number
+  btMarkers?: { time: number; price: number; kind: 'buy' | 'sell'; selected?: boolean }[]
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [allBars, setAllBars] = useState<any[]>([])
@@ -1163,6 +1175,30 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
         }
       }
 
+      // ── Backtest trade wedges plotted at the ACTUAL FILL PRICE ──
+      // green ▲ = BUY (long entry / short cover); red ▼ = SELL (short entry / long exit).
+      // The arrow tip sits exactly on the fill-price line so you can read the real execution.
+      if (btMarkers && btMarkers.length && settings.showExecWedges) {
+        const sAbs = allBars.findIndex(b => b.time === bars[0]?.time)
+        const tfSec = tf === '1' ? 60 : tf === '2' ? 120 : tf === '5' ? 300 : tf === '15' ? 900 : tf === '60' ? 3600 : 86400
+        const tIdx = new Map<number, number>()
+        for (let i = 0; i < allBars.length; i++) { const k = allBars[i].time - (allBars[i].time % tfSec); if (!tIdx.has(k)) tIdx.set(k, i) }
+        for (const m of btMarkers) {
+          const ai = tIdx.get(m.time - (m.time % tfSec))
+          if (ai == null) continue
+          const ri = ai - sAbs
+          if (ri < 0 || ri >= bars.length) continue
+          const x = xFor(ri), y = yFor(m.price), big = m.selected, sz = big ? 8 : 5
+          ctx.beginPath()
+          if (m.kind === 'buy') { ctx.moveTo(x, y); ctx.lineTo(x - sz, y + sz * 2); ctx.lineTo(x + sz, y + sz * 2) }
+          else { ctx.moveTo(x, y); ctx.lineTo(x - sz, y - sz * 2); ctx.lineTo(x + sz, y - sz * 2) }
+          ctx.closePath()
+          ctx.fillStyle = m.kind === 'buy' ? (big ? '#2dd4bf' : 'rgba(45,212,191,0.9)') : (big ? '#f87171' : 'rgba(248,113,113,0.9)')
+          ctx.fill()
+          if (big) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke() }
+        }
+      }
+
       if (settings.showLegend) {
       ctx.font = '8px monospace'; ctx.textAlign = 'left'; const lx = 6, ly = 10
       ctx.fillStyle = 'rgba(34,197,94,0.7)'; ctx.fillText('9/20', lx, ly)
@@ -1170,6 +1206,10 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
       ctx.fillStyle = 'rgba(239,68,68,0.5)'; ctx.fillText('DEV', lx + 70, ly)
       ctx.fillStyle = 'rgba(194,114,58,0.7)'; ctx.fillText('VWAP', lx + 100, ly)
       }
+      // Build stamp (top-right) — confirms a fresh deploy (BT-v8 = wedges AT fill price, tip on the line)
+      ctx.font = '9px monospace'; ctx.textAlign = 'right'
+      ctx.fillStyle = GOLD
+      ctx.fillText('BT-v8', W - PAD_R - 30, 12)
     }
 
     // Zoom indicator
@@ -1177,7 +1217,7 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
       ctx.fillStyle = `${GOLD}80`; ctx.font = '9px monospace'; ctx.textAlign = 'right'
       ctx.fillText(`${visibleBars.length}/${allBars.length}`, W - PAD_R - 4, 12)
     }
-  }, [visibleBars, allBars.length, tf, date, settings, dark, GOLD, execMarkers])
+  }, [visibleBars, allBars.length, tf, date, settings, dark, GOLD, execMarkers, btMarkers])
 
   useEffect(() => { draw() }, [draw])
 
@@ -1717,6 +1757,11 @@ export default function BacktestPage() {
   const [dark, setDark] = useState(true)
   const [dayOffset, setDayOffset] = useState(0)
   const [backtestResults, setBacktestResults] = useState<BacktestResults | null>(null)
+  // ── Backtest runs (peers to scans; selectable in the left sidebar) ──
+  const [btRuns, setBtRuns] = useState<{ id: string; name: string; engine: string; meta: any; summary: any }[]>([])
+  const [selectedBtRun, setSelectedBtRun] = useState<string | null>(null)
+  const [btTrades, setBtTrades] = useState<{ id: string; side: 'long' | 'short'; openDate: string; exitDate: string; entry: number; stop: number; exit: number; exitLabel: string; r: number; pnl: number }[]>([])
+  const [selectedTradeIdx, setSelectedTradeIdx] = useState<number>(0)
   // ── Persisted state: init empty, hydrate from localStorage in useEffect ──
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set())
   const [bars15mCache, setBars15mCache] = useState<Record<string, any[]>>({})
@@ -2200,15 +2245,77 @@ export default function BacktestPage() {
     })
   }, [signals])
 
+
   // Auto-run baseline when signals load
   useEffect(() => {
-    if (signals.length > 0 && !backtestResults) runBaselineBacktest()
+    if (signals.length > 0 && !backtestResults && !selectedBtRun) runBaselineBacktest()
   }, [signals])
 
-  // Re-run when filters change
+  // Re-run baseline when filters change (only when viewing a scan, not a backtest run)
   useEffect(() => {
-    if (filteredSignals.length > 0) runBaselineBacktest(filteredSignals)
+    if (selectedBtRun || filteredSignals.length === 0) return
+    runBaselineBacktest(filteredSignals)
   }, [activeFilters])
+
+  // Load the list of backtest runs on mount (peers to scans)
+  useEffect(() => {
+    fetch('/api/backtest/runs').then(r => r.json()).then(d => setBtRuns(d.runs || [])).catch(() => {})
+  }, [])
+
+  // Selecting a backtest run loads its trades into the rows + populates stats
+  const selectBacktestRun = useCallback(async (id: string | null) => {
+    setSelectedBtRun(id)
+    if (!id) { setBtTrades([]); return }
+    try {
+      const r = await fetch(`/api/backtest/runs?id=${id}`)
+      const d = await r.json()
+      const trs = d.trades || []
+      setBtTrades(trs)
+      setSelectedTradeIdx(trs.length ? trs.length - 1 : 0)
+      // populate the SAME BacktestResults shape from the run's trades
+      const trades = (d.trades || []) as { r: number; pnl: number; side: string; exitLabel: string }[]
+      const returns = trades.map((t: any) => t.r)
+      const wins = trades.filter((t: any) => t.r > 0), losses = trades.filter((t: any) => t.r < 0)
+      const totR = returns.reduce((a: number, b: number) => a + b, 0)
+      const grossWin = wins.reduce((a: number, t: any) => a + t.r, 0)
+      const grossLoss = Math.abs(losses.reduce((a: number, t: any) => a + t.r, 0))
+      const winRate = trades.length ? (100 * wins.length) / trades.length : 0
+      const profitFactor = grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? 999 : 0
+      const avgR = returns.length ? totR / returns.length : 0
+      const avgWinR = wins.length ? wins.reduce((a: number, t: any) => a + t.r, 0) / wins.length : 0
+      const avgLossR = losses.length ? losses.reduce((a: number, t: any) => a + t.r, 0) / losses.length : 0
+      let cumPnl = 0, peak = 0, maxDd = 0; const cumPnlSeries: number[] = [], drawdownSeries: number[] = []
+      returns.forEach((rv: number) => { cumPnl += rv; cumPnlSeries.push(cumPnl); peak = Math.max(peak, cumPnl); drawdownSeries.push(peak - cumPnl); maxDd = Math.max(maxDd, peak - cumPnl) })
+      const mean = returns.length ? returns.reduce((a: number, b: number) => a + b, 0) / returns.length : 0
+      const std = returns.length ? Math.sqrt(returns.reduce((a: number, r: number) => a + (r - mean) ** 2, 0) / returns.length) : 0
+      const down = returns.filter((r: number) => r < 0)
+      const ddev = down.length ? Math.sqrt(down.reduce((a: number, r: number) => a + r ** 2, 0) / down.length) : 0
+      const sortedR = [...returns].sort((a: number, b: number) => a - b)
+      const medianR = sortedR.length ? (sortedR.length % 2 ? sortedR[(sortedR.length - 1) / 2] : (sortedR[sortedR.length / 2 - 1] + sortedR[sortedR.length / 2]) / 2) : 0
+      // previously stubbed — now computed from the run's trades
+      let curDdDur = 0, maxDdDur = 0
+      drawdownSeries.forEach(dd => { if (dd > 0) { curDdDur++; maxDdDur = Math.max(maxDdDur, curDdDur) } else curDdDur = 0 })
+      let cw = 0, cl = 0, maxCW = 0, maxCL = 0
+      returns.forEach(rv => { if (rv > 0) { cw++; cl = 0; maxCW = Math.max(maxCW, cw) } else { cl++; cw = 0; maxCL = Math.max(maxCL, cl) } })
+      const trsDate = (d.trades || []) as { r: number; openDate: string }[]
+      const byDate: Record<string, number[]> = {}, byMonth: Record<string, number[]> = {}
+      trsDate.forEach((t, i) => { const d0 = t.openDate || ''; const k = d0.slice(5, 10), mo = d0.slice(0, 7); (byDate[k] = byDate[k] || []).push(returns[i]); (byMonth[mo] = byMonth[mo] || []).push(returns[i]) })
+      const dayStats = Object.entries(byDate).map(([day, rs]) => ({ day, pnl: rs.reduce((a, b) => a + b, 0), count: rs.length }))
+      const monthlyStats = Object.entries(byMonth).map(([month, rs]) => ({ month, pnl: rs.reduce((a, b) => a + b, 0), count: rs.length }))
+      setBacktestResults({
+        entryType: d.meta ? `${d.meta.engine || 'engine'}` : 'engine', exitType: 'see trade reason',
+        totalTrades: trades.length, winRate, pctProfitable: winRate, profitFactor,
+        sharpe: std ? (mean / std) * Math.sqrt(252) : 0, sortino: ddev ? (mean / ddev) * Math.sqrt(252) : 0, calmar: maxDd ? Math.abs(totR / maxDd) : 0,
+        maxDrawdown: maxDd, maxDDDuration: maxDdDur, avgRMultiple: avgR, medianR, avgWinPct: avgWinR, avgLossPct: avgLossR,
+        expectancy: avgR, expectancyPct: avgR, wlRatio: avgLossR ? Math.abs(avgWinR / avgLossR) : 0,
+        totalPnl: totR, totalReturnPct: totR, cagr: totR, avgTradeDuration: '—',
+        maxConsecWins: maxCW, maxConsecLosses: maxCL, bestTrade: returns.length ? Math.max(...returns) : 0,
+        worstTrade: returns.length ? Math.min(...returns) : 0, stdDevReturns: std, downsideDev: ddev,
+        recoveryFactor: maxDd ? totR / maxDd : 0, grossWin, grossLoss, tradeReturns: returns, cumPnlSeries, drawdownSeries,
+        dayStats, monthlyStats,
+      })
+    } catch {}
+  }, [])
 
   // Keep ALL scans; tree dedupes per strategy, runs panel shows every run for the selected strategy
   useEffect(() => {
@@ -2255,6 +2362,25 @@ export default function BacktestPage() {
 
   const sig = signals[selectedIdx] as Signal | undefined
   const activeScan = scans.find(s => s.id === selectedScan)
+  // When a backtest run is selected, the center chart shows the run's instrument + tf (15m default for Mike's Bands)
+  const selectedBtRunObj = selectedBtRun ? btRuns.find(r => r.id === selectedBtRun) : null
+  const chartSymbol = (selectedBtRunObj?.meta?.symbol as string) || sig?.ticker || 'SPY'
+  const chartTf = (selectedBtRunObj?.meta?.tf as string) || tf
+  const chartDate = selectedBtRunObj ? (btTrades[selectedTradeIdx]?.openDate?.slice(0, 10) || btTrades[0]?.openDate?.slice(0, 10) || (selectedBtRunObj.meta?.from as string)) : sig?.date
+  // Entry + exit wedges for the selected backtest run.
+  // Convention: green ▲ = BUY action (long entry / short cover); red ▼ = SELL action (short entry / long exit).
+  const btMarkers = useMemo(() => {
+    if (!selectedBtRun || !btTrades.length) return []
+    const out: { time: number; price: number; kind: 'buy' | 'sell'; selected: boolean }[] = []
+    for (let i = 0; i < btTrades.length; i++) {
+      const t = btTrades[i]
+      const sel = i === selectedTradeIdx
+      out.push({ time: etWallToUnix(t.openDate), price: t.entry, kind: t.side === 'long' ? 'buy' : 'sell', selected: sel })
+      const etT = etWallToUnix(t.exitDate)
+      if (!isNaN(etT)) out.push({ time: etT, price: t.exit, kind: t.side === 'long' ? 'sell' : 'buy', selected: sel })
+    }
+    return out
+  }, [selectedBtRun, btTrades, selectedTradeIdx])
 
  // Reset day offset when signal changes
  // (also done inline in every setSelectedIdx call)
@@ -2335,6 +2461,38 @@ export default function BacktestPage() {
               {ungrouped.length > 0 && <FolderGroup label="Other" items={ungrouped} selectedScan={selectedScan} onSelect={setSelectedScan} />}
             </>
           })()}
+          {/* ── Backtest runs (peers to scans; selecting one loads its trades into the rows + stats) ── */}
+          <div style={{ borderTop: `1px solid ${T.BORDER}`, marginTop: 2 }}>
+            <div style={{ padding: '7px 10px', borderBottom: `1px solid ${T.BORDER}`, background: T.SURFACE2, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Activity className="h-3 w-3" style={{ color: T.TEAL }} />
+              <span style={{ color: T.TEAL, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>Backtest</span>
+              <span style={{ marginLeft: 'auto', fontSize: 8, color: T.MUTED }}>{btRuns.length} runs</span>
+            </div>
+            {btRuns.length === 0 && <div style={{ padding: '6px 10px 6px 22px', fontSize: 9, color: T.MUTED }}>No saved runs</div>}
+            {btRuns.map(run => {
+              const isActive = selectedBtRun === run.id
+              const s = run.summary || {}
+              return (
+                <button key={run.id} onClick={() => selectBacktestRun(isActive ? null : run.id)} style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  padding: '6px 10px 6px 22px', border: 'none', cursor: 'pointer',
+                  background: isActive ? `${T.TEAL}18` : 'transparent',
+                  borderLeft: isActive ? `2px solid ${T.TEAL}` : '2px solid transparent',
+                  borderBottom: `1px solid ${T.BORDER}`,
+                }}
+                  onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
+                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}>
+                  <div style={{ color: isActive ? T.TEAL : T.TEXT, fontSize: 11, fontWeight: 600, marginBottom: 2 }}>{run.name}</div>
+                  <div style={{ fontSize: 8, color: T.MUTED, display: 'flex', gap: 8 }}>
+                    <span>{s.trades ?? 0} trades</span>
+                    <span style={{ color: (s.totR ?? 0) >= 0 ? T.TEAL : T.RED }}>{(s.totR ?? 0) >= 0 ? '+' : ''}{(s.totR ?? 0).toFixed(1)}R</span>
+                    <span>{(s.winRate ?? 0).toFixed(0)}% win</span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+
           {scans.length === 0 && (
             <div style={{ padding: 20, textAlign: 'center' }}>
               <Search className="h-5 w-5 mx-auto mb-2" style={{ color: T.MUTED, opacity: 0.3 }} />
@@ -2348,12 +2506,27 @@ export default function BacktestPage() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <div style={{ padding: '8px 10px', borderBottom: `1px solid ${T.BORDER}`, background: T.SURFACE2 }}>
           <div className="flex items-center justify-between">
-            <span style={{ color: T.GOLD, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Runs</span>
-            <span style={{ color: T.MUTED, fontSize: 9 }}>{activeRuns.length}</span>
+            <span style={{ color: selectedBtRun ? T.TEAL : T.GOLD, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>{selectedBtRun ? 'Backtest Run' : 'Runs'}</span>
+            <span style={{ color: T.MUTED, fontSize: 9 }}>{selectedBtRun ? btTrades.length : activeRuns.length}</span>
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {activeRuns.map(run => {
+          {selectedBtRun ? (
+            <div style={{ padding: '8px 10px' }}>
+              <div style={{ color: T.TEAL, fontSize: 10, fontWeight: 700 }}>{selectedBtRunObj?.name || 'Backtest'}</div>
+              <div style={{ fontSize: 8, color: T.MUTED, marginTop: 4, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <span>{selectedBtRunObj?.summary?.trades ?? btTrades.length} trades</span>
+                <span style={{ color: (selectedBtRunObj?.summary?.totR ?? 0) >= 0 ? T.TEAL : T.RED }}>{(selectedBtRunObj?.summary?.totR ?? 0) >= 0 ? '+' : ''}{(selectedBtRunObj?.summary?.totR ?? 0).toFixed(1)}R</span>
+                <span>{(selectedBtRunObj?.summary?.winRate ?? 0).toFixed(0)}% win</span>
+                <span style={{ color: T.MUTED }}>{selectedBtRunObj?.meta?.symbol} {selectedBtRunObj?.meta?.tf}m</span>
+              </div>
+              <div style={{ marginTop: 8, padding: '6px 8px', background: T.SURFACE2, borderRadius: 3, fontSize: 8, color: T.MUTED, lineHeight: 1.5 }}>
+                <div>Trade {Math.min(selectedTradeIdx + 1, btTrades.length)} / {btTrades.length} selected</div>
+                <div style={{ opacity: 0.7 }}>Click any row on the right to step through trades →</div>
+              </div>
+            </div>
+          ) : (
+          <>{activeRuns.map(run => {
             const isActive = run.id === selectedScan
             return (
             <div key={run.id} onClick={() => setSelectedScan(run.id)} style={{
@@ -2375,6 +2548,7 @@ export default function BacktestPage() {
           {activeRuns.length === 0 && (
             <div style={{ padding: 16, textAlign: 'center', color: T.MUTED, fontSize: 9 }}>Select a scan to see runs</div>
           )}
+          </>)}
         </div>
       </div>
 
@@ -2565,6 +2739,38 @@ export default function BacktestPage() {
         </div>
 
         <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
+          {selectedBtRun ? (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10, fontFamily: 'monospace' }}>
+              <thead>
+                <tr style={{ background: T.SURFACE2, position: 'sticky', top: 0, zIndex: 2 }}>
+                  {['OPEN', 'S', 'ENTRY', 'STOP', 'EXIT', 'R', '$PNL', 'REASON'].map(h => (
+                    <th key={h} style={{ padding: '4px 6px', textAlign: h === 'OPEN' ? 'left' : 'right', color: T.GOLD, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', borderLeft: `1px solid ${T.BORDER}` }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {btTrades.slice().reverse().map((t, i) => {
+                  const realIdx = btTrades.length - 1 - i
+                  const isTA = realIdx === selectedTradeIdx
+                  const EC: Record<string,string> = { EXTREME: T.TEAL, REVERSION: T.TEAL, CYCLE: T.MUTED, STOP: T.RED, 'OPEN@END': T.GOLD }
+                  return (
+                    <tr key={t.id || i} onClick={() => setSelectedTradeIdx(realIdx)} style={{ borderBottom: `1px solid ${T.BORDER}`, cursor: 'pointer', background: isTA ? `${T.TEAL}18` : 'transparent', borderLeft: isTA ? `2px solid ${T.TEAL}` : '2px solid transparent' }}
+                      onMouseEnter={e => { if (!isTA) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
+                      onMouseLeave={e => { if (!isTA) e.currentTarget.style.background = 'transparent' }}>
+                      <td style={{ padding: '3px 6px', color: T.MUTED, textAlign: 'left' }}>{t.openDate}</td>
+                      <td style={{ padding: '3px 6px', textAlign: 'right', color: t.side === 'long' ? T.TEAL : T.RED, fontWeight: 700 }}>{t.side === 'long' ? 'L' : 'S'}</td>
+                      <td style={{ padding: '3px 6px', textAlign: 'right', color: T.WHITE }}>{t.entry.toFixed(2)}</td>
+                      <td style={{ padding: '3px 6px', textAlign: 'right', color: T.GOLD }}>{t.stop.toFixed(2)}</td>
+                      <td style={{ padding: '3px 6px', textAlign: 'right', color: T.WHITE }}>{t.exit.toFixed(2)}</td>
+                      <td style={{ padding: '3px 6px', textAlign: 'right', color: t.r >= 0 ? T.TEAL : T.RED, fontWeight: 700 }}>{t.r.toFixed(2)}</td>
+                      <td style={{ padding: '3px 6px', textAlign: 'right', color: t.pnl >= 0 ? T.TEAL : T.RED }}>{t.pnl >= 0 ? '+' : ''}{t.pnl.toFixed(0)}</td>
+                      <td style={{ padding: '3px 6px', textAlign: 'right', color: EC[t.exitLabel] || T.MUTED, fontSize: 8 }}>{t.exitLabel}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          ) : (
           <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'separate', borderSpacing: 0, fontSize: 10 }}>
             <thead>
               <tr style={{ background: T.SURFACE2, position: 'sticky', top: 0, zIndex: 2 }}>
@@ -2675,6 +2881,7 @@ export default function BacktestPage() {
               })}
             </tbody>
           </table>
+          )}
         </div>
       </div>
 
@@ -2883,25 +3090,25 @@ export default function BacktestPage() {
             </div>
 
             {/* Charts link */}
-            <a href={`/charts-terminal.html?symbol=${sig.ticker}`} target="_blank" rel="noreferrer" style={{ color: T.GOLD, fontSize: 10, display: 'flex', alignItems: 'center', gap: 3, marginLeft: 'auto' }} className="hover:underline">
+            <a href={`/charts-terminal.html?symbol=${chartSymbol}`} target="_blank" rel="noreferrer" style={{ color: T.GOLD, fontSize: 10, display: 'flex', alignItems: 'center', gap: 3, marginLeft: 'auto' }} className="hover:underline">
               Charts <ExternalLink className="h-3 w-3" />
             </a>
           </div>
 
-          {/* Chart(s) */}
+          {/* Chart(s) — when a backtest run is selected, charts switch to its symbol/tf (SPY 15m) */}
           {chartMode === 'single' ? (
-            <MiniChart symbol={sig.ticker} tf={tf} date={sig.date} height={580} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
+            <MiniChart symbol={chartSymbol} tf={chartTf} date={chartDate} height={580} settings={chartSettings} dark={dark} dayOffset={dayOffset} btMarkers={btMarkers} />
           ) : (
             <div className="space-y-2">
-              <MiniChart symbol={sig.ticker} tf="D" date={sig.date} height={360} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
-              <MiniChart symbol={sig.ticker} tf="60" date={sig.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
-              <MiniChart symbol={sig.ticker} tf="15" date={sig.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
-              <MiniChart symbol={sig.ticker} tf="5" date={sig.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
+              <MiniChart symbol={chartSymbol} tf="D" date={chartDate} height={360} settings={chartSettings} dark={dark} dayOffset={dayOffset} btMarkers={btMarkers} />
+              <MiniChart symbol={chartSymbol} tf="60" date={chartDate} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} btMarkers={btMarkers} />
+              <MiniChart symbol={chartSymbol} tf="15" date={chartDate} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} btMarkers={btMarkers} />
+              <MiniChart symbol={chartSymbol} tf="5" date={chartDate} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} btMarkers={btMarkers} />
             </div>
           )}
 
-          {/* Detail pills */}
-          <div className="flex flex-wrap gap-1">
+          {/* Detail pills — scan OHLC only meaningful for scan signals; hide when a backtest run is active */}
+          {!selectedBtRun && (<div className="flex flex-wrap gap-1">
             <Detail label="Open" value={`$${sig.open?.toFixed(2)}`} />
             <Detail label="High" value={`$${sig.high?.toFixed(2)}`} color={T.TEAL} />
             <Detail label="Low" value={`$${sig.low?.toFixed(2)}`} color={T.RED} />
@@ -2911,7 +3118,18 @@ export default function BacktestPage() {
             <Detail label="ABS" value={(sig.pos_abs || 0).toFixed(3)} />
             <Detail label="D0 Chg" value={`${((sig.close - sig.open) / sig.open * 100).toFixed(1)}%`} color={sig.close < sig.open ? T.RED : T.TEAL} />
             <Detail label="Range" value={`${((sig.high - sig.low) / sig.open * 100).toFixed(1)}%`} />
-          </div>
+          </div>)}
+          {selectedBtRun && btTrades[selectedTradeIdx] && (() => { const tt = btTrades[selectedTradeIdx]
+            return (<div className="flex flex-wrap gap-1">
+              <Detail label="Side" value={tt.side === 'long' ? 'LONG' : 'SHORT'} color={tt.side === 'long' ? T.TEAL : T.RED} />
+              <Detail label="Opened" value={tt.openDate} />
+              <Detail label="Entry" value={`$${tt.entry.toFixed(2)}`} />
+              <Detail label="Stop" value={`$${tt.stop.toFixed(2)}`} color={T.GOLD} />
+              <Detail label="Exit" value={`$${tt.exit.toFixed(2)}`} />
+              <Detail label="R" value={`${tt.r >= 0 ? '+' : ''}${tt.r.toFixed(2)}`} color={tt.r >= 0 ? T.TEAL : T.RED} />
+              <Detail label="$PNL" value={`${tt.pnl >= 0 ? '+' : ''}$${tt.pnl.toFixed(0)}`} color={tt.pnl >= 0 ? T.TEAL : T.RED} />
+              <Detail label="Reason" value={tt.exitLabel} color={tt.exitLabel === 'STOP' ? T.RED : (tt.exitLabel === 'EXTREME' || tt.exitLabel === 'REVERSION') ? T.TEAL : T.MUTED} />
+            </div>) })}
         </>
       ) : null}
     </>
@@ -2980,10 +3198,12 @@ export default function BacktestPage() {
           }}>
             <Play className="h-3 w-3" /> Run Scan
           </button>
-          <button onClick={() => runBaselineBacktest()} style={{
+          <button onClick={() => { selectBacktestRun(null); runBaselineBacktest() }} title="Baseline: D0 open → close over the scan signals" style={{
             display: 'flex', alignItems: 'center', gap: 4,
             padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600,
-            background: '#14b8a6', color: '#000', border: 'none', cursor: 'pointer',
+            background: selectedBtRun ? T.SURFACE2 : '#14b8a6',
+            color: selectedBtRun ? T.MUTED : '#000',
+            border: selectedBtRun ? `1px solid ${T.BORDER}` : 'none', cursor: 'pointer',
           }}>
             <Activity className="h-3 w-3" /> Baseline
           </button>
@@ -3004,7 +3224,7 @@ export default function BacktestPage() {
         </div>
       </div>
 
-      {/* Lingua Exec engine view (replaces body when selected) */}
+      {/* Exec engine view (replaces body when selected) */}
       {activeExec === 'lingua-exec' ? <LinguaExecPanel dark={dark} signals={filteredSignals} selectedSignal={sig} /> : (<>
       {/* Body */}
       <div style={{ display: 'flex', flex: 1 }}>

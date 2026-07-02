@@ -24,6 +24,8 @@ export const auth = betterAuth({
     },
   },
   session: {
+    expiresIn: 60 * 60 * 24 * 90, // 90 days — solo dev tool; stop the weekly logouts
+    updateAge: 60 * 60 * 24, // refresh the expiry once per day
     cookieCache: {
       enabled: true,
       maxAge: 5 * 60,

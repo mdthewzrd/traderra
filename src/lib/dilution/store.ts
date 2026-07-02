@@ -15,6 +15,8 @@ import { computeCompliance, type ComplianceResult } from '@/lib/dilution/complia
 import { getWarrantNotes, type ParsedWarrantNotes } from '@/lib/sec/warrant-notes';
 import { getPrograms, type CompanyProgram, type ProgramType } from '@/lib/sec/filings8k';
 import { getReverseSplits, type ReverseSplit } from '@/lib/sec/reverse-splits';
+import { splitAdjustment } from '@/lib/dilution/split-adjust';
+import { getDraws, type DrawEvent } from '@/lib/sec/draws';
 
 /**
  * Classify recent filings for a company and persist tags. Idempotent — safe to
@@ -64,10 +66,18 @@ async function fetchLatestPrice(ticker: string): Promise<{ price: number; asOf: 
     if (!r.ok) return null;
     const j = (await r.json()) as {
       status?: string;
-      ticker?: { day?: { c?: number; v?: number }; last?: { price?: number } };
+      ticker?: {
+        lastTrade?: { p?: number };
+        lastQuote?: { P?: number };
+        day?: { c?: number; v?: number };
+        prevDay?: { c?: number };
+      };
     };
     if (j.status !== 'OK' || !j.ticker) return null;
-    const price = j.ticker.last?.price ?? j.ticker.day?.c ?? null;
+    // During market hours day.c is unset; fall back to last trade → last quote →
+    // prev close so price (and warrant moneyness) works intraday, not just post-close.
+    // Use || not ??: pre-market returns day.c=0 which is never a valid price.
+    const price = j.ticker.day?.c || j.ticker.lastTrade?.p || j.ticker.lastQuote?.P || j.ticker.prevDay?.c || null;
     const volume = j.ticker.day?.v ?? null;
     if (price == null || price <= 0) return null;
     return { price, asOf: new Date().toISOString().slice(0, 10), volume: typeof volume === 'number' ? volume : null };
@@ -99,6 +109,89 @@ async function fetchMarketData(ticker: string): Promise<{ price: number; asOf: s
   const [px, mc] = await Promise.all([fetchLatestPrice(ticker), fetchMarketCap(ticker)]);
   if (!px) return null;
   return { price: px.price, asOf: px.asOf, volume: px.volume, marketCap: mc };
+}
+
+/** 8-K item codes → readable catalyst label. High-signal for short-bias:
+ *  dilution (3.02), debt (2.03), delisting (3.01), earnings (2.02), deals
+ *  (1.01), control/charter changes (5.01/5.03), Reg FD (7.01), other (8.01).
+ *  9.01 is boilerplate (exhibits) — excluded from the catalyst title. */
+const EIGHT_K_ITEMS: Record<string, string> = {
+  '1.01': 'Material Definitive Agreement',
+  '1.02': 'Agreement Terminated',
+  '1.03': 'Bankruptcy / Receivership',
+  '2.01': 'Acquisition Completed',
+  '2.02': 'Results of Operations (earnings)',
+  '2.03': 'New Financial Obligation (debt)',
+  '2.04': 'Triggering Event',
+  '2.05': 'Exit / Disposal Costs',
+  '2.06': 'Material Impairment',
+  '3.01': 'Delisting / Listing-Standard Failure',
+  '3.02': 'Unregistered Equity Sale',
+  '3.03': 'Rights / Charter Modification',
+  '4.01': 'Auditor Change',
+  '4.02': 'Non-Reliance on Prior Financials',
+  '5.01': 'Change in Control',
+  '5.02': 'Officer / Director Change',
+  '5.03': 'Charter / Bylaws Amendment',
+  '5.07': 'Shareholder Vote Results',
+  '7.01': 'Reg FD Disclosure',
+  '8.01': 'Other Events',
+};
+
+export interface NewsItem {
+  source: 'sec-8k' | 'news';
+  date: string; // YYYY-MM-DD
+  title: string;
+  catalyst?: string; // dominant 8-K item label
+  items?: string[]; // raw 8-K item codes
+  url?: string;
+}
+
+/** Polygon press-release / news feed (beyond SEC filings). Top-tier key returns
+ *  real headlines with publish timestamps. Returns [] on any failure so the
+ *  page degrades to SEC-only. */
+async function fetchTickerNews(ticker: string): Promise<NewsItem[]> {
+  if (!ticker) return [];
+  try {
+    const url = `${POLY_BASE}/v2/reference/news?ticker=${encodeURIComponent(ticker)}&limit=10&apiKey=${POLY_KEY}`;
+    const res = await fetch(url, { headers: { 'User-Agent': 'traderra-research mikedurante13@gmail.com' } });
+    if (!res.ok) return [];
+    const j = (await res.json()) as { results?: Array<{ published_utc?: string; published?: string; title?: string; article_url?: string }> };
+    return (j.results ?? []).map((a) => ({
+      source: 'news' as const,
+      date: (a.published_utc || a.published || '').slice(0, 10),
+      title: a.title || 'Press release',
+      url: a.article_url,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/** Merge 8-K material events (item-code catalysts) + Polygon press releases into
+ *  one recency-sorted feed. 8-Ks get a human-readable catalyst title derived
+ *  from their item codes; press releases come in verbatim. */
+function buildNewsFeed(
+  filings: Array<{ formType: string; filingDate: Date; items: string[] | null; primaryDesc: string | null }>,
+  tickerNews: NewsItem[],
+): NewsItem[] {
+  const sec: NewsItem[] = filings
+    .filter((f) => /^8-K/.test(f.formType))
+    .map((f) => {
+      const codes = (f.items ?? []).filter((c) => c !== '9.01');
+      const labels = codes.map((c) => EIGHT_K_ITEMS[c]).filter(Boolean);
+      return {
+        source: 'sec-8k' as const,
+        date: f.filingDate.toISOString().slice(0, 10),
+        title: labels.length ? labels.join(' · ') : (f.primaryDesc || 'Material event'),
+        catalyst: labels[0],
+        items: codes,
+      };
+    });
+  return [...sec, ...tickerNews]
+    .filter((n) => n.date)
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+    .slice(0, 15);
 }
 
 export interface InTheMoneyInstrument {
@@ -219,6 +312,9 @@ export interface DilutionSnapshot {
     convertible: { shares: number; strike: number | null; period: string } | null;
     overhangPct: number | null;
     suspect: boolean;
+    // Non-null when warrant/convertible strike+shares were retroactively
+    // adjusted for a stock split effective AFTER the reported period (Gap 4).
+    splitNote: string | null;
   };
   inTheMoney: InTheMoney | null;
   compliance: ComplianceResult | null;
@@ -237,15 +333,50 @@ export interface DilutionSnapshot {
   // Authorized share capital (XBRL) + headroom for future dilution. The core
   // 'how much can they print without a vote' number.
   authorizedShares: { authorized: number; outstanding: number; available: number; asOf: string } | null;
+  // SEC public float (10-K cover non-affiliate value + optional derived shares).
+  // Authoritative but sparse (~18% coverage) + annual — see computedFloat for
+  // the high-coverage derived fallback.
+  publicFloat: { value: number; shares: number | null; asOf: string } | null;
+  // Computed float = shares outstanding − aggregate insider holdings (latest
+  // afterShares per Form-4 reporter). Fills the ~82% of names with no SEC cover
+  // float. Honest: transaction-derived, excludes non-filing institutions, only
+  // covers insiders who have transacted. Marked so the UI never confuses it
+  // with the authoritative SEC cover figure.
+  computedFloat: { shares: number; insiderShares: number; outstanding: number } | null;
   // Reverse-split history (8-K Item 3.03 + proxy). High-value short-bias signal —
   // reverse splits precede/accompany toxic financing.
   reverseSplits: ReverseSplit[];
+  // Catalyst news feed: 8-K item-code events (dilution/debt/earnings/delisting)
+  // + Polygon press releases beyond SEC, merged + sorted recency-desc. Lets the
+  // trader see the actual news driving movement, not just terse filing labels.
+  news: NewsItem[];
+  // Unified warrant table spanning three sources so the trader sees EVERY
+  // outstanding tranche, not just the single aggregate XBRL overhang (which
+  // can grab a $0.01 pre-funded unit and hide the real $9/$11.5 strikes).
+  warrants: {
+    source: 'XBRL' | '424B5' | '10-K notes';
+    shares: number | null;
+    strike: number | null;
+    expiry: string | null;
+    exercisable: string | null;
+    description: string;
+    filingDate: string;
+    // Lifecycle status from clause text + dates: 'pre-funded' (already paid,
+    // exercise near-certain — most dilutive), 'active' (outstanding &
+    // exercisable now), 'pending' (exercisable date in future), 'expired'.
+    status: string;
+  }[];
+  // Actual cash-raising events under dilution facilities (SEPA/equity-line
+  // share sales, convertible/promissory note advances, ATM sales), parsed
+  // from 10-Q/10-K bodies. Each = one draw with $ raised, shares, facility,
+  // and the raw clause. Deduped across quarterly restatements.
+  draws: DrawEvent[];
   fromCache: boolean; // true = served from DB only (no SEC call this request)
 }
 
 /** Build the dilution snapshot entirely from the DB (no SEC call). */
 export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
-  const [company, factRows, filings, form4Rows, offeringFilings, registrationFilings, cash, authorizedFactRow, reverseSplits] = await Promise.all([
+  const [company, factRows, filings, form4Rows, offeringFilings, registrationFilings, cash, authorizedFactRow, publicFloatRow, publicFloatSharesRow, reverseSplits] = await Promise.all([
     prisma.dilutionCompany.findUnique({ where: { cik } }),
     prisma.dilutionFact.findMany({
       where: { cik, fact: 'EntityCommonStockSharesOutstanding' },
@@ -276,6 +407,8 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
     }),
     computeCashFromDb(cik),
     prisma.dilutionFact.findFirst({ where: { cik, fact: 'AuthorizedShares' }, orderBy: { period: 'desc' } }),
+    prisma.dilutionFact.findFirst({ where: { cik, fact: 'PublicFloat' }, orderBy: { period: 'desc' } }),
+    prisma.dilutionFact.findFirst({ where: { cik, fact: 'PublicFloatShares' }, orderBy: { period: 'desc' } }),
     getReverseSplits(cik),
   ]);
 
@@ -288,27 +421,102 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
     authorizedFact && sharesLatestOutstanding && sharesLatestOutstanding > 0
       ? { authorized: authorizedFact.val, outstanding: sharesLatestOutstanding, available: authorizedFact.val - sharesLatestOutstanding, asOf: authorizedFact.period }
       : null;
-  const overhang = await computeOverhangFromDb(cik, sharesLatestOutstanding);
+  // Public float — SEC-derived (10-K cover 'non-affiliate float' via
+  // dei:EntityPublicFloat). `value` is the SEC market-value figure (always
+  // present when concept exists); `shares` is value ÷ cover-date close,
+  // available only when Polygon had history for that date (micro-caps often
+  // don't — value still stands, shares null). asOf = cover date (staleness is
+  // visible, never hidden; it's annual).
+  const publicFloat =
+    publicFloatRow && publicFloatRow.val > 0
+      ? {
+          value: publicFloatRow.val,
+          shares: publicFloatSharesRow ? publicFloatSharesRow.val : null,
+          asOf: publicFloatRow.period,
+        }
+      : null;
+  // Computed public float — outstanding minus aggregate insider holdings.
+  // Latest afterShares per Form-4 reporter (a reporter's most-recent txn
+  // reflects their current direct holding). Mirrors the Ownership-tab
+  // aggregation but server-side so scans + snapshot share one figure.
+  const insiderHoldings = (() => {
+    const map = new Map<string, { shares: number; latest: string }>();
+    for (const t of form4Rows) {
+      if (t.afterShares == null || t.afterShares <= 0) continue;
+      const d = t.txnDate.toISOString().slice(0, 10);
+      const ex = map.get(t.reporter);
+      if (!ex || Date.parse(d) > Date.parse(ex.latest)) map.set(t.reporter, { shares: t.afterShares, latest: d });
+    }
+    let total = 0;
+    for (const v of map.values()) total += v.shares;
+    return total;
+  })();
+  const computedFloat = sharesLatestOutstanding != null
+    ? { shares: Math.max(0, sharesLatestOutstanding - insiderHoldings), insiderShares: insiderHoldings, outstanding: sharesLatestOutstanding }
+    : null;
+  const rawOverhang = await computeOverhangFromDb(cik, sharesLatestOutstanding);
+  // Split-adjust stale warrant/convertible data: when the latest reported
+  // period predates a stock split, the raw strike/shares are pre-split. Apply
+  // the cumulative ratio (shares × num/den, strike × den/num) so overhang % and
+  // in-the-money scoring compare against the post-split price/outstanding.
+  const wAdj = rawOverhang.warrant ? splitAdjustment(rawOverhang.warrant.period, reverseSplits) : null;
+  const cAdj = rawOverhang.convertible ? splitAdjustment(rawOverhang.convertible.period, reverseSplits) : null;
+  const warrant = rawOverhang.warrant && wAdj?.applied
+    ? { ...rawOverhang.warrant, shares: rawOverhang.warrant.shares * wAdj.shareFactor, strike: rawOverhang.warrant.strike != null ? rawOverhang.warrant.strike * wAdj.priceFactor : null }
+    : rawOverhang.warrant;
+  const convertible = rawOverhang.convertible && cAdj?.applied
+    ? { ...rawOverhang.convertible, shares: rawOverhang.convertible.shares * cAdj.shareFactor, strike: rawOverhang.convertible.strike != null ? rawOverhang.convertible.strike * cAdj.priceFactor : null }
+    : rawOverhang.convertible;
+  const _adjustedTotal = (warrant?.shares ?? 0) + (convertible?.shares ?? 0);
+  const splitNote = [...new Set([wAdj?.note, cAdj?.note].filter(Boolean))].join(' · ') || null;
+  const overhang = {
+    warrant,
+    convertible,
+    overhangPct: sharesLatestOutstanding && sharesLatestOutstanding > 0
+      ? (_adjustedTotal / sharesLatestOutstanding) * 100
+      : rawOverhang.overhangPct,
+    suspect: rawOverhang.suspect,
+    splitNote,
+  };
   const inTheMoney = await computeInTheMoney(overhang, company?.tickers?.[0], sharesLatestOutstanding);
   const compliance = await computeCompliance(cik, company?.tickers?.[0], company?.exchange ?? null);
+  const tickerNews = await fetchTickerNews(company?.tickers?.[0] ?? '');
+  const news = buildNewsFeed(filings, tickerNews);
   // Shelf remaining: registration.ts + prospectus.ts already parse these to
   // rawPayload (aggregateOffering / grossProceeds). Sum to answer "how much can
   // they STILL dilute under the existing shelf."
   const shelfRemaining = (() => {
-    const registered = registrationFilings
-      .map((f) => ((f.rawPayload ?? {}) as { aggregateOffering?: number | null }).aggregateOffering ?? null)
-      .filter((v): v is number => typeof v === 'number')
-      .reduce((s, v) => s + v, 0);
+    const regs = registrationFilings
+      .map((f) => ({
+        amount: ((f.rawPayload ?? {}) as { aggregateOffering?: number | null }).aggregateOffering ?? null,
+        date: f.filingDate,
+      }))
+      .filter((r): r is { amount: number; date: Date } => typeof r.amount === 'number' && r.amount > 0);
+    if (!regs.length) return null;
+    // Headline shelf = LARGEST registration. Summing expired+replaced shelves
+    // overstates capacity; the max is the binding constraint and matches
+    // Nexus's single-shelf display ("Total Registered: $50M").
+    const headline = regs.reduce((m, r) => (r.amount > m.amount ? r : m));
+    const registered = headline.amount;
+    // Raised = gross proceeds from offerings filed ON/AFTER the headline shelf.
+    // We CANNOT reliably match an offering to a specific shelf without tracing
+    // 333-XXXXXX registration numbers across the prospectus — so offerings
+    // BEFORE this shelf drew on prior, now-replaced capacity and are excluded.
+    // Honest proxy, not exact attribution.
     const raised = offeringFilings
+      .filter((f) => f.filingDate >= headline.date)
       .map((f) => ((f.rawPayload ?? {}) as { grossProceeds?: number | null }).grossProceeds ?? null)
-      .filter((v): v is number => typeof v === 'number')
+      .filter((v): v is number => typeof v === 'number' && v > 0)
       .reduce((s, v) => s + v, 0);
-    if (registered <= 0) return null;
-    const remaining = registered - raised;
+    // Floor at 0: a shelf cannot be over-drawn. Excess offerings (raised >
+    // registered) came from other sources (SEPA, ATM, PIPE) — surface "fully
+    // utilized" rather than a nonsensical negative.
+    const remaining = Math.max(0, registered - raised);
     return { registered, raised, remaining, remainingPct: (remaining / registered) * 100 };
   })();
   const warrantNotes = await getWarrantNotes(cik);
   const programs = await getPrograms(cik);
+  const draws = await getDraws(cik);
   const programTypes = [...new Set(programs.map((p) => p.programType))];
 
   // Accurate 90-day dilutive-share sum from the FULL DB (not the display-capped
@@ -329,6 +537,60 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
   for (const f of filings) {
     for (const t of f.dilutionTags) tagSummary[t] = (tagSummary[t] ?? 0) + 1;
   }
+
+  // Unified warrant table — merge prospectus (424B5) tranches + 10-K note
+  // rows + the XBRL aggregate overhang. Surfaces every tranche the parsers
+  // found, so the $9/$11.5 strikes are visible alongside the $0.01 unit.
+  // Warrant lifecycle status from clause text + dates. 'pre-funded' is the
+  // key dilution signal: the holder already paid, exercise is near-certain.
+  const warrantStatus = (description: string, expiry: string | null, exercisable: string | null): string => {
+    const t = (description || '').toLowerCase();
+    if (/pre-?funded/.test(t)) return 'pre-funded';
+    if (expiry) { const d = new Date(expiry); if (!isNaN(d.getTime()) && d.getTime() < Date.now()) return 'expired'; }
+    if (exercisable) { const d = new Date(exercisable); if (!isNaN(d.getTime()) && d.getTime() > Date.now()) return 'pending'; }
+    return 'active';
+  };
+  const warrants = (() => {
+    const rows: {
+      source: 'XBRL' | '424B5' | '10-K notes';
+      shares: number | null; strike: number | null; expiry: string | null;
+      exercisable: string | null; description: string; filingDate: string; status: string;
+    }[] = [];
+    for (const f of offeringFilings) {
+      const p = (f.rawPayload ?? null) as {
+        warrantTranches?: Array<{ shares: number | null; strike: number | null; expiry: string | null; exercisable: string | null; description: string }>
+      } | null;
+      if (!p?.warrantTranches) continue;
+      for (const t of p.warrantTranches) {
+        rows.push({
+          source: '424B5', shares: t.shares, strike: t.strike, expiry: t.expiry,
+          exercisable: t.exercisable, description: t.description ?? '',
+          filingDate: f.filingDate.toISOString().slice(0, 10),
+          status: warrantStatus(t.description ?? '', t.expiry, t.exercisable),
+        });
+      }
+    }
+    if (warrantNotes?.warrants) {
+      const wnDate = warrantNotes.parsedAt ? warrantNotes.parsedAt.slice(0, 10) : '';
+      for (const w of warrantNotes.warrants) {
+        rows.push({
+          source: '10-K notes', shares: w.shares, strike: w.exercisePrice,
+          expiry: w.expiry, exercisable: w.exercisableDate, description: w.description, filingDate: wnDate,
+          status: warrantStatus(w.description, w.expiry, w.exercisableDate),
+        });
+      }
+    }
+    if (overhang?.warrant) {
+      rows.push({
+        source: 'XBRL', shares: overhang.warrant.shares, strike: overhang.warrant.strike,
+        expiry: null, exercisable: null,
+        description: `Aggregate XBRL overhang (period ${overhang.warrant.period})${overhang.splitNote ? ` · split-adj (${overhang.splitNote})` : ''}`,
+        filingDate: overhang.warrant.period,
+        status: 'active',
+      });
+    }
+    return rows;
+  })();
 
   return {
     company: company
@@ -408,10 +670,15 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
     compliance,
     shelfRemaining,
     warrantNotes,
+    warrants,
+    draws,
     programs,
     programTypes,
     authorizedShares,
+    publicFloat,
+    computedFloat,
     reverseSplits,
+    news,
     fromCache: true,
   };
 }
@@ -447,7 +714,8 @@ export interface ScanRow {
  */
 export async function getScanRows(): Promise<ScanRow[]> {
   const since = new Date(Date.now() - 3 * 365 * 86_400_000); // 3y window for shelf sums
-  const [companies, cashFacts, flowFacts, shareFacts, securities, regFilings, offFilings, tenKFacts] = await Promise.all([
+  const drawSince = new Date(Date.now() - 180 * 86_400_000); // 180d for active-draw sums
+  const [companies, cashFacts, flowFacts, shareFacts, securities, regFilings, offFilings, tenKFacts, drawFilings] = await Promise.all([
     prisma.dilutionCompany.findMany({
       select: { cik: true, tickers: true, name: true, exchange: true, sicCode: true, filingsLastSynced: true },
     }),
@@ -458,6 +726,8 @@ export async function getScanRows(): Promise<ScanRow[]> {
     prisma.dilutionFiling.findMany({ where: { formType: { in: REGISTRATION_FORMS }, filingDate: { gte: since } }, select: { cik: true, rawPayload: true } }),
     prisma.dilutionFiling.findMany({ where: { formType: { in: OFFERING_FORMS }, filingDate: { gte: since } }, select: { cik: true, rawPayload: true } }),
     prisma.dilutionFiling.findMany({ where: { formType: '10-K' }, distinct: ['cik'], orderBy: { filingDate: 'desc' }, select: { cik: true, rawPayload: true } }),
+    // Recent quarterlies carrying parsed draws (10-Q/10-K w/ drawsParsed).
+    prisma.dilutionFiling.findMany({ where: { formType: { in: ['10-Q', '10-K'] }, filingDate: { gte: drawSince }, rawPayload: { path: ['drawsParsed'], equals: true } }, select: { cik: true, filingDate: true, rawPayload: true } }),
   ]);
 
   const cashByCik = new Map(cashFacts.map((r) => [r.cik, { val: r.val, period: r.period }]));
@@ -485,6 +755,25 @@ export async function getScanRows(): Promise<ScanRow[]> {
   for (const f of tenKFacts) {
     const wn = ((f.rawPayload ?? {}) as { warrantNotes?: { goingConcern?: { present?: boolean } } }).warrantNotes;
     if (wn?.goingConcern?.present) gcByCik.set(f.cik, true);
+  }
+  // Active dilution draws per cik — dedup by (amount + facilityType) across the
+  // 180d quarterlies (same draw restated in successive filings), mirroring
+  // getDraws(). Counts distinct draws + sums $ raised in the window.
+  const drawCountByCik = new Map<string, number>();
+  const drawAmtByCik = new Map<string, number>();
+  const drawSeen = new Map<string, Set<string>>();
+  for (const f of drawFilings) {
+    const ds = ((f.rawPayload ?? {}) as { draws?: { amount?: number | null; facilityType?: string }[] }).draws ?? [];
+    if (!drawSeen.has(f.cik)) drawSeen.set(f.cik, new Set());
+    const seen = drawSeen.get(f.cik)!;
+    for (const d of ds) {
+      const amt = typeof d.amount === 'number' ? d.amount : 0;
+      const key = `${Math.round(amt)}|${d.facilityType ?? ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      drawCountByCik.set(f.cik, (drawCountByCik.get(f.cik) ?? 0) + 1);
+      drawAmtByCik.set(f.cik, (drawAmtByCik.get(f.cik) ?? 0) + amt);
+    }
   }
 
   const rows: ScanRow[] = [];
@@ -519,6 +808,8 @@ export async function getScanRows(): Promise<ScanRow[]> {
       overhangSuspect,
       shelfRemaining: shelf != null && shelf > 0 ? shelf : null,
       goingConcern: gcByCik.get(c.cik) ?? false,
+      drawCount: drawCountByCik.get(c.cik) ?? 0,
+      recentDrawAmount: drawAmtByCik.get(c.cik) ?? 0,
       lastSynced: c.filingsLastSynced?.toISOString().slice(0, 10) ?? null,
     });
   }

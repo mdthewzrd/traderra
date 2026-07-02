@@ -51,7 +51,17 @@ function entriesOf(gaap: CompanyFacts['facts']['us-gaap'], concept: string): Xbr
 }
 
 /** Latest period aggregate: sum shares across entries at the newest end-date.
- *  Returns { shares, strike(weighted), period, accn } or null. */
+ *  Returns { shares, strike(median of plausible), period, accn } or null.
+ *
+ *  Strike accuracy (C23): the warrant-strike concept carries MULTIPLE classes at
+ *  the same period (different exercise prices), AND filers occasionally mistag
+ *  an aggregate value as a per-share USD/shares figure (e.g. ATOS reported
+ *  $1,189,167/share — impossible). So:
+ *    1. filter to a plausible per-share range ($0.0001–$10,000)
+ *    2. take the MEDIAN of the plausible classes (robust representative — a
+ *       single weighted strike can't be computed without per-class share
+ *       linkage, which the dimensional frames don't expose reliably)
+ *  Shares remain a straight sum (total warrant shares, all classes). */
 function latestAggregate(shareEntries: XbrlEntry[], strikeEntries: XbrlEntry[]) {
   if (!shareEntries.length) return null;
   // newest period with a share count
@@ -61,11 +71,24 @@ function latestAggregate(shareEntries: XbrlEntry[], strikeEntries: XbrlEntry[]) 
   const sharesAtLatest = shareEntries.filter((e) => e.end === latestPeriod);
   const shares = sharesAtLatest.reduce((s, e) => s + Math.abs(e.val), 0);
   const accn = sharesAtLatest[0]?.accn ?? null;
-  // strike: prefer an entry at the same period; else latest strike available
-  const strikeMatch =
-    strikeEntries.find((e) => e.end === latestPeriod) ??
-    strikeEntries.sort((a, b) => (a.end < b.end ? 1 : -1))[0];
-  const strike = strikeMatch ? Math.abs(strikeMatch.val) : null;
+  // strike: plausible per-share filter, then median across classes.
+  const PLAUS_MIN = 0.0001;
+  const PLAUS_MAX = 10_000;
+  const plausible = (v: number) => v >= PLAUS_MIN && v <= PLAUS_MAX;
+  const atPeriod = strikeEntries.filter((e) => e.end === latestPeriod && plausible(Math.abs(e.val)));
+  const pool = atPeriod.length
+    ? atPeriod
+    : strikeEntries
+        .filter((e) => plausible(Math.abs(e.val)))
+        .sort((a, b) => (a.end < b.end ? 1 : -1));
+  let strike: number | null = null;
+  if (pool.length === 1) {
+    strike = Math.abs(pool[0].val);
+  } else if (pool.length > 1) {
+    const vals = pool.map((e) => Math.abs(e.val)).sort((a, b) => a - b);
+    const mid = Math.floor(vals.length / 2);
+    strike = vals.length % 2 ? vals[mid] : (vals[mid - 1] + vals[mid]) / 2;
+  }
   return { shares, strike, period: latestPeriod, accn };
 }
 
@@ -95,6 +118,14 @@ export async function computeOverhangFromDb(
   const rows = await prisma.dilutionSecurity.findMany({ where: { cik } });
   const warrant = rows.find((r) => r.type === 'warrant') ?? null;
   const convertible = rows.find((r) => r.type === 'convertible') ?? null;
+  // C23 read-time guard: a stored strike outside $0.0001–$10,000/share is a
+  // filer error (aggregate mistagged as per-share) or unit corruption — never a
+  // real exercise price. Null it so it doesn't surface as $1.19M in the UI.
+  // (Sync-time latestAggregate applies the same filter + median for new syncs.)
+  const PLAUS_MIN = 0.0001;
+  const PLAUS_MAX = 10_000;
+  const cleanStrike = (s: number | null) =>
+    s != null && s >= PLAUS_MIN && s <= PLAUS_MAX ? s : null;
   const totalShares =
     (warrant?.shares ?? 0) + (convertible?.shares ?? 0);
   const overhangPct =
@@ -110,10 +141,10 @@ export async function computeOverhangFromDb(
   );
   return {
     warrant: warrant && warrant.shares != null
-      ? { shares: warrant.shares, strike: warrant.strike, period: warrant.period ?? '' }
+      ? { shares: warrant.shares, strike: cleanStrike(warrant.strike), period: warrant.period ?? '' }
       : null,
     convertible: convertible && convertible.shares != null
-      ? { shares: convertible.shares, strike: convertible.strike, period: convertible.period ?? '' }
+      ? { shares: convertible.shares, strike: cleanStrike(convertible.strike), period: convertible.period ?? '' }
       : null,
     overhangPct,
     suspect,

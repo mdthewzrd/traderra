@@ -14,7 +14,10 @@ import { syncRegistrations } from '@/lib/sec/registration';
 import { syncSecurities } from '@/lib/sec/warrants';
 import { syncWarrantNotes } from '@/lib/sec/warrant-notes';
 import { syncMaterialAgreements } from '@/lib/sec/filings8k';
+import { syncDraws } from '@/lib/sec/draws';
 import { syncReverseSplits } from '@/lib/sec/reverse-splits';
+import { syncEftsFacilities } from '@/lib/sec/efts';
+import { syncFloat } from '@/lib/sec/float';
 import { backfillTags, getSnapshot } from '@/lib/dilution/store';
 import { prisma } from '@/lib/prisma';
 
@@ -46,14 +49,17 @@ export async function POST(req: Request) {
 
     // Form 4 + 424B5 parsers run AFTER filings are in the DB (they query
     // DilutionFiling for their target forms). Sequential to the filings sync.
-    const [form4Res, offeringsRes, registrationsRes, securitiesRes, warrantNotesRes, programsRes, splitsRes] = await Promise.all([
+    const [form4Res, offeringsRes, registrationsRes, securitiesRes, warrantNotesRes, programsRes, splitsRes, eftsRes, drawsRes, floatRes] = await Promise.all([
       syncForm4Txns(entry.cik),
       syncOfferings(entry.cik),
       syncRegistrations(entry.cik),
       syncSecurities(ticker),
-      syncWarrantNotes(entry.cik),
+      syncWarrantNotes(entry.cik, { force: body?.force === true }),
       syncMaterialAgreements(entry.cik),
       syncReverseSplits(entry.cik),
+      syncEftsFacilities(entry.cik),
+      syncDraws(entry.cik),
+      syncFloat(entry.cik, ticker),
     ]);
 
     const tagsChanged = await backfillTags(entry.cik);
@@ -74,7 +80,7 @@ export async function POST(req: Request) {
           sourceRef: entry.cik,
           price: null,
           marketCap: null,
-          floatShares: null,
+          floatShares: floatRes.floatShares != null ? BigInt(Math.floor(floatRes.floatShares)) : null,
           outstandingShares: snapshot.sharesLatest ? BigInt(Math.floor(snapshot.sharesLatest.outstanding)) : null,
           industry: snapshot.company?.sicCode ?? null,
           rawText: 'traderra computed snapshot',
@@ -106,6 +112,9 @@ export async function POST(req: Request) {
         warrantNotes: { status: warrantNotesRes.status, withDetail: warrantNotesRes.withDetail },
         programs: { status: programsRes.status, parsed: programsRes.parsed, withDetail: programsRes.withDetail },
         splits: { parsed: splitsRes.parsed, found: splitsRes.found },
+        efts: { searched: eftsRes.searched, fetched: eftsRes.fetched, found: eftsRes.found, created: eftsRes.created },
+        draws: { status: drawsRes.status, parsed: drawsRes.parsed, withDetail: drawsRes.withDetail },
+        float: { status: floatRes.status, value: floatRes.publicFloatValue, shares: floatRes.floatShares, asOf: floatRes.asOf },
         tagsChanged,
       },
       snapshot,

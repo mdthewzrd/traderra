@@ -183,6 +183,20 @@ function TemplateDropdown() {
   useEffect(() => {
     const { loadTemplatesFromStorage } = require('@/lib/charts/templates')
     setTemplates(loadTemplatesFromStorage())
+    // Backfill localStorage templates → DB (global) so every page (/live-scan,
+    // /database, /dilution) can read them without sign-in. Idempotent: skips
+    // names already present in the DB. Presets are skipped (re-seeded everywhere).
+    fetch('/api/chart-data/templates').then(r => r.json()).then(d => {
+      const dbNames = new Set((d.templates || []).map((t: any) => t.name))
+      const local = loadTemplatesFromStorage()
+      const pending = local.filter((t: any) => !dbNames.has(t.name) && !String(t.id).startsWith('preset_'))
+      Promise.all(pending.map((t: any) =>
+        fetch('/api/chart-data/templates', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: t.name, payload: t, global: true }),
+        })
+      ))
+    }).catch(() => {})
   }, [open])
 
   const handleSave = () => {
@@ -201,7 +215,16 @@ function TemplateDropdown() {
     const tf = useChartStore.getState().panels[ap]?.tf || ''
     saveTemplate(name, tools, chartStyle, theme, inds, symbol, tf)
     const { loadTemplatesFromStorage } = require('@/lib/charts/templates')
-    setTemplates(loadTemplatesFromStorage())
+    const updated = loadTemplatesFromStorage()
+    setTemplates(updated)
+    // Persist to DB (global) — single source of truth shared by every page.
+    const saved = updated.find((t: any) => t.name === name)
+    if (saved) {
+      fetch('/api/chart-data/templates', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, payload: saved, global: true }),
+      }).catch(() => {})
+    }
   }
 
   const handleApply = (idx: number) => {
@@ -269,9 +292,13 @@ function TemplateDropdown() {
   }
 
   const handleDelete = (idx: number) => {
+    const tpl = templates[idx]
     const { deleteTemplate, loadTemplatesFromStorage } = require('@/lib/charts/templates')
     deleteTemplate(idx)
     setTemplates(loadTemplatesFromStorage())
+    if (tpl?.id && !String(tpl.id).startsWith('preset_')) {
+      fetch(`/api/chart-data/templates?id=${encodeURIComponent(tpl.id)}`, { method: 'DELETE' }).catch(() => {})
+    }
   }
 
   return (

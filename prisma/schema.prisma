@@ -30,8 +30,139 @@ model User {
   chartUserSettings ChartUserSettings?
   sessions    Session[]
   accounts    Account[]
+
+  // Pattern corpus — pre-trade scan hits classified into the playbook
+  corpusRows  CorpusRow[]
+  corpusViews CorpusView[]
+  corpusTrades CorpusTrade[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────────
+// Pattern Corpus — the /database page backbone
+// A CorpusRow is ONE scan hit, human-classified into the playbook
+// before any trade is taken. Distinct from Trade (executed P&L).
+// ─────────────────────────────────────────────────────────────
+model CorpusRow {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Deduped: ONE row per symbol+signalDate. Tracks every scan that hit it.
+  scanSources String[] @default([])  // e.g. ['Backside B', 'Short FBO 2']
+
+  // The instrument + the day the setup formed
+  symbol    String
+  signalDate String
+
+  // Raw scan metrics — flexible JSON (varies per scan type)
+  metrics   Json?
+
+  // Human classification layer (strings, not enums — your vocabulary evolves)
+  setupType String?  // 'D1' | 'FRD' | 'Backside' | top-level bucket
+  setup     String?  // finer: 'FRD-ET-2leg', 'Backside-Cont', etc.
+  grade     String?  // 'A+' | 'A' | 'B' | null (ungraded)
+  move      String?  // manual link: scans sharing a move name = one cycle
+  tags      String[] @default([])
+
+  // Workspace per row (the row-is-a-page model)
+  notes        String?  // rich text (BlockNote/Tiptap content)
+  annotations  Json?    // [{type:'lab', ref:'uploads/lab-xxx.png', caption?}]
+
+  // Lifecycle
+  status    String   @default("new") // 'new' | 'classified' | 'archived'
+
+  // User-defined custom columns (forward testing) — { fieldId: value }
+  customValues Json?
+
+  // Trades logged against this setup (0..N)
+  trades     CorpusTrade[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([symbol])
+  @@index([signalDate])
+  @@index([grade])
+  @@index([move])
+  @@unique([userId, symbol, signalDate])
+}
+
+model CorpusField {
+  id        String   @id @default(cuid())
+  userId    String
+
+  name      String
+  type      String   // 'text' | 'number' | 'select' | 'multiselect' | 'boolean' | 'date' | 'grade'
+  options   String[] @default([])  // for select/multiselect
+  colors    Json?    // { optionLabel: '#hex' } per-option color for select/multiselect/grade
+  order     Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// Managed option lists — user-editable taxonomies (Setup Type, Setup, etc.)
+// Seeded from defaults on first access. options = [{ label: string, color?: string }]
+model CorpusEnum {
+  id        String   @id @default(cuid())
+  userId    String
+  key       String   // 'setupType' | 'setup' | 'grade'
+  options   Json     // [{label, color?}]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, key])
+}
+
+// ── Trades logged against a CorpusRow setup (forward-testing / execution) ──
+// A trade is one way to play the setup. PnL computed from entry/exit/size/dir.
+model CorpusTrade {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  setupRowId String   // → CorpusRow.id
+  setupRow   CorpusRow @relation(fields: [setupRowId], references: [id], onDelete: Cascade)
+
+  direction  String   // 'short' | 'long'
+  routeStart String?  // user-defined: where the route starts (custom enum)
+  routeEnd   String?  // user-defined: where the route ends (custom enum)
+  entryPrice Float?
+  exitPrice  Float?
+  qty        Int?
+  trendStage String?  // where in the cycle: Euphoric Top / Trendbreak / Backside / ...
+  grade      String?  // A+ | A | B — trade grade (reuses grade enum colors)
+  sections   Json?    // { htf:{text,annots[]}, mtf:{...}, ltf:{...}, key:{...} } — multi-timeframe context + key points
+  notes      String?
+  date       String?  // trade date (may differ from scan signalDate)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+  @@index([setupRowId])
+}
+model CorpusView {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name      String
+  type      String   // 'table' | 'board' | 'gallery'
+  filters   Json?    // saved filter set
+  groupBy   String?  // board grouping: 'setupType' | 'grade' | 'scanSource'
+  sortBy    Json?
+  hidden    Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model Trade {
@@ -184,11 +315,13 @@ model ChartTemplate {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name      String
-  tools     String   @default("[]")          // JSON snapshot of tools at save time
+  tools     String   @default("[]")          // JSON snapshot: full ChartTemplate payload (tools/inds/colors/params/chartStyle/symbol/tf)
+  global    Boolean  @default(false)         // visible to ALL pages/users (no auth) — local single-user store
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+  @@index([global])
 }
 
 model ChartUserSettings {

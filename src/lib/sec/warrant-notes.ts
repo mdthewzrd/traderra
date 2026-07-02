@@ -125,9 +125,12 @@ export function parseWarrantNotesHtml(html: string, accessionNo: string): Parsed
       let expiry: string | null = null;
       let exercisableDate: string | null = null;
 
-      const sh = c.match(/(?:purchase|represent|for|of)\s+([\d,.]+\s*(?:million|billion|thousand)?)\s+shares?/i);
+      const sh = c.match(/(?:purchase|represent|for|of|issued)\s+([\d,.]+\s*(?:million|billion|thousand)?)\s+(?:shares?|warrants?)/i);
       if (sh) shares = scaleShares(sh[1]);
-      const ep = c.match(/exercise\s+price\s+of\s+(?:\$)?([\d,.]+)/i) ?? c.match(/\$([\d,.]+)\s+per\s+share[^.]{0,20}?exercis/i);
+      const ep = c.match(/exercise\s+price\s+of\s+(?:\$\s*)?([\d,.]+)/i)
+        ?? c.match(/(?:at|of)\s+(?:a\s+)?(?:price\s+of\s+)?\$\s*([\d,.]+)\s+per\s+share/i)
+        ?? c.match(/\$\s*([\d,.]+)\s+per\s+share[^.]{0,20}?exercis/i)
+        ?? c.match(/\$\s*([\d,.]+)\s+per\s+share/i);
       if (ep) exercisePrice = scaleMoney(ep[1]);
       const ex = c.match(/expir(?:e|es|ing|ation|y)[^.]{0,30}?(?:on)?\s*([A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})/i);
       if (ex) expiry = ex[1];
@@ -216,47 +219,99 @@ export interface SyncWarrantNotesResult {
   error?: string;
 }
 
-/** Fetch + parse the latest 10-K, store warrant/convertible detail. Idempotent. */
-export async function syncWarrantNotes(cik: string): Promise<SyncWarrantNotesResult> {
+/** Fetch + parse warrant/convertible detail from the latest 10-K AND recent
+ *  10-Qs. Outstanding tranches are often first disclosed in a 10-Q footnote
+ *  (VWAV: $11.5 SPAC + $9 Feb-2026 warrants appear in 10-Q, not the older
+ *  10-K). Idempotent per filing via the warrantNotes flag. */
+export async function syncWarrantNotes(
+  cik: string,
+  opts?: { force?: boolean },
+): Promise<SyncWarrantNotesResult> {
+  const force = opts?.force === true;
   try {
-    const filing = await prisma.dilutionFiling.findFirst({
-      where: { cik, formType: '10-K' },
+    const filings = await prisma.dilutionFiling.findMany({
+      where: { cik, formType: { in: ['10-K', '10-Q'] } },
       orderBy: { filingDate: 'desc' },
+      take: 4, // latest 10-K + latest few 10-Qs
       select: { accessionNo: true, primaryDoc: true, rawPayload: true },
     });
-    if (!filing || !filing.primaryDoc) return { status: 'success', parsed: 0, withDetail: 0 };
-
-    const existing = (filing.rawPayload ?? null) as { warrantNotes?: ParsedWarrantNotes } | null;
-    if (existing?.warrantNotes) return { status: 'success', parsed: 0, withDetail: existing.warrantNotes.warrants.length + existing.warrantNotes.convertibles.length };
-
-    let html: string;
-    try {
-      const res = await secFetchResponse(filingUrl(cik, filing.accessionNo, filing.primaryDoc), 'text/html');
-      if (!res.ok) return { status: 'success', parsed: 0, withDetail: 0 };
-      html = await res.text();
-    } catch {
-      return { status: 'success', parsed: 0, withDetail: 0 };
+    let parsed = 0;
+    let withDetail = 0;
+    for (const filing of filings) {
+      if (!filing.primaryDoc) continue;
+      const existing = (filing.rawPayload ?? null) as { warrantNotes?: ParsedWarrantNotes } | null;
+      // Idempotent: skip re-parsing filings already parsed, UNLESS force=true
+      // (used to propagate parser fixes — e.g. the shares-regex broadening —
+      // across already-synced tickers via resync-universe.cjs).
+      if (existing?.warrantNotes && !force) {
+        withDetail += existing.warrantNotes.warrants.length + existing.warrantNotes.convertibles.length;
+        continue;
+      }
+      let html: string;
+      try {
+        const res = await secFetchResponse(filingUrl(cik, filing.accessionNo, filing.primaryDoc), 'text/html');
+        if (!res.ok) continue;
+        html = await res.text();
+      } catch {
+        continue;
+      }
+      const notes = parseWarrantNotesHtml(html, filing.accessionNo);
+      const detail = notes.warrants.length + notes.convertibles.length;
+      await prisma.dilutionFiling.update({
+        where: { accessionNo: filing.accessionNo },
+        data: { rawPayload: { ...(existing ?? {}), warrantNotes: notes } },
+      });
+      parsed++;
+      withDetail += detail;
     }
-
-    const notes = parseWarrantNotesHtml(html, filing.accessionNo);
-    const withDetail = notes.warrants.length + notes.convertibles.length;
-    await prisma.dilutionFiling.update({
-      where: { accessionNo: filing.accessionNo },
-      data: { rawPayload: { ...(existing ?? {}), warrantNotes: notes } },
-    });
-    return { status: 'success', parsed: 1, withDetail };
+    return { status: 'success', parsed, withDetail };
   } catch (err) {
     return { status: 'error', parsed: 0, withDetail: 0, error: err instanceof Error ? err.message : 'warrant-notes sync failed' };
   }
 }
 
-/** Read latest-parsed warrant/convertible detail from DB (no SEC call). */
+/** Read + MERGE parsed warrant/convertible detail across the latest 10-K +
+ *  10-Qs (no SEC call). The same tranche is restated in successive filings;
+ *  dedup by shares+strike so the table shows each tranche once. */
 export async function getWarrantNotes(cik: string): Promise<ParsedWarrantNotes | null> {
-  const filing = await prisma.dilutionFiling.findFirst({
-    where: { cik, formType: '10-K' },
+  const filings = await prisma.dilutionFiling.findMany({
+    where: { cik, formType: { in: ['10-K', '10-Q'] }, rawPayload: { path: ['warrantNotes'], not: null } },
     orderBy: { filingDate: 'desc' },
+    take: 3,
     select: { rawPayload: true },
   });
-  const rp = (filing?.rawPayload ?? null) as { warrantNotes?: ParsedWarrantNotes } | null;
-  return rp?.warrantNotes ?? null;
+  if (!filings.length) return null;
+  const seenW = new Map<string, WarrantNoteRow>();
+  const seenC = new Map<string, ConvertibleNoteRow>();
+  const seenE = new Map<string, EquityLineNoteRow>();
+  let source = '';
+  let gc: GoingConcern = { present: false, text: null };
+  for (const f of filings) {
+    const n = (f.rawPayload ?? null) as { warrantNotes?: ParsedWarrantNotes } | null;
+    const wn = n?.warrantNotes;
+    if (!wn) continue;
+    if (!source) source = wn.source;
+    if (wn.goingConcern?.present) gc = wn.goingConcern;
+    for (const w of wn.warrants) {
+      const k = `${w.shares}|${w.exercisePrice}`;
+      if (!seenW.has(k)) seenW.set(k, w);
+    }
+    for (const c of wn.convertibles) {
+      const k = `${c.principal}|${c.conversionPrice}`;
+      if (!seenC.has(k)) seenC.set(k, c);
+    }
+    for (const e of wn.equityLines) {
+      const k = `${e.counterparty}|${e.maxCommitment}`;
+      if (!seenE.has(k)) seenE.set(k, e);
+    }
+  }
+  return {
+    warrantNotesParsed: true,
+    warrants: [...seenW.values()],
+    convertibles: [...seenC.values()],
+    equityLines: [...seenE.values()],
+    goingConcern: gc,
+    source,
+    parsedAt: new Date().toISOString().slice(0, 10),
+  };
 }

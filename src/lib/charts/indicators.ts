@@ -355,6 +355,14 @@ export function computeIndicators(
       ensureEMA((t.params?.slow as number) ?? 20)
     }
   }
+  // EMA Cross Switch — same editable fast/slow spans as the cloud (wedges-only tool).
+  if (inds.ema_cross && toolOverrides) {
+    for (const t of toolOverrides) {
+      if (t.indKey !== 'ema_cross') continue
+      ensureEMA((t.params?.fast as number) ?? 9)
+      ensureEMA((t.params?.slow as number) ?? 20)
+    }
+  }
   if (inds.ema || emaTool) ensureEMA(emaTool?.params?.period ?? 20)
 
   // Generic EMA from tool overrides (keys like ema_50, ema_100, etc.)

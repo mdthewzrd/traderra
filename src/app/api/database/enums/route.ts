@@ -16,7 +16,9 @@ const DEFAULTS: Record<string, { label: string; color?: string }[]> = {
   grade: [
     { label: 'A+', color: '#34d399' },
     { label: 'A', color: '#D4AF37' },
+    { label: 'B+', color: '#fbbf24' },
     { label: 'B', color: '#f59e0b' },
+    { label: 'C', color: '#94a3b8' },
   ],
   trendStage: [
     { label: 'Euphoric Top', color: '#ef4444' },
@@ -30,17 +32,29 @@ const DEFAULTS: Record<string, { label: string; color?: string }[]> = {
   routeEnd: [],   // user-defined: where a trade route ends
 }
 
-// GET — all managed enums for this user, seeded with defaults if missing
+// GET — all managed enums for this user, seeded with defaults if missing.
+// Self-healing: any NEW seed options (by label) are merged into an existing
+// record so taxonomy updates propagate without losing the user's custom opts.
 export async function GET(request: NextRequest) {
   const userId = await getAuthUserId(request)
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const existing = await prisma.corpusEnum.findMany({ where: { userId } })
-  const have = new Set(existing.map((e) => e.key))
   const out: Record<string, { label: string; color?: string }[]> = {}
   for (const [key, seed] of Object.entries(DEFAULTS)) {
     const rec = existing.find((e) => e.key === key)
-    out[key] = rec ? (rec.options as any) : seed
+    if (!rec) { out[key] = seed; continue }
+    // Merge: keep user's options, append any seed option whose label is missing
+    const current = (rec.options as any[]).filter(Boolean)
+    const labels = new Set(current.map((o) => typeof o === 'string' ? o : o?.label))
+    const merged = [...current]
+    let changed = false
+    for (const s of seed) {
+      if (!labels.has(s.label)) { merged.push(s); changed = true }
+    }
+    out[key] = merged
+    // persist backfill so it sticks
+    if (changed) await prisma.corpusEnum.update({ where: { id: rec.id }, data: { options: merged } })
   }
   return NextResponse.json({ enums: out })
 }

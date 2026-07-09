@@ -27,7 +27,7 @@ export async function backfillTags(cik: string, limit = 100): Promise<number> {
     where: { cik },
     orderBy: { filingDate: 'desc' },
     take: limit,
-    select: { accessionNo: true, formType: true, items: true, primaryDesc: true, dilutionTags: true },
+    select: { accessionNo: true, formType: true, items: true, primaryDesc: true, dilutionTags: true, rawPayload: true },
   });
 
   let changed = 0;
@@ -37,8 +37,15 @@ export async function backfillTags(cik: string, limit = 100): Promise<number> {
       items: f.items,
       primaryDesc: f.primaryDesc,
     });
+    // Preserve scanner-promoted 'reverse-split'. classifyFiling is metadata-only
+    // (tags reverse-split for 8-Ks), so proxy/10-K splits detected by the body
+    // scanner (stored in rawPayload.reverseSplit) would otherwise be wiped on
+    // every re-classify. The scanner is authoritative for this tag on those forms.
+    if ((f.rawPayload as { reverseSplit?: unknown } | null)?.reverseSplit) {
+      tags.push('reverse-split');
+    }
     const current = [...f.dilutionTags].sort().join(',');
-    const next = [...tags].sort().join(',');
+    const next = [...new Set(tags)].sort().join(',');
     if (current !== next) {
       await prisma.dilutionFiling.update({
         where: { accessionNo: f.accessionNo },
@@ -543,9 +550,9 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
   // found, so the $9/$11.5 strikes are visible alongside the $0.01 unit.
   // Warrant lifecycle status from clause text + dates. 'pre-funded' is the
   // key dilution signal: the holder already paid, exercise is near-certain.
-  const warrantStatus = (description: string, expiry: string | null, exercisable: string | null): string => {
+  const warrantStatus = (description: string, expiry: string | null, exercisable: string | null, strike: number | null): string => {
     const t = (description || '').toLowerCase();
-    if (/pre-?funded/.test(t)) return 'pre-funded';
+    if (/pre-?funded/.test(t) || strike === 0) return 'pre-funded';
     if (expiry) { const d = new Date(expiry); if (!isNaN(d.getTime()) && d.getTime() < Date.now()) return 'expired'; }
     if (exercisable) { const d = new Date(exercisable); if (!isNaN(d.getTime()) && d.getTime() > Date.now()) return 'pending'; }
     return 'active';
@@ -566,7 +573,7 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
           source: '424B5', shares: t.shares, strike: t.strike, expiry: t.expiry,
           exercisable: t.exercisable, description: t.description ?? '',
           filingDate: f.filingDate.toISOString().slice(0, 10),
-          status: warrantStatus(t.description ?? '', t.expiry, t.exercisable),
+          status: warrantStatus(t.description ?? '', t.expiry, t.exercisable, t.strike),
         });
       }
     }
@@ -576,7 +583,7 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
         rows.push({
           source: '10-K notes', shares: w.shares, strike: w.exercisePrice,
           expiry: w.expiry, exercisable: w.exercisableDate, description: w.description, filingDate: wnDate,
-          status: warrantStatus(w.description, w.expiry, w.exercisableDate),
+          status: warrantStatus(w.description, w.expiry, w.exercisableDate, w.exercisePrice),
         });
       }
     }
@@ -586,11 +593,44 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
         expiry: null, exercisable: null,
         description: `Aggregate XBRL overhang (period ${overhang.warrant.period})${overhang.splitNote ? ` · split-adj (${overhang.splitNote})` : ''}`,
         filingDate: overhang.warrant.period,
-        status: 'active',
+        status: warrantStatus(`overhang ${overhang.warrant.period}`, null, null, overhang.warrant.strike),
       });
+    }
+    // Drop XBRL aggregate when per-tranche 10-K detail exists — the aggregate
+    // overlaps the breakdown and double-counts the same warrants.
+    if (rows.some(r => r.source === '10-K notes')) {
+      return rows.filter(r => r.source !== 'XBRL');
     }
     return rows;
   })();
+
+  // Post-report capital raises: add back offering proceeds dated AFTER the
+  // cash report date. Without this, a company that just raised $20M looks
+  // destitute because linear burn from the stale report date wipes it out.
+  // Uses offering grossProceeds (the authoritative 'money raised' signal).
+  // Excludes registrations (S-3/S-1) which register capacity, not sales.
+  const cashAsOf = cash.asOfDate;
+  let postReportRaises = 0;
+  if (cashAsOf && cash.cashReliable) {
+    for (const f of offeringFilings) {
+      const p = (f.rawPayload ?? null) as { offeringParsed?: boolean; grossProceeds?: number | null; offeringType?: string } | null;
+      if (!p?.offeringParsed) continue;
+      const fdate = f.filingDate.toISOString().slice(0, 10);
+      if (fdate <= cashAsOf) continue;
+      if (/^S-[13]/.test(p.offeringType ?? '')) continue;
+      if (p.grossProceeds && p.grossProceeds > 0) postReportRaises += p.grossProceeds;
+    }
+  }
+  const adjCash = postReportRaises > 0 && cash.cashReliable
+    ? {
+        ...cash,
+        projectedCash: (cash.projectedCash ?? cash.estimatedCash ?? 0) + postReportRaises,
+        cashRemainingMonths: cash.monthlyCashFlow != null && cash.monthlyCashFlow < 0
+          ? ((cash.projectedCash ?? cash.estimatedCash ?? 0) + postReportRaises) / Math.abs(cash.monthlyCashFlow)
+          : cash.cashRemainingMonths,
+        postReportRaises,
+      }
+    : { ...cash, postReportRaises: 0 };
 
   return {
     company: company
@@ -606,7 +646,7 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
       : null,
     sharesLatest: sharesHistory[0] ?? null,
     sharesHistory,
-    cash,
+    cash: adjCash,
     filings: filings.map((f) => ({
       accessionNo: f.accessionNo,
       formType: f.formType,

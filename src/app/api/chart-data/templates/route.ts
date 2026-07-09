@@ -30,15 +30,18 @@ async function resolveOwnerId(req?: Request): Promise<string | null> {
 // GET /api/chart-data/templates — global templates to everyone (no auth) + own.
 export async function GET(req: Request) {
   const userId = await getAuthUserId(req)
+  const filterType = new URL(req.url).searchParams.get('type')
+  const where: any = { OR: [{ global: true }, ...(userId ? [{ userId }] : [])] }
+  if (filterType) where.type = filterType
   const templates = await prisma.chartTemplate.findMany({
-    where: { OR: [{ global: true }, ...(userId ? [{ userId }] : [])] },
+    where,
     orderBy: [{ global: 'desc' }, { createdAt: 'desc' }],
   })
   return NextResponse.json({
     templates: templates.map(t => {
       let payload: any = {}
       try { payload = JSON.parse(t.tools) } catch {}
-      return { id: t.id, name: t.name, global: t.global, ...(payload || {}) }
+      return { id: t.id, name: t.name, global: t.global, type: t.type, ...(payload || {}) }
     }),
   })
 }
@@ -48,21 +51,22 @@ export async function GET(req: Request) {
 export async function PUT(req: Request) {
   const userId = await resolveOwnerId(req)
   if (!userId) return NextResponse.json({ error: 'no local user found' }, { status: 500 })
-  const { id, name, payload, global } = await req.json()
+  const { id, name, payload, global, type } = await req.json()
   const tplName = name || payload?.name
   if (!tplName) return NextResponse.json({ error: 'name required' }, { status: 400 })
   const isGlobal = global !== false // default true
-  // match an existing global/own template by name → update in place
+  const tplType = type || 'template'
+  // match an existing global/own template by name + type → update in place
   const existing = await prisma.chartTemplate.findFirst({
-    where: { name: tplName, OR: [{ global: true }, { userId }] },
+    where: { name: tplName, type: tplType, OR: [{ global: true }, { userId }] },
     select: { id: true },
   })
   const rowId = existing?.id || id || `tpl_${Date.now()}`
   const snapshot = JSON.stringify({ ...payload, name: tplName, ts: Date.now() })
   const template = await prisma.chartTemplate.upsert({
     where: { id: rowId },
-    create: { userId, name: tplName, tools: snapshot, global: isGlobal },
-    update: { name: tplName, tools: snapshot, global: isGlobal },
+    create: { userId, name: tplName, type: tplType, tools: snapshot, global: isGlobal },
+    update: { name: tplName, type: tplType, tools: snapshot, global: isGlobal },
   })
   return NextResponse.json({ ok: true, id: template.id })
 }

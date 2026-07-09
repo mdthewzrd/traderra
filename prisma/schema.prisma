@@ -35,6 +35,9 @@ model User {
   corpusRows  CorpusRow[]
   corpusViews CorpusView[]
   corpusTrades CorpusTrade[]
+  playbooks   Playbook[]
+  playbookTrades PlaybookTrade[]
+  corpusDatabases CorpusDatabase[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -45,10 +48,28 @@ model User {
 // A CorpusRow is ONE scan hit, human-classified into the playbook
 // before any trade is taken. Distinct from Trade (executed P&L).
 // ─────────────────────────────────────────────────────────────
+model CorpusDatabase {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name      String
+
+  rows      CorpusRow[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@unique([userId, name])
+}
+
 model CorpusRow {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  databaseId String?
+  database  CorpusDatabase? @relation(fields: [databaseId], references: [id], onDelete: Cascade)
 
   // Deduped: ONE row per symbol+signalDate. Tracks every scan that hit it.
   scanSources String[] @default([])  // e.g. ['Backside B', 'Short FBO 2']
@@ -88,7 +109,8 @@ model CorpusRow {
   @@index([signalDate])
   @@index([grade])
   @@index([move])
-  @@unique([userId, symbol, signalDate])
+  @@index([databaseId])
+  @@unique([databaseId, symbol, signalDate])
 }
 
 model CorpusField {
@@ -164,6 +186,70 @@ model CorpusView {
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Playbook — strategy definitions (the blueprint, pre-scan).
+// A rich document you hand to Renata before we build the scan.
+// Mirrors the corpus TRADE_SECTIONS pattern: text + pasted image
+// annotations stored inline as base64 data URLs.
+// ─────────────────────────────────────────────────────────────
+model Playbook {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name      String
+  status    String   @default("idea") // idea | spec | scan-built | validated | live
+  thesis    String?  // one-liner — the edge in a sentence
+
+  // The document — keyed sections, each { text, annots: [{ref, caption?}] }
+  sections  Json?
+
+  setupType String?  // optional: link to your setup vocabulary
+  tags      String[] @default([])
+  grade     String?  // A+ | A | B — confidence in the edge
+  category  String?  // optional grouping label — tree parent in the sidebar
+
+  // Example trades logged against this playbook (0..N)
+  trades    PlaybookTrade[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// PlaybookTrade — an example play logged against a strategy.
+// Mirrors CorpusTrade's structure but stands alone (carries its own symbol
+// since there's no parent row). Used to log textbook instances of a setup.
+// ─────────────────────────────────────────────────────────────
+model PlaybookTrade {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  playbookId String
+  playbook  Playbook @relation(fields: [playbookId], references: [id], onDelete: Cascade)
+
+  symbol    String   // the ticker — playbook trades carry their own
+  direction String   // 'short' | 'long'
+  date      String?  // trade date
+  entryPrice Float?
+  exitPrice  Float?
+  qty       Int?
+  grade     String?  // A+ | A | B — example grade
+  trendStage String? // where in the cycle
+  routeStart String? // user-defined route start
+  routeEnd   String?  // user-defined route end
+  sections   Json?    // { daily, htf, mtf, ltf } — { text, annots[] }
+  notes      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([playbookId])
 }
 
 model Trade {
@@ -316,6 +402,7 @@ model ChartTemplate {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name      String
+  type      String   @default("template")    // 'template' (layout: indicators only) | 'savedchart' (full snapshot: symbol+tf+indicators)
   tools     String   @default("[]")          // JSON snapshot: full ChartTemplate payload (tools/inds/colors/params/chartStyle/symbol/tf)
   global    Boolean  @default(false)         // visible to ALL pages/users (no auth) — local single-user store
   createdAt DateTime @default(now())

@@ -45,6 +45,7 @@ interface Hit {
   checks_total?: number
   receivedAt: number
   current?: boolean
+  confirmed?: boolean
 }
 
 interface ScanDef { spec: string; label: string; color: string }
@@ -91,6 +92,16 @@ for (const g of GROUPS) for (const s of g.scans) {
   SPEC_COLOR[s.spec] = s.color
   SPEC_GROUP[s.spec] = g.key
 }
+// live potential variants — relaxed candidates pushed live during the session
+// (day1s premarket via run_get_d1s.py; backside/frontside intraday via
+// live_spec_poller.py). Registered so they (a) pass the live-stream group filter
+// at the SSE handler and (b) carry a label/color mapped to their own group.
+for (const g of GROUPS) for (const s of g.scans) {
+  const p = s.spec + '-potential'
+  SPEC_LABEL[p] = s.label
+  SPEC_COLOR[p] = s.color
+  SPEC_GROUP[p] = g.key
+}
 
 // chart widget palette (mirrors /database DARK theme + GOLD accents)
 const W = {
@@ -110,6 +121,12 @@ const fmtVol = (v?: number) => {
 const fmtPct = (v?: number) => (v === undefined || v === null ? '-' : (v >= 0 ? '+' : '') + (v * 100).toFixed(0) + '%')
 const fmtTime = (ts: number) => new Date(ts).toLocaleTimeString('en-US', { hour12: false })
 const todayStr = () => new Date().toISOString().slice(0, 10)
+// previous trading day (skip Sat/Sun) — for the D-1 potentials radar
+const prevTradingDay = (date: string): string => {
+  const d = new Date(date + 'T12:00:00Z')
+  do { d.setUTCDate(d.getUTCDate() - 1) } while (d.getUTCDay() === 0 || d.getUTCDay() === 6)
+  return d.toISOString().slice(0, 10)
+}
 const fmtDay = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 const fmtDateShort = (d: string) => { const dt = new Date(d + 'T12:00:00'); return (dt.getMonth() + 1) + '/' + dt.getDate() }
 const shiftDay = (d: string, dir: 1 | -1) => {
@@ -180,7 +197,7 @@ export default function LiveScanPage() {
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [tab, setTab] = useState<Record<string, 'eod' | 'valid' | 'recent'>>({
-    day1s: 'valid', backside: 'valid', frontside: 'valid',
+    day1s: 'valid', backside: 'eod', frontside: 'eod',
   })
 
   // chart (in-flow resizable block)
@@ -204,6 +221,8 @@ export default function LiveScanPage() {
   // static chart canvas height (viewport-based, no observer → no feedback loop)
   const canvasH = Math.max(200, (typeof window !== 'undefined' ? window.innerHeight : 800) - 220)
 
+  const [refreshing, setRefreshing] = useState(false)
+
   // ── Load scan catalog + all results into cache ──
   const fetchAll = useCallback(async () => {
     try {
@@ -223,7 +242,23 @@ export default function LiveScanPage() {
     } catch {}
   }, [])
 
-  useEffect(() => { fetchAll() }, [fetchAll])
+  // manual refresh: clear the cache so fetchAll re-fetches every row
+  const refreshAll = useCallback(async () => {
+    setRefreshing(true)
+    scanCacheRef.current.clear()
+    await fetchAll()
+    setRefreshing(false)
+  }, [fetchAll])
+
+  useEffect(() => {
+    fetchAll()
+    // Poll the catalog every 60s so newly-backfilled EOD rows appear without a
+    // hard reload (fetchAll skips already-cached rows, so this is cheap — one
+    // list fetch + results fetch only for new IDs). Without this, /live-scan's
+    // EOD/Recent tabs show stale data after backfills push new SavedScan rows.
+    const t = setInterval(fetchAll, 60000)
+    return () => clearInterval(t)
+  }, [fetchAll])
 
   // SSE — live valid
   const addHits = useCallback((incoming: any, replay = false) => {
@@ -311,13 +346,25 @@ export default function LiveScanPage() {
   const _ = [resultsVersion, liveVersion]
 
   const specResults = useMemo(() => {
-    const m = new Map<string, any[]>()
+    // Merge results across ALL SavedScan rows of the same strategy (union by
+    // ticker+date). scans is newest-first (createdAt desc), so first occurrence
+    // of a ticker+date is the freshest state and wins; later rows skipped.
+    // This matters for backfills: a small fresh 07-01 row would otherwise be
+    // shadowed by an older larger multi-month row → backfilled dates invisible.
+    const buckets = new Map<string, Map<string, any>>()
     for (const s of scans) {
       const spec = s.strategy
       if (!SPEC_GROUP[spec]) continue
       const res = scanCacheRef.current.get(s.id) || []
-      if (!m.has(spec) || (m.get(spec)!.length < res.length)) m.set(spec, res)
+      if (!buckets.has(spec)) buckets.set(spec, new Map())
+      const bucket = buckets.get(spec)!
+      for (const x of res) {
+        const key = `${(x.ticker || '?').toUpperCase()}::${(x.date || '').slice(0, 10)}`
+        if (!bucket.has(key)) bucket.set(key, x)
+      }
     }
+    const m = new Map<string, any[]>()
+    for (const [spec, bucket] of buckets) m.set(spec, [...bucket.values()])
     return m
   }, [scans, resultsVersion])
 
@@ -359,6 +406,98 @@ export default function LiveScanPage() {
     }
     return eodHitsFor(groupKey, date)
   }, [eodHitsFor, liveVersion])
+
+  // Valid tab (backside/frontside): live monitor = overnight radar (potentials
+  // stamped D-1) + today's confirmed valids (stamped D0). Confirmed names are
+  // flagged confirmed=true → HitRow highlights them (green border + tint + dot);
+  // potential-only names on the radar render dimmed. day1s not routed here.
+  const validRadarHitsFor = useCallback((groupKey: string, date: string) => {
+    const g = GROUPS.find(x => x.key === groupKey)!
+    const today = todayStr()
+    const radarDate = prevTradingDay(date)
+    const byKey = new Map<string, Hit>()
+    // seed: radar potentials (confirmed=false), re-tagged to base spec for the box filter
+    for (const s of g.scans) {
+      const res = specResults.get(s.spec + '-potential') || []
+      for (const x of res) {
+        const xd = x.date ? String(x.date).slice(0, 10) : ''
+        if (xd === radarDate) {
+          const h = resultToHit(x, s.spec, date)
+          h.confirmed = false
+          byKey.set(`${s.spec}::${h.ticker}`, h)
+        }
+      }
+    }
+    // overlay: confirmed valids (base spec stamped D0) — live SSE + DB
+    const markValid = (h: Hit) => { byKey.set(`${h.strategy}::${h.ticker}`, { ...h, confirmed: true }) }
+    if (date >= today) {
+      for (const [, h] of liveSeenRef.current) {
+        if (SPEC_GROUP[h.strategy] !== groupKey) continue
+        markValid(h)
+      }
+    }
+    for (const s of g.scans) {
+      const res = specResults.get(s.spec) || []
+      for (const x of res) {
+        const xd = x.date ? String(x.date).slice(0, 10) : ''
+        if (xd === date) markValid(resultToHit(x, s.spec, date))
+      }
+    }
+    const out = [...byKey.values()]
+    out.sort((a, b) => Number(b.confirmed) - Number(a.confirmed) || (b.pm_high_pct || 0) - (a.pm_high_pct || 0))
+    return out
+  }, [specResults, resultToHit, liveVersion])
+
+  // Potentials tab. day1s = same-day premarket model (unchanged).
+  // backside/frontside = D-1/D0 lifecycle: <spec>-potential stamped on D-1 (EOD
+  // close analysis) shown on D0's tab — the overnight radar.
+  const potentialHitsFor = useCallback((groupKey: string, date: string) => {
+    const out: Hit[] = []
+    const byTk = new Map<string, Hit>()
+    const add = (h: Hit) => byTk.set(h.ticker, h)
+    const g = GROUPS.find(x => x.key === groupKey)!
+    if (groupKey === 'day1s') {
+      // day1s: <spec>-potential stamped on `date` (DB) + live SSE for today.
+      const today = todayStr()
+      for (const s of g.scans) {
+        const p = s.spec + '-potential'
+        const res = specResults.get(p) || []
+        for (const x of res) {
+          const xd = x.date ? String(x.date).slice(0, 10) : ''
+          if (xd === date) add(resultToHit(x, p, date))
+        }
+      }
+      if (date >= today) {
+        for (const s of g.scans) {
+          const res = specResults.get(s.spec) || []
+          for (const x of res) {
+            const xd = x.date ? String(x.date).slice(0, 10) : ''
+            if (xd === date) add(resultToHit(x, s.spec, date))
+          }
+        }
+        for (const [, h] of liveSeenRef.current) {
+          if (SPEC_GROUP[h.strategy] !== groupKey) continue
+          add(h)
+        }
+      }
+    } else {
+      // backside/frontside: EOD tab for date D = the EOD close analysis
+      // (relaxed radar) run ON date D, stamped D. Navigate to a date → see that
+      // date's end-of-day scan. This is the D-1 source: 07-07's EOD radar seeds
+      // 07-08's watchlist.
+      for (const s of g.scans) {
+        const p = s.spec + '-potential'
+        const res = specResults.get(p) || []
+        for (const x of res) {
+          const xd = x.date ? String(x.date).slice(0, 10) : ''
+          if (xd === date) add(resultToHit(x, p, date))
+        }
+      }
+    }
+    for (const h of byTk.values()) out.push(h)
+    out.sort((a, b) => (b.pm_high_pct || 0) - (a.pm_high_pct || 0))
+    return out
+  }, [specResults, resultToHit, liveVersion])
 
   const recentHitsFor = useCallback((groupKey: string, from: string, to: string) => {
     const out: Hit[] = []
@@ -438,17 +577,17 @@ export default function LiveScanPage() {
   // ── Hit row ──
   const HitRow = ({ h, showValid = false, showDate = false }: { h: Hit; showValid?: boolean; showDate?: boolean }) => {
     const color = SPEC_COLOR[h.strategy] || '#9ca3af'
-    const openedValid = h.phase === 'confirmed'
+    const openedValid = h.confirmed === true || h.phase === 'confirmed'
     const checksStr = h.checks_met !== undefined && h.checks_total !== undefined ? `${h.checks_met}/${h.checks_total}` : ''
     const tail = showDate ? fmtDateShort(h.date) : (showValid && h.receivedAt ? fmtTime(h.receivedAt) : checksStr)
     const sel = h.id === selectedId
     return (
       <div ref={el => { if (el) rowRefs.current.set(h.id, el) }} onClick={() => selectRow(h)} onDoubleClick={() => openFullChart(h)}
-        style={{ display: 'grid', gridTemplateColumns: cols(showValid), gap: 8, alignItems: 'center', padding: '5px 8px', cursor: 'pointer', borderBottom: '1px solid #141a26', fontSize: 12, outline: sel ? '1px solid #D4AF37' : 'none', outlineOffset: -1, background: sel ? 'rgba(212,175,55,0.08)' : 'transparent' }}>
+        style={{ display: 'grid', gridTemplateColumns: cols(showValid), gap: 8, alignItems: 'center', padding: '5px 8px', cursor: 'pointer', borderBottom: '1px solid #141a26', borderLeft: h.confirmed === true ? '2px solid #22c55e' : '2px solid transparent', fontSize: 12, outline: sel ? '1px solid #D4AF37' : 'none', outlineOffset: -1, opacity: h.confirmed === false ? 0.6 : 1, background: sel ? 'rgba(212,175,55,0.08)' : h.confirmed === true ? 'rgba(34,197,94,0.10)' : 'transparent' }}>
         {showValid && (
           <span title={openedValid ? 'Opened valid' : 'PM hit'} style={{ width: 8, height: 8, borderRadius: '50%', background: openedValid ? '#22c55e' : 'transparent', border: openedValid ? 'none' : '1px solid #374151', boxShadow: openedValid ? '0 0 6px #22c55e' : 'none' }} />
         )}
-        <span style={{ fontWeight: 700, color: '#f9fafb' }}>{h.ticker}</span>
+        <span style={{ fontWeight: 700, color: h.confirmed === false ? '#6b7280' : '#f9fafb' }}>{h.ticker}</span>
         <span style={{ display: 'flex' }}>
           <span style={{ background: color + '33', color, border: `1px solid ${color}66`, borderRadius: 3, padding: '1px 5px', fontSize: 10, whiteSpace: 'nowrap' }}>{h.scanName}</span>
         </span>
@@ -467,11 +606,16 @@ export default function LiveScanPage() {
         <span style={{ fontWeight: 700, fontSize: 14, color: '#f9fafb' }}>{title}</span>
         <span style={{ background: '#374151', color: '#d1d5db', borderRadius: 8, padding: '0 7px', fontSize: 11 }}>{count}</span>
       </div>
-      {onExpand && (
-        <button onClick={onExpand} title={expanded ? 'Collapse to merged card' : 'Expand to individual scan cards'} style={{ background: 'none', border: '1px solid #374151', borderRadius: 4, color: '#9ca3af', padding: '2px 6px', fontSize: 11, cursor: 'pointer' }}>
-          {expanded ? 'groupBy' : 'unfold'}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <button onClick={refreshAll} disabled={refreshing} title="Refresh all scan data" style={{ background: 'none', border: '1px solid #374151', borderRadius: 4, color: '#9ca3af', padding: '2px 6px', fontSize: 11, cursor: refreshing ? 'wait' : 'pointer', opacity: refreshing ? 0.5 : 1 }}>
+          <span style={{ display: 'inline-block', animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }}>↻</span>
+        </button>
+        {onExpand && (
+          <button onClick={onExpand} title={expanded ? 'Collapse to merged card' : 'Expand to individual scan cards'} style={{ background: 'none', border: '1px solid #374151', borderRadius: 4, color: '#9ca3af', padding: '2px 6px', fontSize: 11, cursor: 'pointer' }}>
+            {expanded ? 'groupBy' : 'unfold'}
         </button>
       )}
+      </div>
     </div>
   )
 
@@ -484,8 +628,13 @@ export default function LiveScanPage() {
     let hits: Hit[] = []
     let showValid = false
     let showDate = false
-    if (activeTab === 'eod') hits = eodHitsFor(group.key, eodDate)
-    else if (activeTab === 'valid') { hits = validHitsFor(group.key, validDate); showValid = true }
+    // EOD/Potentials tab: potentials for the selected date (day1s same-day;
+    // backside/frontside = D-1 radar). Valid tab + Recent use their own readers.
+    if (activeTab === 'eod') hits = potentialHitsFor(group.key, eodDate)
+    else if (activeTab === 'valid') {
+      hits = group.key === 'day1s' ? validHitsFor(group.key, validDate) : validRadarHitsFor(group.key, validDate)
+      showValid = true
+    }
     else { hits = recentHitsFor(group.key, recentFrom, recentTo); showDate = true }
     visibleHitsRef.current[group.key] = hits
 
@@ -495,7 +644,14 @@ export default function LiveScanPage() {
           <CardHeader title={group.label} accent={group.accent} onExpand={toggle} expanded={isExp} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 8 }}>
             {group.scans.map(s => {
-              const sh: Hit[] = hits.filter(h => h.strategy === s.spec)
+              const isPotentialView = activeTab === 'eod'
+              // day1s potentials box shows -potential + confirmed-valid (base spec).
+              // backside/frontside potentials box shows only -potential (valids are on
+              // the Valid tab).
+              const wantSpecs = isPotentialView
+                ? (group.key === 'day1s' ? new Set([s.spec + '-potential', s.spec]) : new Set([s.spec + '-potential']))
+                : new Set([s.spec])
+              const sh: Hit[] = hits.filter(h => wantSpecs.has(h.strategy))
               return (
                 <div key={s.spec} style={{ background: '#0f1623', border: `1px solid ${s.color}44`, borderRadius: 8, overflow: 'hidden', display: 'flex', flexDirection: 'column', height: 200 }}>
                   <div style={{ padding: '6px 10px', borderBottom: '1px solid #1f2937', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
@@ -554,6 +710,7 @@ export default function LiveScanPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#0a0e14', color: '#e5e7eb', display: 'flex', flexDirection: 'column' }}>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       {/* Top bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid #1f2937', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

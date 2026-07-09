@@ -9,15 +9,10 @@
  * ("5,000,000") or spelled out ("5 million") — normalized both ways.
  */
 import { prisma } from '@/lib/prisma';
-import { secFetchResponse } from '@/lib/sec/client';
+import { fetchAndParseFiling } from '@/lib/sec/client';
 
 export const OFFERING_FORMS = ['424B1', '424B3', '424B4', '424B5', '424B7', '424B8'];
 const PROSPECTUS_WINDOW = 40;
-
-function filingUrl(cik: string, accessionNo: string, primaryDoc: string | null): string {
-  const stripped = accessionNo.replace(/-/g, '');
-  return `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${stripped}/${primaryDoc ?? ''}`;
-}
 
 function stripHtml(html: string): string {
   return html
@@ -63,7 +58,8 @@ export interface ParsedOffering {
 }
 
 export function parseProspectusHtml(html: string): ParsedOffering {
-  const text = stripHtml(html);
+  // Normalize PDF→HTML number-split artifacts ('$ 5 0,000,000' → '$50,000,000').
+  const text = stripHtml(html).replace(/\$\s+/g, '$').replace(/(\d)\s+(?=\d)/g, '$1');
   // Offer terms live on the cover page + offering summary (first ~2-3 pages).
   // Deep-prose numbers (risk factors, exhibits) are noise — scope extraction there.
   const cover = text.slice(0, 8000);
@@ -125,9 +121,9 @@ export function parseProspectusHtml(html: string): ParsedOffering {
   // Common phrasing: "accompanying warrants to purchase N shares ... exercise
   // price of $Y ... exercisable ... expiring on DATE".
   const warrantTranches: WarrantTranche[] = [];
-  const warrantClauses = cover.match(/[A-Z][^.]{0,40}?warrant[s]?[^.]{0,400}?(?:exercis|expir|exercise\s+price)[^.]{0,300}?(?:\.|;)/gi) ?? [];
+  const warrantClauses = cover.match(/[A-Z][^.]{0,90}?warrant[s]?[^.]{0,400}?(?:exercis|expir|exercise\s+price)[^.]{0,300}?(?:\.|;)/gi) ?? [];
   for (const wc of warrantClauses.slice(0, 8)) {
-    const sh = wc.match(/(?:purchase|represent|for|of|to\s+purchase)\s+([\d,.]+\s*(?:million|billion|thousand)?)\s+shares?/i);
+    const sh = wc.match(/(?:purchase|represent|for|of|to\s+purchase|accompany)\s+(?:up\s+to\s+|an\s+aggregate\s+of\s+)?([\d,.]+\s*(?:million|billion|thousand)?)\s+shares?/i);
     const ep = wc.match(/(?:exercise|exercisable\s+at(?:\s+a)?(?:\s+price\s+of)?|strike\s+price\s+of)\s+\$?([\d,.]+(?:\.\d{1,4})?)/i)
       ?? wc.match(/exercise\s+price[^.]{0,50}?(?:equal\s+to|of)\s+\$?([\d,.]+(?:\.\d{1,4})?)/i);
     const ex = wc.match(/expir(?:e|es|ing|ation|y)[^.]{0,30}?(?:on)?\s*([A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})/i);
@@ -135,7 +131,7 @@ export function parseProspectusHtml(html: string): ParsedOffering {
     const shares = sh ? scaleNum(sh[1]) : null;
     const strike = ep ? parseFloat(ep[1].replace(/,/g, '')) : null;
     const expiry = ex ? ex[1] : null;
-    const exercisable = ed ? ed[1] : null;
+    const exercisable = ed ? ed[1] : (/exercisable\s+(?:immediately|upon\s+issuance|as\s+of\s+issuance)/i.test(wc) ? 'immediately' : null);
     if (shares != null || strike != null || expiry != null) {
       warrantTranches.push({ shares, strike, expiry, exercisable, description: wc.trim().replace(/\s+/g, ' ').slice(0, 300) });
     }
@@ -170,17 +166,15 @@ export async function syncOfferings(cik: string): Promise<SyncOfferingsResult> {
         withDetail++;
         continue; // idempotent
       }
-      let html: string;
-      try {
-        const res = await secFetchResponse(filingUrl(cik, f.accessionNo, f.primaryDoc), 'text/html');
-        if (!res.ok) continue;
-        html = await res.text();
-      } catch {
-        continue;
-      }
+      const o = await fetchAndParseFiling(
+        cik,
+        f.accessionNo,
+        f.primaryDoc,
+        (html) => parseProspectusHtml(html),
+        (result) => !result.sharesOffered && !result.pricePerShare && !result.grossProceeds,
+      );
       parsed++;
-      const o = parseProspectusHtml(html);
-      if (!o.sharesOffered && !o.pricePerShare && !o.grossProceeds) continue; // nothing extractable
+      if (!o || (!o.sharesOffered && !o.pricePerShare && !o.grossProceeds)) continue; // nothing extractable
       await prisma.dilutionFiling.update({
         where: { accessionNo: f.accessionNo },
         data: {

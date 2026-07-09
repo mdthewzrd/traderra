@@ -16,7 +16,17 @@
     "totR": 0,
     "profitFactor": 0,
     "longs": 0,
-    "shorts": 0
+    "shorts": 0,
+    "avgR": 0,
+    "greenDays": 0,
+    "greenPct": 0,
+    "tradingDays": 0,
+    "perDay": 0,
+    "maxDD": 0,
+    "avgDayR": 0,
+    "bestDay": null,
+    "worstDay": null
   },
-  "trades": []
+  "trades": [],
+  "byDay": {}
 }

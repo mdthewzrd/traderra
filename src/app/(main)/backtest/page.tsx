@@ -2382,6 +2382,22 @@ export default function BacktestPage() {
     return out
   }, [selectedBtRun, btTrades, selectedTradeIdx])
 
+  // Backside-pop (and any push_time-emitting scan) pop markers for the current ticker.
+  // Green ▲ at the pop high; the renderer snaps it to the timeframe bar. '1H is trend,
+  // 15m for pushes' — on the hourly these arrows mark where the backside pop fired.
+  const signalMarkers = useMemo(() => {
+    if (!signals.length || !chartSymbol) return []
+    const out: { time: number; price: number; kind: 'buy'; selected: boolean }[] = []
+    for (const s of signals) {
+      if (s.ticker !== chartSymbol || !s.push_time) continue
+      const t = etWallToUnix(`${s.date} ${s.push_time}`)
+      if (isNaN(t) || s.high == null) continue
+      out.push({ time: t, price: s.high, kind: 'buy', selected: s.date === sig?.date })
+    }
+    return out
+  }, [signals, chartSymbol, sig])
+  const chartMarkers = useMemo(() => [...btMarkers, ...signalMarkers], [btMarkers, signalMarkers])
+
  // Reset day offset when signal changes
  // (also done inline in every setSelectedIdx call)
 
@@ -2473,7 +2489,8 @@ export default function BacktestPage() {
               const isActive = selectedBtRun === run.id
               const s = run.summary || {}
               return (
-                <button key={run.id} onClick={() => selectBacktestRun(isActive ? null : run.id)} style={{
+                <div key={run.id}>
+                <button onClick={() => selectBacktestRun(isActive ? null : run.id)} style={{
                   display: 'block', width: '100%', textAlign: 'left',
                   padding: '6px 10px 6px 22px', border: 'none', cursor: 'pointer',
                   background: isActive ? `${T.TEAL}18` : 'transparent',
@@ -2487,8 +2504,15 @@ export default function BacktestPage() {
                     <span>{s.trades ?? 0} trades</span>
                     <span style={{ color: (s.totR ?? 0) >= 0 ? T.TEAL : T.RED }}>{(s.totR ?? 0) >= 0 ? '+' : ''}{(s.totR ?? 0).toFixed(1)}R</span>
                     <span>{(s.winRate ?? 0).toFixed(0)}% win</span>
+                    {(s.greenPct ?? null) != null && <span style={{ color: (s.greenPct ?? 0) >= 60 ? T.TEAL : T.MUTED }}>{(s.greenPct ?? 0).toFixed(0)}% green</span>}
                   </div>
                 </button>
+                {isActive && (
+                  <a href={`/backtest/run/${run.id}`} style={{ display: 'block', padding: '4px 10px 4px 22px', fontSize: 9, fontWeight: 700, color: T.GOLD || '#D4AF37', background: 'rgba(212,175,55,0.06)', borderBottom: `1px solid ${T.BORDER}`, textDecoration: 'none' }}>
+                    → full detail · calendar · day stats
+                  </a>
+                )}
+                </div>
               )
             })}
           </div>
@@ -3097,13 +3121,13 @@ export default function BacktestPage() {
 
           {/* Chart(s) — when a backtest run is selected, charts switch to its symbol/tf (SPY 15m) */}
           {chartMode === 'single' ? (
-            <MiniChart symbol={chartSymbol} tf={chartTf} date={chartDate} height={580} settings={chartSettings} dark={dark} dayOffset={dayOffset} btMarkers={btMarkers} />
+            <MiniChart symbol={chartSymbol} tf={chartTf} date={chartDate} height={580} settings={chartSettings} dark={dark} dayOffset={dayOffset} btMarkers={chartMarkers} />
           ) : (
             <div className="space-y-2">
-              <MiniChart symbol={chartSymbol} tf="D" date={chartDate} height={360} settings={chartSettings} dark={dark} dayOffset={dayOffset} btMarkers={btMarkers} />
-              <MiniChart symbol={chartSymbol} tf="60" date={chartDate} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} btMarkers={btMarkers} />
-              <MiniChart symbol={chartSymbol} tf="15" date={chartDate} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} btMarkers={btMarkers} />
-              <MiniChart symbol={chartSymbol} tf="5" date={chartDate} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} btMarkers={btMarkers} />
+              <MiniChart symbol={chartSymbol} tf="D" date={chartDate} height={360} settings={chartSettings} dark={dark} dayOffset={dayOffset} btMarkers={chartMarkers} />
+              <MiniChart symbol={chartSymbol} tf="60" date={chartDate} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} btMarkers={chartMarkers} />
+              <MiniChart symbol={chartSymbol} tf="15" date={chartDate} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} btMarkers={chartMarkers} />
+              <MiniChart symbol={chartSymbol} tf="5" date={chartDate} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} btMarkers={chartMarkers} />
             </div>
           )}
 

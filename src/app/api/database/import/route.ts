@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthUserId } from '@/lib/auth-helpers'
+import { getDatabaseId } from '@/lib/db-id'
 
 export const maxDuration = 60 // allow large scans to process
 
@@ -13,6 +14,7 @@ export const maxDuration = 60 // allow large scans to process
 export async function POST(request: NextRequest) {
   const userId = await getAuthUserId(request)
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const dbId = await getDatabaseId(request, userId)
 
   const body = await request.json()
   const scanIds: string[] = Array.isArray(body.scanIds) ? body.scanIds : []
@@ -64,7 +66,7 @@ export async function POST(request: NextRequest) {
     // 2. Fetch existing rows for these symbols in ONE bulk query
     const symbols = [...new Set([...deduped.keys()].map((k) => k.split('|')[0]))]
     const existingRows = await prisma.corpusRow.findMany({
-      where: { userId, symbol: { in: symbols } },
+      where: { userId, databaseId: dbId, symbol: { in: symbols } },
       select: { id: true, symbol: true, signalDate: true, scanSources: true },
     })
     const existingMap = new Map<string, { id: string; scanSources: string[] }>()
@@ -82,7 +84,7 @@ export async function POST(request: NextRequest) {
       } else {
         const { ticker, symbol: _s, date: _d, signal, ...metrics } = e
         const [symbol, signalDate] = key.split('|')
-        toCreate.push({ userId, symbol, signalDate, scanSources: [scan.name], metrics })
+        toCreate.push({ userId, databaseId: dbId, symbol, signalDate, scanSources: [scan.name], metrics })
       }
     }
 

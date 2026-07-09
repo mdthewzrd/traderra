@@ -115,3 +115,62 @@ export async function secFetchJson<T>(url: string): Promise<T> {
   const response = await secFetchResponse(url, 'application/json');
   return (await response.json()) as T;
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Filing-body fetch helpers.
+// Consolidated here so every parser shares ONE url builder + ONE fallback
+// path (previously filingUrl was copy-pasted into 7 files, and only
+// warrant-notes had the .txt fallback — the others silently parsed a cover
+// page and found nothing for inline-XBRL split filings).
+// ─────────────────────────────────────────────────────────────────────────
+
+/** URL for a filing's primary document on EDGAR. */
+export function filingUrl(cik: string, accessionNo: string, primaryDoc: string | null): string {
+  const stripped = accessionNo.replace(/-/g, '');
+  return `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${stripped}/${primaryDoc ?? ''}`;
+}
+
+/** URL for a filing's complete submission .txt (contains EVERY document in
+ *  the filing — cover, financial statements, exhibits). */
+export function filingTxtUrl(cik: string, accessionNo: string): string {
+  const stripped = accessionNo.replace(/-/g, '');
+  return `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${stripped}/${accessionNo}.txt`;
+}
+
+/** Fetch + parse a filing, falling back to the complete-submission .txt when
+ *  the primary document yields no structured data.
+ *
+ *  Solves the systemic 'missing warrants/dilution data' bug: inline-XBRL
+ *  filers split a 10-K so primaryDoc is a cover page (e.g. CLRO: 4.8KB cover)
+ *  while the warrant notes live in R*.htm. A parser reading only primaryDoc
+ *  sees the cover and finds zero. The .txt always contains every document.
+ *
+ *  `isEmpty` lets each parser define what 'found nothing' means for its domain
+ *  (0 warrants, no offering amount, etc.). */
+export async function fetchAndParseFiling<T>(
+  cik: string,
+  accessionNo: string,
+  primaryDoc: string | null,
+  parse: (text: string) => T,
+  isEmpty: (result: T) => boolean,
+): Promise<T | null> {
+  // 1. Primary document.
+  try {
+    const res = await secFetchResponse(filingUrl(cik, accessionNo, primaryDoc), 'text/html');
+    if (res.ok) {
+      const primary = parse(await res.text());
+      if (!isEmpty(primary)) return primary;
+    }
+  } catch {
+    /* fall through to .txt fallback */
+  }
+
+  // 2. Complete submission .txt — always contains every document in the filing.
+  try {
+    const res = await secFetchResponse(filingTxtUrl(cik, accessionNo), 'text/plain');
+    if (res.ok) return parse(await res.text());
+  } catch {
+    /* give up */
+  }
+  return null;
+}

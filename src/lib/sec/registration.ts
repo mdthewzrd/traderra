@@ -24,15 +24,10 @@
  *   FFAI S-3     → $90,000,000, atm, agent AGP/Maxim
  */
 import { prisma } from '@/lib/prisma';
-import { secFetchResponse } from '@/lib/sec/client';
+import { fetchAndParseFiling } from '@/lib/sec/client';
 
 export const REGISTRATION_FORMS = ['S-3', 'S-3ASR', 'S-3/A', 'F-3', 'F-3/A', 'S-1', 'S-1/A'];
 const REGISTRATION_WINDOW = 30;
-
-function filingUrl(cik: string, accessionNo: string, primaryDoc: string | null): string {
-  const stripped = accessionNo.replace(/-/g, '');
-  return `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${stripped}/${primaryDoc ?? ''}`;
-}
 
 function stripHtml(html: string): string {
   return html
@@ -65,7 +60,11 @@ export interface ParsedRegistration {
 }
 
 export function parseRegistrationHtml(html: string, formType: string): ParsedRegistration {
-  const text = stripHtml(html);
+  // SEC HTML often splits numbers with stray spaces (PDF→HTML artifacts):
+  // '$ 5 0,000,000' instead of '$50,000,000'. Collapse '$ ' → '$' and join
+  // digit-space-digit so amount regexes match. Without this, shelves register
+  // null (the 'cant tell whats available' bug).
+  const text = stripHtml(html).replace(/\$\s+/g, '$').replace(/(\d)\s+(?=\d)/g, '$1');
   // The registered amount lives in the explanatory note / summary (first ~10k chars).
   const cover = text.slice(0, 10000);
   const coverLower = cover.toLowerCase();
@@ -162,18 +161,16 @@ export async function syncRegistrations(cik: string, opts: { force?: boolean } =
         withDetail++;
         continue; // idempotent
       }
-      let html: string;
-      try {
-        const res = await secFetchResponse(filingUrl(cik, f.accessionNo, f.primaryDoc), 'text/html');
-        if (!res.ok) continue;
-        html = await res.text();
-      } catch {
-        continue;
-      }
+      const r = await fetchAndParseFiling(
+        cik,
+        f.accessionNo,
+        f.primaryDoc,
+        (html) => parseRegistrationHtml(html, f.formType),
+        (result) => result.aggregateOffering === null && result.salesChannel === null && result.securitiesTypes.length === 0,
+      );
       parsed++;
-      const r = parseRegistrationHtml(html, f.formType);
       // Nothing extractable (some S-3 are pre-effective amendments with no amount) — skip.
-      if (r.aggregateOffering === null && r.salesChannel === null && r.securitiesTypes.length === 0) continue;
+      if (!r || (r.aggregateOffering === null && r.salesChannel === null && r.securitiesTypes.length === 0)) continue;
       await prisma.dilutionFiling.update({
         where: { accessionNo: f.accessionNo },
         data: {

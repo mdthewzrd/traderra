@@ -142,6 +142,8 @@ export function TopBar() {
       </div>
       <button style={tb} title="Next timeframe (→)" onClick={() => cycleTab(1)}>▶</button>
 
+      <SavedChartsStrip />
+
       <div style={{ flex: 1 }} />
 
       <TemplateDropdown />
@@ -200,21 +202,11 @@ function TemplateDropdown() {
   }, [open])
 
   const handleSave = () => {
-    const { saveTemplate } = require('@/lib/charts/templates')
-    const { useToolStore } = require('@/stores/charts/toolStore')
     const name = prompt('Template name:')
     if (!name) return
-    const tools = useToolStore.getState().tools
-    const chartStyle = useUIStore.getState().chartStyle
-    const theme = useUIStore.getState().theme
-    const inds = require('@/stores/charts/indicatorStore').useIndicatorStore.getState().inds
-    // capture current view so saved templates preserve symbol + top-panel timeframe
-    const { useChartStore } = require('@/stores/charts/chartStore')
-    const symbol = useChartStore.getState().symbol
-    const ap = useUIStore.getState().activePanel
-    const tf = useChartStore.getState().panels[ap]?.tf || ''
-    saveTemplate(name, tools, chartStyle, theme, inds, symbol, tf)
+    const { saveCurrentAsTemplate } = require('@/lib/charts/applyTemplate')
     const { loadTemplatesFromStorage } = require('@/lib/charts/templates')
+    saveCurrentAsTemplate(name)
     const updated = loadTemplatesFromStorage()
     setTemplates(updated)
     // Persist to DB (global) — single source of truth shared by every page.
@@ -229,66 +221,9 @@ function TemplateDropdown() {
 
   const handleApply = (idx: number) => {
     if (!templates[idx]) return
-    const tpl = templates[idx]
-    if (tpl.inds) {
-      const { useIndicatorStore } = require('@/stores/charts/indicatorStore')
-      useIndicatorStore.getState().setInds(tpl.inds)
-    }
-    if (tpl.chartStyle) {
-      useUIStore.getState().setChartStyle(tpl.chartStyle)
-    }
-    // Symbol + timeframe: applied to the top panel (index 0). Optional — templates
-    // without these fields leave the current symbol/TF untouched.
-    if (tpl.symbol) {
-      const { useChartStore } = require('@/stores/charts/chartStore')
-      useChartStore.getState().setSymbol(tpl.symbol)
-    }
-    if (tpl.tf) {
-      const { useChartStore } = require('@/stores/charts/chartStore')
-      const ap = useUIStore.getState().activePanel
-      useChartStore.getState().setPanelTf(ap, tpl.tf)
-    }
-    if (tpl.tools) {
-      const { useToolStore } = require('@/stores/charts/toolStore')
-      const { IND_CATALOG } = require('@/stores/charts/toolStore')
-      // Build the template's DESIRED state per indKey, hydrating params/colors from catalog
-      // defaults (same as before) so a template from an older config still loads.
-      const tplByKey: Record<string, any> = {}
-      for (const t of tpl.tools) {
-        const cat = IND_CATALOG[t.indKey]
-        const params: Record<string, string | number> = {}
-        cat?.params?.forEach((p: any) => { params[p.key] = t.params?.[p.key] ?? p.def })
-        const colors: Record<string, string> = {}
-        cat?.colors?.forEach((c: any) => { colors[c.key] = t.colors?.[c.key] ?? c.def })
-        tplByKey[t.indKey] = { on: t.on !== false, params, colors }
-      }
-      const ts = useToolStore.getState()
-      // MERGE (not replace): a template is a VISIBILITY/LAYOUT preset, NOT a destructive
-      // list swap. Every existing tool stays in the Vault — tools in the template take the
-      // template's on/params/colors; tools NOT in the template are turned OFF (hidden) but
-      // are KEPT. Template tools missing from the Vault are added (hydrated). This is why
-      // the Vault always shows ALL tools regardless of the active template.
-      const existingKeys = new Set(ts.tools.map((t: any) => t.indKey))
-      const merged = ts.tools.map((t: any) => {
-        const want = tplByKey[t.indKey]
-        if (want) return { ...t, on: want.on, params: { ...t.params, ...want.params }, colors: { ...t.colors, ...want.colors } }
-        return { ...t, on: false }            // not in template → hidden, but KEPT in the Vault
-      })
-      for (const key of Object.keys(tplByKey)) {
-        if (!existingKeys.has(key)) {           // template tool missing from Vault → add it
-          const want = tplByKey[key]
-          merged.push({
-            id: 't' + Date.now() + Math.random().toString(36).slice(2, 6),
-            indKey: key, name: IND_CATALOG[key]?.label || key,
-            on: want.on, params: want.params, colors: want.colors, hot: false,
-            legacyKeys: IND_CATALOG[key]?.legacyKeys || [key],
-          })
-        }
-      }
-      ts.setTools(merged)
-    }
+    const { applyTemplate } = require('@/lib/charts/applyTemplate')
+    applyTemplate(templates[idx])
     setOpen(false)
-    useUIStore.getState().setActiveTemplateName(tpl.name)
   }
 
   const handleDelete = (idx: number) => {
@@ -331,6 +266,62 @@ function TemplateDropdown() {
         <hr style={{ border: 'none', borderTop: '1px solid #2a3050', margin: '2px 0' }} />
         <div className="tool-btn" style={{ color: GOLD, cursor: 'pointer' }} onClick={handleSave}>💾 Save Current</div>
       </div>
+    </div>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Saved Charts Strip — inline hot buttons (separate from the dropdown).
+   Sits LEFT in the top bar. One click = load a full chart snapshot
+   (symbol + timeframe + indicators + params). Saves the current chart
+   as a new hot button via 💾. Shares the same template store as the dropdown.
+   ═══════════════════════════════════════════════════════════════ */
+function SavedChartsStrip() {
+  const [charts, setCharts] = useState<any[]>([])
+
+  useEffect(() => {
+    const { loadSavedCharts } = require('@/lib/charts/savedCharts')
+    setCharts(loadSavedCharts())
+  }, [])
+
+  const handleApply = (idx: number) => {
+    if (!charts[idx]) return
+    const { applyTemplate } = require('@/lib/charts/applyTemplate')
+    applyTemplate(charts[idx])
+  }
+
+  const handleSave = () => {
+    const name = prompt('Save current chart as — name:')
+    if (!name) return
+    const { saveCurrentAsSavedChart, loadSavedCharts } = require('@/lib/charts/savedCharts')
+    saveCurrentAsSavedChart(name)
+    setCharts(loadSavedCharts())
+  }
+
+  const handleDelete = (idx: number) => {
+    const { deleteSavedChart, loadSavedCharts } = require('@/lib/charts/savedCharts')
+    deleteSavedChart(idx)
+    setCharts(loadSavedCharts())
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      {charts.map((c, i) => (
+        <div key={c.id || i} style={{ display: 'flex', alignItems: 'center' }}>
+          <button
+            className="tool-btn"
+            style={{ ...tb, padding: '0 7px', color: '#fbbf24' }}
+            onClick={() => handleApply(i)}
+            title={`Load "${c.name}" (${c.symbol || '?'} ${c.tf || '?'})`}
+          >★ {c.name}</button>
+          <button
+            style={{ background: 'none', border: 'none', color: '#ff3d57', cursor: 'pointer', fontSize: 9, padding: '0 1px' }}
+            onClick={() => handleDelete(i)}
+            title={`Delete "${c.name}"`}
+          >✕</button>
+        </div>
+      ))}
+      <button className="tool-btn" style={{ ...tb, color: GOLD, padding: '0 6px' }} onClick={handleSave} title="Save current chart as a snapshot (symbol + timeframe + indicators)">💾</button>
     </div>
   )
 }

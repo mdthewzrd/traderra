@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
 
 /**
  * POST /api/scans/push — Push scan results from Renata agent to connected clients.
@@ -41,6 +42,23 @@ export async function POST(req: NextRequest) {
     }
 
     pushedScans.push(scan)
+
+    // Persist live full-state snapshots to DB so names survive server restarts
+    // and page reloads through end of day (fulfils "keep till tomorrow").
+    // Only for live re-broadcasts (meta.fullState + spec); historical/agent
+    // pushes are unaffected. Upsert one row per strategy, type='live'.
+    if (scan.meta?.fullState && scan.spec) {
+      try {
+        const strat = scan.spec
+        const dateRange = JSON.stringify({ from: new Date(scan.createdAt).toISOString().slice(0,10), to: new Date(scan.createdAt).toISOString().slice(0,10) })
+        const existing = await prisma.savedScan.findFirst({ where: { strategy: strat, type: 'live' }, select: { id: true } })
+        if (existing) {
+          await prisma.savedScan.update({ where: { id: existing.id }, data: { name: scan.name, results: JSON.stringify(scan.results), resultCount: scan.results.length, dateRange } })
+        } else {
+          await prisma.savedScan.create({ data: { name: scan.name, type: 'live', strategy: strat, results: JSON.stringify(scan.results), resultCount: scan.results.length, dateRange } })
+        }
+      } catch {}
+    }
 
     // Broadcast to all SSE listeners
     listeners.forEach(fn => fn(scan))

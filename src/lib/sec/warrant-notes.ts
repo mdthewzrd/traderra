@@ -22,7 +22,7 @@
  *   "N% convertible notes due YEAR ... conversion price of $Y"
  */
 import { prisma } from '@/lib/prisma';
-import { secFetchResponse } from '@/lib/sec/client';
+import { fetchAndParseFiling } from '@/lib/sec/client';
 
 const SCALE: Record<string, number> = { million: 1e6, billion: 1e9, thousand: 1e3 };
 function scaleShares(raw: string): number | null {
@@ -52,11 +52,6 @@ function stripHtml(html: string): string {
     .replace(/&#8217;|&#8220;|&#8221;|&ldquo;|&rdquo;|&rsquo;/gi, "'")
     .replace(/\s+/g, ' ')
     .trim();
-}
-
-function filingUrl(cik: string, accessionNo: string, primaryDoc: string | null): string {
-  const stripped = accessionNo.replace(/-/g, '');
-  return `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${stripped}/${primaryDoc ?? ''}`;
 }
 
 // Split stripped text into clause-ish chunks (sentence-ish). Warrant/convertible
@@ -106,6 +101,42 @@ export interface ParsedWarrantNotes {
   parsedAt: string;
 }
 
+/** Extract the "Schedule of outstanding warrants" summary table — the
+ *  authoritative per-tranche list (type, shares, strike, expiry). This table
+ *  appears in most 10-Ks with warrants and is FAR more complete than prose
+ *  clause extraction, which misses expiry/exercisable split across sentences.
+ *  Returns null when no schedule table is found (caller falls back to prose). */
+function extractWarrantScheduleTable(text: string): WarrantNoteRow[] | null {
+  const headerIdx = text.search(/(schedule\s+of\s+(?:the\s+)?(?:company'?s\s+)?outstanding\s+warrants|outstanding\s+warrants\s+(?:as\s+of|is\s+as\s+follows))/i);
+  if (headerIdx < 0) return null;
+  const block = text.slice(headerIdx, headerIdx + 3000);
+  // Row: "<Type> Warrants <shares> $<price> <issuance M/D/Y> <expiry M/D/Y>"
+  const re = /([A-Za-z][A-Za-z ()/.\-]{1,40}?Warrants)\s+([\d,]+(?:\.\d+)?)\s+\$\s*([\d,.]+)\s+(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{1,2}\/\d{1,2}\/\d{2,4})/g;
+  const rows: WarrantNoteRow[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(block))) {
+    const type = m[1].trim().replace(/^(?:.*(?:Expiration Date|Issuance Date|Exercise Price)\s+)/i, '');
+    const shares = parseInt(m[2].replace(/,/g, ''), 10);
+    const price = parseFloat(m[3].replace(/,/g, ''));
+    if (isNaN(shares) || shares < 50) continue;
+    // Enrich exercisable: scan ALL occurrences of this series (the table row
+    // itself has no exercisable clause; the discussion appears in prose elsewhere).
+    let exercisableDate: string | null = null;
+    let searchFrom = 0;
+    while (exercisableDate == null) {
+      const sIdx = text.indexOf(type, searchFrom);
+      if (sIdx < 0) break;
+      const ctx = text.slice(Math.max(0, sIdx - 150), sIdx + 250);
+      const ed = ctx.match(/exercisable(?:\s+(?:commencing|beginning|on|until))?\s+(?:on\s+)?([A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})/i);
+      if (ed) exercisableDate = ed[1];
+      else if (/exercisable\s+(?:immediately|upon\s+issuance|as\s+of\s+issuance)|immediately\s+exercisable/i.test(ctx)) exercisableDate = 'immediately';
+      searchFrom = sIdx + 1;
+    }
+    rows.push({ description: `${type} — ${shares.toLocaleString()} sh @ $${price}, issued ${m[4]}, expires ${m[5]}`, shares, exercisePrice: price, expiry: m[5], exercisableDate });
+  }
+  return rows.length ? rows : null;
+}
+
 export function parseWarrantNotesHtml(html: string, accessionNo: string): ParsedWarrantNotes {
   const text = stripHtml(html);
   const chunks = clauses(text);
@@ -125,8 +156,15 @@ export function parseWarrantNotesHtml(html: string, accessionNo: string): Parsed
       let expiry: string | null = null;
       let exercisableDate: string | null = null;
 
-      const sh = c.match(/(?:purchase|represent|for|of|issued)\s+([\d,.]+\s*(?:million|billion|thousand)?)\s+(?:shares?|warrants?)/i);
-      if (sh) shares = scaleShares(sh[1]);
+      // Flexible share-count extraction: a warrant clause keyword, then the
+      // number (possibly with 'up to' / 'an aggregate of' filler on either
+      // side), then 'shares'. Lookbehind rejects a $-prefixed price; the
+      // >=100 filter drops small false positives (e.g. 'five years').
+      const sh = c.match(/\b(?:purchase|aggregate|exercisable|represent|issued)\b[\s\S]{0,60}?(?<![\d.$])([\d,]+(?:\.\d+)?)\s*(million|billion|thousand)?[\s\S]{0,30}?\bshares?\b/i);
+      if (sh) {
+        const v = scaleShares(sh[1]);
+        if (v != null && v >= 100) shares = v;
+      }
       const ep = c.match(/exercise\s+price\s+of\s+(?:\$\s*)?([\d,.]+)/i)
         ?? c.match(/(?:at|of)\s+(?:a\s+)?(?:price\s+of\s+)?\$\s*([\d,.]+)\s+per\s+share/i)
         ?? c.match(/\$\s*([\d,.]+)\s+per\s+share[^.]{0,20}?exercis/i)
@@ -136,6 +174,7 @@ export function parseWarrantNotesHtml(html: string, accessionNo: string): Parsed
       if (ex) expiry = ex[1];
       const ed = c.match(/exercisable(?:\s+(?:commencing|beginning|on|until))?\s+(?:on\s+)?([A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})/i);
       if (ed) exercisableDate = ed[1];
+      else if (/exercisable\s+(?:immediately|upon\s+issuance|as\s+of\s+issuance)/i.test(c)) exercisableDate = 'immediately';
 
       // Only keep clauses with at least one structured fact (avoid prose-only).
       if (shares != null || exercisePrice != null || expiry != null || exercisableDate != null) {
@@ -201,10 +240,15 @@ export function parseWarrantNotesHtml(html: string, accessionNo: string): Parsed
     });
   };
 
+  // Prefer the warrant SCHEDULE TABLE (complete: shares+strike+expiry per
+  // tranche) over prose clauses when present. Prose misses expiry because the
+  // sentence-splitter can't join detail spread across clauses.
+  const tableWarrants = extractWarrantScheduleTable(text);
+
   return {
     warrantNotesParsed: true,
-    warrants: dedup(warrants).slice(0, 6),
-    convertibles: dedup(convertibles).slice(0, 6),
+    warrants: dedup(tableWarrants ?? warrants).slice(0, 12),
+    convertibles: dedup(convertibles).slice(0, 12),
     equityLines: dedup(equityLines).slice(0, 6),
     goingConcern,
     source: `10-K ${accessionNo}`,
@@ -247,15 +291,14 @@ export async function syncWarrantNotes(
         withDetail += existing.warrantNotes.warrants.length + existing.warrantNotes.convertibles.length;
         continue;
       }
-      let html: string;
-      try {
-        const res = await secFetchResponse(filingUrl(cik, filing.accessionNo, filing.primaryDoc), 'text/html');
-        if (!res.ok) continue;
-        html = await res.text();
-      } catch {
-        continue;
-      }
-      const notes = parseWarrantNotesHtml(html, filing.accessionNo);
+      const notes = await fetchAndParseFiling(
+        cik,
+        filing.accessionNo,
+        filing.primaryDoc,
+        (html) => parseWarrantNotesHtml(html, filing.accessionNo),
+        (n) => n.warrants.length === 0 && n.convertibles.length === 0,
+      );
+      if (!notes) continue; // primary + .txt both failed — leave unmarked, retry later
       const detail = notes.warrants.length + notes.convertibles.length;
       await prisma.dilutionFiling.update({
         where: { accessionNo: filing.accessionNo },
@@ -286,15 +329,46 @@ export async function getWarrantNotes(cik: string): Promise<ParsedWarrantNotes |
   const seenE = new Map<string, EquityLineNoteRow>();
   let source = '';
   let gc: GoingConcern = { present: false, text: null };
+  // Detect an authoritative schedule TABLE (>=3 warrants carry expiry) in the
+  // newest filing. When present, treat it as the complete warrant list and
+  // ignore prose-only restatements from older 10-Qs — those restate the same
+  // tranches without expiry, creating noise duplicates (LUCY: 22 rows → 11).
+  let authoritativeWarrantSet: WarrantNoteRow[] | null = null;
+  for (const f of filings) {
+    const n0 = (f.rawPayload ?? null) as { warrantNotes?: ParsedWarrantNotes } | null;
+    const wn0 = n0?.warrantNotes;
+    if (wn0 && (wn0.warrants ?? []).filter((w) => w.expiry).length >= 3) {
+      authoritativeWarrantSet = wn0.warrants ?? [];
+      break;
+    }
+  }
   for (const f of filings) {
     const n = (f.rawPayload ?? null) as { warrantNotes?: ParsedWarrantNotes } | null;
     const wn = n?.warrantNotes;
     if (!wn) continue;
     if (!source) source = wn.source;
     if (wn.goingConcern?.present) gc = wn.goingConcern;
+    // When an authoritative table exists, only ingest warrants FROM that filing;
+    // skip prose warrants from other filings (restatements without expiry).
+    if (authoritativeWarrantSet && wn.warrants !== authoritativeWarrantSet) {
+      // still fall through to convertibles/equityLines below
+    } else {
     for (const w of wn.warrants ?? []) {
-      const k = `${w.shares}|${w.exercisePrice}`;
-      if (!seenW.has(k)) seenW.set(k, w);
+      // Dedup by shares alone (the same tranche is restated across filings
+      // and within a clause the share price often bleeds in as a false strike —
+      // e.g. CLRO '437,500 shares at $4.00 ... warrant ... at $5.00'. Keying on
+      // shares+strike would keep both. Key on shares; on collision keep the
+      // HIGHER strike (warrant exercise prices exceed the concurrent share price,
+      // so max filters out the share-price bleed). null strike = lowest.
+      const k = `${w.shares ?? 'x'}`;
+      const cur = seenW.get(k);
+      if (!cur) seenW.set(k, w);
+      else {
+        const a = w.exercisePrice ?? -Infinity;
+        const b = cur.exercisePrice ?? -Infinity;
+      if (a > b || (a === b && (cur.expiry == null && w.expiry != null))) seenW.set(k, w);
+      }
+    }
     }
     for (const c of wn.convertibles ?? []) {
       const k = `${c.principal}|${c.conversionPrice}`;

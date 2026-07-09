@@ -21,7 +21,7 @@
  *    promissory-note/convertible facility, $15M max, 2029 maturity.
  */
 import { prisma } from '@/lib/prisma';
-import { secFetchResponse } from '@/lib/sec/client';
+import { fetchAndParseFiling } from '@/lib/sec/client';
 
 const SCALE: Record<string, number> = { million: 1e6, billion: 1e9, thousand: 1e3, trillion: 1e12 };
 function scaleMoney(raw: string): number | null {
@@ -48,11 +48,6 @@ function stripHtml(html: string): string {
     .replace(/&#\d+;/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-}
-
-function filingUrl(cik: string, accessionNo: string, primaryDoc: string | null): string {
-  const stripped = accessionNo.replace(/-/g, '');
-  return `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${stripped}/${primaryDoc ?? ''}`;
 }
 
 export type ProgramType =
@@ -82,10 +77,15 @@ export interface ProgramDetail {
 function detectType(sect: string): ProgramType | null {
   const s = sect.toLowerCase();
   if (/(at[\s-]?the[\s-]?market|sales\s+agreement|equity\s+distribution\s+agreement)/.test(s)) return 'atm';
-  if (/(standby\s+equity|sepa|equity\s+(?:purchase|line)|share\s+purchase\s+agreement|purchase\s+facility|drawdown)/.test(s)) return 'equity-line';
+  // Equity line / SEPA: require a STANDING-FACILITY signal (continuous draw
+  // mechanism). A one-time "securities/share purchase agreement" with a fixed
+  // price + single closing is a PIPE/warrant-offering, NOT a standing line.
+  // This was mis-tagging one-time PIPEs as equity-lines (RKTO Dec-2022 SPA).
+  if (/(standby\s+equity|sepa|equity\s+line\s+of\s+credit|equity\s+credit\s+line|purchase\s+facility|drawdown|draw\s+down)/.test(s)) return 'equity-line';
+  if (/equity\s+purchase\s+agreement/.test(s) && /(from\s+time\s+to\s+time|drawdown|draw\s+down|commitment|periodic)/.test(s)) return 'equity-line';
   if (/convertible\s+(?:note|debenture|security)|conversion\s+price/.test(s)) return 'convertible';
   if (/promissory\s+note|secured\s+note/.test(s)) return 'promissory-note';
-  if (/(pre-?funded\s+warrant|warrant\s+to\s+purchase|issuance\s+of\s+warrants)/.test(s)) return 'warrant-offering';
+  if (/(pre-?funded\s+warrant|warrant\s+to\s+purchase|issuance\s+of\s+warrants|accompanying\s+warrants)/.test(s)) return 'warrant-offering';
   return null; // generic 1.01 we don't model — skip
 }
 
@@ -99,9 +99,18 @@ export function parse8kMaterialAgreement(html: string, accessionNo: string, fili
     text.match(/Item\s*1\.01[\s\S]{0,80}?(?:Entry\s+into\s+a\s+Material|Material\s+Definitive)([\s\S]{0,6000}?)(?=Item\s*\d)/i) ??
     text.match(/Item\s*2\.03[\s\S]{0,80}?(?:Creation[\s\S]{0,40}?Direct)([\s\S]{0,6000}?)(?=Item\s*\d)/i) ??
     text.match(/Item\s*3\.0[23][\s\S]{0,80}?(?:Unregistered|Material\s+Modif)([\s\S]{0,6000}?)(?=Item\s*\d)/i);
-  if (!sectMatch) return null;
-  const sect = sectMatch[0].trim();
-  return parseClause(sect, accessionNo, filingDate, items);
+  if (sectMatch) {
+    return parseClause(sectMatch[0].trim(), accessionNo, filingDate, items);
+  }
+  // Fallback: Item 8.01 (Other Events). ATM cap-increase amendments and Sales
+  // Agreement announcements are frequently reported under 8.01, not 1.01.
+  // Content gate: only extract when ATM/Sales Agreement keywords are present
+  // (most 8.01 8-Ks are earnings/PR noise — skip them).
+  if (items.includes('8.01') && /at[\s-]?the[\s-]?market|sales\s+agreement|equity\s+distribution\s+agreement/i.test(text)) {
+    const atmSect = text.match(/Item\s*8\.01[\s\S]{0,80}?(?:Other\s+Events)([\s\S]{0,6000}?)(?=Item\s*\d)/i);
+    if (atmSect) return parseClause(atmSect[0].trim(), accessionNo, filingDate, items);
+  }
+  return null;
 }
 
 /** Parse a single facility clause (already-extracted text window) into a
@@ -223,11 +232,12 @@ export async function syncMaterialAgreements(cik: string, opts: { force?: boolea
       where: {
         cik,
         formType: '8-K',
-        items: { hasSome: ['1.01', '2.03', '3.02', '3.03'] },
+        // 8.01 included: ATM amendments often reported under Other Events.
+        items: { hasSome: ['1.01', '2.03', '3.02', '3.03', '8.01'] },
       },
       select: { accessionNo: true, filingDate: true, primaryDoc: true, items: true, rawPayload: true },
       orderBy: { filingDate: 'desc' },
-      take: 20, // recent 20 — programs refresh, old ones don't matter
+      take: 30, // recent 30 — programs refresh + ATM amendments are frequent
     });
     let parsed = 0;
     let withDetail = 0;
@@ -235,15 +245,13 @@ export async function syncMaterialAgreements(cik: string, opts: { force?: boolea
       const existing = (f.rawPayload ?? null) as { programDetail?: ProgramDetail; programParsed?: boolean } | null;
       if (existing?.programParsed && !opts.force) continue; // idempotent
       if (!f.primaryDoc) continue;
-      let html: string;
-      try {
-        const res = await secFetchResponse(filingUrl(cik, f.accessionNo, f.primaryDoc), 'text/html');
-        if (!res.ok) continue;
-        html = await res.text();
-      } catch {
-        continue;
-      }
-      const detail = parse8kMaterialAgreement(html, f.accessionNo, f.filingDate.toISOString().slice(0, 10), f.items ?? []);
+      const detail = await fetchAndParseFiling(
+        cik,
+        f.accessionNo,
+        f.primaryDoc,
+        (html) => parse8kMaterialAgreement(html, f.accessionNo, f.filingDate.toISOString().slice(0, 10), f.items ?? []),
+        (d) => !d,
+      );
       parsed++;
       // Mark parsed regardless (avoid re-fetching unmodeled agreements); store detail if found.
       await prisma.dilutionFiling.update({

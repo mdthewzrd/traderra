@@ -155,229 +155,371 @@ function mechanicsSummary(snap: any): { label: string; value: string; tone: stri
 // converts / ATM / shelf / S-1. Pulls from the richest available snapshot
 // sources per type (parsed 8-K agreements, 10-K notes, registrations, filings).
 // Detail-led: each row names the mechanism + where it came from, no scores.
-function ProgramTabs({ snapshot }: { snapshot: any }) {
-  const [view, setView] = useState<'sum' | 'det'>('sum');
-  const [tab, setTab] = useState(0);
+// Nexus-parity dilution overview: one spacious <table> per instrument type,
+// full page width, no scroll box. Replaces the old cramped tabbed ProgramTabs.
+function DilutionOverview({ snapshot }: { snapshot: any }) {
   const M = 1e6;
   const px = snapshot?.inTheMoney?.price ?? null;
-  // Most-recent equity-line draw date — 'last time used' for SEPA/ATM.
-  const draws = (snapshot?.draws ?? []) as { date?: string; facilityType?: string; amount?: number | null }[];
-  const lastUsed = (() => {
-    const elDraws = draws.filter((d) => d.facilityType === 'equity-line' && d.date).map((d) => d.date!);
-    return elDraws.length ? elDraws.sort().reverse()[0] : null;
-  })();
-  // Shares available for a $ capacity at the current price. Approximate — ATM/
-  // equity-line ceilings are in $; dividing by price gives share dilution.
   const sharesFor = (maxDollars: number | null | undefined) =>
     px != null && maxDollars != null && maxDollars > 0 ? Math.round(maxDollars / px) : null;
   const eqLines = [
-    ...((snapshot?.warrantNotes?.equityLines ?? []).map((el: any, i: number) => ({ key: 'el' + i, src: el.description, date: '', who: el.counterparty, max: el.maxCommitment, extra: [el.pricing, el.ownershipCap != null ? el.ownershipCap + '% cap' : null].filter(Boolean).join(' · ') }))),
-    ...((snapshot?.programs ?? []).filter((p: any) => p.programType === 'equity-line').map((p: any, i: number) => ({ key: 'pr' + i, src: p.description, date: p.filingDate, who: p.counterparty, max: p.maxCommitment, extra: [p.pricing, p.ownershipCap != null ? p.ownershipCap + '% cap' : null].filter(Boolean).join(' · ') }))),
+    ...((snapshot?.warrantNotes?.equityLines ?? []).map((el: any, i: number) => ({ key: 'el' + i, date: '', who: el.counterparty, max: el.maxCommitment, extra: [el.pricing, el.ownershipCap != null ? el.ownershipCap + '% cap' : null].filter(Boolean).join(' · ') }))),
+    ...((snapshot?.programs ?? []).filter((p: any) => p.programType === 'equity-line').map((p: any, i: number) => ({ key: 'pr' + i, date: p.filingDate, who: p.counterparty, max: p.maxCommitment, extra: [p.pricing, p.ownershipCap != null ? p.ownershipCap + '% cap' : null].filter(Boolean).join(' · ') }))),
   ];
   const warrants = snapshot?.warrants ?? [];
   const converts = [
-    ...((snapshot?.programs ?? []).filter((p: any) => p.programType === 'convertible').map((p: any, i: number) => ({ key: 'cv' + i, src: p.description, date: p.filingDate, who: p.counterparty, max: p.maxCommitment, extra: [p.maturity ? 'matures ' + p.maturity : null, p.pricing].filter(Boolean).join(' · ') }))),
+    ...((snapshot?.programs ?? []).filter((p: any) => p.programType === 'convertible').map((p: any, i: number) => ({ key: 'cv' + i, date: p.filingDate, who: p.counterparty, max: p.maxCommitment, extra: [p.maturity ? 'matures ' + p.maturity : null, p.pricing].filter(Boolean).join(' · ') }))),
   ];
   const overhangConv = snapshot?.overhang?.convertible;
-  if (overhangConv) converts.push({ key: 'ovc', src: 'XBRL convertible overhang', date: overhangConv.period, who: null, max: null, extra: overhangConv.shares + ' shares' + (overhangConv.strike != null ? ' · $' + overhangConv.strike : '') });
+  if (overhangConv) converts.push({ key: 'ovc', date: overhangConv.period, who: 'XBRL overhang', max: null, extra: overhangConv.shares + ' sh' + (overhangConv.strike != null ? ' @ $' + overhangConv.strike : '') });
   const atm = [
-    ...((snapshot?.programs ?? []).filter((p: any) => p.programType === 'atm').map((p: any, i: number) => ({ key: 'at' + i, src: p.description, date: p.filingDate, who: p.counterparty, max: p.maxCommitment, extra: [p.pricing].filter(Boolean).join(' · ') }))),
-    ...((snapshot?.registrations ?? []).filter((r: any) => r.salesChannel === 'atm').map((r: any, i: number) => ({ key: 'ra' + i, src: (r.shelfType === 'automatic-shelf' ? 'S-3ASR' : r.formType) + ' ATM registration', date: r.filingDate, who: r.agent, max: r.aggregateOffering, extra: null }))),
+    ...((snapshot?.programs ?? []).filter((p: any) => p.programType === 'atm').map((p: any, i: number) => ({ key: 'at' + i, date: p.filingDate, who: p.counterparty, max: p.maxCommitment, extra: p.pricing }))),
+    ...((snapshot?.registrations ?? []).filter((r: any) => r.salesChannel === 'atm').map((r: any, i: number) => ({ key: 'ra' + i, date: r.filingDate, who: r.agent, max: r.aggregateOffering, extra: r.shelfType === 'automatic-shelf' ? 'S-3ASR' : r.formType }))),
   ];
   const shelf = (snapshot?.registrations ?? []).filter((r: any) => r.aggregateOffering != null);
   const s1 = (snapshot?.filings ?? []).filter((f: any) => /^S-1/.test(f.formType)).slice(0, 12);
+
+  // ── DILUTION CAPACITY ROLLUP ──────────────────────────────────────────────
+  // The at-a-glance answer to "how much can they still dilute?" Each bucket is
+  // a distinct $ capacity (no double-count: shelves = S-3/F-3 registrations,
+  // equity lines = 8-K SEPA programs). Draws = actual cash raised under any
+  // facility. Warrants/converts are share dilution (not $), shown separately.
+  const sr = snapshot?.shelfRemaining ?? null;
+  const eqMax = eqLines.reduce((a: number, r) => a + (Number(r.max) || 0), 0);
+  const eqDrawn = (snapshot?.draws ?? []).filter((d: any) => d.facilityType === 'equity-line').reduce((a: number, d: any) => a + (d.amount ?? 0), 0);
+  const eqRemaining = eqMax > 0 ? Math.max(0, eqMax - eqDrawn) : 0;
+  const totalDraws = (snapshot?.draws ?? []).reduce((a: number, d: any) => a + (d.amount ?? 0), 0);
+  const warrantShares = warrants.reduce((a: number, w: any) => a + (w.shares ?? 0), 0);
+  const warrantItmShares = warrants.filter((w: any) => w.strike != null && w.strike > 0 && px != null && px >= w.strike).reduce((a: number, w: any) => a + (w.shares ?? 0), 0);
+  const convShares = snapshot?.overhang?.convertible?.shares ?? 0;
+  // $ value of remaining capacity (shelf + equity line), in share terms.
+  const capacityRemaining = (sr?.remaining ?? 0) + eqRemaining;
+  const capacityRemainingShares = sharesFor(capacityRemaining);
   // ITM = price over strike (exercise likely, dilution imminent). NEAR =
   // within 20% below strike (watch). OTM (further below) is unremarkable.
   const stt = (strike: number | null) => {
-    if (strike == null || px == null) return null;
+    if (strike == null || strike === 0 || px == null) return null;
     if (px >= strike) return { label: 'ITM', border: 'border-l-2 border-red-500/70 pl-2', txt: 'text-red-300', bg: 'bg-red-500/15' };
     if (px >= strike * 0.8) return { label: 'NEAR', border: 'border-l-2 border-amber-500/70 pl-2', txt: 'text-amber-300', bg: 'bg-amber-500/15' };
     return null;
   };
-  // Per-type body renderers — shared by Sum (all expanded) and Det (one tab).
-  const EqBody = () => eqLines.length ? (
-    <div className="divide-y divide-zinc-800/60">
-      {eqLines.map((r) => {
-        const st = statusFor(r.date);
-        return (
-          <div key={r.key} className="py-1.5">
-            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs">
-              {r.who && <span className="font-medium text-zinc-200">{r.who}</span>}
-              {r.max != null && <span className="text-zinc-400">· ${(Number(r.max) / M).toFixed(0)}M</span>}
-              {st && <span className={`rounded px-1 py-px text-[9px] font-semibold uppercase ${st.cls}`}>{st.label}</span>}
-              {!st && <span className="text-[10px] text-zinc-600">no date</span>}
-              {st && <span className="text-zinc-600">{r.date} · {st.rel}</span>}
-            </div>
-            {r.extra && <div className="text-[11px] text-zinc-500">{r.extra}</div>}
-            {lastUsed && <div className="text-[10px] text-emerald-500/70">last used {lastUsed}</div>}
-            <div className="mt-0.5 line-clamp-2 text-[10px] italic text-zinc-600">{r.src.slice(0, 140)}{r.src.length > 140 ? '…' : ''}</div>
-          </div>
-        );
-      })}
-      <div className="py-1.5 text-[10px] leading-snug text-zinc-600">SEPA / equity-line usage is disclosed only as a 10-Q aggregate — per-tap dates aren't available, so the filing agreement's recency is the best 'idle vs active' proxy.</div>
-    </div>
-  ) : null;
-  const WarrantBody = () => warrants.length ? (
-    <div className="divide-y divide-zinc-800/60">
-      {px != null && <div className="pb-1.5 text-[10px] text-zinc-500">Current price ${px}. <span className="text-red-400">Red</span> = in-the-money (exercise likely); <span className="text-amber-400">amber</span> = within 20% of strike; <span className="text-fuchsia-400">pre-funded</span> = already paid, exercise near-certain.</div>}
-      {warrants.map((w: any, i: number) => {
-        const st = stt(w.strike);
-        const stat = w.status && w.status !== 'active';
-        const statCls = w.status === 'pre-funded' ? 'bg-fuchsia-500/15 text-fuchsia-300' : w.status === 'expired' ? 'bg-zinc-700 text-zinc-500 line-through' : 'bg-zinc-700 text-zinc-400';
-        return (
-          <div key={i} className={`py-1.5 ${st ? st.border : ''}`}>
-            <div className="flex flex-wrap items-baseline gap-x-2 text-xs">
-              <span className={`font-medium ${st ? st.txt : 'text-zinc-200'}`}>{w.shares != null ? (w.shares / M).toFixed(2) + 'M sh' : 'shares n/a'}</span>
-              {w.strike != null && <span className={st ? st.txt : 'text-zinc-400'}>@ ${w.strike}</span>}
-              {st && <span className={`rounded px-1 text-[9px] font-semibold uppercase ${st.bg} ${st.txt}`} title="Strike vs current price">{st.label}</span>}
-              {stat && <span className={`rounded px-1 text-[9px] font-semibold uppercase ${statCls}`} title="Warrant lifecycle status">{w.status}</span>}
-              {w.expiry && <span className="text-zinc-600">exp {w.expiry}</span>}
-              <span className="ml-auto rounded bg-zinc-800 px-1 text-[9px] text-zinc-500">{w.source}</span>
-            </div>
-            <div className="mt-0.5 line-clamp-2 text-[10px] italic text-zinc-600">{w.description.slice(0, 140)}</div>
-          </div>
-        );
-      })}
-    </div>
-  ) : null;
-  const ShelfBody = () => shelf.length ? (
-    <div className="divide-y divide-zinc-800/60">{shelf.map((r: any) => {
-      // Baby shelf = non-WKSI company filing a standard S-3 (not S-3ASR).
-      // WKSI = worldwide public float ≥ $700M. S-3ASR is the automatic-shelf
-      // form (definitively WKSI). A plain S-3 by a small company is a baby
-      // shelf: capped at 1/3 of public float in primary offerings / 12mo.
-      const px2 = snapshot?.inTheMoney?.price ?? null;
-      const floatSharesVal = snapshot?.publicFloat?.value
-        ?? (snapshot?.computedFloat?.shares != null && px2 != null ? snapshot.computedFloat.shares * px2 : null);
-      const isWksi = floatSharesVal != null && floatSharesVal >= 700e6;
-      const isBaby = /^S-3$/.test(r.formType) && !isWksi;
-      const sh = sharesFor(r.aggregateOffering);
-      // Baby-shelf cap: primary offerings ≤ 1/3 of float value over 12mo.
-      const babyCap = isBaby && floatSharesVal != null ? floatSharesVal / 3 : null;
-      return (
-      <div key={r.accessionNo} className="py-1.5">
-        <div className="flex flex-wrap items-baseline gap-x-2 text-xs">
-          <span className="font-medium text-zinc-200">${(r.aggregateOffering / M).toFixed(0)}M</span>
-          <span className="text-zinc-600">filed {r.filingDate}</span>
-          <span className="rounded bg-zinc-800 px-1 text-[9px] text-zinc-500">{r.formType}</span>
-          {isWksi && <span className="rounded bg-emerald-500/15 px-1 text-[9px] font-semibold uppercase text-emerald-300" title="Well-known seasoned issuer (float ≥ $700M): no baby-shelf limit">WKSI</span>}
-          {isBaby && <span className="rounded bg-amber-500/20 px-1 text-[9px] font-semibold uppercase text-amber-300" title="Non-WKSI S-3: limited to 1/3 of public float in primary offerings / 12-month period">baby shelf</span>}
-          {r.salesChannel === 'atm' && <span className="rounded bg-red-500/20 px-1 text-[9px] font-semibold uppercase text-red-400">ATM</span>}
-          {sh != null && <span className="text-zinc-500">· {(sh / M).toFixed(1)}M sh avail</span>}
-        </div>
-        {r.agent && <div className="text-[11px] text-zinc-500">agent {r.agent}</div>}
-        {isBaby && babyCap != null && <div className="text-[10px] text-amber-400/70">Baby-shelf cap: ≤ ${fmtMoney(babyCap)} primary offerings / 12mo</div>}
-      </div>
-      );
-    })}</div>
-  ) : null;
-  const S1Body = () => s1.length ? (
-    <div className="divide-y divide-zinc-800/60">{s1.map((f: any, i: number) => (<div key={i} className="flex items-start gap-2 py-1.5"><span className="mt-0.5 shrink-0 text-[10px] text-zinc-600">{f.filingDate}</span><div className="min-w-0"><span className="text-xs text-zinc-200">{f.formType}</span>{f.items?.length > 0 && <span className="ml-1 text-[10px] text-zinc-600">{f.items.join(', ')}</span>}<div className="truncate text-[11px] text-zinc-500">{f.primaryDesc ?? '—'}</div></div></div>))}</div>
-  ) : null;
-  const AtmBody = () => atm.length ? (
-    <div className="divide-y divide-zinc-800/60">
-      {atm.map((r) => {
-        const sh = sharesFor(r.max);
-        const st = statusFor(r.date);
-        return (
-          <div key={r.key} className="py-1.5">
-            <div className="flex flex-wrap items-baseline gap-x-2 text-xs">
-              {r.who && <span className="font-medium text-zinc-200">{r.who}</span>}
-              {r.max != null && <span className="text-zinc-400">· ${(Number(r.max) / M).toFixed(0)}M</span>}
-              {sh != null && <span className="text-zinc-500">· {(sh / M).toFixed(1)}M sh avail</span>}
-              {st && <span className={`rounded px-1 py-px text-[9px] font-semibold uppercase ${st.cls}`}>{st.label}</span>}
-              {st ? <span className="text-zinc-600">filed {r.date} · {st.rel}</span> : <span className="text-[10px] text-zinc-600">no date</span>}
-            </div>
-            {lastUsed ? <div className="text-[10px] text-emerald-500/70">last used {lastUsed}</div> : <div className="text-[10px] text-zinc-600">no draws parsed yet</div>}
-            {r.extra && <div className="text-[11px] text-zinc-500">{r.extra}</div>}
-            {r.src && <div className="mt-0.5 line-clamp-2 text-[10px] italic text-zinc-600">{r.src.slice(0, 140)}{r.src.length > 140 ? '…' : ''}</div>}
-          </div>
-        );
-      })}
-    </div>
-  ) : null;
-  const TONE_BG: Record<string, string> = { red: 'bg-red-500/15 text-red-400', amber: 'bg-amber-500/15 text-amber-300', purple: 'bg-purple-500/15 text-purple-400', orange: 'bg-orange-500/15 text-orange-300', blue: 'bg-blue-500/15 text-blue-400' };
-  const SECTIONS = [
-    { label: 'Equity Lines', tone: 'red', n: eqLines.length, body: EqBody },
-    { label: 'Warrants', tone: 'amber', n: warrants.length, body: WarrantBody },
-    { label: 'Converts', tone: 'purple', n: converts.length, body: () => list(converts) },
-    { label: 'ATM', tone: 'orange', n: atm.length, body: () => AtmBody() },
-    { label: 'Shelf', tone: 'orange', n: shelf.length, body: ShelfBody },
-    { label: 'S-1', tone: 'blue', n: s1.length, body: S1Body },
-  ];
-  const Row = ({ src, date, who, max, extra }: { src: string; date: string; who: any; max: any; extra: any }) => (
-    <div className="py-1.5">
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs">
-        {who && <span className="font-medium text-zinc-200">{who}</span>}
-        {max != null && <span className="text-zinc-400">· ${(Number(max) / M).toFixed(0)}M</span>}
-        {date && <span className="text-zinc-600">{date}</span>}
-      </div>
-      {extra && <div className="text-[11px] text-zinc-500">{extra}</div>}
-      <div className="mt-0.5 line-clamp-2 text-[10px] italic text-zinc-600">{src.slice(0, 160)}{src.length > 160 ? '…' : ''}</div>
-    </div>
-  );
-  const empty = <div className="py-4 text-center text-xs text-zinc-500">None detected.</div>;
+  // float value (SEC cover) for baby-shelf / WKSI classification.
+  const floatVal = snapshot?.publicFloat?.value ?? (snapshot?.computedFloat?.shares != null && px != null ? snapshot.computedFloat.shares * px : null);
   const DAY = 86400000;
-  // Equity-line status from filing age: a freshly-filed SEPA is tappable; one
-  // filed 2yr+ ago is likely drained/expired. This is the honest 'idle vs
-  // active' proxy because SEPA tap dates aren't itemized in filings (10-Q only).
+  // Filing-age proxy: fresh SEPA/ATM = tappable; 2yr+ = likely drained.
   const statusFor = (ds: string): { label: string; cls: string; rel: string } | null => {
     if (!ds) return null;
     const days = Math.floor((Date.now() - new Date(ds).getTime()) / DAY);
     if (Number.isNaN(days)) return null;
     const rel = days < 30 ? days + 'd ago' : days < 365 ? Math.round(days / 30) + 'mo ago' : (days / 365).toFixed(1) + 'yr ago';
-    let label: string, cls: string;
-    if (days <= 90) { label = 'new'; cls = 'bg-emerald-500/15 text-emerald-400'; }
-    else if (days <= 730) { label = 'active'; cls = 'bg-zinc-700 text-zinc-300'; }
-    else { label = 'aging'; cls = 'bg-amber-500/15 text-amber-400'; }
-    return { label, cls, rel };
+    if (days <= 90) return { label: 'new', cls: 'bg-emerald-500/15 text-emerald-400', rel };
+    if (days <= 730) return { label: 'active', cls: 'bg-zinc-700 text-zinc-300', rel };
+    return { label: 'aging', cls: 'bg-amber-500/15 text-amber-400', rel };
   };
-  const list = (arr: any[]) => arr.length ? <div className="divide-y divide-zinc-800/60">{arr.map((r) => <Row key={r.key} {...r} />)}</div> : empty;
+  const fmtSh = (s: number | null | undefined) => (s != null ? (s >= M ? (s / M).toFixed(2) + 'M' : Math.round(s).toLocaleString()) : '—');
+  const th = 'py-2 pr-4 text-left text-[10px] font-medium uppercase tracking-wide text-zinc-500 whitespace-nowrap';
+  const td = 'py-1.5 pr-4 text-xs align-top';
+  const nothing = shelf.length + atm.length + eqLines.length + warrants.length + converts.length + s1.length === 0;
+
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-      <div className="mb-2 flex items-center gap-2 text-zinc-400">
+      <div className="mb-3 flex items-center gap-2 text-zinc-400">
         <Layers className="h-4 w-4" />
-        <span className="text-xs uppercase tracking-wide">Dilution programs</span>
-        <div className="ml-auto flex rounded-md border border-zinc-700 p-0.5">
-          <button onClick={() => setView('sum')} className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition ${view === 'sum' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}>Sum</button>
-          <button onClick={() => setView('det')} className={`rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition ${view === 'det' ? 'bg-zinc-700 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'}`}>Det</button>
-        </div>
+        <span className="text-xs uppercase tracking-wide">Dilution overview</span>
+        {px != null && <span className="ml-auto text-[11px] text-zinc-500">price ${px}</span>}
       </div>
-      {view === 'det' && (
-        <div className="mb-2 flex flex-wrap gap-1">
-          {SECTIONS.map((t, i) => (
-            <button key={t.label} onClick={() => setTab(i)} className={`rounded px-2 py-1 text-[11px] transition ${tab === i ? 'bg-zinc-700 text-zinc-100' : 'bg-zinc-800/60 text-zinc-400 hover:text-zinc-200'}`}>
-              {t.label}{t.n > 0 && <span className={`ml-1 ${tab === i ? 'text-zinc-400' : 'text-zinc-600'}`}>{t.n}</span>}
-            </button>
-          ))}
-        </div>
-      )}
-      <div className="max-h-80 overflow-y-auto pr-1">
-        {view === 'sum' ? (
-          <div className="space-y-3">
-            {SECTIONS.filter((s) => s.n > 0).map((s) => (
-              <div key={s.label}>
-                <div className="mb-1 flex items-center gap-2">
-                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${TONE_BG[s.tone] ?? 'bg-zinc-700 text-zinc-300'}`}>{s.label}</span>
-                  <span className="text-[10px] text-zinc-600">{s.n}</span>
-                </div>
-                {s.body()}
-              </div>
-            ))}
-            {SECTIONS.every((s) => s.n === 0) && <div className="py-4 text-center text-xs text-zinc-500">No dilution facilities detected.</div>}
+
+      {/* ── ROLLUP: full dilution scope at a glance ── */}
+      {(sr || eqMax > 0 || totalDraws > 0 || warrantShares > 0 || convShares > 0) && (
+        <div className="mb-4 grid grid-cols-2 gap-3 rounded-md border border-zinc-700/70 bg-zinc-800/30 p-3 sm:grid-cols-4">
+          {capacityRemaining > 0 && (
+            <div className="col-span-2 flex items-baseline gap-2 sm:col-span-4">
+              <span className="text-[10px] uppercase tracking-wide text-zinc-500">Capacity remaining</span>
+              <span className="text-2xl font-bold leading-none text-amber-300">${(capacityRemaining / M).toFixed(1)}M</span>
+              {capacityRemainingShares != null && px != null && <span className="text-[11px] text-zinc-500">= {(capacityRemainingShares / M).toFixed(1)}M shares @ ${px}</span>}
+            </div>
+          )}
+          <div className="flex flex-col">
+            <span className="text-[10px] uppercase tracking-wide text-zinc-600">Shelf</span>
+            {sr ? (
+              <>
+                <span className="font-medium text-emerald-400">${(sr.remaining / M).toFixed(1)}M<span className="text-zinc-600"> left</span></span>
+                <span className="text-[10px] text-zinc-600">of ${(sr.registered / M).toFixed(0)}M</span>
+              </>
+            ) : <span className="text-zinc-600">none</span>}
           </div>
-        ) : (
-          SECTIONS[tab]?.body() ?? <div className="py-4 text-center text-xs text-zinc-500">None detected.</div>
-        )}
-      </div>
-      {snapshot?.shelfRemaining && (
-        <div className="mt-2 border-t border-zinc-800/60 pt-2 text-[10px] text-zinc-500">
-          Shelf drawable: ${(snapshot.shelfRemaining.remaining / M).toFixed(1)}M of ${(snapshot.shelfRemaining.registered / M).toFixed(1)}M registered
+          <div className="flex flex-col">
+            <span className="text-[10px] uppercase tracking-wide text-zinc-600">Equity lines</span>
+            {eqMax > 0 ? (
+              <>
+                <span className="font-medium text-emerald-400">${(eqRemaining / M).toFixed(1)}M<span className="text-zinc-600"> left</span></span>
+                <span className="text-[10px] text-zinc-600">of ${(eqMax / M).toFixed(0)}M</span>
+              </>
+            ) : <span className="text-zinc-600">none</span>}
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[10px] uppercase tracking-wide text-zinc-600">Raised so far</span>
+            {totalDraws > 0 ? (
+              <>
+                <span className="font-medium text-amber-400">${(totalDraws / M).toFixed(1)}M</span>
+                <span className="text-[10px] text-zinc-600">{(snapshot?.draws ?? []).length} draws</span>
+              </>
+            ) : <span className="text-zinc-600">—</span>}
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[10px] uppercase tracking-wide text-zinc-600">Warrants + converts</span>
+            {warrantShares > 0 || convShares > 0 ? (
+              <>
+                <span className="font-medium text-zinc-200">{fmtSh(warrantShares + convShares)}<span className="text-zinc-600"> sh</span></span>
+                {warrantItmShares > 0 && <span className="text-[10px] text-red-400">{fmtSh(warrantItmShares)} ITM</span>}
+              </>
+            ) : <span className="text-zinc-600">none</span>}
+          </div>
         </div>
       )}
+
+      <div className="space-y-5">
+        {/* SHELVES */}
+        {shelf.length > 0 && (
+          <div>
+            <div className="mb-1.5 flex items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">Shelves</span>
+              <span className="text-[10px] text-zinc-600">{shelf.length}</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead className="border-b border-zinc-800">
+                  <tr>
+                    <th className={th}>Filed</th>
+                    <th className={th}>Form</th>
+                    <th className={th}>Amount</th>
+                    <th className={th}>Type</th>
+                    <th className={th}>Channel</th>
+                    <th className={th}>Agent</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/50">
+                  {shelf.map((r: any) => {
+                    const isWksi = floatVal != null && floatVal >= 700e6;
+                    const isBaby = /^S-3$/.test(r.formType) && !isWksi;
+                    return (
+                      <tr key={r.accessionNo}>
+                        <td className={td + ' whitespace-nowrap text-zinc-500'}>{r.filingDate}</td>
+                        <td className={td}><span className="rounded bg-zinc-800 px-1 text-[10px] text-zinc-400">{r.formType}</span></td>
+                        <td className={td + ' font-medium text-zinc-100'}>${(r.aggregateOffering / M).toFixed(0)}M</td>
+                        <td className={td}>{isWksi ? <span className="rounded bg-emerald-500/15 px-1 text-[9px] font-semibold uppercase text-emerald-300">WKSI</span> : isBaby ? <span className="rounded bg-amber-500/20 px-1 text-[9px] font-semibold uppercase text-amber-300">baby</span> : <span className="text-zinc-600">—</span>}</td>
+                        <td className={td}>{r.salesChannel === 'atm' ? <span className="rounded bg-red-500/20 px-1 text-[9px] font-semibold uppercase text-red-400">ATM</span> : <span className="text-zinc-600">—</span>}</td>
+                        <td className={td + ' text-zinc-500'}>{r.agent || '—'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {sr && (
+              <div className="mt-2 flex flex-wrap gap-x-4 text-[11px] text-zinc-500">
+                <span>Registered <span className="text-zinc-300">${(sr.registered / M).toFixed(0)}M</span></span>
+                <span>Raised <span className="text-zinc-300">${(sr.raised / M).toFixed(1)}M</span></span>
+                <span className="font-medium text-emerald-400">Remaining ${(sr.remaining / M).toFixed(1)}M ({sr.remainingPct.toFixed(0)}%)</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ATM PROGRAMS */}
+        {atm.length > 0 && (
+          <div>
+            <div className="mb-1.5 flex items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">ATM programs</span>
+              <span className="text-[10px] text-zinc-600">{atm.length}</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead className="border-b border-zinc-800">
+                  <tr>
+                    <th className={th}>Filed</th>
+                    <th className={th}>Agent / bank</th>
+                    <th className={th}>Max</th>
+                    <th className={th}>Shares avail</th>
+                    <th className={th}>Status</th>
+                    <th className={th}>Terms</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/50">
+                  {atm.map((r: any) => {
+                    const st = statusFor(r.date);
+                    const sh = sharesFor(r.max);
+                    return (
+                      <tr key={r.key}>
+                        <td className={td + ' whitespace-nowrap text-zinc-500'}>{r.date || '—'}</td>
+                        <td className={td + ' text-zinc-200'}>{r.who || '—'}</td>
+                        <td className={td}>{r.max != null ? <span className="font-medium text-zinc-100">${(Number(r.max) / M).toFixed(1)}M</span> : '—'}</td>
+                        <td className={td + ' text-zinc-400'}>{sh != null ? fmtSh(sh) : '—'}</td>
+                        <td className={td}>{st ? <span className={'rounded px-1 py-px text-[9px] font-semibold uppercase ' + st.cls}>{st.label}</span> : <span className="text-zinc-600">—</span>}</td>
+                        <td className={td + ' text-zinc-500'}>{r.extra || '—'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* EQUITY LINES */}
+        {eqLines.length > 0 && (
+          <div>
+            <div className="mb-1.5 flex items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">Equity lines</span>
+              <span className="text-[10px] text-zinc-600">{eqLines.length}</span>
+            </div>
+            <div className="mb-2 flex flex-wrap gap-x-4 text-[11px]">
+              <span className="text-zinc-500">Max <span className="text-zinc-300">${(eqMax / M).toFixed(1)}M</span></span>
+              <span className="text-zinc-500">Drawn <span className="text-amber-400">${(eqDrawn / M).toFixed(1)}M</span></span>
+              <span className="font-medium text-emerald-400">Remaining ${((eqMax - eqDrawn) / M).toFixed(1)}M</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead className="border-b border-zinc-800">
+                  <tr>
+                    <th className={th}>Filed</th>
+                    <th className={th}>Counterparty</th>
+                    <th className={th}>Max</th>
+                    <th className={th}>Status</th>
+                    <th className={th}>Terms</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/50">
+                  {eqLines.map((r: any) => {
+                    const st = statusFor(r.date);
+                    return (
+                      <tr key={r.key}>
+                        <td className={td + ' whitespace-nowrap text-zinc-500'}>{r.date || '—'}</td>
+                        <td className={td + ' text-zinc-200'}>{r.who || 'equity line'}</td>
+                        <td className={td}>{r.max != null ? <span className="font-medium text-zinc-100">${(Number(r.max) / M).toFixed(1)}M</span> : '—'}</td>
+                        <td className={td}>{st ? <span className={'rounded px-1 py-px text-[9px] font-semibold uppercase ' + st.cls}>{st.label}</span> : <span className="text-zinc-600">—</span>}</td>
+                        <td className={td + ' text-zinc-500'}>{r.extra || '—'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-1 text-[10px] text-zinc-600">Remaining = max − already sold, totaled across all lines (filings don't say which line was tapped).</div>
+          </div>
+        )}
+
+        {/* WARRANTS */}
+        {warrants.length > 0 && (
+          <div>
+            <div className="mb-1.5 flex items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">Warrants</span>
+              <span className="text-[10px] text-zinc-600">{warrants.length}{px != null && <span className="ml-1 text-zinc-600">· ${px}</span>}</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead className="border-b border-zinc-800">
+                  <tr>
+                    <th className={th}>Shares</th>
+                    <th className={th}>Strike</th>
+                    <th className={th}>vs price</th>
+                    <th className={th}>Status</th>
+                    <th className={th}>Exercisable</th>
+                    <th className={th}>Expires</th>
+                    <th className={th}>Source</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/50">
+                  {warrants.map((w: any, i: number) => {
+                    const st = stt(w.strike);
+                    const statCls = w.status === 'pre-funded' ? 'bg-fuchsia-500/15 text-fuchsia-300' : w.status === 'expired' ? 'bg-zinc-700 text-zinc-500 line-through' : w.status === 'pending' ? 'bg-amber-500/15 text-amber-300' : 'bg-zinc-800/60 text-zinc-500';
+                    return (
+                      <tr key={i}>
+                        <td className={td + ' font-medium text-zinc-100'}>{fmtSh(w.shares)}</td>
+                        <td className={td + (st ? ' ' + st.txt : '')}>{w.strike != null ? '$' + w.strike : '—'}</td>
+                        <td className={td}>{st ? <span className={'rounded px-1 text-[9px] font-semibold uppercase ' + st.bg + ' ' + st.txt}>{st.label}</span> : w.status === 'pre-funded' ? <span className="rounded px-1 text-[9px] font-semibold uppercase bg-fuchsia-500/15 text-fuchsia-300">paid</span> : <span className="text-zinc-600">OTM</span>}</td>
+                        <td className={td}><span className={'rounded px-1 text-[9px] font-semibold uppercase ' + statCls}>{w.status}</span></td>
+                        <td className={td + ' text-zinc-500'}>{w.exercisable || '—'}</td>
+                        <td className={td + ' text-zinc-500'}>{w.expiry || '—'}</td>
+                        <td className={td}><span className="rounded bg-zinc-800 px-1 text-[9px] text-zinc-500">{w.source}</span></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-1 text-[10px] text-zinc-500"><span className="text-red-400">ITM</span> = in-the-money (exercise likely) · <span className="text-amber-400">NEAR</span> = within 20% of strike · <span className="text-fuchsia-400">pre-funded</span> = already paid.</div>
+          </div>
+        )}
+
+        {/* CONVERTIBLE NOTES */}
+        {converts.length > 0 && (
+          <div>
+            <div className="mb-1.5 flex items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">Convertible notes</span>
+              <span className="text-[10px] text-zinc-600">{converts.length}</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead className="border-b border-zinc-800">
+                  <tr>
+                    <th className={th}>Filed</th>
+                    <th className={th}>Counterparty</th>
+                    <th className={th}>Max / principal</th>
+                    <th className={th}>Terms</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/50">
+                  {converts.map((r: any) => (
+                    <tr key={r.key}>
+                      <td className={td + ' whitespace-nowrap text-zinc-500'}>{r.date || '—'}</td>
+                      <td className={td + ' text-zinc-200'}>{r.who || '—'}</td>
+                      <td className={td}>{r.max != null ? <span className="font-medium text-zinc-100">${(Number(r.max) / M).toFixed(1)}M</span> : '—'}</td>
+                      <td className={td + ' text-zinc-500'}>{r.extra || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* S-1 / F-1 */}
+        {s1.length > 0 && (
+          <div>
+            <div className="mb-1.5 flex items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">S-1 / F-1 registrations</span>
+              <span className="text-[10px] text-zinc-600">{s1.length}</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead className="border-b border-zinc-800">
+                  <tr>
+                    <th className={th}>Filed</th>
+                    <th className={th}>Form</th>
+                    <th className={th}>Headline</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/50">
+                  {s1.map((f: any, i: number) => (
+                    <tr key={i}>
+                      <td className={td + ' whitespace-nowrap text-zinc-500'}>{f.filingDate}</td>
+                      <td className={td}><span className="rounded bg-zinc-800 px-1 text-[10px] text-zinc-400">{f.formType}</span></td>
+                      <td className={td + ' text-zinc-400'}>{f.primaryDesc ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {nothing && <div className="py-6 text-center text-xs text-zinc-500">No dilution facilities detected.</div>}
+      </div>
     </div>
   );
 }
+
 
 /**
  * Bottom tabbed block — consolidates the scattered bottom cards into three tabs.
@@ -986,6 +1128,7 @@ export default function DilutionPage() {
             {/* Dilution Summary + Rating — the AskEdgar dilution-tracker view */}
             {summary && (
               <div className="grid gap-4 lg:grid-cols-3">
+                <div className="space-y-4">
                 <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
                   <div className="flex items-center gap-2 text-zinc-400">
                     <Gauge className="h-4 w-4" />
@@ -1072,6 +1215,40 @@ export default function DilutionPage() {
                   })()}
                 </div>
 
+                {/* News — 8-K catalysts + press releases, recency-sorted; last 24h highlighted */}
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+                  <div className="mb-1 flex items-center gap-2 text-zinc-400">
+                    <FileText className="h-4 w-4" />
+                    <span className="text-xs uppercase tracking-wide">News</span>
+                    <span className="ml-auto text-[10px] text-zinc-600">8-K catalysts + press</span>
+                  </div>
+                  {(() => {
+                    const news = snapshot?.news ?? [];
+                    if (!news.length) return <div className="py-3 text-center text-xs text-zinc-500">No recent news.</div>;
+                    const today = new Date().toISOString().slice(0, 10);
+                    const yest = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+                    return (
+                      <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
+                        {news.map((n, i) => {
+                          const recent = n.date === today || n.date === yest;
+                          const sec = n.source === 'sec-8k';
+                          return (
+                            <div key={i} className={`flex items-start gap-2 ${recent ? '-mx-1 rounded bg-amber-500/5 px-1' : ''}`}>
+                              <span className="mt-0.5 shrink-0 text-[10px] text-zinc-600">{n.date}</span>
+                              <span className={`mt-0.5 shrink-0 rounded px-1 text-[9px] font-semibold uppercase ${sec ? 'bg-blue-500/15 text-blue-300' : 'bg-zinc-700 text-zinc-300'}`}>{sec ? '8-K' : 'news'}</span>
+                              <div className="min-w-0">
+                                <span className="text-xs leading-snug text-zinc-200">{n.title}</span>
+                                {n.url && <a href={n.url} target="_blank" rel="noreferrer" className="ml-1 text-[10px] text-blue-400 hover:underline">↗</a>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+                </div>
+
                 <div className="lg:col-span-2 space-y-4">
                   {/* Dilution ability — BIG: what they can sell & where (shelf/SEPA/ATM/converts/warrants). Detail-led, no score. */}
                   <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
@@ -1090,44 +1267,8 @@ export default function DilutionPage() {
                     )}
                   </div>
 
-                  {/* Programs (scroll) + News side by side — programs made SHORTER, news in freed space */}
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    {/* Dilution programs — tabbed by type (equity lines / warrants / converts / ATM / shelf / S-1) */}
-                    <ProgramTabs snapshot={snapshot} />
-
-                    {/* News — 8-K catalysts + press releases, recency-sorted; last 24h highlighted */}
-                    <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-                      <div className="mb-1 flex items-center gap-2 text-zinc-400">
-                        <FileText className="h-4 w-4" />
-                        <span className="text-xs uppercase tracking-wide">News</span>
-                        <span className="ml-auto text-[10px] text-zinc-600">8-K catalysts + press</span>
-                      </div>
-                      {(() => {
-                        const news = snapshot?.news ?? [];
-                        if (!news.length) return <div className="py-3 text-center text-xs text-zinc-500">No recent news.</div>;
-                        const today = new Date().toISOString().slice(0, 10);
-                        const yest = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-                        return (
-                          <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
-                            {news.map((n, i) => {
-                              const recent = n.date === today || n.date === yest;
-                              const sec = n.source === 'sec-8k';
-                              return (
-                                <div key={i} className={`flex items-start gap-2 ${recent ? '-mx-1 rounded bg-amber-500/5 px-1' : ''}`}>
-                                  <span className="mt-0.5 shrink-0 text-[10px] text-zinc-600">{n.date}</span>
-                                  <span className={`mt-0.5 shrink-0 rounded px-1 text-[9px] font-semibold uppercase ${sec ? 'bg-blue-500/15 text-blue-300' : 'bg-zinc-700 text-zinc-300'}`}>{sec ? '8-K' : 'news'}</span>
-                                  <div className="min-w-0">
-                                    <span className="text-xs leading-snug text-zinc-200">{n.title}</span>
-                                    {n.url && <a href={n.url} target="_blank" rel="noreferrer" className="ml-1 text-[10px] text-blue-400 hover:underline">↗</a>}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  </div>
+                  {/* Dilution overview — Nexus-style tables, one per instrument type */}
+                  <DilutionOverview snapshot={snapshot} />
                 </div>
               </div>
             )}
@@ -1192,6 +1333,11 @@ export default function DilutionPage() {
                           {snapshot.cash.projectedCash !== null && (
                             <span className="text-zinc-600">· est. {fmtMoney(snapshot.cash.projectedCash)} now</span>
                           )}
+                          {snapshot.cash.postReportRaises && snapshot.cash.postReportRaises > 0 && (
+                            <span className="font-medium text-emerald-400" title="Gross proceeds from offerings filed after the cash report date, added back so the projection reflects actual treasury.">
+                              · includes {fmtMoney(snapshot.cash.postReportRaises)} raised since report
+                            </span>
+                          )}
                           {cashOutOfMoney && cashRanOutDate && (
                             <span className="font-medium text-red-400">· out of money ~{cashRanOutDate.toISOString().slice(0, 10)}</span>
                           )}
@@ -1199,7 +1345,7 @@ export default function DilutionPage() {
                       )}
                     </div>
                     <p className="text-[11px] text-zinc-600">
-                      Runway = total liquidity (cash + restricted) ÷ latest operating burn, as-of report date — matches AskEdgar/Nexus. Projected carries the burn forward to today.
+                      Runway = total liquidity (cash + restricted) ÷ latest operating burn, as-of report date — matches AskEdgar/Nexus. Projected carries the burn forward to today and adds back capital raised since the report.
                     </p>
                   </div>
                 )}
@@ -1267,46 +1413,7 @@ export default function DilutionPage() {
               </div>
             )}
 
-            {/* Shelf capacity remaining — primary "way to dilute": registered capacity not yet drawn */}
-            {snapshot?.shelfRemaining && (
-              <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-                <div className="flex items-center gap-2 text-zinc-400">
-                  <Layers className="h-4 w-4" />
-                  <span className="text-xs uppercase tracking-wide">Shelf capacity remaining</span>
-                </div>
-                <div className="mt-2 flex items-end gap-2">
-                  <span className={`text-3xl font-bold ${snapshot.shelfRemaining.remainingPct <= 0 ? 'text-red-400' : snapshot.shelfRemaining.remainingPct <= 25 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                    ${(snapshot.shelfRemaining.remaining / 1e6).toFixed(0)}M
-                  </span>
-                  <span className="mb-1 text-xs text-zinc-500">of ${(snapshot.shelfRemaining.registered / 1e6).toFixed(0)}M registered still drawable</span>
-                </div>
-                <div className="mt-3 space-y-1 text-xs">
-                  <div className="flex justify-between"><span className="text-zinc-500">Registered (shelf)</span><span className="text-zinc-300">${(snapshot.shelfRemaining.registered / 1e6).toFixed(1)}M</span></div>
-                  <div className="flex justify-between"><span className="text-zinc-500">Raised so far (424B5)</span><span className="text-zinc-300">${(snapshot.shelfRemaining.raised / 1e6).toFixed(1)}M</span></div>
-                  <div className="flex justify-between border-t border-zinc-800/60 pt-1"><span className="text-zinc-500">Remaining</span><span className="font-semibold text-zinc-200">${(snapshot.shelfRemaining.remaining / 1e6).toFixed(1)}M ({snapshot.shelfRemaining.remainingPct.toFixed(0)}%)</span></div>
-                </div>
-                {/* Per-shelf breakdown — each registration statement with amount/type/ATM. */}
-                {snapshot.registrations.filter((r) => r.aggregateOffering !== null).length > 0 && (
-                  <div className="mt-3">
-                    <div className="mb-1 text-[10px] uppercase tracking-wide text-zinc-500">Per-shelf registrations</div>
-                    <div className="space-y-1">
-                      {snapshot.registrations.filter((r) => r.aggregateOffering !== null).map((r) => (
-                        <div key={r.accessionNo} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded bg-zinc-800/40 px-2 py-1 text-[11px]">
-                          <span className="text-zinc-300">${(r.aggregateOffering! / 1e6).toFixed(0)}M</span>
-                          <span className="text-zinc-600">·</span>
-                          <span className="text-zinc-500">{r.filingDate}</span>
-                          <span className="rounded bg-zinc-700 px-1 text-[9px] text-zinc-300">{r.shelfType === 'automatic-shelf' ? 'S-3ASR' : r.formType}</span>
-                          {r.salesChannel === 'atm' && <span className="rounded bg-red-500/20 px-1 text-[9px] font-semibold uppercase text-red-400">ATM</span>}
-                          {r.agent && <span className="text-zinc-500">· agent {r.agent}</span>}
-                          {r.securitiesTypes.length > 0 && <span className="text-zinc-600">· {r.securitiesTypes.join(', ')}</span>}
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-1 text-[9px] text-zinc-600">Per-shelf "raised" not attributable from SEC data; global raised/remaining shown above.</div>
-                  </div>
-                )}
-              </div>
-            )}
+
 
             {/* Warrants & convertibles overhang (XBRL) — the price-dependent dilution threat */}
             {snapshot.overhang && (snapshot.overhang.warrant || snapshot.overhang.convertible) && (

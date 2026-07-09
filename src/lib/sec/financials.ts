@@ -46,6 +46,10 @@ export interface CashPosition {
   // the smoothed TTM rate. Headline monthlyCashFlow already switches to the
   // recent run-rate in that case; this flag lets the UI say "accelerating".
   acceleratingBurn: boolean;
+  // Gross proceeds from offerings dated AFTER asOfDate, added back to the
+  // projection. The UI shows this as 'includes $X raised since [date]' so the
+  // trader understands why projected cash ≠ reportedCash − burn.
+  postReportRaises?: number;
 }
 
 // Forward-project last-reported cash to today assuming burn continues at the
@@ -58,6 +62,7 @@ export function project(
   asOfDate: string | null,
   monthlyFlow: number | null,
   flowEnd: string | null = null,
+  postReportRaises: number | null = null,
 ): Pick<CashPosition, 'reportedRunwayMonths' | 'projectedCash' | 'cashRemainingMonths' | 'projectedAsOf'> {
   // Period-mismatch guard: runway is only meaningful when cash and burn
   // describe the same reporting era. If the cash fact and the operating-flow
@@ -82,7 +87,13 @@ export function project(
     return { reportedRunwayMonths, projectedCash: reportedCash, cashRemainingMonths: null, projectedAsOf: null };
   }
   const monthsElapsed = Math.max(0, (Date.now() - new Date(asOfDate).getTime()) / MS_PER_MONTH);
-  const projectedCash = reportedCash + monthlyFlow * monthsElapsed; // flow neg → cash declines
+  // Add back capital raised SINCE the report date (ATM draws, SPA proceeds,
+  // equity sales). Without this, a company that just raised $20M looks
+  // destitute because the linear burn from the stale report date wipes it
+  // out (RKTO: $4M reported − 3mo burn = $0.6M projected, but they raised
+  // ~$20M since → real cash is ~$14M). This matches Nexus's methodology.
+  const raises = postReportRaises ?? 0;
+  const projectedCash = reportedCash + monthlyFlow * monthsElapsed + raises;
   const cashRemainingMonths = projectedCash / Math.abs(monthlyFlow); // can be NEGATIVE
   return {
     reportedRunwayMonths,
@@ -597,16 +608,14 @@ function assessCashReliability(
   if (Math.abs(latest.val) < 1000) {
     return { reliable: false, note: 'Cash under $1,000 — likely a placeholder XBRL value.' };
   }
-  // Implausibly tiny vs burn: cash under one month of operating burn. Two
-  // honest causes we can't separate from XBRL alone — the company is genuinely
-  // cash-starved (common for the microcaps this terminal targets; verified on
-  // TC/Token Cat: $140K cash vs ~$2.1M/mo burn is REAL, not mis-scaled) OR the
-  // fact is mis-scaled. normalizeScale already corrected same-date ×1000
-  // corruption upstream, but a lone mis-scaled fact can still slip through.
-  // Surface for manual verify rather than asserting one cause — better honest
-  // than misleading.
+  // Cash below one month of operating burn is COMMON for distressed microcaps
+  // (the core use case of this terminal) and is NOT a reliable mis-scale signal
+  // after normalizeScale runs upstream — e.g. CLRO: $756K cash vs $1.05M/mo burn
+  // is a genuine 0.7-mo runway, the most actionable signal we have. Suppressing
+  // here would blank the projection for exactly the names that need it most.
+  // Show the projection (reliable: true) and surface a verify-note instead.
   if (burn !== null && Math.abs(burn) > 0 && Math.abs(latest.val) < Math.abs(burn)) {
-    return { reliable: false, note: 'Cash below one month of operating burn — verify against the filing (genuinely depleted or mis-scaled).' };
+    return { reliable: true, note: 'Cash below one month of operating burn — verify against the filing (genuinely depleted or mis-scaled).' };
   }
   return { reliable: true, note: null };
 }

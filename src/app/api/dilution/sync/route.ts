@@ -38,7 +38,7 @@ export async function POST(req: Request) {
     }
 
     const [filingsRes, sharesRes, finRes] = await Promise.all([
-      syncFilings(ticker, { limit: 50 }),
+      syncFilings(ticker, { limit: 1000 }),
       syncSharesOutstanding(ticker, { limit: 40 }),
       syncFinancials(ticker, { force: true }),
     ]);

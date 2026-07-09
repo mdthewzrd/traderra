@@ -21,6 +21,7 @@ import { renderPivotZones } from '@/lib/charts/render-pzones'
 import { renderDevZones } from '@/lib/charts/render-devzones'
 import { renderCurlTrend } from '@/lib/charts/render-curltrend'
 import { renderLinguaFast } from '@/lib/charts/render-linguafast'
+import { renderLinguaCycle2 } from '@/lib/charts/render-lingua2'
 import { renderAdaptiveBands } from '@/lib/charts/render-adaptive-bands'
 import { renderLinguaExec, setLinguaExecPitch, drawWedge } from '@/lib/charts/render-lingua-exec'
 import { renderLinguaCycle, renderAnchoredTrendline, renderConsolidation, renderRegime, renderLinguaPitchOverlay, setLinguaMtfBars, htfOf, ltfOf } from '@/lib/charts/render-lingua'
@@ -87,6 +88,9 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
   // Fetch 2m bars for trail stop overlay when on higher TFs
   const trailStopOn = useToolStore(s => s.tools.find((t: any) => t.indKey === 'trail_stop')?.on ?? false)
   const linguaOn = useToolStore(s => s.tools.find((t: any) => t.indKey === 'lingua')?.on ?? false)
+  const lingua2On = useToolStore(s => s.tools.find((t: any) => t.indKey === 'lingua2')?.on ?? false)
+  // Either classic Lingua or the clean v2 cycle needs the MTF/HTF/LTF bar feeds.
+  const linguaCycleOn = linguaOn || lingua2On
   const { bars: bars2m } = useLiveBars(
     (tf !== '2' && trailStopOn) ? symbol : null,
     '2',
@@ -105,9 +109,9 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
   // LTF = fractal child (MTF÷4, e.g. 1H→15m). Only fetched when the 15m LEAD markers are
   // enabled — its trendbreaks lead the 1H TB band, surfacing the top earlier.
   const ltfTf = ltfOf(mtfTf)
-  const ltfOn = linguaOn && (((linguaParams?.tbLtfOn as number) ?? 1) !== 0)
-  const { bars: bars1h } = useLiveBars(linguaOn ? symbol : null, mtfTf, focusDate)
-  const { bars: bars4h } = useLiveBars(linguaOn ? symbol : null, htfTf, focusDate)
+  const ltfOn = linguaCycleOn && (((linguaParams?.tbLtfOn as number) ?? 1) !== 0)
+  const { bars: bars1h } = useLiveBars(linguaCycleOn ? symbol : null, mtfTf, focusDate)
+  const { bars: bars4h } = useLiveBars(linguaCycleOn ? symbol : null, htfTf, focusDate)
   const { bars: bars15m } = useLiveBars(ltfOn ? symbol : null, ltfTf, focusDate)
   const trail2mRef = useRef<(number | null)[] | null>(null)
 
@@ -591,6 +595,7 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
 
       // ── Lingua Cycle (5-stage detector: 3-TF hierarchical + hysteresis) ──
       if (inds.lingua) renderLinguaCycle(rc)
+      if (inds.lingua2) renderLinguaCycle2(rc)
 
       // ── Lingua Exec (50/89 regime cloud + switch wedges) ──
       if (inds.lingua_exec) renderLinguaExec(rc)

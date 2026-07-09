@@ -3,11 +3,11 @@
 import { useState, useEffect, useMemo, useCallback, useRef, createContext, useContext } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  useReactTable, getCoreRowModel, getSortedRowModel,
+  useReactTable, getCoreRowModel, getSortedRowModel, getPaginationRowModel,
   flexRender, createColumnHelper, type ColumnDef, type SortingState,
 } from '@tanstack/react-table'
 import {
-  Database, X, Trash2, Tag, Loader2, Image as ImageIcon,
+  Database, X, Trash2, Copy, Tag, Loader2, Image as ImageIcon,
   Inbox, Check, Upload, Layers, AlertCircle, CheckCircle2, BarChart3, Plus,
   ArrowUpDown, ArrowUp, ArrowDown, Sun, Moon, Filter, Maximize2, Settings,
 } from 'lucide-react'
@@ -43,7 +43,7 @@ const SETUP_DETAILS: Record<string, string[]> = {
   Structure: ['Consolidation Sweep', 'Breakout', 'Breakdown'],
   Long: ['Uptrend Cont', 'Euphoric Low', 'Euphoric Bottom', 'Trendbreak'],
 }
-const GRADES = ['A+', 'A', 'B'] as const
+const GRADES = ['A+', 'A', 'B+', 'B', 'C'] as const
 const GRADE_COLORS: Record<string, { c: string; b: string }> = {
   'A+': { c: '#34d399', b: 'rgba(52,211,153,0.35)' },
   'A': { c: C.GOLD, b: C.GOLD_BORDER },
@@ -742,10 +742,58 @@ export default function DatabasePage() {
   const [panelH, setPanelH] = useState<number>(0) // 0 = default 50%
   const [fields, setFields] = useState<CorpusField[]>([])
 
+  // ── Database (workspace) switching ──
+  // Each workspace is an isolated collection of rows. The active id rides
+  // every /api/database* call via the x-db-id header (dbFetch below).
+  const [databases, setDatabases] = useState<{ id: string; name: string; rowCount: number }[]>([])
+  const [currentDbId, setCurrentDbId] = useState<string | null>(null)
+  const dbIdRef = useRef<string | null>(null)
+  const dbFetch = useCallback((url: string, opts: RequestInit = {}) => {
+    const headers = new Headers(opts.headers || {})
+    if (dbIdRef.current) headers.set('x-db-id', dbIdRef.current)
+    return fetch(url, { ...opts, headers })
+  }, [])
+
+  const fetchDatabases = useCallback(async () => {
+    const res = await dbFetch('/api/database/databases')
+    const data = await res.json()
+    const list: { id: string; name: string; rowCount: number }[] = data.databases ?? []
+    setDatabases(list)
+    return list
+  }, [dbFetch])
+
+  const switchDatabase = useCallback((id: string) => {
+    setCurrentDbId(id)
+    try { localStorage.setItem('traderra.currentDbId', id) } catch {}
+    setSelectedId(null)
+    setOpenTradeId(null)
+  }, [])
+
+  const createDatabase = useCallback(async (name: string, duplicateFrom?: string) => {
+    const res = await dbFetch('/api/database/databases', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, ...(duplicateFrom ? { duplicateFrom } : {}) }),
+    })
+    const data = await res.json()
+    if (!res.ok) { setStatus({ kind: 'err', msg: data.error || 'Failed to create database' }); return null }
+    const list = await fetchDatabases()
+    const created = list.find((d) => d.name === name)
+    if (created) switchDatabase(created.id)
+    return data.database
+  }, [dbFetch, fetchDatabases, switchDatabase])
+
+  const deleteDatabase = useCallback(async (id: string) => {
+    const res = await dbFetch(`/api/database/databases?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+    const data = await res.json()
+    if (!res.ok) { setStatus({ kind: 'err', msg: data.error || 'Failed to delete database' }); return }
+    const list = await fetchDatabases()
+    if (currentDbId === id && list[0]) switchDatabase(list[0].id)
+  }, [dbFetch, fetchDatabases, currentDbId, switchDatabase])
+
   // Managed option lists (Setup Type, Setup) — DB-backed, user-editable
   const [enums, setEnums] = useState<Record<string, { label: string; color?: string }[]>>({})
   const fetchEnums = useCallback(async () => {
-    const res = await fetch('/api/database/enums')
+    const res = await dbFetch('/api/database/enums')
     const data = await res.json()
     setEnums(data.enums ?? {})
   }, [])
@@ -760,7 +808,7 @@ export default function DatabasePage() {
     if (cur.some((o) => o.label === label)) return
     const next = [...cur, { label }]
     setEnums((prev) => ({ ...prev, [key]: next }))
-    await fetch('/api/database/enums', {
+    await dbFetch('/api/database/enums', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key, options: next }),
     })
@@ -771,7 +819,7 @@ export default function DatabasePage() {
     if (!field || field.options.includes(label)) return
     const nextOpts = [...field.options, label]
     setFields((prev) => prev.map((f) => (f.id === fieldId ? { ...f, options: nextOpts } : f)))
-    await fetch('/api/database/fields', {
+    await dbFetch('/api/database/fields', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: fieldId, options: nextOpts }),
     })
@@ -780,7 +828,7 @@ export default function DatabasePage() {
   // replace the full option list for a built-in enum (setupType / setup / grade)
   const saveEnum = useCallback(async (key: string, options: { label: string; color?: string }[]) => {
     setEnums((prev) => ({ ...prev, [key]: options }))
-    await fetch('/api/database/enums', {
+    await dbFetch('/api/database/enums', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key, options }),
     })
@@ -852,14 +900,14 @@ export default function DatabasePage() {
 
   const fetchRows = useCallback(async () => {
     setLoading(true)
-    const res = await fetch('/api/database')
+    const res = await dbFetch('/api/database')
     const data = await res.json()
     setRows(data.rows ?? [])
     setLoading(false)
   }, [])
 
   const fetchFields = useCallback(async () => {
-    const res = await fetch('/api/database/fields')
+    const res = await dbFetch('/api/database/fields')
     const data = await res.json()
     setFields(data.fields ?? [])
   }, [])
@@ -875,7 +923,7 @@ export default function DatabasePage() {
     const target = rows.find((r) => r.id === rowId)
     const next = { ...(target?.customValues ?? {}) }
     next[fieldId] = value
-    await fetch('/api/database', {
+    await dbFetch('/api/database', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: rowId, customValues: next }),
     })
@@ -884,12 +932,12 @@ export default function DatabasePage() {
   // ── Trades CRUD ──
   const [trades, setTrades] = useState<Record<string, CorpusTrade[]>>({})
   const fetchTrades = useCallback(async (rowId: string) => {
-    const res = await fetch(`/api/database/trades?setupRowId=${rowId}`)
+    const res = await dbFetch(`/api/database/trades?setupRowId=${rowId}`)
     const data = await res.json()
     setTrades((prev) => ({ ...prev, [rowId]: data.trades ?? [] }))
   }, [])
   const addTrade = useCallback(async (rowId: string, direction: string, date: string) => {
-    const res = await fetch('/api/database/trades', {
+    const res = await dbFetch('/api/database/trades', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ setupRowId: rowId, direction, date }),
     })
@@ -911,18 +959,18 @@ export default function DatabasePage() {
   }, [trades, addTrade])
   const updateTrade = useCallback(async (rowId: string, tradeId: string, patch: Partial<CorpusTrade>) => {
     setTrades((prev) => ({ ...prev, [rowId]: (prev[rowId] ?? []).map((t) => (t.id === tradeId ? { ...t, ...patch } : t)) }))
-    await fetch('/api/database/trades', {
+    await dbFetch('/api/database/trades', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: tradeId, ...patch }),
     })
   }, [])
   const deleteTrade = useCallback(async (rowId: string, tradeId: string) => {
     setTrades((prev) => ({ ...prev, [rowId]: (prev[rowId] ?? []).filter((t) => t.id !== tradeId) }))
-    await fetch(`/api/database/trades?id=${tradeId}`, { method: 'DELETE' })
+    await dbFetch(`/api/database/trades?id=${tradeId}`, { method: 'DELETE' })
   }, [])
 
   const createField = async (name: string, type: FieldType, options: string[], colors: Record<string, string>) => {
-    const res = await fetch('/api/database/fields', {
+    const res = await dbFetch('/api/database/fields', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, type, options, colors }),
     })
@@ -932,7 +980,7 @@ export default function DatabasePage() {
   }
 
   const updateColumn = async (id: string, name: string, options: string[], colors: Record<string, string>) => {
-    await fetch('/api/database/fields', {
+    await dbFetch('/api/database/fields', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, name, options, colors }),
     })
@@ -941,7 +989,7 @@ export default function DatabasePage() {
 
   const deleteField = async (id: string, name: string) => {
     if (!confirm(`Delete column “${name}”? Its values will be removed from all rows.`)) return
-    await fetch(`/api/database/fields?id=${id}`, { method: 'DELETE' })
+    await dbFetch(`/api/database/fields?id=${id}`, { method: 'DELETE' })
     await fetchFields()
     setRows((prev) => prev.map((r) => {
       if (!r.customValues || !(id in r.customValues)) return r
@@ -951,10 +999,24 @@ export default function DatabasePage() {
     setStatus({ kind: 'ok', msg: `Deleted column “${name}”.` })
   }
 
-  useEffect(() => { fetchScans() }, [fetchScans])
-  useEffect(() => { fetchFields() }, [fetchFields])
-  useEffect(() => { fetchEnums() }, [fetchEnums])
-  useEffect(() => { fetchRows() }, [fetchRows])
+  // Load databases on mount; restore last active workspace from localStorage
+  useEffect(() => {
+    (async () => {
+      const list = await fetchDatabases()
+      let saved: string | null = null
+      try { saved = localStorage.getItem('traderra.currentDbId') } catch {}
+      const target = saved && list.some((d) => d.id === saved) ? saved : (list[0]?.id ?? null)
+      if (target) setCurrentDbId(target)
+    })()
+  }, [fetchDatabases])
+
+  // Sync the db-id ref + reload all workspace data when the active db changes
+  useEffect(() => {
+    dbIdRef.current = currentDbId
+    if (!currentDbId) return
+    fetchRows(); fetchScans(); fetchEnums(); fetchFields()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentDbId])
   useEffect(() => { if (selectedId) fetchTrades(selectedId) }, [selectedId, fetchTrades])
 
   // auto-dismiss status after 5s
@@ -967,7 +1029,7 @@ export default function DatabasePage() {
   const updateField = useCallback(async (id: string, patch: Partial<CorpusRow>) => {
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)))
     setSaving(true)
-    await fetch('/api/database', {
+    await dbFetch('/api/database', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, ...patch }),
     })
@@ -979,7 +1041,7 @@ export default function DatabasePage() {
     if (notesTimer.current) clearTimeout(notesTimer.current)
     notesTimer.current = setTimeout(async () => {
       setSaving(true)
-      await fetch('/api/database', {
+      await dbFetch('/api/database', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, notes: val }),
       })
@@ -989,14 +1051,14 @@ export default function DatabasePage() {
   }, [])
 
   const deleteRow = useCallback(async (id: string) => {
-    await fetch(`/api/database?id=${id}`, { method: 'DELETE' })
+    await dbFetch(`/api/database?id=${id}`, { method: 'DELETE' })
     setRows((prev) => prev.filter((r) => r.id !== id))
     if (selectedId === id) setSelectedId(null)
   }, [selectedId])
 
   // Evict one scan source from the corpus (removes it from every row; deletes orphaned rows)
   const removeScan = useCallback(async (name: string) => {
-    const res = await fetch(`/api/database?scan=${encodeURIComponent(name)}`, { method: 'DELETE' })
+    const res = await dbFetch(`/api/database?scan=${encodeURIComponent(name)}`, { method: 'DELETE' })
     if (!res.ok) { setStatus({ kind: 'err', msg: `Couldn't remove ${name}` }); return }
     const d = await res.json().catch(() => ({}))
     await fetchRows()
@@ -1005,13 +1067,41 @@ export default function DatabasePage() {
 
   // Wipe the whole working corpus (non-archived rows)
   const clearAll = useCallback(async () => {
-    const res = await fetch(`/api/database?all=1`, { method: 'DELETE' })
+    const res = await dbFetch(`/api/database?all=1`, { method: 'DELETE' })
     if (!res.ok) { setStatus({ kind: 'err', msg: 'Clear failed' }); return }
     const d = await res.json().catch(() => ({}))
     setSelectedId(null)
     await fetchRows()
     setStatus({ kind: 'ok', msg: `Cleared ${d.deleted ?? 0} rows from the corpus.` })
   }, [])
+
+  const downloadBackup = useCallback(async () => {
+    const res = await dbFetch('/api/database/backup')
+    if (!res.ok) { setStatus({ kind: 'err', msg: 'Backup failed' }); return }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `traderra-backup-${new Date().toISOString().slice(0, 10)}.json`
+    document.body.appendChild(a); a.click(); a.remove()
+    URL.revokeObjectURL(url)
+    setStatus({ kind: 'ok', msg: 'Backup downloaded — keep this file safe.' })
+  }, [])
+
+  const restoreBackup = useCallback(async (file: File) => {
+    if (!confirm('Restore will REPLACE everything in the database with the backup. Continue?')) return
+    try {
+      const text = await file.text()
+      const backup = JSON.parse(text)
+      const res = await dbFetch('/api/database/backup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ backup }) })
+      const data = await res.json()
+      if (!res.ok) { setStatus({ kind: 'err', msg: data.error || 'Restore failed' }); return }
+      await fetchRows()
+      setStatus({ kind: 'ok', msg: 'Restored from backup.' })
+    } catch (e: any) {
+      setStatus({ kind: 'err', msg: 'Invalid backup file: ' + e.message })
+    }
+  }, [fetchRows])
 
   const toggleScan = (id: string) => setSelectedScanIds((s) => {
     const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n
@@ -1024,7 +1114,7 @@ export default function DatabasePage() {
     setImporting(true)
     try {
       const ids = Array.from(selectedScanIds)
-      const res = await fetch('/api/database/import', {
+      const res = await dbFetch('/api/database/import', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scanIds: ids }),
       })
@@ -1217,13 +1307,16 @@ export default function DatabasePage() {
     }))
   }, [rows, columnFilters])
 
+  const [{ pageIndex, pageSize }, setPagination] = useState({ pageIndex: 0, pageSize: 50 })
   const table = useReactTable({
     data: tableData, columns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
     columnResizeMode: 'onChange',
-    state: { sorting },
+    state: { sorting, pagination: { pageIndex, pageSize } },
     onSortingChange: setSorting,
+    onPaginationChange: setPagination,
   })
 
   const selected = useMemo(() => rows.find((r) => r.id === selectedId) ?? null, [rows, selectedId])
@@ -1245,6 +1338,35 @@ export default function DatabasePage() {
             {counts.total} rows · {counts.classified} classified · {counts.graded} graded
           </span>
           {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: C.MUTED }} />}
+          {/* Database (workspace) switcher */}
+          <div className="flex items-center gap-1 px-1.5 py-0.5 rounded" style={{ background: C.SURFACE, border: `1px solid ${C.BORDER}` }}>
+            <span className="text-[9px] uppercase tracking-wider font-bold" style={{ color: C.MUTED }}>DB</span>
+            <select
+              value={currentDbId ?? ''}
+              onChange={(e) => switchDatabase(e.target.value)}
+              className="bg-transparent text-xs font-bold outline-none cursor-pointer"
+              style={{ color: C.TEXT }}
+              title="Switch database (workspace)"
+            >
+              {databases.map((d) => (
+                <option key={d.id} value={d.id} style={{ background: C.SURFACE2 }}>{d.name} · {d.rowCount}</option>
+              ))}
+            </select>
+            <button onClick={() => { const n = prompt('Name for the new (empty) database:'); if (n?.trim()) createDatabase(n.trim()) }} title="New empty database"
+              className="opacity-70 hover:opacity-100 transition-opacity" style={{ color: C.GOLD }}>
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={() => { if (!currentDbId) return; const cur = databases.find((d) => d.id === currentDbId); const n = prompt(`Duplicate "${cur?.name ?? ''}" to a new database named:`); if (n?.trim()) createDatabase(n.trim(), currentDbId) }} title="Duplicate current database"
+              className="opacity-70 hover:opacity-100 transition-opacity" style={{ color: C.GOLD }}>
+              <Copy className="w-3.5 h-3.5" />
+            </button>
+            {databases.length > 1 && (
+              <button onClick={() => { if (currentDbId && confirm('Delete this database and ALL its rows + trades? Cannot be undone.')) deleteDatabase(currentDbId) }} title="Delete current database"
+                className="opacity-70 hover:opacity-100 transition-opacity" style={{ color: C.RED }}>
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <FilterPopup
@@ -1319,10 +1441,21 @@ export default function DatabasePage() {
               <button onClick={() => removeScan(n)} title={`Remove ${n} from corpus`} className="opacity-60 hover:opacity-100 leading-none">✕</button>
             </span>
           ))}
-          <button onClick={() => { if (confirm('Clear ALL rows from the corpus? This cannot be undone.')) clearAll() }}
-            className="text-[10px] px-2 py-0.5 rounded font-semibold ml-auto" style={{ color: C.RED, background: 'rgba(239,68,68,0.08)', border: `1px solid rgba(239,68,68,0.3)` }}>
-            Clear All
-          </button>
+          <div className="ml-auto flex items-center gap-1.5">
+            <button onClick={downloadBackup} title="Download a full JSON backup (rows, trades, screenshots)"
+              className="text-[10px] px-2 py-0.5 rounded font-semibold" style={{ color: C.GOLD, background: C.GOLD_DIM, border: `1px solid ${C.GOLD_BORDER}` }}>
+              ⤓ Backup
+            </button>
+            <label title="Restore database from a backup JSON (replaces everything)"
+              className="text-[10px] px-2 py-0.5 rounded font-semibold cursor-pointer" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>
+              ⤒ Restore
+              <input type="file" accept="application/json,.json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) restoreBackup(f); e.target.value = '' }} />
+            </label>
+            <button onClick={() => { if (confirm('Clear ALL rows from the corpus? This cannot be undone. (Tip: download a Backup first!)')) clearAll() }}
+              className="text-[10px] px-2 py-0.5 rounded font-semibold" style={{ color: C.RED, background: 'rgba(239,68,68,0.08)', border: `1px solid rgba(239,68,68,0.3)` }}>
+              Clear All
+            </button>
+          </div>
         </div>
       )}
 
@@ -1403,6 +1536,23 @@ export default function DatabasePage() {
           </table>
         )}
       </div>
+
+      {/* Pagination — caps DOM rows so typing/re-render stays fast with hundreds of rows */}
+      {table.getPageCount() > 1 && (
+        <div className="shrink-0 flex items-center justify-between gap-3 px-3 py-1.5 border-t" style={{ borderColor: C.BORDER, background: C.SURFACE }}>
+          <div className="flex items-center gap-1">
+            <button onClick={() => table.setPageIndex(0)} disabled={!table.getCanPreviousPage()} className="text-[10px] px-2 py-0.5 rounded font-mono disabled:opacity-30" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>«</button>
+            <button onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()} className="text-[10px] px-2 py-0.5 rounded font-mono disabled:opacity-30" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>◀</button>
+            <span className="text-[10px] font-mono px-2" style={{ color: C.MUTED }}>page {pageIndex + 1} / {table.getPageCount()}</span>
+            <button onClick={() => table.nextPage()} disabled={!table.getCanNextPage()} className="text-[10px] px-2 py-0.5 rounded font-mono disabled:opacity-30" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>▶</button>
+            <button onClick={() => table.setPageIndex(table.getPageCount() - 1)} disabled={!table.getCanNextPage()} className="text-[10px] px-2 py-0.5 rounded font-mono disabled:opacity-30" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>»</button>
+          </div>
+          <span className="text-[10px] font-mono" style={{ color: C.MUTED }}>{tableData.length} rows · {pageSize}/page</span>
+          <select value={pageSize} onChange={(e) => { setPagination(p => ({ pageIndex: 0, pageSize: Number(e.target.value) })) }} className="text-[10px] rounded px-1 py-0.5 font-mono" style={{ background: C.SURFACE2, color: C.MUTED, border: `1px solid ${C.BORDER}` }}>
+            {[25, 50, 100, 200].map(n => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </div>
+      )}
 
       {selected && (
         <div onMouseDown={onSplitDown} title="Drag to resize"
@@ -1492,15 +1642,27 @@ function TradeSection({ label, hint, section, onChange }: {
   onChange: (s: { text: string; annots: { ref: string; caption?: string }[] }) => void
 }) {
   const C = useTheme()
-  const text = section?.text ?? ''
+  const propText = section?.text ?? ''
   const annots = Array.isArray(section?.annots) ? section!.annots : []
+  // LOCAL text state + debounced push so typing never re-renders the whole table
+  const [local, setLocal] = useState(propText)
+  const pushRef = useRef(propText)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (propText !== pushRef.current && propText !== local) { setLocal(propText); pushRef.current = propText }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [propText])
+  const flush = () => {
+    if (timer.current) { clearTimeout(timer.current); timer.current = null }
+    if (local !== pushRef.current) { pushRef.current = local; onChange({ text: local, annots }) }
+  }
   const onPaste = (e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items; if (!items) return
     for (let i = 0; i < items.length; i++) {
       if (items[i].type.startsWith('image/')) {
         const file = items[i].getAsFile(); if (!file) continue
         const reader = new FileReader()
-        reader.onload = () => onChange({ text, annots: [...annots, { ref: reader.result as string, caption: '' }] })
+        reader.onload = () => { pushRef.current = local; onChange({ text: local, annots: [...annots, { ref: reader.result as string, caption: '' }] }) }
         reader.readAsDataURL(file)
         e.preventDefault()
         return
@@ -1513,7 +1675,11 @@ function TradeSection({ label, hint, section, onChange }: {
         <label className="text-xs uppercase tracking-wider font-bold" style={{ color: C.GOLD }}>{label}</label>
         {hint && <p className="text-[10px] mt-0.5" style={{ color: C.MUTED }}>{hint}</p>}
       </div>
-      <textarea value={text} onChange={(e) => onChange({ text: e.target.value, annots })} onPaste={onPaste}
+      <textarea value={local} onChange={(e) => {
+          setLocal(e.target.value)
+          if (timer.current) clearTimeout(timer.current)
+          timer.current = setTimeout(flush, 500)
+        }} onBlur={flush} onPaste={onPaste}
         placeholder="Write your analysis… (paste screenshots straight in)"
         className="w-full border rounded-lg px-3 py-2 text-sm leading-relaxed resize-y focus:outline-none min-h-[120px]"
         style={{ background: C.SURFACE, borderColor: C.BORDER, color: C.TEXT }} />
@@ -1523,7 +1689,7 @@ function TradeSection({ label, hint, section, onChange }: {
             <div key={i} className="relative group">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={a.ref} alt={a.caption ?? ''} className="w-48 h-32 object-cover rounded-lg border" style={{ borderColor: C.BORDER }} />
-              <button onClick={() => onChange({ text, annots: annots.filter((_, idx) => idx !== i) })}
+              <button onClick={() => { pushRef.current = local; onChange({ text: local, annots: annots.filter((_, idx) => idx !== i) }) }}
                 className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full text-[10px] opacity-0 group-hover:opacity-100 flex items-center justify-center"
                 style={{ background: C.RED, color: '#fff' }}>✕</button>
             </div>

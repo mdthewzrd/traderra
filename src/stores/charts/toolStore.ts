@@ -98,6 +98,20 @@ export const IND_CATALOG: Record<string, IndCatalogEntry> = {
       {key:'part_fill',label:'Partial Fill (red)',def:'rgba(183,28,28,0.45)'},
       {key:'full_fill',label:'Extreme Fill (orange)',def:'rgba(230,81,0,0.55)'},
     ], legacyKeys:['devzones'] },
+  lingua2:        { label:'Lingua Cycle v2',  group:'Overlays', combo:true,
+    params:[
+      {key:'flat',label:'Flat Threshold',def:0.03,step:0.01,group:'aop'},
+      {key:'slopeN',label:'Slope Lookback',def:10,min:2,max:50,group:'aop'},
+      {key:'slopeEma',label:'Slope EMA (fast)',def:20,min:3,max:200,group:'aop'},
+      {key:'holdBars',label:'Stage Hold Bars',def:2,min:1,max:20,group:'aop'},
+      {key:'emaMid',label:'Mean EMA Mid',def:72,min:1,max:500,group:'ema'},
+      {key:'emaSlow',label:'Mean EMA Slow',def:89,min:1,max:500,group:'ema'},
+      {key:'trendEma',label:'Trend Pitch EMA',def:39,min:1,max:500,group:'ema'},
+      {key:'extThr',label:'Extreme Band',def:6.9,step:0.1,group:'dev'},
+      {key:'contThr',label:'Cont Band (LTF)',def:5.5,step:0.1,group:'dev'},
+      {key:'chopThr',label:'Chop Threshold (ER)',def:0.30,step:0.05,min:0,max:1,group:'aop'},
+      {key:'schmitt',label:'Schmitt Stickiness',def:0.4,step:0.1,min:0,max:1,group:'aop'},
+    ], legacyKeys:['lingua2'] },
   lingua:         { label:'Lingua Cycle',     group:'Overlays', combo:true,
     params:[
       {key:'slopeN',label:'Slope Lookback (bars)',def:10,min:2,max:50,group:'aop'},
@@ -352,6 +366,7 @@ function makeDefaultTools(): ToolInstance[] {
     mk('pzones', true, false),
     mk('devzones', false, false),
     mk('lingua', false, false),
+    mk('lingua2', true, false),
     mk('lingua_exec', false, false),
     mk('curltrend', false, false),
     mk('mikesbands', false, false),
@@ -519,7 +534,7 @@ export const useToolStore = create<ToolState>()(
 },
     {
       name: 'traderra-tools',
-      version: 1,
+      version: 2,
       // sessionStorage → per-tab isolation: tool list/params are local to each tab so a
       // template applied in one tab doesn't change indicators in another.
       storage: createJSONStorage(() => sessionStorage),
@@ -530,6 +545,20 @@ export const useToolStore = create<ToolState>()(
         if (version === undefined && persisted.toolOverrides && !persisted.tools) {
           const tools = Object.entries(persisted.toolOverrides).map(([indKey, o]: [string, any]) => ({ indKey, on: o.on, hot: o.hot, params: o.params, colors: o.colors }))
           return { ...persisted, tools, toolOverrides: undefined }
+        }
+        // v1→v2: lingua2 re-calibration (emaMid 59→72, emaSlow 69→89, extThr 7.2→6.9 = the
+        // confirmed 72/89 upper-1 band). Persisted tools saved these as EXPLICIT param
+        // values, so merge keeps the stale 59/7.2 and starves EXTREME on lower-vol instruments
+        // (SPY/QQQ). Strip just the changed keys so catalog defaults re-apply below; user-tuned
+        // params (flat, schmitt, ...) survive untouched.
+        if (version < 2 && Array.isArray(persisted.tools)) {
+          for (const t of persisted.tools) {
+            if (t && t.indKey === 'lingua2' && t.params) {
+              delete t.params.emaMid
+              delete t.params.emaSlow
+              delete t.params.extThr
+            }
+          }
         }
         return persisted
       },

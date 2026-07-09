@@ -143,6 +143,17 @@ function tfSlot(map: Record<number, TFIndicators>, panelIdx: number): TFIndicato
   return map[panelIdx] || (map[panelIdx] = { times: [], aop: [], dev: [], devLow: [], eMid: [], eSlow: [], eTrend: [], pitch: [], atrMid: [], atrSlow: [], high: [], low: [], close: [] })
 }
 
+// Raw bars from the shared MTF/HTF/LTF slots — consumed by render-lingua2.ts (the clean
+// v2 cycle) so it shares the bar feed WITHOUT inheriting the classic tool's param coupling.
+export function getLinguaCycleBars(panelIdx: number, role: 'mtf' | 'htf' | 'ltf'): { time: number; high: number; low: number; close: number }[] {
+  const map = role === 'mtf' ? MTF : role === 'htf' ? HTF : LTF
+  const s = tfSlot(map, panelIdx)
+  const n = s.times.length
+  const out: { time: number; high: number; low: number; close: number }[] = new Array(n)
+  for (let i = 0; i < n; i++) out[i] = { time: s.times[i], high: s.high[i], low: s.low[i], close: s.close[i] }
+  return out
+}
+
 // HTF auto-derivation: confirmation TF = primary MTF TF × 4 minutes. Preserves the
 // fractal hierarchy (1H→4H, 30m→2H, 15m→1H). Daily/weekly roll up to D/W.
 export function htfOf(tf: string): string {

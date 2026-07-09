@@ -14,7 +14,7 @@ export default function MainLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
-  const isBacktest = pathname === '/backtest'
+  const isBacktest = pathname.startsWith('/backtest')
 
   return (
     <>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthUserId } from '@/lib/auth-helpers'
+import { getDatabaseId } from '@/lib/db-id'
 
 // /api/database — CorpusRow CRUD (pre-trade pattern corpus)
 // A row = one deduped scan hit (symbol+signalDate), human-classified into the playbook.
@@ -10,7 +11,8 @@ export async function GET(request: NextRequest) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(request.url)
-  const where: any = { userId }
+  const dbId = await getDatabaseId(request, userId)
+  const where: any = { userId, databaseId: dbId }
 
   if (searchParams.get('grade')) where.grade = searchParams.get('grade')
   if (searchParams.get('setupType')) where.setupType = searchParams.get('setupType')
@@ -36,9 +38,11 @@ export async function POST(request: NextRequest) {
   const userId = await getAuthUserId(request)
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const dbId = await getDatabaseId(request, userId)
   const body = await request.json()
   const data: any = {
     userId,
+    databaseId: dbId,
     symbol: body.symbol,
     signalDate: body.signalDate,
     scanSources: Array.isArray(body.scanSources) ? body.scanSources : (body.scanSource ? [body.scanSource] : []),
@@ -69,12 +73,13 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const userId = await getAuthUserId(request)
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const dbId = await getDatabaseId(request, userId)
 
   const { searchParams } = new URL(request.url)
 
   // Mode: clear all non-archived rows for this user
   if (searchParams.get('all')) {
-    const r = await prisma.corpusRow.deleteMany({ where: { userId, status: { not: 'archived' } } })
+    const r = await prisma.corpusRow.deleteMany({ where: { userId, databaseId: dbId, status: { not: 'archived' } } })
     return NextResponse.json({ ok: true, deleted: r.count })
   }
 
@@ -83,7 +88,7 @@ export async function DELETE(request: NextRequest) {
   const scan = searchParams.get('scan')
   if (scan) {
     const hits = await prisma.corpusRow.findMany({
-      where: { userId, scanSources: { has: scan } },
+      where: { userId, databaseId: dbId, scanSources: { has: scan } },
       select: { id: true, scanSources: true },
     })
     let deleted = 0, updated = 0

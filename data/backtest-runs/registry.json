@@ -16,9 +16,24 @@
       "totR": -31.69,
       "profitFactor": 0.903,
       "longs": 449,
-      "shorts": 273
+      "shorts": 273,
+      "avgR": -0.044,
+      "greenDays": 143,
+      "greenPct": 31.9,
+      "tradingDays": 448,
+      "perDay": 1.61,
+      "maxDD": 58.1,
+      "avgDayR": -0.07,
+      "bestDay": {
+        "date": "2024-08-12",
+        "r": 21.1
+      },
+      "worstDay": {
+        "date": "2025-09-30",
+        "r": -2.71
+      }
     },
-    "createdAt": "2026-07-01T01:41:57.797Z"
+    "createdAt": "2026-07-07T17:09:30.408Z"
   },
   {
     "id": "spy-1631-920",
@@ -37,9 +52,24 @@
       "totR": -32.56,
       "profitFactor": 0.908,
       "longs": 464,
-      "shorts": 283
+      "shorts": 283,
+      "avgR": -0.044,
+      "greenDays": 139,
+      "greenPct": 30.3,
+      "tradingDays": 459,
+      "perDay": 1.63,
+      "maxDD": 72.5,
+      "avgDayR": -0.07,
+      "bestDay": {
+        "date": "2024-08-12",
+        "r": 21.1
+      },
+      "worstDay": {
+        "date": "2024-04-03",
+        "r": -3.29
+      }
     },
-    "createdAt": "2026-07-01T01:41:57.800Z"
+    "createdAt": "2026-07-07T17:09:30.415Z"
   },
   {
     "id": "lingua-exec",
@@ -58,9 +88,18 @@
       "totR": 0,
       "profitFactor": 0,
       "longs": 0,
-      "shorts": 0
+      "shorts": 0,
+      "avgR": 0,
+      "greenDays": 0,
+      "greenPct": 0,
+      "tradingDays": 0,
+      "perDay": 0,
+      "maxDD": 0,
+      "avgDayR": 0,
+      "bestDay": null,
+      "worstDay": null
     },
-    "createdAt": "2026-07-01T01:41:57.801Z"
+    "createdAt": "2026-07-07T17:09:30.416Z"
   },
   {
     "id": "scalp-920-spy",
@@ -79,8 +118,203 @@
       "totR": 399.24,
       "profitFactor": 1.648,
       "longs": 480,
-      "shorts": 434
+      "shorts": 434,
+      "avgR": 0.437,
+      "greenDays": 253,
+      "greenPct": 49.2,
+      "tradingDays": 514,
+      "perDay": 1.78,
+      "maxDD": 25.7,
+      "avgDayR": 0.78,
+      "bestDay": {
+        "date": "2025-06-10",
+        "r": 13.84
+      },
+      "worstDay": {
+        "date": "2024-01-18",
+        "r": -5
+      }
     },
-    "createdAt": "2026-07-01T01:41:57.803Z"
+    "createdAt": "2026-07-07T17:09:30.420Z"
+  },
+  {
+    "id": "lingua-mtf-5m",
+    "name": "Lingua MTF · SPY 15m→5m",
+    "engine": "lingua-mtf",
+    "meta": {
+      "symbol": "SPY",
+      "tf": "5",
+      "from": "2024-01-01",
+      "to": "2026-06-27"
+    },
+    "summary": {
+      "trades": 5427,
+      "wins": 1991,
+      "winRate": 36.7,
+      "totR": 756.32,
+      "profitFactor": 1.198,
+      "longs": 3102,
+      "shorts": 2325,
+      "avgR": 0.139,
+      "greenDays": 393,
+      "greenPct": 62.7,
+      "tradingDays": 627,
+      "perDay": 8.66,
+      "maxDD": 55.5,
+      "avgDayR": 1.21,
+      "bestDay": {
+        "date": "2025-11-04",
+        "r": 17.92
+      },
+      "worstDay": {
+        "date": "2025-04-09",
+        "r": -27.36
+      }
+    },
+    "createdAt": "2026-07-07T17:09:30.446Z"
+  },
+  {
+    "id": "lingua-mtf-spy2022",
+    "name": "Lingua MTF · SPY 2022 BEAR",
+    "engine": "lingua-mtf",
+    "meta": {
+      "symbol": "SPY",
+      "tf": "5",
+      "from": "2022-01-01",
+      "to": "2022-12-31"
+    },
+    "summary": {
+      "trades": 2384,
+      "wins": 815,
+      "winRate": 34.2,
+      "totR": 251.37,
+      "profitFactor": 1.148,
+      "longs": 1085,
+      "shorts": 1299,
+      "avgR": 0.105,
+      "greenDays": 156,
+      "greenPct": 62.2,
+      "tradingDays": 251,
+      "perDay": 9.5,
+      "maxDD": 42.9,
+      "avgDayR": 1,
+      "bestDay": {
+        "date": "2022-01-21",
+        "r": 14.21
+      },
+      "worstDay": {
+        "date": "2022-11-10",
+        "r": -35.87
+      }
+    },
+    "createdAt": "2026-07-07T17:09:30.453Z"
+  },
+  {
+    "id": "lingua-mtf-qqq",
+    "name": "Lingua MTF · QQQ 15m→5m",
+    "engine": "lingua-mtf",
+    "meta": {
+      "symbol": "QQQ",
+      "tf": "5",
+      "from": "2024-01-01",
+      "to": "2026-06-27"
+    },
+    "summary": {
+      "trades": 5316,
+      "wins": 1828,
+      "winRate": 34.4,
+      "totR": 551.59,
+      "profitFactor": 1.141,
+      "longs": 2974,
+      "shorts": 2342,
+      "avgR": 0.104,
+      "greenDays": 367,
+      "greenPct": 58.5,
+      "tradingDays": 627,
+      "perDay": 8.48,
+      "maxDD": 47.2,
+      "avgDayR": 0.88,
+      "bestDay": {
+        "date": "2025-03-10",
+        "r": 18.44
+      },
+      "worstDay": {
+        "date": "2025-04-09",
+        "r": -25.17
+      }
+    },
+    "createdAt": "2026-07-07T17:09:30.473Z"
+  },
+  {
+    "id": "lingua-mtf-2m",
+    "name": "Lingua MTF · SPY 15m→2m",
+    "engine": "lingua-mtf",
+    "meta": {
+      "symbol": "SPY",
+      "tf": "2",
+      "from": "2024-01-01",
+      "to": "2026-06-27"
+    },
+    "summary": {
+      "trades": 4063,
+      "wins": 1757,
+      "winRate": 43.2,
+      "totR": 258.17,
+      "profitFactor": 1.106,
+      "longs": 2302,
+      "shorts": 1761,
+      "avgR": 0.064,
+      "greenDays": 341,
+      "greenPct": 55.6,
+      "tradingDays": 613,
+      "perDay": 6.63,
+      "maxDD": 46.4,
+      "avgDayR": 0.42,
+      "bestDay": {
+        "date": "2025-05-13",
+        "r": 19.15
+      },
+      "worstDay": {
+        "date": "2026-03-13",
+        "r": -13.69
+      }
+    },
+    "createdAt": "2026-07-07T17:09:30.485Z"
+  },
+  {
+    "id": "lingua-route-snipe",
+    "name": "Lingua Route-Snipe · 15m→5m",
+    "engine": "lingua-route",
+    "meta": {
+      "symbol": "SPY",
+      "tf": "5",
+      "from": "2024-01-01",
+      "to": "2026-06-27"
+    },
+    "summary": {
+      "trades": 697,
+      "wins": 254,
+      "winRate": 36.4,
+      "totR": 74.35,
+      "profitFactor": 1.167,
+      "longs": 423,
+      "shorts": 274,
+      "avgR": 0.107,
+      "greenDays": 162,
+      "greenPct": 43.8,
+      "tradingDays": 370,
+      "perDay": 1.88,
+      "maxDD": 29.9,
+      "avgDayR": 0.2,
+      "bestDay": {
+        "date": "2025-01-15",
+        "r": 12.64
+      },
+      "worstDay": {
+        "date": "2024-03-22",
+        "r": -4.37
+      }
+    },
+    "createdAt": "2026-07-07T17:09:30.488Z"
   }
 ]

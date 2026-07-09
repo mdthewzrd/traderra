@@ -34,5 +34,105 @@ module.exports = {
       watch: false,
       env: { NODE_ENV: 'production' },
     },
+    // ── Live D1 premarket scanners (run_get_d1s.py) ──────────────────────────
+    // Push via /api/scans/push → SSE → /live-scan. Active 7:00–10:00 ET, 30s poll.
+    // Died 2026-07-01 and were never restored → no live d1-gap/d1-gap-wide data.
+    // --live = strict/valid (d1-gap); --live --wide = d1-gap-wide;
+    // --potential-live = relaxed candidates (d1-gap-potential).
+    {
+      name: 'd1-gap-live',
+      script: 'run_get_d1s.py',
+      interpreter: '/home/mdwzrd/edge.dev/.venv/bin/python',
+      args: '--live',
+      cwd: '/home/mdwzrd/.wzrd-pi-dev/projects/edge-dev/uploads',
+      exec_mode: 'fork',
+      instances: 1,
+      autorestart: true,
+      max_restarts: 100,
+      restart_delay: 3000,
+      watch: false,
+      env: {
+        PUSH_URL: 'http://127.0.0.1:6565/api/scans/push',
+        SCANNER_URL: 'http://127.0.0.1:6565/api/scans',
+      },
+    },
+    {
+      name: 'd1-gap-wide-live',
+      script: 'run_get_d1s.py',
+      interpreter: '/home/mdwzrd/edge.dev/.venv/bin/python',
+      args: '--live --wide',
+      cwd: '/home/mdwzrd/.wzrd-pi-dev/projects/edge-dev/uploads',
+      exec_mode: 'fork',
+      instances: 1,
+      autorestart: true,
+      max_restarts: 100,
+      restart_delay: 3000,
+      watch: false,
+      env: {
+        PUSH_URL: 'http://127.0.0.1:6565/api/scans/push',
+        SCANNER_URL: 'http://127.0.0.1:6565/api/scans',
+      },
+    },
+    {
+      name: 'd1-gap-potential-live',
+      script: 'run_get_d1s.py',
+      interpreter: '/home/mdwzrd/edge.dev/.venv/bin/python',
+      args: '--potential-live',
+      cwd: '/home/mdwzrd/.wzrd-pi-dev/projects/edge-dev/uploads',
+      exec_mode: 'fork',
+      instances: 1,
+      autorestart: true,
+      max_restarts: 100,
+      restart_delay: 3000,
+      watch: false,
+      env: {
+        PUSH_URL: 'http://127.0.0.1:6565/api/scans/push',
+        SCANNER_URL: 'http://127.0.0.1:6565/api/scans',
+      },
+    },
+    // D1 Gap WIDE potentials — relaxed candidates pushed as d1-gap-wide-potential.
+    // Without this, d1-gap-wide valid names (e.g. BJDX, TDTH) had no matching
+    // potential feed → appeared in Valid but not Potentials on /live-scan.
+    {
+      name: 'd1-gap-wide-potential-live',
+      script: 'run_get_d1s.py',
+      interpreter: '/home/mdwzrd/edge.dev/.venv/bin/python',
+      args: '--potential-live --wide',
+      cwd: '/home/mdwzrd/.wzrd-pi-dev/projects/edge-dev/uploads',
+      exec_mode: 'fork',
+      instances: 1,
+      autorestart: true,
+      max_restarts: 100,
+      restart_delay: 3000,
+      watch: false,
+      env: {
+        PUSH_URL: 'http://127.0.0.1:6565/api/scans/push',
+        SCANNER_URL: 'http://127.0.0.1:6565/api/scans',
+      },
+    },
+    // ── Live intraday scanner (live_spec_poller.py) ────────────────────────
+    // Evaluates backside/frontside YAML specs (relaxed) against the forming
+    // intraday bar 9:30–16:00 ET, 45s poll. STICKY: once a name hits a spec it
+    // stays in that day's potential set. Pushed as <spec>-potential → /live-scan
+    // backside/frontside boxes' Potentials tab. Universe = Polygon gainers funnel.
+    // Also still runs the premarket pm-movers/max-scan specs 7–10am.
+    {
+      name: 'intraday-spec-live',
+      script: 'live_spec_poller.py',
+      interpreter: '/home/mdwzrd/edge.dev/.venv/bin/python',
+      cwd: '/home/mdwzrd/.wzrd-pi-dev/projects/edge-dev/uploads',
+      exec_mode: 'fork',
+      instances: 1,
+      autorestart: true,
+      max_restarts: 100,
+      restart_delay: 3000,
+      watch: false,
+      env: {
+        // live_spec_poller treats PUSH_URL as the bare API origin and appends
+        // /api/scans itself (unlike run_get_d1s.py which wants the full push path).
+        PUSH_URL: 'http://127.0.0.1:6565',
+        SCANNER_URL: 'http://127.0.0.1:6565/api/scans',
+      },
+    },
   ],
 }

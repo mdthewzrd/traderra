@@ -24,7 +24,7 @@
  * getDraws(cik) aggregates + dedupes for the snapshot.
  */
 import { prisma } from '@/lib/prisma';
-import { secFetchResponse } from '@/lib/sec/client';
+import { fetchAndParseFiling } from '@/lib/sec/client';
 
 const SCALE: Record<string, number> = { million: 1e6, billion: 1e9, thousand: 1e3, trillion: 1e12 };
 function scaleMoney(raw: string): number | null {
@@ -52,11 +52,6 @@ function stripHtml(html: string): string {
     .replace(/&#\d+;/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-}
-
-function filingUrl(cik: string, accessionNo: string, primaryDoc: string | null): string {
-  const stripped = accessionNo.replace(/-/g, '');
-  return `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${stripped}/${primaryDoc ?? ''}`;
 }
 
 export type DrawFacility = 'equity-line' | 'convertible' | 'promissory-note' | 'atm' | 'unknown';
@@ -176,15 +171,14 @@ export async function syncDraws(cik: string): Promise<SyncDrawsResult> {
         withDetail += (existing.draws ?? []).length;
         continue;
       }
-      let html: string;
-      try {
-        const res = await secFetchResponse(filingUrl(cik, filing.accessionNo, filing.primaryDoc), 'text/html');
-        if (!res.ok) continue;
-        html = await res.text();
-      } catch {
-        continue;
-      }
-      const d = parseDrawsHtml(html, filing.accessionNo, filing.filingDate.toISOString().slice(0, 10));
+      const d = await fetchAndParseFiling(
+        cik,
+        filing.accessionNo,
+        filing.primaryDoc,
+        (html) => parseDrawsHtml(html, filing.accessionNo, filing.filingDate.toISOString().slice(0, 10)),
+        (result) => result.draws.length === 0,
+      );
+      if (!d) continue; // primary + .txt both failed — leave unmarked, retry later
       parsed++;
       withDetail += d.draws.length;
       await prisma.dilutionFiling.update({

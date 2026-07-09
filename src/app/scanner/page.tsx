@@ -1,15 +1,42 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } from 'react'
 import { computeAnchoredTrendline } from '@/lib/charts/anchored-trend'
+import { tradingCalendar } from '@/lib/advanced-date-parser'
 import {
   Search, Loader2, ChevronLeft, ChevronRight,
   BarChart3, TrendingUp, List, MessageSquare,
   Plus, ExternalLink, Calendar, Zap, Activity,
   ArrowUpRight, Hash, DollarSign, Target, Layers,
-  Clock, TrendingDown, Minus, Send, Play, Rows3,
+  Clock, TrendingDown, Minus, Send, Play, Rows3, Rows2,
   LayoutGrid, X, Settings2, Save, Sun, Moon, Shield
 } from 'lucide-react'
+
+// ─── MDR swing is a "trade next day" setup: signal day = setup (D-1), next trading day = trade day (D0) ──
+const MDR_SWING_RE = /mdr[\s_-]?swing/i
+const _nyseHols = new Map<number, Set<string>>()
+function nyseHolidaySet(year: number): Set<string> {
+  const c = _nyseHols.get(year); if (c) return c
+  const set = new Set<string>()
+  tradingCalendar.getMarketHolidays(year).forEach(d => {
+    set.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)
+  })
+  set.add(`${year}-06-19`) // Juneteenth (not in base calendar)
+  _nyseHols.set(year, set); return set
+}
+// Next NYSE trading day after a YYYY-MM-DD date (skips weekends + major holidays). Used for row labels only;
+// the chart derives the same value from actual bars (ground truth). Display heuristic — does not model observed-holiday shifts.
+function nextNyseTradingDay(yyyymmdd: string): string {
+  const d = new Date(yyyymmdd + 'T12:00:00')
+  for (let i = 0; i < 8; i++) {
+    d.setDate(d.getDate() + 1)
+    const y = d.getFullYear()
+    const ds = `${y}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const dow = d.getDay()
+    if (dow !== 0 && dow !== 6 && !nyseHolidaySet(y).has(ds)) return ds
+  }
+  return yyyymmdd
+}
 
 // ─── Built-in Scans (shared with SCAN tab) ─────────────
 const BUILTIN_SCANS: ScanDef[] = [
@@ -41,6 +68,14 @@ const BUILTIN_SCANS: ScanDef[] = [
   { id: 'builtin-og-lc-backside-d3-ext2', name: 'Backside D3 Ext2', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-backside-d3-ext2', 'lc', 'backside', 'd3'], group: 'og-scans' },
   { id: 'builtin-og-lc-backside-d3', name: 'Backside D3', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-backside-d3', 'lc', 'backside', 'd3'], group: 'og-scans' },
   { id: 'builtin-og-lc-backside-d4-para', name: 'Backside D4 Para', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-backside-d4-para', 'lc', 'backside', 'parabolic'], group: 'og-scans' },
+  { id: 'builtin-og-lc-backside-d3-gap05', name: 'Backside D3 Gap05', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-backside-d3-gap05', 'lc', 'backside', 'd3', 'gap'], group: 'og-scans' },
+  { id: 'builtin-og-lc-backside-d3-ext1-gap05', name: 'Backside D3 Ext1 Gap05', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-backside-d3-ext1-gap05', 'lc', 'backside', 'd3', 'gap'], group: 'og-scans' },
+  { id: 'builtin-og-lc-backside-d3-ext2-gap05', name: 'Backside D3 Ext2 Gap05', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-backside-d3-ext2-gap05', 'lc', 'backside', 'd3', 'gap'], group: 'og-scans' },
+  { id: 'builtin-og-lc-backside-d4-para-gap05', name: 'Backside D4 Para Gap05', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-backside-d4-para-gap05', 'lc', 'backside', 'parabolic', 'gap'], group: 'og-scans' },
+  { id: 'builtin-og-lc-backside-d3-gappdh025', name: 'Backside D3 GapPDH025', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-backside-d3-gappdh025', 'lc', 'backside', 'd3', 'gap', 'pdh'], group: 'og-scans' },
+  { id: 'builtin-og-lc-backside-d3-ext1-gappdh025', name: 'Backside D3 Ext1 GapPDH025', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-backside-d3-ext1-gappdh025', 'lc', 'backside', 'd3', 'gap', 'pdh'], group: 'og-scans' },
+  { id: 'builtin-og-lc-backside-d3-ext2-gappdh025', name: 'Backside D3 Ext2 GapPDH025', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-backside-d3-ext2-gappdh025', 'lc', 'backside', 'd3', 'gap', 'pdh'], group: 'og-scans' },
+  { id: 'builtin-og-lc-backside-d4-para-gappdh025', name: 'Backside D4 Para GapPDH025', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-backside-d4-para-gappdh025', 'lc', 'backside', 'parabolic', 'gap', 'pdh'], group: 'og-scans' },
   { id: 'builtin-og-lc-frontside-d2-uptrend', name: 'Frontside D2 Uptrend', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-frontside-d2-uptrend', 'lc', 'frontside', 'd2'], group: 'og-scans' },
   { id: 'builtin-frd-gap', name: 'FRD Gap', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['frd-gap', 'mean-reversion'], group: 'mikes-scans/mean-reversion' },
   { id: 'builtin-frd-gap-lc', name: 'FRD Gap LC', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['frd-gap-lc', 'mean-reversion'], group: 'mikes-scans/mean-reversion' },
@@ -87,6 +122,14 @@ const BUILTIN_SPEC_MAP: Record<string, string> = {
   'builtin-og-lc-backside-d3-ext2': 'og-lc-backside-d3-ext2',
   'builtin-og-lc-backside-d3': 'og-lc-backside-d3',
   'builtin-og-lc-backside-d4-para': 'og-lc-backside-d4-para',
+  'builtin-og-lc-backside-d3-gap05': 'og-lc-backside-d3-gap05',
+  'builtin-og-lc-backside-d3-ext1-gap05': 'og-lc-backside-d3-ext1-gap05',
+  'builtin-og-lc-backside-d3-ext2-gap05': 'og-lc-backside-d3-ext2-gap05',
+  'builtin-og-lc-backside-d4-para-gap05': 'og-lc-backside-d4-para-gap05',
+  'builtin-og-lc-backside-d3-gappdh025': 'og-lc-backside-d3-gappdh025',
+  'builtin-og-lc-backside-d3-ext1-gappdh025': 'og-lc-backside-d3-ext1-gappdh025',
+  'builtin-og-lc-backside-d3-ext2-gappdh025': 'og-lc-backside-d3-ext2-gappdh025',
+  'builtin-og-lc-backside-d4-para-gappdh025': 'og-lc-backside-d4-para-gappdh025',
   'builtin-og-lc-frontside-d2-uptrend': 'og-lc-frontside-d2-uptrend',
   'builtin-frd-gap': 'frd-gap',
   'builtin-frd-gap-lc': 'frd-gap-lc',
@@ -140,7 +183,7 @@ interface ScanRun {
 }
 
 export type Timeframe = '5' | '15' | '60' | '120' | '240' | 'D'
-type ChartMode = 'single' | 'stacked'
+type ChartMode = 'single' | '2stack' | 'stacked'
 type PageMode = 'scanner' | 'backtest'
 
 interface BacktestResults {
@@ -542,7 +585,7 @@ function barETMinutes(b: any): number | null {
 }
 
 // ─── MiniChart with zoom & drag ─────────────────────────
-export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset = 0, entryMarker, exitMarker, centerOnDate, legMarkers, exitEpoch, klParams, chartDays, stackDays, compact, extraDays, volH }: {
+export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset = 0, entryMarker, exitMarker, centerOnDate, legMarkers, exitEpoch, klParams, chartDays, stackDays, compact, extraDays, volH, tradeNextDay, zoomDays }: {
   symbol: string
   tf: Timeframe
   date?: string
@@ -561,6 +604,8 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
   compact?: boolean    // tighter margins for small embedded charts (less dead space)
   extraDays?: number   // widen the view window by N extra days (navigation extend buttons)
   volH?: number        // explicit volume pane height in px (overrides PAD_B-based default)
+  tradeNextDay?: boolean  // MDR-swing-style: treat the next trading day (not the signal day) as D0
+  zoomDays?: { before: number; after: number }  // scan-mode default zoom: N trading days before D0 + M after
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [allBars, setAllBars] = useState<any[]>([])
@@ -589,7 +634,9 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
       fromDate.setDate(fromDate.getDate() - 3)
       toDate.setDate(toDate.getDate() + 10)
     } else {
-      toDate.setDate(toDate.getDate() + dayOffset * 2 + 10)
+      // Forward window: D0 + nav offset + ~5 trading days. Keeps zoom-out focused on
+      // D0 and the immediate aftermath (trendbreak plays out in 1-5 days), not 30d forward.
+      toDate.setDate(toDate.getDate() + dayOffset + 7)
       if (tf === '5') fromDate.setDate(fromDate.getDate() - 3)
       else if (tf === '15') fromDate.setDate(fromDate.getDate() - 12)
       else if (tf === '60') fromDate.setDate(fromDate.getDate() - 70)
@@ -605,10 +652,40 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
       .catch(() => { setAllBars([]); setLoading(false) })
   }, [symbol, tf, date, dayOffset, centerOnDate])
 
+  // For "trade next day" setups (e.g. MDR swing), the chart's D0/focal day is the
+  // next trading day after the signal date. Derived from actual bars so it's
+  // holiday/weekend-safe with no calendar dependency.
+  const d0Date = useMemo(() => {
+    if (!tradeNextDay || !date || !allBars.length) return date
+    let sigLast = -1
+    for (let i = allBars.length - 1; i >= 0; i--) {
+      if (barETDate(allBars[i]) === date) { sigLast = i; break }
+    }
+    if (sigLast < 0) return date
+    for (let i = sigLast + 1; i < allBars.length; i++) {
+      if (barETDate(allBars[i]) !== date) return barETDate(allBars[i])
+    }
+    return date
+  }, [tradeNextDay, date, allBars])
+
   // Compute visible bars
   const visibleBars = useMemo(() => {
     if (!allBars.length) return []
     if (manualZoom) return allBars.slice(manualZoom.start, manualZoom.end)
+
+    // zoomDays override: N days before D0 + M after (scan-mode default zoom)
+    if (zoomDays && d0Date) {
+      const bpd = tf === '5' ? 78 : tf === '15' ? 26 : tf === '60' ? 7 : tf === '120' ? 4 : tf === '240' ? 2 : 1
+      let d0First = -1
+      for (let i = 0; i < allBars.length; i++) {
+        if (barETDate(allBars[i]) === d0Date) { d0First = i; break }
+      }
+      if (d0First >= 0) {
+        const startIdx = Math.max(0, d0First - zoomDays.before * bpd)
+        const endIdx = Math.min(allBars.length, d0First + (1 + zoomDays.after) * bpd)
+        return allBars.slice(startIdx, endIdx)
+      }
+    }
 
     if (chartDays) {
       // Per-TF context view (live-feed): show chartDays of bars ending at D0+dayOffset
@@ -703,9 +780,9 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
     else defaultBars = Math.min(allBars.length, 120)
 
     let d0Idx = allBars.length - 1
-    if (date) {
+    if (d0Date) {
       for (let i = allBars.length - 1; i >= 0; i--) {
-        if (barETDate(allBars[i]) === date) { d0Idx = i; break }
+        if (barETDate(allBars[i]) === d0Date) { d0Idx = i; break }
       }
     }
     const bpd = tf === '5' ? 78 : tf === '15' ? 26 : tf === '60' ? 7 : tf === '120' ? 4 : tf === '240' ? 2 : 1
@@ -713,7 +790,7 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
     const endIdx = Math.min(allBars.length, d0Idx + dayOffset * bpd + 1)
     const startIdx = Math.max(0, endIdx - defaultBars)
     return allBars.slice(startIdx, endIdx)
-  }, [allBars, tf, dayOffset, date, manualZoom, chartDays, extraDays])
+  }, [allBars, tf, dayOffset, date, d0Date, manualZoom, chartDays, extraDays, zoomDays])
 
   const draw = useCallback(() => {
     const bars = visibleBars
@@ -895,10 +972,10 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
       // 9:30 ET boundary x for D0 — clip gold so it stops exactly at market open
       const step = (W - PAD_R) / bars.length
       let d0OpenX = Infinity
-      if (date) {
+      if (d0Date) {
         for (let i = 0; i < bars.length; i++) {
           const mins = getBarMinET(bars[i])
-          if (mins !== null && getBarDate(bars[i]) === date && mins >= mktOpen) { d0OpenX = xFor(i) - step / 2; break }
+          if (mins !== null && getBarDate(bars[i]) === d0Date && mins >= mktOpen) { d0OpenX = xFor(i) - step / 2; break }
         }
       }
       let d0Labeled = false
@@ -910,7 +987,7 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
         if (isPre || isAH) {
           const x = xFor(i)
           const barDate = getBarDate(bars[i])
-          const isD0 = isPre && date && barDate === date
+          const isD0 = isPre && d0Date && barDate === d0Date
           ctx.fillStyle = isD0 ? 'rgba(212,175,55,0.22)' : isPre ? 'rgba(70,70,80,0.3)' : 'rgba(50,35,35,0.3)'
           const left = x - bodyW
           const right = isD0 ? Math.min(x + bodyW, d0OpenX) : x + bodyW
@@ -949,10 +1026,10 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
     }
 
     // ── D0 marker: gold wedge below D0 daily candle (1D only) ──
-    if (date && tf === 'D' && bars.length > 0) {
+    if (d0Date && tf === 'D' && bars.length > 0) {
       for (let i = 0; i < bars.length; i++) {
         const b = bars[i]
-        if (barETDate(b) === date) {
+        if (barETDate(b) === d0Date) {
           const x = xFor(i)
           const lowY = yFor(b.low)
           // Upward wedge ▲ below the candle
@@ -1302,7 +1379,7 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
       ctx.fillStyle = `${GOLD}80`; ctx.font = '9px monospace'; ctx.textAlign = 'right'
       ctx.fillText(`${visibleBars.length}/${allBars.length}`, W - PAD_R - 4, 12)
     }
-  }, [visibleBars, allBars.length, tf, date, settings, dark, GOLD, entryMarker, exitMarker, legMarkers])
+  }, [visibleBars, allBars.length, tf, date, d0Date, settings, dark, GOLD, entryMarker, exitMarker, legMarkers])
 
   useEffect(() => { draw() }, [draw])
 
@@ -1481,6 +1558,25 @@ export default function ScanDashboardPage() {
   const [selectedIdx, setSelectedIdx] = useState(0)
   const [tf, setTf] = useState<Timeframe>('D')
   const [chartMode, setChartMode] = useState<ChartMode>('single')
+  // ── 2-stack auto-fit: size both charts to fill the viewport below the chart header ──
+  const twoStackRef = useRef<HTMLDivElement>(null)
+  const [winH, setWinH] = useState(typeof window !== 'undefined' ? window.innerHeight : 1080)
+  const [stackTop, setStackTop] = useState(280)
+  useEffect(() => {
+    const onResize = () => setWinH(window.innerHeight)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  // After the 2-stack mounts (or viewport changes), measure its top offset and re-render with correct heights
+  useLayoutEffect(() => {
+    if (chartMode !== '2stack') return
+    const t = twoStackRef.current?.getBoundingClientRect().top
+    if (t != null && Math.abs(t - stackTop) > 1) setStackTop(t)
+  }, [chartMode, winH])
+  // available height = viewport - top of the 2-stack container - 16px bottom breathing room
+  const stackAvail = Math.max(360, winH - stackTop - 16)
+  const stackDailyH = Math.floor(stackAvail * 0.48)
+  const stack15H = stackAvail - stackDailyH - 8 // 8px = space-y-2 gap
   const [loading, setLoading] = useState(false)
   const [showRunPanel, setShowRunPanel] = useState(false)
   const [runRange, setRunRange] = useState('90')
@@ -1778,11 +1874,14 @@ export default function ScanDashboardPage() {
     return s.strategy === strat || s.strategy === strat.replace(/-lc$/, '')
   })
   const activeStrategy = activeScanDef ? (BUILTIN_SPEC_MAP[activeScanDef.id] || activeScanDef.name.toLowerCase().replace(/\s+/g, '-')) : ''
-  const runs: ScanRun[] = (dbScansByStrategy[activeStrategy] || []).map(db => ({
+  const runs: ScanRun[] = (dbScansByStrategy[activeStrategy] || [])
+    .slice()
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .map(db => ({
     id: db.id,
     scanId: db.id,
     dateRange: db.name,
-    runAt: new Date(db.createdAt).toLocaleString(),
+    runAt: new Date(db.createdAt).toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }) + ' ET',
     resultCount: db.resultCount,
     tags: db.tags ? (typeof db.tags === 'string' ? JSON.parse(db.tags) : db.tags) : [],
     strategy: db.strategy,
@@ -1975,6 +2074,8 @@ export default function ScanDashboardPage() {
   // Backtest detection for chart mode — markers passed as HHMM time_int, matched to bars in ScanMiniChart
   const isBT = sig && (sig as any).entry_type != null
   const chartDate = sig ? (isBT ? (sig as any).d0_date : ((sig as any).signal_date || sig.date)) : undefined
+  // MDR swing is a "trade next day" setup: the chart's D0 = the trading day after the signal
+  const isMdrSwing = /mdr[\s_-]?swing/i.test((sig as any)?.signal || '')
   // Build per-leg markers: each leg gets its own entry (red) and exit (green)
   const legMarkers = isBT ? (() => {
     const rawLegs = (sig as any).legs
@@ -2295,7 +2396,7 @@ export default function ScanDashboardPage() {
               <p style={{ color: T.MUTED, fontSize: 9, marginTop: 4 }}>Click Run ▶ to execute</p>
             </div>
           )}
-          {runs.map(run => {
+          {runs.map((run, runIdx) => {
             const isActive = run.id === selectedRun
             return (
             <div key={run.id} onClick={() => setSelectedRun(run.id)} style={{
@@ -2308,7 +2409,10 @@ export default function ScanDashboardPage() {
             >
               <div className="flex items-center justify-between">
                 <span style={{ color: isActive ? GOLD : T.TEXT2, fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{run.dateRange}</span>
-                <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 2, background: `${T.TEAL}20`, color: T.TEAL }}>{run.resultCount} sig</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {runIdx === 0 && <span style={{ fontSize: 7, fontWeight: 800, padding: '1px 4px', borderRadius: 2, background: GOLD, color: '#000', letterSpacing: 0.5 }}>NEW</span>}
+                  <span style={{ fontSize: 9, padding: '1px 5px', borderRadius: 2, background: `${T.TEAL}20`, color: T.TEAL }}>{run.resultCount} sig</span>
+                </span>
               </div>
               <div className="flex items-center gap-1" style={{ marginTop: 2 }}>
                 {[...new Set(run.tags || [])].map(tag => (
@@ -2594,7 +2698,7 @@ export default function ScanDashboardPage() {
                     onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}
                   >
                     <td style={{ padding: '3px 6px', color: isActive ? GOLD : T.WHITE, fontWeight: 700, fontFamily: 'monospace', position: 'sticky', left: 0, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1 }}>{s.ticker}</td>
-                    <td style={{ padding: '3px 6px', color: isActive ? GOLD : T.MUTED, position: 'sticky', left: 56, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1, borderRight: `1px solid ${T.BORDER}` }}>{(s.date || (s as any).signal_date || '').slice(2)}</td>
+                    <td style={{ padding: '3px 6px', color: isActive ? GOLD : T.MUTED, position: 'sticky', left: 56, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1, borderRight: `1px solid ${T.BORDER}` }}>{(() => { const sig = (s.date || (s as any).signal_date || ''); if (MDR_SWING_RE.test(s.signal || '') && sig) { return <>{nextNyseTradingDay(sig).slice(2)}<br/><span style={{ fontSize: 7, color: T.BORDER }}>S:{sig.slice(5)}</span></> } return sig.slice(2) })()}</td>
                     <td style={{ padding: '3px 4px', color: T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{(s as any).pm_high_pct != null ? `${((s as any).pm_high_pct * 100).toFixed(0)}%` : '–'}</td>
                     <td style={{ padding: '3px 4px', color: T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{(s.gap_pct || 0).toFixed(0)}%</td>
                     <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(s as any).pm_vol != null ? `${((s as any).pm_vol / 1e6).toFixed(1)}M` : '–'}</td>
@@ -2712,6 +2816,13 @@ export default function ScanDashboardPage() {
                 border: `1px solid ${chartMode === 'single' ? GOLD : T.BORDER}`,
                 display: 'flex', alignItems: 'center', gap: 3,
               }}><LayoutGrid className="h-3 w-3" />Single</button>
+              <button onClick={() => setChartMode('2stack')} title="2-Stack: Daily + 15m Mike's Bands" style={{
+                padding: '3px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600,
+                background: chartMode === '2stack' ? GOLD : T.SURFACE,
+                color: chartMode === '2stack' ? '#000' : T.MUTED,
+                border: `1px solid ${chartMode === '2stack' ? GOLD : T.BORDER}`,
+                display: 'flex', alignItems: 'center', gap: 3,
+              }}><Rows2 className="h-3 w-3" />2-Stack</button>
               <button onClick={() => setChartMode('stacked')} title="Stacked" style={{
                 padding: '3px 8px', borderRadius: 3, fontSize: 10, fontWeight: 600,
                 background: chartMode === 'stacked' ? GOLD : T.SURFACE,
@@ -2939,13 +3050,18 @@ export default function ScanDashboardPage() {
           {isBT ? (
             <ScanMiniChart symbol={sig!.ticker} tf="5" date={chartDate} height={580} settings={chartSettings} dark={dark} centerOnDate legMarkers={legMarkers} exitEpoch={tradeExitEpoch} klParams={klParams} />
           ) : chartMode === 'single' ? (
-            <ScanMiniChart symbol={sig!.ticker} tf={tf} date={sig!.date} height={580} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
+            <ScanMiniChart symbol={sig!.ticker} tf={tf} date={sig!.date} height={580} settings={chartSettings} dark={dark} dayOffset={dayOffset} tradeNextDay={isMdrSwing} />
+          ) : chartMode === '2stack' ? (
+            <div ref={twoStackRef} className="space-y-2">
+              <ScanMiniChart symbol={sig!.ticker} tf="D" date={sig!.date} height={stackDailyH} settings={chartSettings} dark={dark} dayOffset={dayOffset} tradeNextDay={isMdrSwing} />
+              <ScanMiniChart symbol={sig!.ticker} tf="15" date={sig!.date} height={stack15H} settings={{ ...chartSettings, showEma72_89: true, showDevBands72_89: true }} dark={dark} dayOffset={dayOffset} tradeNextDay={isMdrSwing} zoomDays={{ before: 3, after: 1 }} />
+            </div>
           ) : (
             <div className="space-y-2">
-              <ScanMiniChart symbol={sig!.ticker} tf="D" date={sig!.date} height={360} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
-              <ScanMiniChart symbol={sig!.ticker} tf="60" date={sig!.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
-              <ScanMiniChart symbol={sig!.ticker} tf="15" date={sig!.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} />
-              <ScanMiniChart symbol={sig!.ticker} tf="5" date={sig!.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} stackDays={3} />
+              <ScanMiniChart symbol={sig!.ticker} tf="D" date={sig!.date} height={360} settings={chartSettings} dark={dark} dayOffset={dayOffset} tradeNextDay={isMdrSwing} />
+              <ScanMiniChart symbol={sig!.ticker} tf="60" date={sig!.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} tradeNextDay={isMdrSwing} />
+              <ScanMiniChart symbol={sig!.ticker} tf="15" date={sig!.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} tradeNextDay={isMdrSwing} />
+              <ScanMiniChart symbol={sig!.ticker} tf="5" date={sig!.date} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} stackDays={3} tradeNextDay={isMdrSwing} />
             </div>
           )}
 

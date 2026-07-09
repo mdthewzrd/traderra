@@ -57,7 +57,7 @@ export interface ParsedOffering {
   warrantTranches: WarrantTranche[];
 }
 
-export function parseProspectusHtml(html: string): ParsedOffering {
+export function parseProspectusHtml(html: string, filingDate?: Date): ParsedOffering {
   // Normalize PDF→HTML number-split artifacts ('$ 5 0,000,000' → '$50,000,000').
   const text = stripHtml(html).replace(/\$\s+/g, '$').replace(/(\d)\s+(?=\d)/g, '$1');
   // Offer terms live on the cover page + offering summary (first ~2-3 pages).
@@ -141,7 +141,25 @@ export function parseProspectusHtml(html: string): ParsedOffering {
     const strike = ep ? parseFloat(ep[1].replace(/,/g, '')) : null;
     // Expiry: absolute date after "expir...".
     const ex = zone.match(/expir(?:e|es|ing|ation|y)[\s\S]{0,30}?(?:on)?\s*([A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})/i);
-    const expiry = ex ? ex[1] : null;
+    let expiry: string | null = ex ? ex[1] : null;
+    // Relative-term expiry: "for N years", "N years from issuance/closing",
+    // "expiring N years after". Compute from the filing date when available —
+    // most warrant terms are relative ("five years from the date of issuance"),
+    // and without this ALL expiries are null.
+    if (!expiry && filingDate) {
+      // Word-number map: warrant terms are prose ("for five years", not "for 5 years").
+      const WORD_YEARS: Record<string, number> = { one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10 };
+      const yrText = zone.match(/(?:for|term\s+of|expir(?:e|es|ing|ation|y)[^.]{0,20}?(?:after)?|following)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+years?/i)
+        ?? zone.match(/(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+years?\s+from\s+/i);
+      if (yrText) {
+        const yrs = /^\d+$/.test(yrText[1]) ? parseInt(yrText[1], 10) : (WORD_YEARS[yrText[1].toLowerCase()] ?? null);
+        if (yrs) {
+          const d = new Date(filingDate);
+          d.setFullYear(d.getFullYear() + yrs);
+          expiry = d.toISOString().slice(0, 10);
+        }
+      }
+    }
     // Exercisable: absolute date or "immediately".
     const ed = zone.match(/exercisable(?:\s+(?:commencing|beginning|on|immediately|until|any\s+time))?[\s\S]{0,40}?(?:on\s+)?([A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})/i);
     const exercisable = ed ? ed[1] : (/exercisable\s+(?:immediately|upon\s+issuance|as\s+of\s+issuance)/i.test(zone) ? 'immediately' : null);
@@ -187,7 +205,7 @@ export async function syncOfferings(cik: string): Promise<SyncOfferingsResult> {
       where: { cik, formType: { in: OFFERING_FORMS } },
       orderBy: { filingDate: 'desc' },
       take: PROSPECTUS_WINDOW,
-      select: { accessionNo: true, primaryDoc: true, rawPayload: true },
+      select: { accessionNo: true, filingDate: true, primaryDoc: true, rawPayload: true },
     });
 
     let withDetail = 0;
@@ -203,7 +221,7 @@ export async function syncOfferings(cik: string): Promise<SyncOfferingsResult> {
         cik,
         f.accessionNo,
         f.primaryDoc,
-        (html) => parseProspectusHtml(html),
+        (html) => parseProspectusHtml(html, f.filingDate ?? undefined),
         (result) => !result.sharesOffered && !result.pricePerShare && !result.grossProceeds,
       );
       parsed++;

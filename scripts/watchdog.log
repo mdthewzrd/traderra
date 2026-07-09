@@ -147,3 +147,6 @@
 2026-07-09T15:02:01+00:00 DOWN (http=000) — full delete + start
 2026-07-09T15:02:07+00:00 STILL DOWN (http=000) — manual intervention needed
 2026-07-09T16:00:01+00:00 .next missing — rebuild in progress, skipping
+2026-07-09T16:44:01+00:00 .next missing — rebuild in progress, skipping
+2026-07-09T16:46:02+00:00 .next missing — rebuild in progress, skipping
+2026-07-09T16:50:01+00:00 .next missing — rebuild in progress, skipping

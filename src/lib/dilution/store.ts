@@ -581,8 +581,10 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
   // Warrant lifecycle status from clause text + dates. 'pre-funded' is the
   // key dilution signal: the holder already paid, exercise is near-certain.
   const warrantStatus = (description: string, expiry: string | null, exercisable: string | null, strike: number | null): string => {
-    const t = (description || '').toLowerCase();
-    if (/pre-?funded/.test(t) || strike === 0) return 'pre-funded';
+    // Pre-funded = nominal strike (< $0.01). Don't scan description text — the
+    // zone spans multiple warrant tranches so "pre-funded" from a sibling
+    // tranche leaks in and mis-tags $2.505 warrants as pre-funded.
+    if (strike != null && strike < 0.01) return 'pre-funded';
     if (expiry) { const d = new Date(expiry); if (!isNaN(d.getTime()) && d.getTime() < Date.now()) return 'expired'; }
     if (exercisable) { const d = new Date(exercisable); if (!isNaN(d.getTime()) && d.getTime() > Date.now()) return 'pending'; }
     return 'active';

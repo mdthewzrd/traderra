@@ -117,27 +117,60 @@ export function parseProspectusHtml(html: string): ParsedOffering {
     text.match(/underwriters?:?\s*([A-Z][\w&.,\s]{2,40}?)[.,]/);
   if (uw) underwriter = uw[1].trim();
 
-  // Per-warrant tranches — scan cover for warrant clauses with strike/expiry.
-  // Common phrasing: "accompanying warrants to purchase N shares ... exercise
-  // price of $Y ... exercisable ... expiring on DATE".
+  // Per-warrant tranches — anchor on each "warrant" keyword occurrence and
+  // scan a ±window around it. Warrant terms SPAN SENTENCES: shares are
+  // described in the transaction summary ("warrants to purchase N shares")
+  // while exercise price and expiry live in the warrant terms paragraph
+  // ("exercise price of $Y, exercisable for Z years"). A sentence-bounded
+  // regex misses the shares; a multi-sentence window catches both.
   const warrantTranches: WarrantTranche[] = [];
-  const warrantClauses = cover.match(/[A-Z][^.]{0,90}?warrant[s]?[^.]{0,400}?(?:exercis|expir|exercise\s+price)[^.]{0,300}?(?:\.|;)/gi) ?? [];
-  for (const wc of warrantClauses.slice(0, 8)) {
-    const sh = wc.match(/(?:purchase|represent|for|of|to\s+purchase|accompany)\s+(?:up\s+to\s+|an\s+aggregate\s+of\s+)?([\d,.]+\s*(?:million|billion|thousand)?)\s+shares?/i);
-    const ep = wc.match(/(?:exercise|exercisable\s+at(?:\s+a)?(?:\s+price\s+of)?|strike\s+price\s+of)\s+\$?([\d,.]+(?:\.\d{1,4})?)/i)
-      ?? wc.match(/exercise\s+price[^.]{0,50}?(?:equal\s+to|of)\s+\$?([\d,.]+(?:\.\d{1,4})?)/i);
-    const ex = wc.match(/expir(?:e|es|ing|ation|y)[^.]{0,30}?(?:on)?\s*([A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})/i);
-    const ed = wc.match(/exercisable(?:\s+(?:commencing|beginning|on|immediately|until|any\s+time))?[^.]{0,25}?(?:on\s+)?([A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})/i);
+  const seenKeys = new Set<string>();
+  const warrantRe = /\bwarrant[s]?\b/gi;
+  for (let wm; (wm = warrantRe.exec(cover)) !== null && warrantTranches.length < 8;) {
+    const start = Math.max(0, wm.index - 300);
+    const end = Math.min(cover.length, wm.index + 700);
+    const zone = cover.slice(start, end);
+    // Must have a terms signal to avoid prose mentions (risk factors, etc.).
+    if (!/exercis|expir|exercise\s+price|strike\s+price/i.test(zone)) continue;
+    // Shares: "warrants to purchase (up to) N shares" / "N warrants".
+    const sh = zone.match(/(?:purchase|for|of|to\s+purchase|represent|accompany|concurrent|issu(?:e|ing|ed))\s+(?:up\s+to\s+|an\s+aggregate\s+of\s+|equal\s+to\s+)?([\d,.]+)\s*(?:million|billion|thousand)?\s+shares?/i);
     const shares = sh ? scaleNum(sh[1]) : null;
+    // Strike: "exercise price of $Y" / "exercisable at $Y".
+    const ep = zone.match(/exercise\s+price\s+(?:of\s+|equal\s+to\s+)?\$([\d,.]+(?:\.\d{1,4})?)/i)
+      ?? zone.match(/(?:exercisable\s+at(?:\s+a)?(?:\s+price\s+of)?|strike\s+price\s+of)\s+\$([\d,.]+(?:\.\d{1,4})?)/i);
     const strike = ep ? parseFloat(ep[1].replace(/,/g, '')) : null;
+    // Expiry: absolute date after "expir...".
+    const ex = zone.match(/expir(?:e|es|ing|ation|y)[\s\S]{0,30}?(?:on)?\s*([A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})/i);
     const expiry = ex ? ex[1] : null;
-    const exercisable = ed ? ed[1] : (/exercisable\s+(?:immediately|upon\s+issuance|as\s+of\s+issuance)/i.test(wc) ? 'immediately' : null);
-    if (shares != null || strike != null || expiry != null) {
-      warrantTranches.push({ shares, strike, expiry, exercisable, description: wc.trim().replace(/\s+/g, ' ').slice(0, 300) });
+    // Exercisable: absolute date or "immediately".
+    const ed = zone.match(/exercisable(?:\s+(?:commencing|beginning|on|immediately|until|any\s+time))?[\s\S]{0,40}?(?:on\s+)?([A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})/i);
+    const exercisable = ed ? ed[1] : (/exercisable\s+(?:immediately|upon\s+issuance|as\s+of\s+issuance)/i.test(zone) ? 'immediately' : null);
+    if (shares == null && strike == null && expiry == null) continue;
+    const key = `${shares}|${strike?.toFixed(4)}|${expiry}`;
+    if (seenKeys.has(key)) continue;
+    seenKeys.add(key);
+    warrantTranches.push({ shares, strike, expiry, exercisable, description: zone.trim().replace(/\s+/g, ' ').slice(0, 300) });
+  }
+  // Merge tranches that share shares OR strike (same warrant caught in
+  // overlapping windows with different fields populated). Fill nulls from
+  // the counterpart, then drop entries with no shares AND no strike.
+  const merged: WarrantTranche[] = [];
+  for (const t of warrantTranches) {
+    const match = merged.find(m =>
+      (t.shares != null && m.shares != null && t.shares === m.shares) ||
+      (t.strike != null && m.strike != null && Math.abs(t.strike - m.strike) < 0.001),
+    );
+    if (match) {
+      if (match.shares == null && t.shares != null) match.shares = t.shares;
+      if (match.strike == null && t.strike != null) match.strike = t.strike;
+      if (match.expiry == null && t.expiry != null) match.expiry = t.expiry;
+      if (match.exercisable == null && t.exercisable != null) match.exercisable = t.exercisable;
+    } else {
+      merged.push({ ...t });
     }
   }
 
-  return { sharesOffered: shares, pricePerShare: price, grossProceeds: proceeds, offeringType, underwriter, warrantTranches };
+  return { sharesOffered: shares, pricePerShare: price, grossProceeds: proceeds, offeringType, underwriter, warrantTranches: merged };
 }
 
 export interface SyncOfferingsResult {

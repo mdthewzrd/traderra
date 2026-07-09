@@ -461,16 +461,47 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
   const computedFloat = sharesLatestOutstanding != null
     ? { shares: Math.max(0, sharesLatestOutstanding - insiderHoldings), insiderShares: insiderHoldings, outstanding: sharesLatestOutstanding }
     : null;
+  const warrantNotes = await getWarrantNotes(cik);
   const rawOverhang = await computeOverhangFromDb(cik, sharesLatestOutstanding);
+  // Fallback: when XBRL has no warrant aggregate (common for micro-caps),
+  // build one from 424B5 prospectus warrant tranches so overhang % and
+  // ITM scoring work for ALL issuers, not just those with clean XBRL.
+  // This is the RKTO fix: 3 clean 424B5 tranches exist but overhang=null
+  // because dilutionSecurity table is empty.
+  const fallbackWarrant = (() => {
+    if (rawOverhang.warrant) return null; // XBRL is authoritative when present
+    const tranches: { shares: number; strike: number | null }[] = [];
+    for (const f of offeringFilings) {
+      const p = (f.rawPayload ?? null) as { warrantTranches?: Array<{ shares: number | null; strike: number | null }> } | null;
+      if (!p?.warrantTranches) continue;
+      for (const t of p.warrantTranches) {
+        if (t.shares != null && t.shares > 0) tranches.push({ shares: t.shares, strike: t.strike });
+      }
+    }
+    // Fall back to 10-K note warrants ONLY when no 424B5 tranches with shares
+    // exist. Using both double-counts the same warrants (10-K notes restate
+    // warrants issued in prior 424B5 offerings — RKTO 4.5M → 11M if summed).
+    if (!tranches.length && warrantNotes?.warrants) {
+      for (const w of warrantNotes.warrants) {
+        if (w.shares != null && w.shares > 0) tranches.push({ shares: w.shares, strike: w.exercisePrice });
+      }
+    }
+    if (!tranches.length) return null;
+    const totalShares = tranches.reduce((s, t) => s + t.shares, 0);
+    const strikes = tranches.map(t => t.strike).filter((s): s is number => s != null && s > 0).sort((a, b) => a - b);
+    const medianStrike = strikes.length > 0 ? strikes[Math.floor(strikes.length / 2)] : null;
+    return { shares: totalShares, strike: medianStrike, period: '' };
+  })();
+  const warrantSrc = rawOverhang.warrant ?? fallbackWarrant;
   // Split-adjust stale warrant/convertible data: when the latest reported
   // period predates a stock split, the raw strike/shares are pre-split. Apply
   // the cumulative ratio (shares × num/den, strike × den/num) so overhang % and
   // in-the-money scoring compare against the post-split price/outstanding.
-  const wAdj = rawOverhang.warrant ? splitAdjustment(rawOverhang.warrant.period, reverseSplits) : null;
+  const wAdj = warrantSrc ? splitAdjustment(warrantSrc.period, reverseSplits) : null;
   const cAdj = rawOverhang.convertible ? splitAdjustment(rawOverhang.convertible.period, reverseSplits) : null;
-  const warrant = rawOverhang.warrant && wAdj?.applied
-    ? { ...rawOverhang.warrant, shares: rawOverhang.warrant.shares * wAdj.shareFactor, strike: rawOverhang.warrant.strike != null ? rawOverhang.warrant.strike * wAdj.priceFactor : null }
-    : rawOverhang.warrant;
+  const warrant = warrantSrc && wAdj?.applied
+    ? { ...warrantSrc, shares: warrantSrc.shares * wAdj.shareFactor, strike: warrantSrc.strike != null ? warrantSrc.strike * wAdj.priceFactor : null }
+    : warrantSrc;
   const convertible = rawOverhang.convertible && cAdj?.applied
     ? { ...rawOverhang.convertible, shares: rawOverhang.convertible.shares * cAdj.shareFactor, strike: rawOverhang.convertible.strike != null ? rawOverhang.convertible.strike * cAdj.priceFactor : null }
     : rawOverhang.convertible;
@@ -521,7 +552,6 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
     const remaining = Math.max(0, registered - raised);
     return { registered, raised, remaining, remainingPct: (remaining / registered) * 100 };
   })();
-  const warrantNotes = await getWarrantNotes(cik);
   const programs = await getPrograms(cik);
   const draws = await getDraws(cik);
   const programTypes = [...new Set(programs.map((p) => p.programType))];

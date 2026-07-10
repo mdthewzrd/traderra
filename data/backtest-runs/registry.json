@@ -316,5 +316,50 @@
       }
     },
     "createdAt": "2026-07-07T17:09:30.488Z"
+  },
+  {
+    "id": "rs-pump-long",
+    "name": "R/S Pump Long · 9/20 + DevBand · 5m",
+    "engine": "rs-pump-long",
+    "meta": {
+      "symbol": "R/S Universe",
+      "tf": "5",
+      "from": "2026-06-24",
+      "to": "2026-07-10",
+      "strategy": "r/s-names → ema9/20 lower-dev-band long",
+      "universe": "30 most-recent R/S splits",
+      "windowDays": 35,
+      "params": {
+        "bandMult": 2,
+        "stopMult": 1.5,
+        "fast": 9,
+        "slow": 20
+      }
+    },
+    "summary": {
+      "trades": 67,
+      "wins": 47,
+      "winRate": 70.1,
+      "totR": 38.1,
+      "profitFactor": 4.867,
+      "longs": 67,
+      "shorts": 0,
+      "avgR": 0.569,
+      "greenDays": 11,
+      "greenPct": 91.7,
+      "tradingDays": 12,
+      "perDay": 5.58,
+      "maxDD": 1.9,
+      "avgDayR": 3.18,
+      "bestDay": {
+        "date": "2026-07-01",
+        "r": 10.03
+      },
+      "worstDay": {
+        "date": "2026-06-24",
+        "r": -0.36
+      }
+    },
+    "createdAt": "2026-07-10T17:43:36.042Z"
   }
 ]

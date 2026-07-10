@@ -1760,7 +1760,7 @@ export default function BacktestPage() {
   // ── Backtest runs (peers to scans; selectable in the left sidebar) ──
   const [btRuns, setBtRuns] = useState<{ id: string; name: string; engine: string; meta: any; summary: any }[]>([])
   const [selectedBtRun, setSelectedBtRun] = useState<string | null>(null)
-  const [btTrades, setBtTrades] = useState<{ id: string; side: 'long' | 'short'; openDate: string; exitDate: string; entry: number; stop: number; exit: number; exitLabel: string; r: number; pnl: number }[]>([])
+  const [btTrades, setBtTrades] = useState<{ id: string; side: 'long' | 'short'; openDate: string; exitDate: string; entry: number; stop: number; exit: number; exitLabel: string; r: number; pnl: number; ticker?: string; rsDate?: string }[]>([])
   const [selectedTradeIdx, setSelectedTradeIdx] = useState<number>(0)
   // ── Persisted state: init empty, hydrate from localStorage in useEffect ──
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set())
@@ -2364,16 +2364,18 @@ export default function BacktestPage() {
   const activeScan = scans.find(s => s.id === selectedScan)
   // When a backtest run is selected, the center chart shows the run's instrument + tf (15m default for Mike's Bands)
   const selectedBtRunObj = selectedBtRun ? btRuns.find(r => r.id === selectedBtRun) : null
-  const chartSymbol = (selectedBtRunObj?.meta?.symbol as string) || sig?.ticker || 'SPY'
+  const chartSymbol = (selectedBtRun && btTrades[selectedTradeIdx]?.ticker) || (selectedBtRunObj?.meta?.symbol as string) || sig?.ticker || 'SPY'
   const chartTf = (selectedBtRunObj?.meta?.tf as string) || tf
-  const chartDate = selectedBtRunObj ? (btTrades[selectedTradeIdx]?.openDate?.slice(0, 10) || btTrades[0]?.openDate?.slice(0, 10) || (selectedBtRunObj.meta?.from as string)) : sig?.date
+  const chartDate = selectedBtRunObj ? (btTrades[selectedTradeIdx]?.rsDate || btTrades[selectedTradeIdx]?.openDate?.slice(0, 10) || btTrades[0]?.openDate?.slice(0, 10) || (selectedBtRunObj.meta?.from as string)) : sig?.date
   // Entry + exit wedges for the selected backtest run.
   // Convention: green ▲ = BUY action (long entry / short cover); red ▼ = SELL action (short entry / long exit).
   const btMarkers = useMemo(() => {
     if (!selectedBtRun || !btTrades.length) return []
+    const selTicker = btTrades[selectedTradeIdx]?.ticker
     const out: { time: number; price: number; kind: 'buy' | 'sell'; selected: boolean }[] = []
     for (let i = 0; i < btTrades.length; i++) {
       const t = btTrades[i]
+      if (selTicker && t.ticker && t.ticker !== selTicker) continue
       const sel = i === selectedTradeIdx
       out.push({ time: etWallToUnix(t.openDate), price: t.entry, kind: t.side === 'long' ? 'buy' : 'sell', selected: sel })
       const etT = etWallToUnix(t.exitDate)
@@ -2397,6 +2399,19 @@ export default function BacktestPage() {
     return out
   }, [signals, chartSymbol, sig])
   const chartMarkers = useMemo(() => [...btMarkers, ...signalMarkers], [btMarkers, signalMarkers])
+
+  // For multi-ticker bt runs (e.g. R/S Pump), auto-size the chart window to span
+  // from the selected trade's R/S date through that ticker's last exit.
+  const btDayOffset = useMemo(() => {
+    if (!selectedBtRun || !btTrades.length || !btTrades[selectedTradeIdx]) return 0
+    const t = btTrades[selectedTradeIdx]
+    if (!t.ticker || !t.rsDate) return 0
+    const tickerTrades = btTrades.filter((tr: any) => tr.ticker === t.ticker)
+    const maxExit = tickerTrades.reduce((mx: string, tr: any) => (tr.exitDate > mx ? tr.exitDate : mx), '')
+    if (!maxExit) return 0
+    const days = Math.ceil((new Date(maxExit.slice(0, 10) + 'T12:00:00').getTime() - new Date(t.rsDate + 'T12:00:00').getTime()) / 86400000)
+    return Math.max(0, days + 2)
+  }, [selectedBtRun, btTrades, selectedTradeIdx])
 
  // Reset day offset when signal changes
  // (also done inline in every setSelectedIdx call)
@@ -2767,8 +2782,8 @@ export default function BacktestPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10, fontFamily: 'monospace' }}>
               <thead>
                 <tr style={{ background: T.SURFACE2, position: 'sticky', top: 0, zIndex: 2 }}>
-                  {['OPEN', 'S', 'ENTRY', 'STOP', 'EXIT', 'R', '$PNL', 'REASON'].map(h => (
-                    <th key={h} style={{ padding: '4px 6px', textAlign: h === 'OPEN' ? 'left' : 'right', color: T.GOLD, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', borderLeft: `1px solid ${T.BORDER}` }}>{h}</th>
+                  {['OPEN', 'S', 'TKR', 'R/S', 'ENTRY', 'STOP', 'EXIT', 'R', '$PNL', 'REASON'].map(h => (
+                    <th key={h} style={{ padding: '4px 6px', textAlign: (h === 'OPEN' || h === 'TKR' || h === 'R/S') ? 'left' : 'right', color: T.GOLD, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', borderLeft: `1px solid ${T.BORDER}` }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -2783,6 +2798,8 @@ export default function BacktestPage() {
                       onMouseLeave={e => { if (!isTA) e.currentTarget.style.background = 'transparent' }}>
                       <td style={{ padding: '3px 6px', color: T.MUTED, textAlign: 'left' }}>{t.openDate}</td>
                       <td style={{ padding: '3px 6px', textAlign: 'right', color: t.side === 'long' ? T.TEAL : T.RED, fontWeight: 700 }}>{t.side === 'long' ? 'L' : 'S'}</td>
+                      <td style={{ padding: '3px 6px', textAlign: 'left', color: T.WHITE, fontWeight: 600 }}>{t.ticker || '-'}</td>
+                      <td style={{ padding: '3px 6px', textAlign: 'left', color: T.MUTED }}>{t.rsDate || '-'}</td>
                       <td style={{ padding: '3px 6px', textAlign: 'right', color: T.WHITE }}>{t.entry.toFixed(2)}</td>
                       <td style={{ padding: '3px 6px', textAlign: 'right', color: T.GOLD }}>{t.stop.toFixed(2)}</td>
                       <td style={{ padding: '3px 6px', textAlign: 'right', color: T.WHITE }}>{t.exit.toFixed(2)}</td>
@@ -3121,13 +3138,13 @@ export default function BacktestPage() {
 
           {/* Chart(s) — when a backtest run is selected, charts switch to its symbol/tf (SPY 15m) */}
           {chartMode === 'single' ? (
-            <MiniChart symbol={chartSymbol} tf={chartTf} date={chartDate} height={580} settings={chartSettings} dark={dark} dayOffset={dayOffset} btMarkers={chartMarkers} />
+            <MiniChart symbol={chartSymbol} tf={chartTf} date={chartDate} height={580} settings={chartSettings} dark={dark} dayOffset={selectedBtRun ? btDayOffset : dayOffset} btMarkers={chartMarkers} />
           ) : (
             <div className="space-y-2">
-              <MiniChart symbol={chartSymbol} tf="D" date={chartDate} height={360} settings={chartSettings} dark={dark} dayOffset={dayOffset} btMarkers={chartMarkers} />
-              <MiniChart symbol={chartSymbol} tf="60" date={chartDate} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} btMarkers={chartMarkers} />
-              <MiniChart symbol={chartSymbol} tf="15" date={chartDate} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} btMarkers={chartMarkers} />
-              <MiniChart symbol={chartSymbol} tf="5" date={chartDate} height={280} settings={chartSettings} dark={dark} dayOffset={dayOffset} btMarkers={chartMarkers} />
+              <MiniChart symbol={chartSymbol} tf="D" date={chartDate} height={360} settings={chartSettings} dark={dark} dayOffset={selectedBtRun ? btDayOffset : dayOffset} btMarkers={chartMarkers} />
+              <MiniChart symbol={chartSymbol} tf="60" date={chartDate} height={280} settings={chartSettings} dark={dark} dayOffset={selectedBtRun ? btDayOffset : dayOffset} btMarkers={chartMarkers} />
+              <MiniChart symbol={chartSymbol} tf="15" date={chartDate} height={280} settings={chartSettings} dark={dark} dayOffset={selectedBtRun ? btDayOffset : dayOffset} btMarkers={chartMarkers} />
+              <MiniChart symbol={chartSymbol} tf="5" date={chartDate} height={280} settings={chartSettings} dark={dark} dayOffset={selectedBtRun ? btDayOffset : dayOffset} btMarkers={chartMarkers} />
             </div>
           )}
 

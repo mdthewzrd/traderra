@@ -2272,6 +2272,7 @@ export default function BacktestPage() {
       const trs = d.trades || []
       setBtTrades(trs)
       setSelectedTradeIdx(trs.length ? trs.length - 1 : 0)
+      if (d.meta?.tf) setTf(d.meta.tf as Timeframe)
       // populate the SAME BacktestResults shape from the run's trades
       const trades = (d.trades || []) as { r: number; pnl: number; side: string; exitLabel: string }[]
       const returns = trades.map((t: any) => t.r)
@@ -2365,7 +2366,7 @@ export default function BacktestPage() {
   // When a backtest run is selected, the center chart shows the run's instrument + tf (15m default for Mike's Bands)
   const selectedBtRunObj = selectedBtRun ? btRuns.find(r => r.id === selectedBtRun) : null
   const chartSymbol = (selectedBtRun && btTrades[selectedTradeIdx]?.ticker) || (selectedBtRunObj?.meta?.symbol as string) || sig?.ticker || 'SPY'
-  const chartTf = (selectedBtRunObj?.meta?.tf as string) || tf
+  const chartTf = tf
   const chartDate = selectedBtRunObj ? (btTrades[selectedTradeIdx]?.rsDate || btTrades[selectedTradeIdx]?.openDate?.slice(0, 10) || btTrades[0]?.openDate?.slice(0, 10) || (selectedBtRunObj.meta?.from as string)) : sig?.date
   // Entry + exit wedges for the selected backtest run.
   // Convention: green ▲ = BUY action (long entry / short cover); red ▼ = SELL action (short entry / long exit).

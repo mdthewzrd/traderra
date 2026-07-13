@@ -369,10 +369,10 @@
     "meta": {
       "symbol": "R/S Universe",
       "tf": "60",
-      "from": "2026-06-30",
+      "from": "2026-05-04",
       "to": "2026-07-13",
       "strategy": "r/s-names → hourly ema9/20 lower-band long, daily-swing structural stop, extreme exit",
-      "universe": "30 most-recent R/S splits",
+      "universe": "79 R/S splits (deduped, 2024-2026, 60d forward)",
       "windowDays": 60,
       "params": {
         "bandMult": 2,
@@ -382,29 +382,29 @@
       }
     },
     "summary": {
-      "trades": 5,
-      "wins": 2,
-      "winRate": 40,
-      "totR": 0.22,
-      "profitFactor": 1.106,
-      "longs": 5,
+      "trades": 30,
+      "wins": 8,
+      "winRate": 26.7,
+      "totR": -11.33,
+      "profitFactor": 0.378,
+      "longs": 30,
       "shorts": 0,
-      "avgR": 0.044,
-      "greenDays": 1,
-      "greenPct": 33.3,
-      "tradingDays": 3,
-      "perDay": 1.67,
-      "maxDD": 1.1,
-      "avgDayR": 0.07,
+      "avgR": -0.378,
+      "greenDays": 6,
+      "greenPct": 28.6,
+      "tradingDays": 21,
+      "perDay": 1.43,
+      "maxDD": 12,
+      "avgDayR": -0.54,
       "bestDay": {
-        "date": "2026-07-10",
-        "r": 2.27
+        "date": "2026-05-07",
+        "r": 2.96
       },
       "worstDay": {
-        "date": "2026-07-02",
-        "r": -2
+        "date": "2026-06-03",
+        "r": -2.66
       }
     },
-    "createdAt": "2026-07-13T13:18:40.648Z"
+    "createdAt": "2026-07-13T13:21:44.311Z"
   }
 ]

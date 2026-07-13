@@ -6,10 +6,10 @@
   "meta": {
     "symbol": "R/S Universe",
     "tf": "60",
-    "from": "2026-06-30",
+    "from": "2026-05-04",
     "to": "2026-07-13",
     "strategy": "r/s-names → hourly ema9/20 lower-band long, daily-swing structural stop, extreme exit",
-    "universe": "30 most-recent R/S splits",
+    "universe": "79 R/S splits (deduped, 2024-2026, 60d forward)",
     "windowDays": 60,
     "params": {
       "bandMult": 2,
@@ -19,116 +19,556 @@
     }
   },
   "summary": {
-    "trades": 5,
-    "wins": 2,
-    "winRate": 40,
-    "totR": 0.22,
-    "profitFactor": 1.106,
-    "longs": 5,
+    "trades": 30,
+    "wins": 8,
+    "winRate": 26.7,
+    "totR": -11.33,
+    "profitFactor": 0.378,
+    "longs": 30,
     "shorts": 0,
-    "avgR": 0.044,
-    "greenDays": 1,
-    "greenPct": 33.3,
-    "tradingDays": 3,
-    "perDay": 1.67,
-    "maxDD": 1.1,
-    "avgDayR": 0.07,
+    "avgR": -0.378,
+    "greenDays": 6,
+    "greenPct": 28.6,
+    "tradingDays": 21,
+    "perDay": 1.43,
+    "maxDD": 12,
+    "avgDayR": -0.54,
     "bestDay": {
-      "date": "2026-07-10",
-      "r": 2.27
+      "date": "2026-05-07",
+      "r": 2.96
     },
     "worstDay": {
-      "date": "2026-07-02",
-      "r": -2
+      "date": "2026-06-03",
+      "r": -2.66
     }
   },
   "trades": [
     {
-      "id": "long-AIB-2026-07-011300",
+      "id": "long-XHLD-2026-07-061300",
       "side": "long",
-      "ticker": "AIB",
-      "rsDate": "2026-06-29",
-      "openDate": "2026-07-01 13:00",
-      "exitDate": "2026-07-02 19:00",
-      "entry": 1.9811,
-      "stop": 1.7762,
-      "exit": 1.7762,
-      "exitLabel": "STOP",
-      "r": -1,
-      "pnl": -100
-    },
-    {
-      "id": "long-EVTV-2026-07-061300",
-      "side": "long",
-      "ticker": "EVTV",
-      "rsDate": "2026-06-29",
+      "ticker": "XHLD",
+      "rsDate": "2026-05-15",
       "openDate": "2026-07-06 13:00",
-      "exitDate": "2026-07-10 23:00",
-      "entry": 1.586,
-      "stop": 1.3985,
-      "exit": 1.95,
+      "exitDate": "2026-07-13 11:00",
+      "entry": 1.8674,
+      "stop": 1.2495,
+      "exit": 1.8403,
       "exitLabel": "OPEN@END",
-      "r": 1.941,
-      "pnl": 194.13
+      "r": -0.044,
+      "pnl": -4.39
     },
     {
-      "id": "long-MDIA-2026-07-081900",
+      "id": "long-AIFA-2026-06-251600",
       "side": "long",
-      "ticker": "MDIA",
-      "rsDate": "2026-06-26",
-      "openDate": "2026-07-08 19:00",
-      "exitDate": "2026-07-10 19:00",
-      "entry": 0.9163,
-      "stop": 0.6903,
-      "exit": 0.9902,
-      "exitLabel": "OPEN@END",
-      "r": 0.327,
-      "pnl": 32.71
+      "ticker": "AIFA",
+      "rsDate": "2026-05-11",
+      "openDate": "2026-06-25 16:00",
+      "exitDate": "2026-07-07 14:00",
+      "entry": 2.1293,
+      "stop": 1.9959,
+      "exit": 1.9959,
+      "exitLabel": "STOP",
+      "r": -0.893,
+      "pnl": -89.34
     },
     {
-      "id": "long-NVVE-2026-06-302000",
+      "id": "long-PLSE-2026-06-011300",
       "side": "long",
-      "ticker": "NVVE",
-      "rsDate": "2026-06-25",
-      "openDate": "2026-06-30 20:00",
-      "exitDate": "2026-07-02 16:00",
-      "entry": 5.8023,
-      "stop": 5.76,
-      "exit": 5.76,
+      "ticker": "PLSE",
+      "rsDate": "2026-05-11",
+      "openDate": "2026-06-01 13:00",
+      "exitDate": "2026-06-04 13:00",
+      "entry": 23.8554,
+      "stop": 17.983,
+      "exit": 27.715,
+      "exitLabel": "EXTREME",
+      "r": 0.657,
+      "pnl": 65.72
+    },
+    {
+      "id": "long-ENTG-2026-06-161500",
+      "side": "long",
+      "ticker": "ENTG",
+      "rsDate": "2026-05-08",
+      "openDate": "2026-06-16 15:00",
+      "exitDate": "2026-07-07 13:00",
+      "entry": 154.4279,
+      "stop": 133.11,
+      "exit": 133.11,
       "exitLabel": "STOP",
       "r": -1,
       "pnl": -100
     },
     {
-      "id": "long-CTMX-2026-07-101300",
+      "id": "long-ERNA-2026-06-261300",
       "side": "long",
-      "ticker": "CTMX",
-      "rsDate": "2026-06-22",
-      "openDate": "2026-07-10 13:00",
-      "exitDate": "2026-07-13 13:00",
-      "entry": 3.7251,
-      "stop": 2.815,
-      "exit": 3.68,
+      "ticker": "ERNA",
+      "rsDate": "2026-05-04",
+      "openDate": "2026-06-26 13:00",
+      "exitDate": "2026-07-02 23:00",
+      "entry": 6.0333,
+      "stop": 5.3451,
+      "exit": 6.4512,
       "exitLabel": "OPEN@END",
-      "r": -0.05,
-      "pnl": -4.95
+      "r": 0.607,
+      "pnl": 60.73
+    },
+    {
+      "id": "long-PLBY-2026-05-061400",
+      "side": "long",
+      "ticker": "PLBY",
+      "rsDate": "2026-04-30",
+      "openDate": "2026-05-06 14:00",
+      "exitDate": "2026-05-11 20:00",
+      "entry": 1.6659,
+      "stop": 1.6255,
+      "exit": 1.6255,
+      "exitLabel": "STOP",
+      "r": -1,
+      "pnl": -100
+    },
+    {
+      "id": "long-SOC-2026-05-131300",
+      "side": "long",
+      "ticker": "SOC",
+      "rsDate": "2026-04-30",
+      "openDate": "2026-05-13 13:00",
+      "exitDate": "2026-05-14 08:00",
+      "entry": 13.0079,
+      "stop": 12.5851,
+      "exit": 12.4732,
+      "exitLabel": "STOP",
+      "r": -1.265,
+      "pnl": -126.47
+    },
+    {
+      "id": "long-SOC-2026-06-011600",
+      "side": "long",
+      "ticker": "SOC",
+      "rsDate": "2026-04-30",
+      "openDate": "2026-06-01 16:00",
+      "exitDate": "2026-06-01 18:00",
+      "entry": 13.4373,
+      "stop": 12.5851,
+      "exit": 12.5851,
+      "exitLabel": "STOP",
+      "r": -1,
+      "pnl": -100
+    },
+    {
+      "id": "long-APRE-2026-05-111000",
+      "side": "long",
+      "ticker": "APRE",
+      "rsDate": "2026-04-30",
+      "openDate": "2026-05-11 10:00",
+      "exitDate": "2026-06-03 13:00",
+      "entry": 0.8388,
+      "stop": 0.7464,
+      "exit": 0.7464,
+      "exitLabel": "STOP",
+      "r": -0.979,
+      "pnl": -97.95
+    },
+    {
+      "id": "long-RXT-2026-05-071200",
+      "side": "long",
+      "ticker": "RXT",
+      "rsDate": "2026-04-30",
+      "openDate": "2026-05-07 12:00",
+      "exitDate": "2026-05-07 13:00",
+      "entry": 2.0337,
+      "stop": 1.3778,
+      "exit": 3.975,
+      "exitLabel": "EXTREME",
+      "r": 2.96,
+      "pnl": 295.96
+    },
+    {
+      "id": "long-QXL-2026-06-221100",
+      "side": "long",
+      "ticker": "QXL",
+      "rsDate": "2026-04-30",
+      "openDate": "2026-06-22 11:00",
+      "exitDate": "2026-06-29 19:00",
+      "entry": 5.6306,
+      "stop": 3.8902,
+      "exit": 5.55,
+      "exitLabel": "OPEN@END",
+      "r": -0.046,
+      "pnl": -4.63
+    },
+    {
+      "id": "long-REVB-2026-06-011200",
+      "side": "long",
+      "ticker": "REVB",
+      "rsDate": "2026-04-30",
+      "openDate": "2026-06-01 12:00",
+      "exitDate": "2026-06-03 14:00",
+      "entry": 1.0511,
+      "stop": 1.0392,
+      "exit": 1.0392,
+      "exitLabel": "STOP",
+      "r": -1,
+      "pnl": -100
+    },
+    {
+      "id": "long-UAVS-2026-05-110800",
+      "side": "long",
+      "ticker": "UAVS",
+      "rsDate": "2026-04-30",
+      "openDate": "2026-05-11 08:00",
+      "exitDate": "2026-05-18 18:00",
+      "entry": 1.11,
+      "stop": 0.9833,
+      "exit": 0.9833,
+      "exitLabel": "STOP",
+      "r": -1,
+      "pnl": -100
+    },
+    {
+      "id": "long-ALTO-2026-05-061400",
+      "side": "long",
+      "ticker": "ALTO",
+      "rsDate": "2026-04-30",
+      "openDate": "2026-05-06 14:00",
+      "exitDate": "2026-05-06 20:00",
+      "entry": 5.5379,
+      "stop": 4.966,
+      "exit": 4.966,
+      "exitLabel": "STOP",
+      "r": -1,
+      "pnl": -100
+    },
+    {
+      "id": "long-LNZA-2026-05-111600",
+      "side": "long",
+      "ticker": "LNZA",
+      "rsDate": "2026-04-29",
+      "openDate": "2026-05-11 16:00",
+      "exitDate": "2026-05-11 17:00",
+      "entry": 22.1687,
+      "stop": 21.5,
+      "exit": 21.5,
+      "exitLabel": "STOP",
+      "r": -1,
+      "pnl": -100
+    },
+    {
+      "id": "long-MAMO-2026-05-040800",
+      "side": "long",
+      "ticker": "MAMO",
+      "rsDate": "2026-04-29",
+      "openDate": "2026-05-04 08:00",
+      "exitDate": "2026-06-03 20:00",
+      "entry": 0.9684,
+      "stop": 0.9314,
+      "exit": 0.9314,
+      "exitLabel": "STOP",
+      "r": -0.681,
+      "pnl": -68.07
+    },
+    {
+      "id": "long-HIND-2026-05-291200",
+      "side": "long",
+      "ticker": "HIND",
+      "rsDate": "2026-04-29",
+      "openDate": "2026-05-29 12:00",
+      "exitDate": "2026-06-26 22:00",
+      "entry": 2.1067,
+      "stop": 1.8916,
+      "exit": 2.14,
+      "exitLabel": "OPEN@END",
+      "r": 0.155,
+      "pnl": 15.47
+    },
+    {
+      "id": "long-DRCT-2026-05-071300",
+      "side": "long",
+      "ticker": "DRCT",
+      "rsDate": "2026-04-28",
+      "openDate": "2026-05-07 13:00",
+      "exitDate": "2026-05-29 14:00",
+      "entry": 5.3194,
+      "stop": 2.8917,
+      "exit": 2.8917,
+      "exitLabel": "STOP",
+      "r": -0.778,
+      "pnl": -77.83
+    },
+    {
+      "id": "long-PIII-2026-05-291400",
+      "side": "long",
+      "ticker": "PIII",
+      "rsDate": "2026-04-28",
+      "openDate": "2026-05-29 14:00",
+      "exitDate": "2026-06-26 19:00",
+      "entry": 14.23,
+      "stop": 2.4894,
+      "exit": 11.495,
+      "exitLabel": "OPEN@END",
+      "r": -0.233,
+      "pnl": -23.3
+    },
+    {
+      "id": "long-IPSC-2026-05-141000",
+      "side": "long",
+      "ticker": "IPSC",
+      "rsDate": "2026-04-27",
+      "openDate": "2026-05-14 10:00",
+      "exitDate": "2026-05-19 13:00",
+      "entry": 2.1779,
+      "stop": 2.17,
+      "exit": 2.17,
+      "exitLabel": "STOP",
+      "r": -1,
+      "pnl": -100
+    },
+    {
+      "id": "long-CVGI-2026-06-181300",
+      "side": "long",
+      "ticker": "CVGI",
+      "rsDate": "2026-04-27",
+      "openDate": "2026-06-18 13:00",
+      "exitDate": "2026-06-18 14:00",
+      "entry": 5.0426,
+      "stop": 4.946,
+      "exit": 4.946,
+      "exitLabel": "STOP",
+      "r": -1,
+      "pnl": -100
+    },
+    {
+      "id": "long-UP-2026-05-291300",
+      "side": "long",
+      "ticker": "UP",
+      "rsDate": "2026-04-27",
+      "openDate": "2026-05-29 13:00",
+      "exitDate": "2026-06-05 14:00",
+      "entry": 7.9632,
+      "stop": 7.51,
+      "exit": 7.51,
+      "exitLabel": "STOP",
+      "r": -1,
+      "pnl": -100
+    },
+    {
+      "id": "long-BGMS-2026-05-181300",
+      "side": "long",
+      "ticker": "BGMS",
+      "rsDate": "2026-04-27",
+      "openDate": "2026-05-18 13:00",
+      "exitDate": "2026-05-18 20:00",
+      "entry": 0.9683,
+      "stop": 0.946,
+      "exit": 0.946,
+      "exitLabel": "STOP",
+      "r": -1,
+      "pnl": -100
+    },
+    {
+      "id": "long-ASTI-2026-06-091400",
+      "side": "long",
+      "ticker": "ASTI",
+      "rsDate": "2026-04-27",
+      "openDate": "2026-06-09 14:00",
+      "exitDate": "2026-06-11 18:00",
+      "entry": 6.6533,
+      "stop": 3.7251,
+      "exit": 9.42,
+      "exitLabel": "EXTREME",
+      "r": 0.945,
+      "pnl": 94.49
+    },
+    {
+      "id": "long-SER-2026-06-221600",
+      "side": "long",
+      "ticker": "SER",
+      "rsDate": "2026-04-27",
+      "openDate": "2026-06-22 16:00",
+      "exitDate": "2026-06-24 19:00",
+      "entry": 1.852,
+      "stop": 1.85,
+      "exit": 1.85,
+      "exitLabel": "STOP",
+      "r": -1,
+      "pnl": -100
+    },
+    {
+      "id": "long-LCID-2026-05-051300",
+      "side": "long",
+      "ticker": "LCID",
+      "rsDate": "2026-04-23",
+      "openDate": "2026-05-05 13:00",
+      "exitDate": "2026-05-13 16:00",
+      "entry": 6.4167,
+      "stop": 5.475,
+      "exit": 6.58,
+      "exitLabel": "EXTREME",
+      "r": 0.173,
+      "pnl": 17.34
+    },
+    {
+      "id": "long-VTAK-2026-06-040900",
+      "side": "long",
+      "ticker": "VTAK",
+      "rsDate": "2026-04-23",
+      "openDate": "2026-06-04 09:00",
+      "exitDate": "2026-06-18 19:00",
+      "entry": 0.8932,
+      "stop": 0.8806,
+      "exit": 0.8806,
+      "exitLabel": "STOP",
+      "r": -0.291,
+      "pnl": -29.07
+    },
+    {
+      "id": "long-ANTX-2026-06-171300",
+      "side": "long",
+      "ticker": "ANTX",
+      "rsDate": "2026-04-22",
+      "openDate": "2026-06-17 13:00",
+      "exitDate": "2026-06-18 19:00",
+      "entry": 4.5195,
+      "stop": 3.8425,
+      "exit": 4.99,
+      "exitLabel": "OPEN@END",
+      "r": 0.695,
+      "pnl": 69.48
+    },
+    {
+      "id": "long-PDYN-2026-05-291300",
+      "side": "long",
+      "ticker": "PDYN",
+      "rsDate": "2026-04-22",
+      "openDate": "2026-05-29 13:00",
+      "exitDate": "2026-06-09 16:00",
+      "entry": 8.0403,
+      "stop": 6.25,
+      "exit": 6.25,
+      "exitLabel": "STOP",
+      "r": -1,
+      "pnl": -100
+    },
+    {
+      "id": "long-PDLB-2026-05-281300",
+      "side": "long",
+      "ticker": "PDLB",
+      "rsDate": "2026-04-22",
+      "openDate": "2026-05-28 13:00",
+      "exitDate": "2026-06-18 19:00",
+      "entry": 18.5258,
+      "stop": 17.3636,
+      "exit": 19.32,
+      "exitLabel": "OPEN@END",
+      "r": 0.683,
+      "pnl": 68.34
     }
   ],
   "byDay": {
+    "2026-07-13": {
+      "r": -0.04,
+      "trades": 1,
+      "pnl": -4.39
+    },
+    "2026-07-07": {
+      "r": -1.89,
+      "trades": 2,
+      "pnl": -189.34
+    },
+    "2026-06-04": {
+      "r": 0.66,
+      "trades": 1,
+      "pnl": 65.72
+    },
     "2026-07-02": {
+      "r": 0.61,
+      "trades": 1,
+      "pnl": 60.73
+    },
+    "2026-05-11": {
       "r": -2,
       "trades": 2,
       "pnl": -200
     },
-    "2026-07-10": {
-      "r": 2.27,
-      "trades": 2,
-      "pnl": 226.84
+    "2026-05-14": {
+      "r": -1.26,
+      "trades": 1,
+      "pnl": -126.47
     },
-    "2026-07-13": {
+    "2026-06-01": {
+      "r": -1,
+      "trades": 1,
+      "pnl": -100
+    },
+    "2026-06-03": {
+      "r": -2.66,
+      "trades": 3,
+      "pnl": -266.02
+    },
+    "2026-05-07": {
+      "r": 2.96,
+      "trades": 1,
+      "pnl": 295.96
+    },
+    "2026-06-29": {
       "r": -0.05,
       "trades": 1,
-      "pnl": -4.95
+      "pnl": -4.63
+    },
+    "2026-05-18": {
+      "r": -2,
+      "trades": 2,
+      "pnl": -200
+    },
+    "2026-05-06": {
+      "r": -1,
+      "trades": 1,
+      "pnl": -100
+    },
+    "2026-06-26": {
+      "r": -0.08,
+      "trades": 2,
+      "pnl": -7.83
+    },
+    "2026-05-29": {
+      "r": -0.78,
+      "trades": 1,
+      "pnl": -77.83
+    },
+    "2026-05-19": {
+      "r": -1,
+      "trades": 1,
+      "pnl": -100
+    },
+    "2026-06-18": {
+      "r": 0.09,
+      "trades": 4,
+      "pnl": 8.75
+    },
+    "2026-06-05": {
+      "r": -1,
+      "trades": 1,
+      "pnl": -100
+    },
+    "2026-06-11": {
+      "r": 0.94,
+      "trades": 1,
+      "pnl": 94.49
+    },
+    "2026-06-24": {
+      "r": -1,
+      "trades": 1,
+      "pnl": -100
+    },
+    "2026-05-13": {
+      "r": 0.17,
+      "trades": 1,
+      "pnl": 17.34
+    },
+    "2026-06-09": {
+      "r": -1,
+      "trades": 1,
+      "pnl": -100
     }
   }
 }

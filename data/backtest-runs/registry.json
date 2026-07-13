@@ -406,5 +406,49 @@
       }
     },
     "createdAt": "2026-07-13T13:21:44.311Z"
+  },
+  {
+    "id": "rs-pump-long-v3",
+    "name": "R/S Pump Long v3 · 9/20 Cross + Breakout · Daily",
+    "engine": "rs-pump-long-v3",
+    "meta": {
+      "symbol": "R/S Universe",
+      "tf": "D",
+      "from": "2025-10-06",
+      "to": "2026-07-13",
+      "strategy": "r/s-names → daily 9/20 bullish cross + split-high breakout entry, structural swing stop, extreme exit",
+      "universe": "95 serial R/S loopers (on-disk watchlist)",
+      "windowDays": "split→today",
+      "params": {
+        "extremeMult": 3,
+        "swingPivot": 3,
+        "stopBuffer": 0.25
+      }
+    },
+    "summary": {
+      "trades": 28,
+      "wins": 15,
+      "winRate": 53.6,
+      "totR": 15.26,
+      "profitFactor": 2.524,
+      "longs": 28,
+      "shorts": 0,
+      "avgR": 0.545,
+      "greenDays": 10,
+      "greenPct": 47.6,
+      "tradingDays": 21,
+      "perDay": 1.33,
+      "maxDD": 4.9,
+      "avgDayR": 0.73,
+      "bestDay": {
+        "date": "2026-06-22",
+        "r": 7.12
+      },
+      "worstDay": {
+        "date": "2026-01-16",
+        "r": -1.35
+      }
+    },
+    "createdAt": "2026-07-13T14:26:48.317Z"
   }
 ]

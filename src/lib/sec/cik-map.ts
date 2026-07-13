@@ -73,7 +73,20 @@ async function hydrateFromDb(): Promise<{
   map: Map<string, CikMapEntry>;
   fetchedAt: Date | null;
 }> {
-  const rows = await prisma.secTickerCik.findMany();
+  // Neon serverless auto-suspends idle databases. The first query after
+  // suspension takes 2-10s to wake — which can exceed connect_timeout and
+  // throw "Can't reach database server". A single retry with a short backoff
+  // covers the cold-start window without slowing down the warm path.
+  let rows;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      rows = await prisma.secTickerCik.findMany();
+      break;
+    } catch (e: any) {
+      if (attempt === 1) throw e;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
   const map = new Map<string, CikMapEntry>();
   let newest: Date | null = null;
   for (const row of rows) {

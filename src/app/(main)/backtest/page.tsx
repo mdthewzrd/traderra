@@ -2401,17 +2401,19 @@ export default function BacktestPage() {
   }, [signals, chartSymbol, sig])
   const chartMarkers = useMemo(() => [...btMarkers, ...signalMarkers], [btMarkers, signalMarkers])
 
-  // For multi-ticker bt runs (e.g. R/S Pump), auto-size the chart window to span
-  // from the selected trade's R/S date through that ticker's last exit.
+  // For multi-ticker bt runs (e.g. R/S Pump), show a wide forward window from the
+  // R/S date so the full post-split landscape is visible — the pump we're hunting
+  // can come weeks after the split. Minimum 60 calendar days; extend further if a
+  // trade is still open past that.
   const btDayOffset = useMemo(() => {
     if (!selectedBtRun || !btTrades.length || !btTrades[selectedTradeIdx]) return 0
     const t = btTrades[selectedTradeIdx]
     if (!t.ticker || !t.rsDate) return 0
     const tickerTrades = btTrades.filter((tr: any) => tr.ticker === t.ticker)
     const maxExit = tickerTrades.reduce((mx: string, tr: any) => (tr.exitDate > mx ? tr.exitDate : mx), '')
-    if (!maxExit) return 0
-    const days = Math.ceil((new Date(maxExit.slice(0, 10) + 'T12:00:00').getTime() - new Date(t.rsDate + 'T12:00:00').getTime()) / 86400000)
-    return Math.max(0, days + 2)
+    const splitMs = new Date(t.rsDate + 'T12:00:00').getTime()
+    const exitDays = maxExit ? Math.ceil((new Date(maxExit.slice(0, 10) + 'T12:00:00').getTime() - splitMs) / 86400000) : 0
+    return Math.max(60, exitDays + 5)
   }, [selectedBtRun, btTrades, selectedTradeIdx])
 
  // Reset day offset when signal changes

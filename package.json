@@ -23,7 +23,8 @@
     "test:enhanced": "vitest run src/tests/journal-enhanced-mode.test.tsx",
     "test:all": "npm run test:run && npm run test:e2e",
     "test:report": "npm run test:coverage && npm run test:e2e",
-    "playwright:install": "playwright install"
+    "playwright:install": "playwright install",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@ag-ui/client": "^0.0.41",

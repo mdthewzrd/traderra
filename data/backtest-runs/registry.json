@@ -361,5 +361,50 @@
       }
     },
     "createdAt": "2026-07-10T17:43:36.042Z"
+  },
+  {
+    "id": "rs-pump-long-v2",
+    "name": "R/S Pump Long v2 · 9/20 + SwingStop · 1H",
+    "engine": "rs-pump-long-v2",
+    "meta": {
+      "symbol": "R/S Universe",
+      "tf": "60",
+      "from": "2026-06-30",
+      "to": "2026-07-13",
+      "strategy": "r/s-names → hourly ema9/20 lower-band long, daily-swing structural stop, extreme exit",
+      "universe": "30 most-recent R/S splits",
+      "windowDays": 60,
+      "params": {
+        "bandMult": 2,
+        "extremeMult": 3,
+        "swingPivot": 3,
+        "stopBuffer": 0.25
+      }
+    },
+    "summary": {
+      "trades": 5,
+      "wins": 2,
+      "winRate": 40,
+      "totR": 0.22,
+      "profitFactor": 1.106,
+      "longs": 5,
+      "shorts": 0,
+      "avgR": 0.044,
+      "greenDays": 1,
+      "greenPct": 33.3,
+      "tradingDays": 3,
+      "perDay": 1.67,
+      "maxDD": 1.1,
+      "avgDayR": 0.07,
+      "bestDay": {
+        "date": "2026-07-10",
+        "r": 2.27
+      },
+      "worstDay": {
+        "date": "2026-07-02",
+        "r": -2
+      }
+    },
+    "createdAt": "2026-07-13T13:18:40.648Z"
   }
 ]

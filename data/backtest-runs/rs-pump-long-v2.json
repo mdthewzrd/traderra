@@ -1,0 +1,134 @@
+{
+  "id": "rs-pump-long-v2",
+  "file": "",
+  "name": "R/S Pump Long v2 · 9/20 + SwingStop · 1H",
+  "engine": "rs-pump-long-v2",
+  "meta": {
+    "symbol": "R/S Universe",
+    "tf": "60",
+    "from": "2026-06-30",
+    "to": "2026-07-13",
+    "strategy": "r/s-names → hourly ema9/20 lower-band long, daily-swing structural stop, extreme exit",
+    "universe": "30 most-recent R/S splits",
+    "windowDays": 60,
+    "params": {
+      "bandMult": 2,
+      "extremeMult": 3,
+      "swingPivot": 3,
+      "stopBuffer": 0.25
+    }
+  },
+  "summary": {
+    "trades": 5,
+    "wins": 2,
+    "winRate": 40,
+    "totR": 0.22,
+    "profitFactor": 1.106,
+    "longs": 5,
+    "shorts": 0,
+    "avgR": 0.044,
+    "greenDays": 1,
+    "greenPct": 33.3,
+    "tradingDays": 3,
+    "perDay": 1.67,
+    "maxDD": 1.1,
+    "avgDayR": 0.07,
+    "bestDay": {
+      "date": "2026-07-10",
+      "r": 2.27
+    },
+    "worstDay": {
+      "date": "2026-07-02",
+      "r": -2
+    }
+  },
+  "trades": [
+    {
+      "id": "long-AIB-2026-07-011300",
+      "side": "long",
+      "ticker": "AIB",
+      "rsDate": "2026-06-29",
+      "openDate": "2026-07-01 13:00",
+      "exitDate": "2026-07-02 19:00",
+      "entry": 1.9811,
+      "stop": 1.7762,
+      "exit": 1.7762,
+      "exitLabel": "STOP",
+      "r": -1,
+      "pnl": -100
+    },
+    {
+      "id": "long-EVTV-2026-07-061300",
+      "side": "long",
+      "ticker": "EVTV",
+      "rsDate": "2026-06-29",
+      "openDate": "2026-07-06 13:00",
+      "exitDate": "2026-07-10 23:00",
+      "entry": 1.586,
+      "stop": 1.3985,
+      "exit": 1.95,
+      "exitLabel": "OPEN@END",
+      "r": 1.941,
+      "pnl": 194.13
+    },
+    {
+      "id": "long-MDIA-2026-07-081900",
+      "side": "long",
+      "ticker": "MDIA",
+      "rsDate": "2026-06-26",
+      "openDate": "2026-07-08 19:00",
+      "exitDate": "2026-07-10 19:00",
+      "entry": 0.9163,
+      "stop": 0.6903,
+      "exit": 0.9902,
+      "exitLabel": "OPEN@END",
+      "r": 0.327,
+      "pnl": 32.71
+    },
+    {
+      "id": "long-NVVE-2026-06-302000",
+      "side": "long",
+      "ticker": "NVVE",
+      "rsDate": "2026-06-25",
+      "openDate": "2026-06-30 20:00",
+      "exitDate": "2026-07-02 16:00",
+      "entry": 5.8023,
+      "stop": 5.76,
+      "exit": 5.76,
+      "exitLabel": "STOP",
+      "r": -1,
+      "pnl": -100
+    },
+    {
+      "id": "long-CTMX-2026-07-101300",
+      "side": "long",
+      "ticker": "CTMX",
+      "rsDate": "2026-06-22",
+      "openDate": "2026-07-10 13:00",
+      "exitDate": "2026-07-13 13:00",
+      "entry": 3.7251,
+      "stop": 2.815,
+      "exit": 3.68,
+      "exitLabel": "OPEN@END",
+      "r": -0.05,
+      "pnl": -4.95
+    }
+  ],
+  "byDay": {
+    "2026-07-02": {
+      "r": -2,
+      "trades": 2,
+      "pnl": -200
+    },
+    "2026-07-10": {
+      "r": 2.27,
+      "trades": 2,
+      "pnl": 226.84
+    },
+    "2026-07-13": {
+      "r": -0.05,
+      "trades": 1,
+      "pnl": -4.95
+    }
+  }
+}

@@ -51,6 +51,8 @@ const BUILTIN_SCANS: ScanDef[] = [
   { id: 'builtin-high-tight-flag', name: 'High Tight Flag', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['htf'], group: 'standalone' },
   { id: 'builtin-aparascan', name: 'Aparascan', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['aparascan'], group: 'standalone' },
   { id: 'builtin-sc-dmr', name: 'SC DMR', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['sc-dmr'], group: 'standalone' },
+  { id: 'builtin-sam-dmr', name: "Sam's DMR", type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['sam-dmr'], group: 'standalone' },
+  { id: 'builtin-daily-run-gap', name: 'Daily Run Gap', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['daily-run-gap'], group: 'standalone' },
   { id: 'builtin-short-fbo', name: 'Short FBO', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['short-fbo'], group: 'standalone' },
   { id: 'builtin-short-fbo-2', name: 'Short FBO 2', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['short-fbo-2'], group: 'standalone' },
   { id: 'builtin-half-a', name: 'Half A', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['half-a'], group: 'standalone' },
@@ -106,6 +108,8 @@ const BUILTIN_SPEC_MAP: Record<string, string> = {
   'builtin-mdr-backtest': 'mdr-fixed',
   'builtin-mdr-signals': 'mdr-signals',
   'builtin-sc-dmr': 'sc-dmr',
+  'builtin-sam-dmr': 'sam-dmr',
+  'builtin-daily-run-gap': 'daily-run-gap',
   'builtin-short-fbo': 'short-fbo',
   'builtin-short-fbo-2': 'short-fbo-2',
   'builtin-half-a': 'half-a',
@@ -3053,8 +3057,8 @@ export default function ScanDashboardPage() {
             <ScanMiniChart symbol={sig!.ticker} tf={tf} date={sig!.date} height={580} settings={chartSettings} dark={dark} dayOffset={dayOffset} tradeNextDay={isMdrSwing} />
           ) : chartMode === '2stack' ? (
             <div ref={twoStackRef} className="space-y-2">
-              <ScanMiniChart symbol={sig!.ticker} tf="D" date={sig!.date} height={stackDailyH} settings={chartSettings} dark={dark} dayOffset={dayOffset} tradeNextDay={isMdrSwing} />
-              <ScanMiniChart symbol={sig!.ticker} tf="15" date={sig!.date} height={stack15H} settings={{ ...chartSettings, showEma72_89: true, showDevBands72_89: true }} dark={dark} dayOffset={dayOffset} tradeNextDay={isMdrSwing} zoomDays={{ before: 3, after: 1 }} />
+              <ScanMiniChart symbol={sig!.ticker} tf="D" date={sig!.date} height={stackDailyH} settings={{ ...chartSettings, showEma9_20: true }} dark={dark} dayOffset={dayOffset} tradeNextDay={isMdrSwing} />
+              <ScanMiniChart symbol={sig!.ticker} tf="15" date={sig!.date} height={stack15H} settings={{ ...chartSettings, showEma72_89: true, showDevBands72_89: true, showDevBands9_20: true, showDevBands72_89Tight: true }} dark={dark} dayOffset={dayOffset} tradeNextDay={isMdrSwing} zoomDays={{ before: 3, after: 1 }} />
             </div>
           ) : (
             <div className="space-y-2">

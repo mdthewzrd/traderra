@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { writeFileSync, readFileSync, mkdirSync, existsSync } from 'fs'
+import { join } from 'path'
 
 /**
  * GET /api/chart-data/bars — Proxy to Polygon.io for OHLCV data.
@@ -14,6 +16,29 @@ const POLY_BASE = 'https://api.polygon.io'
 const barCache = new Map<string, { data: any; ts: number }>()
 const LIVE_TTL = 2 * 60 * 1000      // 2 min for data including today
 const HIST_TTL = 60 * 60 * 1000     // 1 hr for fully-historical ranges
+
+// Fix D: persist barCache to disk so pm2 restarts don't force cold Polygon
+// reloads. Historical bars are immutable, so disk-cached entries within TTL
+// serve instantly on the first request after restart.
+const CACHE_FILE = join(process.cwd(), '.next', 'cache', 'bars-cache.json')
+try {
+  if (existsSync(CACHE_FILE)) {
+    const entries = JSON.parse(readFileSync(CACHE_FILE, 'utf8'))
+    if (Array.isArray(entries)) for (const [k, v] of entries) barCache.set(k, v)
+    console.log(`[bars] restored ${barCache.size} cached entries from disk`)
+  }
+} catch {}
+let spillTimer: ReturnType<typeof setTimeout> | null = null
+function spillCache() {
+  if (spillTimer) clearTimeout(spillTimer)
+  spillTimer = setTimeout(() => {
+    try {
+      mkdirSync(join(CACHE_FILE, '..'), { recursive: true })
+      writeFileSync(CACHE_FILE, JSON.stringify([...barCache.entries()]))
+    } catch {}
+    spillTimer = null
+  }, 5000) // debounce: one write per 5s burst
+}
 
 function tfToPolygon(tf: string): { multiplier: number; timespan: string } {
   const map: Record<string, { multiplier: number; timespan: string }> = {
@@ -99,6 +124,7 @@ export async function GET(request: NextRequest) {
     const payload = { bars, symbol, tf, pages }
     // store in cache
     barCache.set(cacheKey, { data: payload, ts: Date.now() })
+    spillCache()
     // prevent unbounded growth — evict oldest entries past 400 keys
     if (barCache.size > 400) {
       const oldest = [...barCache.entries()].sort((a, b) => a[1].ts - b[1].ts)[0]

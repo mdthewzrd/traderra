@@ -6,6 +6,7 @@
  */
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useUIStore } from '@/stores/charts/uiStore'
+import { useChartStore } from '@/stores/charts/chartStore'
 
 export interface Bar {
   time: number
@@ -114,6 +115,20 @@ export function useLiveBars(symbol: string | null, tf: string, focusDate?: strin
       console.log(`[useLiveBars] ${symbol} tf=${tf} LIVE from=${params.get('from')} (${back}+${warmup}d) fetchId=${thisFetchId}`)
     }
 
+    // ── Fix A: serve from client barCache if warm (120s TTL). Skips Polygon round-trip
+    // for symbol/tf switches already seen this session. ──
+    const cacheKey = `${symbol}|${tf}|${params.get('from')}|${params.get('to')}`
+    const cached = useChartStore.getState().getBarCache(cacheKey)
+    if (cached && cached.length) {
+      if (fetchIdRef.current !== thisFetchId) return () => { fetchIdRef.current++ }
+      const wb = visibleFromDate ? cached.findIndex(b => barToDate(b) >= visibleFromDate) : 0
+      setWarmupBars(wb < 0 ? cached.length : wb)
+      setBars(cached)
+      setLoading(false)
+      console.log(`[useLiveBars] ${symbol} tf=${tf} CACHE HIT (${cached.length} bars)`)
+      return () => { fetchIdRef.current++ }
+    }
+
     fetch(`/api/chart-data/bars?${params}`)
       .then(r => r.json())
       .then(data => {
@@ -139,6 +154,7 @@ export function useLiveBars(symbol: string | null, tf: string, focusDate?: strin
         const wb = visibleFromDate ? kept.findIndex(b => barToDate(b) >= visibleFromDate) : 0
         setWarmupBars(wb < 0 ? kept.length : wb)
         setBars(kept)
+        useChartStore.getState().setBarCache(cacheKey, kept)
         setLoading(false)
       })
       .catch(err => {
@@ -161,6 +177,7 @@ export function useLiveBars(symbol: string | null, tf: string, focusDate?: strin
     if (!liveMode || !symbol || focusDate) return
 
     intervalRef.current = setInterval(async () => {
+      if (document.hidden) return // Fix C: no polling when tab not visible
       try {
         const resp = await fetch(`/api/chart-data/bars?symbol=${symbol}&tf=${tf}&from=${new Date().toISOString().split('T')[0]}`)
         if (!resp.ok) return

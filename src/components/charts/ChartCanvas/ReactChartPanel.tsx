@@ -725,10 +725,18 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
     }
   }, [bars, viewStart, viewBars, mouse, size, chartStyle, tf, symbol, loading, annotations, activeTool, toolStep, toolAnchor, selectedAnn, hideAll])
 
-  // Animation loop
+  // Fix B: dirty-gate the render loop. The expensive canvas redraw (clear + grid
+  // + candles + volume + indicators + crosshair) only runs when render deps
+  // change. Idle = zero draws, not 4 panels × 60fps. rAF callback stays (cheap
+  // no-op when !dirty) so any mouseRef-based interaction paths stay intact.
+  const dirtyRef = useRef(true)
+  useEffect(() => { dirtyRef.current = true }, [render])
   useEffect(() => {
     const loop = () => {
-      render()
+      if (dirtyRef.current) {
+        dirtyRef.current = false
+        render()
+      }
       animRef.current = requestAnimationFrame(loop)
     }
     animRef.current = requestAnimationFrame(loop)

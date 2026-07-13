@@ -9,6 +9,7 @@ import { TraderraProvider } from '@/contexts/TraderraContext'
 import { GlobalTraderraProvider } from '@/components/global/GlobalTraderraProvider'
 import { GuestModeProvider } from '@/contexts/GuestModeContext'
 import { TradeUploadProvider } from '@/components/providers/trade-upload-provider'
+import { RequestInbox } from '@/components/inbox/RequestInbox'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -90,6 +91,7 @@ export default function RootLayout({
             </GlobalTraderraProvider>
           </TraderraProvider>
         </StudioTheme>
+        <RequestInbox />
       </body>
     </html>
   )

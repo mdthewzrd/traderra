@@ -398,6 +398,7 @@ export default function LiveScanPage() {
       const out: Hit[] = []
       for (const [, h] of liveSeenRef.current) {
         if (SPEC_GROUP[h.strategy] !== groupKey) continue
+        if (h.date !== date) continue
         out.push(h)
       }
       // opened-valid (confirmed) first, then by gap
@@ -477,6 +478,7 @@ export default function LiveScanPage() {
         }
         for (const [, h] of liveSeenRef.current) {
           if (SPEC_GROUP[h.strategy] !== groupKey) continue
+          if (h.date !== date) continue
           add(h)
         }
       }

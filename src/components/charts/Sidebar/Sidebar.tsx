@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, Component } from 'react'
-import { useUIStore, useChartStore, useWatchlistStore } from '@/stores/charts'
+import { useUIStore } from '@/stores/charts'
 import { useToolStore } from '@/stores/charts/toolStore'
 import { TabLook } from './tabs/TabLook'
 import { TabTools } from './tabs/TabTools'
@@ -11,6 +11,7 @@ import { TabScan } from './tabs/TabScan'
 import { TabBt } from './tabs/TabBt'
 import { TabLab } from './tabs/TabLab'
 import { TabAgent } from './tabs/TabAgent'
+import { WatchlistPanel } from './WatchlistPanel'
 
 class SidebarErrorBoundary extends Component<{
   children: React.ReactNode
@@ -143,15 +144,6 @@ export function Sidebar() {
   const agentChatOpen = useUIStore((s) => s.agentChatOpen)
   const setAgentChatOpen = useUIStore((s) => s.setAgentChatOpen)
 
-  const wlLists = useWatchlistStore((s) => s.lists)
-  const wlActiveIdx = useWatchlistStore((s) => s.activeIdx)
-  const wlAddSymbol = useWatchlistStore((s) => s.addSymbol)
-  const wlSwitchList = useWatchlistStore((s) => s.switchList)
-  const wlDeleteList = useWatchlistStore((s) => s.deleteList)
-  const wlRenameList = useWatchlistStore((s) => s.renameList)
-  const wlCreateList = useWatchlistStore((s) => s.createList)
-  const wlRemoveSymbol = useWatchlistStore((s) => s.removeSymbol)
-  const scanNavigate = useChartStore((s) => s.scanNavigate)
   const sbRef = useRef<HTMLDivElement>(null)
 
   // Sync open/close + bridge sbOpen/sbClose
@@ -187,67 +179,7 @@ export function Sidebar() {
 
       {/* Watchlist or Renata Chat */}
       {!agentChatOpen ? (
-      <div id="wl-section">
-        <div id="wl-head" onClick={() => document.getElementById('wl-section')?.classList.toggle('collapsed')}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span id="wl-chevron" style={{ color: '#4a5580', fontSize: 11 }}>▼</span>
-            <select
-              id="wl-picker"
-              value={wlActiveIdx}
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => wlSwitchList(parseInt(e.target.value))}
-            >
-              {wlLists.map((l, i) => (
-                <option key={i} value={i}>{l.name}</option>
-              ))}
-            </select>
-            <button onClick={(e) => { e.stopPropagation(); const name = prompt('Watchlist name:'); if (name) wlCreateList(name) }} title="New Watchlist" style={{ background: 'none', border: '1px solid #2a3050', color: '#4a6080', fontSize: 11, padding: '1px 4px', borderRadius: 2, cursor: 'pointer' }}>+</button>
-            <button onClick={(e) => { e.stopPropagation(); wlDeleteList() }} title="Delete Watchlist" style={{ background: 'none', border: '1px solid #2a3050', color: '#4a6080', fontSize: 11, padding: '1px 4px', borderRadius: 2, cursor: 'pointer' }}>🗑</button>
-            <button onClick={(e) => { e.stopPropagation(); const name = prompt('New name:', wlLists[wlActiveIdx]?.name); if (name) wlRenameList(name) }} title="Rename" style={{ background: 'none', border: '1px solid #2a3050', color: '#4a6080', fontSize: 11, padding: '1px 4px', borderRadius: 2, cursor: 'pointer' }}>✏</button>
-            <button onClick={(e) => { e.stopPropagation(); (window as any).wlColSettings?.() }} title="Columns" style={{ background: 'none', border: '1px solid #2a3050', color: '#4a6080', fontSize: 11, padding: '1px 4px', borderRadius: 2, cursor: 'pointer' }}>⚙</button>
-          </div>
-          <span id="wl-count" style={{ color: '#4a5580', fontSize: 11 }}>{wlLists[wlActiveIdx]?.syms?.length || 0}</span>
-        </div>
-        <div id="wl-body">
-          <div id="wl-col-header" />
-          <div id="wl-list">
-            {wlLists[wlActiveIdx]?.syms?.map((sym) => (
-              <div
-                key={sym}
-                className={`wl-row${(window as any).symbol === sym ? ' active' : ''}`}
-                onClick={() => {
-                  scanNavigate(sym, null) // Live mode — no focus date
-                  ;(window as any).symbol = sym
-                  ;(window as any).loadChart?.(sym)
-                }}
-              >
-                <span className="wl-sym">{sym}</span>
-                <span className="wl-del" onClick={(e) => { e.stopPropagation(); wlRemoveSymbol(sym) }}>✕</span>
-              </div>
-            ))}
-          </div>
-          <div id="wl-add">
-            <input
-              id="wl-add-input"
-              type="text"
-              placeholder="+ symbol"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  const val = (e.target as HTMLInputElement).value
-                  if (val.trim()) {
-                    wlAddSymbol(val)
-                    ;(e.target as HTMLInputElement).value = ''
-                  }
-                }
-              }}
-            />
-            <button onClick={() => {
-              const inp = document.getElementById('wl-add-input') as HTMLInputElement
-              if (inp?.value.trim()) { wlAddSymbol(inp.value); inp.value = '' }
-            }}>+</button>
-          </div>
-        </div>
-      </div>
+      <WatchlistPanel />
       ) : (
       <div id="wl-section" style={{ display: 'flex', flexDirection: 'column', flex: '1 1 0', minHeight: 0, overflow: 'hidden' }}>
         <TabAgent embedded />

@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useUIStore, useChartStore } from '@/stores/charts'
+import { useWatchlistStore } from '@/stores/charts/watchlistStore'
 import { ProfileIcon } from '@/app/charts/ChartsTerminal'
 import { ChartDateNav } from './ChartDateNav'
 
@@ -38,8 +39,13 @@ const tbActive: React.CSSProperties = {
 
 export function TopBar() {
   const [symInput, setSymInput] = useState('AAPL')
+  const [wlAddOpen, setWlAddOpen] = useState(false)
   const chartSymbol = useChartStore((s) => s.symbol)
   const setChartSymbol = useChartStore((s) => s.setSymbol)
+  const wlLists = useWatchlistStore((s) => s.lists)
+  const wlAddSymbol = useWatchlistStore((s) => s.addSymbol)
+  const wlRemoveSymbol = useWatchlistStore((s) => s.removeSymbol)
+  const symInAnyList = wlLists.some(l => l.syms.includes(chartSymbol))
   const liveMode = useUIStore((s) => s.liveMode)
   const setLiveMode = useUIStore((s) => s.setLiveMode)
   const activeLayout = useUIStore((s) => s.activeLayout)
@@ -94,6 +100,36 @@ export function TopBar() {
         onKeyDown={(e) => e.key === 'Enter' && handleLoadSymbol()}
       />
       <button style={tb} onClick={handleLoadSymbol}>▶</button>
+      <div style={{ position: 'relative' }}>
+        <button
+          style={symInAnyList ? tbActive : tb}
+          title="Add to watchlist"
+          onClick={() => setWlAddOpen(v => !v)}
+        >★</button>
+        {wlAddOpen && (
+          <>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={() => setWlAddOpen(false)} />
+            <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 100, background: '#0d1018', border: '1px solid #222840', borderRadius: 6, padding: 6, minWidth: 150, boxShadow: '0 8px 24px rgba(0,0,0,.5)' }}>
+              <div style={{ fontSize: 9, color: '#4a6080', fontWeight: 700, marginBottom: 4, padding: '0 4px' }}>ADD {chartSymbol} TO</div>
+              {wlLists.map((l, i) => {
+                const has = l.syms.includes(chartSymbol)
+                return (
+                  <div
+                    key={l.id || i}
+                    onClick={() => { has ? wlRemoveSymbol(chartSymbol) : wlAddSymbol(chartSymbol) }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 11, color: '#dde3f0', borderRadius: 3 }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = '#1a2030')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <span style={{ color: has ? '#4ade80' : '#4a6080', fontSize: 10 }}>{has ? '✓' : '○'}</span>
+                    {l.name}
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
+      </div>
       <button
         style={liveMode ? tbActive : tb}
         onClick={() => setLiveMode(!liveMode)}

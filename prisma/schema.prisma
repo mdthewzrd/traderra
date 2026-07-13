@@ -390,6 +390,7 @@ model ChartWatchlist {
   name      String   @default("default")
   symbols   String   @default("[]")          // JSON array of symbol strings
   columns   String?  @default("{}")          // JSON column config
+  meta      String?  @default("{}")          // JSON: { "SYM": { "note": "..." } }
   isDefault Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

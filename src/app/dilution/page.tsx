@@ -286,7 +286,7 @@ function DilutionOverview({ snapshot }: { snapshot: any }) {
               <svg className="h-3 w-3 shrink-0 text-zinc-500 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
               <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">ATM Programs</span>
               <span className="rounded bg-zinc-800 px-1.5 text-[10px] text-zinc-400">{atm.length}</span>
-              <span className="text-[11px] text-zinc-500">· {atm.reduce((a: number, r: any) => a + (Number(r.max) || 0), 0) > 0 ? '$' + (atm.reduce((a: number, r: any) => a + (Number(r.max) || 0), 0) / M).toFixed(0) + 'M max' : ''}</span>
+              <span className="text-[11px] text-zinc-500">· {atm.reduce((a: number, r: any) => a + (Number(r.max) || 0), 0) > 0 && '$' + (atm.reduce((a: number, r: any) => a + (Number(r.max) || 0), 0) / M).toFixed(0) + 'M max'}{sr && <> · <span className="text-emerald-400">${'$'}{(sr.remaining / M).toFixed(0)}M remaining</span></>}</span>
             </summary>
             <div className="border-t border-zinc-800/50 px-3 py-2">
             <div className="overflow-x-auto">
@@ -424,7 +424,7 @@ function DilutionOverview({ snapshot }: { snapshot: any }) {
               <svg className="h-3 w-3 shrink-0 text-zinc-500 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
               <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">Convertible Notes</span>
               <span className="rounded bg-zinc-800 px-1.5 text-[10px] text-zinc-400">{converts.length}</span>
-              {overhangConv && <span className="text-[11px] text-zinc-500">· {overhangConv.shares ? fmtSh(overhangConv.shares) : ''} sh</span>}
+              <span className="text-[11px] text-zinc-500">· {converts.reduce((a: number, r: any) => a + (Number(r.max) || 0), 0) > 0 && '$' + (converts.reduce((a: number, r: any) => a + (Number(r.max) || 0), 0) / M).toFixed(0) + 'M principal'}{overhangConv?.shares && ' · ' + fmtSh(overhangConv.shares) + ' sh'}{overhangConv?.itm && <span className="text-red-400"> · ITM</span>}</span>
             </summary>
             <div className="border-t border-zinc-800/50 px-3 py-2">
             <div className="overflow-x-auto">
@@ -453,13 +453,26 @@ function DilutionOverview({ snapshot }: { snapshot: any }) {
           </details>
         )}
 
-        {/* S-1 / F-1 */}
-        {s1.length > 0 && (
+        {/* S-1 / F-1 — registration lifecycle: filed → amended → effective → withdrawn */}
+        {s1.length > 0 && (() => {
+          const allFilings = snapshot?.filings ?? [];
+          const has424 = allFilings.some((fl: any) => /^424B[345]/.test(fl.formType));
+          const hasRW = allFilings.some((fl: any) => /RW/.test(fl.formType));
+          const s1Regs = (snapshot?.registrations ?? []).filter((r: any) => /^S-1|^F-1/.test(r.formType));
+          const s1RegTotal = s1Regs.reduce((a: number, r: any) => a + (r.aggregateOffering ?? 0), 0);
+          const statusFor1 = (ft: string): { label: string; cls: string } => {
+            if (/RW/.test(ft)) return { label: 'withdrawn', cls: 'bg-zinc-700 text-zinc-500 line-through' };
+            if (/\/A/.test(ft)) return { label: 'amended', cls: 'bg-amber-500/15 text-amber-300' };
+            if (has424) return { label: 'effective', cls: 'bg-emerald-500/15 text-emerald-400' };
+            return { label: 'pending', cls: 'bg-zinc-800 text-zinc-500' };
+          };
+          return (
           <details className="group rounded border border-zinc-800/60">
             <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 hover:bg-zinc-800/30">
               <svg className="h-3 w-3 shrink-0 text-zinc-500 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
               <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">S-1 / F-1 Registrations</span>
               <span className="rounded bg-zinc-800 px-1.5 text-[10px] text-zinc-400">{s1.length}</span>
+              <span className="text-[11px] text-zinc-500">· {s1RegTotal > 0 ? '$' + (s1RegTotal / M).toFixed(0) + 'M registered' : ''}{has424 ? ' · ' : hasRW ? ' · ' : ' · '}<span className={has424 ? 'text-emerald-400' : 'text-zinc-500'}>{has424 ? 'effective' : hasRW ? 'withdrawn' : 'pending'}</span></span>
             </summary>
             <div className="border-t border-zinc-800/50 px-3 py-2">
             <div className="overflow-x-auto">
@@ -468,23 +481,29 @@ function DilutionOverview({ snapshot }: { snapshot: any }) {
                   <tr>
                     <th className={th}>Filed</th>
                     <th className={th}>Form</th>
+                    <th className={th}>Status</th>
                     <th className={th}>Headline</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/50">
-                  {s1.map((f: any, i: number) => (
-                    <tr key={i}>
-                      <td className={td + ' whitespace-nowrap text-zinc-500'}>{f.filingDate}</td>
-                      <td className={td}><span className="rounded bg-zinc-800 px-1 text-[10px] text-zinc-400">{f.formType}</span></td>
-                      <td className={td + ' text-zinc-400'}>{f.primaryDesc ?? '—'}</td>
-                    </tr>
-                  ))}
+                  {s1.map((f: any, i: number) => {
+                    const st = statusFor1(f.formType);
+                    return (
+                      <tr key={i}>
+                        <td className={td + ' whitespace-nowrap text-zinc-500'}>{f.filingDate}</td>
+                        <td className={td}><span className="rounded bg-zinc-800 px-1 text-[10px] text-zinc-400">{f.formType}</span></td>
+                        <td className={td}><span className={'rounded px-1 text-[9px] font-semibold uppercase ' + st.cls}>{st.label}</span></td>
+                        <td className={td + ' text-zinc-400'}>{f.primaryDesc ?? '—'}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
             </div>
           </details>
-        )}
+          );
+        })()}
 
         {nothing && <div className="py-3 text-center text-xs text-zinc-500">No dilution facilities detected.</div>}
       </div>

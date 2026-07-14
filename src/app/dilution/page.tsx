@@ -158,6 +158,7 @@ function mechanicsSummary(snap: any): { label: string; value: string; tone: stri
 // Nexus-parity dilution overview: one spacious <table> per instrument type,
 // full page width, no scroll box. Replaces the old cramped tabbed ProgramTabs.
 function DilutionOverview({ snapshot }: { snapshot: any }) {
+  const [ovTab, setOvTab] = useState(0);
   const M = 1e6;
   const px = snapshot?.inTheMoney?.price ?? null;
   const sharesFor = (maxDollars: number | null | undefined) =>
@@ -278,10 +279,32 @@ function DilutionOverview({ snapshot }: { snapshot: any }) {
         </div>
       )}
 
-      <div className="space-y-1.5">
+      {/* Tab bar */}
+      {(() => {
+        const ovTabs = [
+          { label: 'ATM', n: atm.length, idx: 0 },
+          { label: 'Eq Lines', n: eqLines.length, idx: 1 },
+          { label: 'Warrants', n: warrants.length, idx: 2 },
+          { label: 'Converts', n: converts.length, idx: 3 },
+          { label: 'S-1 / F-1', n: s1.length, idx: 4 },
+        ].filter(t => t.n > 0);
+        if (!ovTabs.length) return null;
+        return (
+          <div className="mb-3 flex flex-wrap gap-1">
+            {ovTabs.map(t => (
+              <button key={t.idx} onClick={() => setOvTab(t.idx)}
+                className={`rounded px-2.5 py-1 text-[11px] font-medium transition-colors ${ovTab === t.idx ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'}`}>
+                {t.label} <span className="ml-1 opacity-60">{t.n}</span>
+              </button>
+            ))}
+          </div>
+        );
+      })()}
+
+      <div>
         {/* ATM PROGRAMS */}
-        {atm.length > 0 && (
-          <details className="group rounded border border-zinc-800/60">
+        {ovTab === 0 && atm.length > 0 && (
+          <details open className="rounded border border-zinc-800/60">
             <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 hover:bg-zinc-800/30">
               <svg className="h-3 w-3 shrink-0 text-zinc-500 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
               <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">ATM Programs</span>
@@ -324,8 +347,8 @@ function DilutionOverview({ snapshot }: { snapshot: any }) {
         )}
 
         {/* EQUITY LINES */}
-        {eqLines.length > 0 && (
-          <details className="group rounded border border-zinc-800/60">
+        {ovTab === 1 && eqLines.length > 0 && (
+          <details open className="rounded border border-zinc-800/60">
             <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 hover:bg-zinc-800/30">
               <svg className="h-3 w-3 shrink-0 text-zinc-500 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
               <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">Equity Lines / SEPA</span>
@@ -371,8 +394,8 @@ function DilutionOverview({ snapshot }: { snapshot: any }) {
         )}
 
         {/* WARRANTS */}
-        {warrants.length > 0 && (
-          <details className="group rounded border border-zinc-800/60">
+        {ovTab === 2 && warrants.length > 0 && (
+          <details open className="rounded border border-zinc-800/60">
             <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 hover:bg-zinc-800/30">
               <svg className="h-3 w-3 shrink-0 text-zinc-500 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
               <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">Warrants</span>
@@ -418,8 +441,8 @@ function DilutionOverview({ snapshot }: { snapshot: any }) {
         )}
 
         {/* CONVERTIBLE NOTES */}
-        {converts.length > 0 && (
-          <details className="group rounded border border-zinc-800/60">
+        {ovTab === 3 && converts.length > 0 && (
+          <details open className="rounded border border-zinc-800/60">
             <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 hover:bg-zinc-800/30">
               <svg className="h-3 w-3 shrink-0 text-zinc-500 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
               <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">Convertible Notes</span>
@@ -454,7 +477,7 @@ function DilutionOverview({ snapshot }: { snapshot: any }) {
         )}
 
         {/* S-1 / F-1 — registration lifecycle: filed → amended → effective (8-K notice) → withdrawn */}
-        {s1.length > 0 && (() => {
+        {ovTab === 4 && s1.length > 0 && (() => {
           const allFilings = snapshot?.filings ?? [];
           const has424 = allFilings.some((fl: any) => /^424B[345]/.test(fl.formType));
           const hasRW = allFilings.some((fl: any) => /RW/.test(fl.formType));
@@ -1771,10 +1794,9 @@ export default function DilutionPage() {
               </div>
             )}
 
-            {/* Tier 2 — Dilution programs detail. Unified list with category tabs.
-                Every financing mechanism in one place, filterable by type.
-                Click any card to expand terms + source clause. */}
-            {(() => {
+            {/* Tier 2 REMOVED — consolidated into DilutionOverview tabs above.
+                ProgramCard component retained for potential reuse. */}
+            {false && (() => {
               const eqLines = (snapshot?.warrantNotes?.equityLines ?? []).map((el: any, i: number) => ({ ...el, programType: 'equity-line', filingDate: el.filingDate ?? '', securities: [] }));
               const progs = snapshot?.programs ?? [];
               // Also surface warrant offerings from 424B5 prospectuses

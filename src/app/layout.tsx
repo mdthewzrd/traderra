@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Inter, JetBrains_Mono } from 'next/font/google'
+import { Inter } from 'next/font/google'
 import '../styles/globals.css'
 import '../styles/button-fix.css'
 import { QueryProvider } from '@/components/providers/query-provider'
@@ -14,12 +14,6 @@ import { RequestInbox } from '@/components/inbox/RequestInbox'
 const inter = Inter({
   subsets: ['latin'],
   variable: '--font-sans',
-  display: 'swap',
-})
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  variable: '--font-mono',
   display: 'swap',
 })
 
@@ -76,7 +70,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
-      <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased studio-bg min-h-screen`} style={{ fontSize: 13 }}>
+      <body className={`${inter.variable} font-sans antialiased studio-bg min-h-screen`} style={{ fontSize: 13 }}>
         <StudioTheme>
           <TraderraProvider>
             <GlobalTraderraProvider>

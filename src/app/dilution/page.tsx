@@ -1140,155 +1140,139 @@ function dilutionCapacityCards(snap: any) {
 
 // Tier 3 — Dilution tendencies. Computes CONCRETE dilution metrics from
 // actual data: total raised, shares issued, growth rate, offering frequency,
-// preferred mechanism. Always shows numbers, not conditional flags.
-function dilutionTendencies(snap: any) {
+// preferred mechanism. Lens-aware: 60d / 6mo / 1yr / all filter date ranges.
+type Lens = '60d' | '6mo' | '1yr' | 'all';
+const LENS_DAYS: Record<Lens, number> = { '60d': 60, '6mo': 180, '1yr': 365, all: 99999 };
+
+function dilutionTendencies(snap: any, lens: Lens = '1yr') {
   const now = Date.now();
   const DAY = 86_400_000;
+  const cutoff = now - LENS_DAYS[lens] * DAY;
+  const lensLabel = lens === 'all' ? 'all-time' : `last ${lens}`;
   const ins: { label: string; value: string; detail?: string; tone: string }[] = [];
 
-  const offerings = snap?.offerings ?? [];
-  const draws = snap?.draws ?? [];
-  const sharesHistory = (snap?.sharesHistory ?? []) as { period: string; outstanding: number }[];
-  const reverseSplits = snap?.reverseSplits ?? [];
-  const form4 = (snap?.form4Txns ?? []) as { txnDate: string; securities: number; dilutive: boolean }[];
-  const cash = snap?.cash;
+  const offeringsAll = snap?.offerings ?? [];
+  const drawsAll = snap?.draws ?? [];
   const filings = snap?.filings ?? [];
+  // Filter events to the lens window
+  const inLens = (d: string | undefined) => d != null && Date.parse(d) >= cutoff;
+  const offerings = offeringsAll.filter((o: any) => inLens(o.filingDate));
+  const draws = drawsAll.filter((d: any) => inLens(d.date ?? d.filingDate));
+  const reverseSplits = (snap?.reverseSplits ?? []).filter((r: any) => inLens(r.executionDate ?? r.announcementDate));
+  const form4 = ((snap?.form4Txns ?? []) as { txnDate: string; securities: number; dilutive: boolean }[]).filter((t) => t.dilutive && inLens(t.txnDate));
+  const cash = snap?.cash;
+  const sharesHistory = (snap?.sharesHistory ?? []) as { period: string; outstanding: number }[];
 
-  // 1. TOTAL raised (all-time) — offerings + draws, concrete number
+  // 1. TOTAL raised in lens — offerings + draws
   const offTotal = offerings.reduce((a: number, o: any) => a + (o.grossProceeds ?? 0), 0);
   const drawTotal = draws.reduce((a: number, d: any) => a + (d.amount ?? d.proceeds ?? 0), 0);
-  const raisedAll = offTotal + drawTotal;
-  const totalEvents = offerings.length + draws.length;
-  if (raisedAll > 0) {
-    const off12 = offerings.filter((o: any) => o.filingDate && Date.parse(o.filingDate) >= now - 365 * DAY);
-    const draw12 = draws.filter((d: any) => (d.date ?? d.filingDate) && Date.parse(d.date ?? d.filingDate) >= now - 365 * DAY);
-    const count12 = off12.length + draw12.length;
+  const raisedLens = offTotal + drawTotal;
+  const eventsLens = offerings.length + draws.length;
+  if (raisedLens > 0 || eventsLens > 0) {
     ins.push({
-      label: 'Total raised (all-time)',
-      value: fmtMoney(raisedAll),
-      detail: `${totalEvents} raise${totalEvents !== 1 ? 's' : ''}` + (count12 > 0 ? ` · ${count12} in last 12mo` : ''),
-      tone: totalEvents >= 8 ? 'red' : totalEvents >= 4 ? 'amber' : 'zinc',
+      label: `Raised (${lensLabel})`,
+      value: fmtMoney(raisedLens),
+      detail: `${eventsLens} raise${eventsLens !== 1 ? 's' : ''}`,
+      tone: eventsLens >= 8 ? 'red' : eventsLens >= 3 ? 'amber' : 'zinc',
     });
+  } else {
+    ins.push({ label: `Raised (${lensLabel})`, value: '$0', detail: 'no raises', tone: 'zinc' });
   }
 
-  // 2. SHARES issued via dilution — sum of shares offered + draw shares
+  // 2. SHARES issued via dilution in lens
   const shOffered = offerings.reduce((a: number, o: any) => a + (o.sharesOffered ?? 0), 0);
   const shDrawn = draws.reduce((a: number, d: any) => a + (d.shares ?? 0), 0);
   const sharesIssued = shOffered + shDrawn;
   if (sharesIssued > 0) {
-    ins.push({
-      label: 'Shares issued',
-      value: fmtNum(sharesIssued) + ' sh',
-      detail: 'via offerings + draws',
-      tone: 'amber',
-    });
+    ins.push({ label: 'Shares issued', value: fmtNum(sharesIssued) + ' sh', detail: lensLabel, tone: 'amber' });
   }
 
-  // 3. SHARE GROWTH — from oldest to newest in sharesHistory
+  // 3. SHARE GROWTH — compare newest vs point at start of lens window
   if (sharesHistory.length >= 2) {
     const sorted = [...sharesHistory].sort((a, b) => Date.parse(a.period) - Date.parse(b.period));
-    const oldest = sorted[0];
     const newest = sorted[sorted.length - 1];
-    if (oldest.outstanding > 0 && oldest.outstanding !== newest.outstanding) {
-      const growth = ((newest.outstanding - oldest.outstanding) / oldest.outstanding) * 100;
-      const years = (Date.parse(newest.period) - Date.parse(oldest.period)) / (365 * DAY);
+    // oldest WITHIN the lens window (or the one just before it)
+    const baseline = [...sorted].reverse().find((p) => Date.parse(p.period) <= cutoff) ?? sorted[0];
+    if (baseline.outstanding > 0 && baseline.outstanding !== newest.outstanding) {
+      const growth = ((newest.outstanding - baseline.outstanding) / baseline.outstanding) * 100;
       ins.push({
-        label: years > 1.5 ? 'Share growth' : 'Share change',
+        label: 'Share growth',
         value: `${growth > 0 ? '+' : ''}${growth.toFixed(0)}%`,
-        detail: years > 1.5 ? `over ${years.toFixed(1)}yr` : undefined,
+        detail: lensLabel,
         tone: growth > 200 ? 'red' : growth > 50 ? 'amber' : 'zinc',
       });
     }
   }
 
-  // 4. PREFERRED MECHANISM — most-used facility type
+  // 4. PREFERRED MECHANISM — most-used facility type in lens
   const facCounts: Record<string, number> = {};
   const facAmt: Record<string, number> = {};
-  offerings.forEach((o: any) => {
-    const t = o.offeringType ?? o.formType ?? 'unknown';
-    facCounts[t] = (facCounts[t] ?? 0) + 1;
-    facAmt[t] = (facAmt[t] ?? 0) + (o.grossProceeds ?? 0);
-  });
-  draws.forEach((d: any) => {
-    const t = d.facilityType ?? 'draw';
-    facCounts[t] = (facCounts[t] ?? 0) + 1;
-    facAmt[t] = (facAmt[t] ?? 0) + (d.amount ?? 0);
-  });
+  offerings.forEach((o: any) => { const t = o.offeringType ?? o.formType ?? 'unknown'; facCounts[t] = (facCounts[t] ?? 0) + 1; facAmt[t] = (facAmt[t] ?? 0) + (o.grossProceeds ?? 0); });
+  draws.forEach((d: any) => { const t = d.facilityType ?? 'draw'; facCounts[t] = (facCounts[t] ?? 0) + 1; facAmt[t] = (facAmt[t] ?? 0) + (d.amount ?? 0); });
   const topFac = Object.entries(facCounts).sort((a, b) => b[1] - a[1])[0];
   if (topFac && topFac[1] > 0) {
-    const nameMap: Record<string, string> = {
-      'equity-line': 'SEPA / Equity Line',
-      atm: 'ATM Shelf',
-      convertible: 'Convertibles',
-      'promissory-note': 'Promissory Notes',
-      underwritten: 'Underwritten',
-    };
-    const name = nameMap[topFac[0]] ?? topFac[0];
-    ins.push({
-      label: 'Go-to mechanism',
-      value: name,
-      detail: `${topFac[1]}× ${facAmt[topFac[0]] > 0 ? '· ' + fmtMoney(facAmt[topFac[0]]) : ''}`,
-      tone: 'red',
-    });
+    const nameMap: Record<string, string> = { 'equity-line': 'SEPA / Equity Line', atm: 'ATM Shelf', convertible: 'Convertibles', 'promissory-note': 'Promissory Notes', underwritten: 'Underwritten' };
+    ins.push({ label: 'Go-to mechanism', value: nameMap[topFac[0]] ?? topFac[0], detail: `${topFac[1]}×`, tone: 'red' });
   }
 
-  // 5. REVERSE SPLITS — serial diluter signal
+  // 5. REVERSE SPLITS in lens
   if (reverseSplits.length > 0) {
     const last = [...reverseSplits].sort((a: any, b: any) => Date.parse(b.executionDate ?? b.announcementDate) - Date.parse(a.executionDate ?? a.announcementDate))[0];
-    const d = now - Date.parse(last.executionDate ?? last.announcementDate);
-    const rel = d < 365 * DAY ? Math.round(d / 30 / DAY) + 'mo ago' : (d / (365 * DAY)).toFixed(1) + 'yr ago';
-    ins.push({
-      label: 'Reverse splits',
-      value: `${reverseSplits.length}×`,
-      detail: last.ratio + ' · last ' + rel,
-      tone: reverseSplits.length >= 2 ? 'red' : 'amber',
-    });
+    ins.push({ label: 'Reverse splits', value: `${reverseSplits.length}×`, detail: last.ratio ?? '', tone: reverseSplits.length >= 2 ? 'red' : 'amber' });
   }
 
-  // 6. INSIDER selling (90d)
-  const sells90 = form4.filter((t) => t.dilutive && Date.parse(t.txnDate) >= now - 90 * DAY);
-  if (sells90.length > 0) {
-    const sh = sells90.reduce((a, t) => a + t.securities, 0);
-    ins.push({
-      label: 'Insider selling (90d)',
-      value: `${sells90.length} sale${sells90.length !== 1 ? 's' : ''}`,
-      detail: fmtNum(sh) + ' sh',
-      tone: 'amber',
-    });
+  // 6. INSIDER selling in lens
+  if (form4.length > 0) {
+    const sh = form4.reduce((a, t) => a + t.securities, 0);
+    ins.push({ label: 'Insider selling', value: `${form4.length} sale${form4.length !== 1 ? 's' : ''}`, detail: fmtNum(sh) + ' sh', tone: 'amber' });
   }
 
-  // 7. CAPITAL CYCLE — runway pressure
+  // 7. CAPITAL CYCLE — runway pressure (lens-independent, always relevant)
   if (cash?.monthlyCashFlow != null && cash.monthlyCashFlow < 0 && cash.projectedCash != null) {
     const monthsLeft = cash.projectedCash / Math.abs(cash.monthlyCashFlow);
-    ins.push({
-      label: 'Runway',
-      value: monthsLeft < 12 ? `${monthsLeft.toFixed(0)}mo left` : 'Funded',
-      detail: cash.projectedCash != null ? fmtMoney(cash.projectedCash) + ' cash' : undefined,
-      tone: monthsLeft < 6 ? 'red' : monthsLeft < 12 ? 'amber' : 'zinc',
-    });
+    ins.push({ label: 'Runway', value: monthsLeft < 12 ? `${monthsLeft.toFixed(0)}mo left` : 'Funded', detail: fmtMoney(cash.projectedCash) + ' cash', tone: monthsLeft < 6 ? 'red' : monthsLeft < 12 ? 'amber' : 'zinc' });
   }
 
-  // 8. COMPLIANCE — late filings (NT-10 notices) + Nasdaq listing rules
-  const late = filings.filter((f: any) => /^NT-10/.test(f.formType));
+  // 8. COMPLIANCE — late filings in lens
+  const late = filings.filter((f: any) => /^NT-10/.test(f.formType) && inLens(f.filingDate));
   if (late.length > 0) {
-    ins.push({
-      label: 'Late filings',
-      value: `${late.length} NT notice${late.length !== 1 ? 's' : ''}`,
-      detail: 'Failed to file on time',
-      tone: 'red',
-    });
+    ins.push({ label: 'Late filings', value: `${late.length} NT notice${late.length !== 1 ? 's' : ''}`, detail: 'Failed to file on time', tone: 'red' });
   }
-  // Nasdaq listing compliance
   if (snap?.compliance) {
-    ins.push({
-      label: 'Listing compliance',
-      value: snap.compliance.failures === 0 ? 'PASSING' : `${snap.compliance.failures} FAIL`,
-      detail: snap.compliance.tier,
-      tone: snap.compliance.failures === 0 ? 'zinc' : snap.compliance.failures === 1 ? 'amber' : 'red',
-    });
+    ins.push({ label: 'Listing compliance', value: snap.compliance.failures === 0 ? 'PASSING' : `${snap.compliance.failures} FAIL`, detail: snap.compliance.tier, tone: snap.compliance.failures === 0 ? 'zinc' : snap.compliance.failures === 1 ? 'amber' : 'red' });
   }
 
   return ins;
+}
+
+// Detailed dilution tendencies — event timeline table. Merges offerings,
+// draws, and reverse splits into one chronologically-sorted feed within the
+// selected lens. This is the drill-down beneath the summary cards.
+function dilutionEvents(snap: any, lens: Lens = '1yr') {
+  const now = Date.now();
+  const DAY = 86_400_000;
+  const cutoff = now - LENS_DAYS[lens] * DAY;
+  const events: { date: string; type: string; amount: string; detail: string; tone: string }[] = [];
+  const inLens = (d: string | undefined) => d != null && Date.parse(d) >= cutoff;
+  (snap?.offerings ?? []).forEach((o: any) => {
+    if (!inLens(o.filingDate)) return;
+    events.push({ date: o.filingDate, type: 'Offering', amount: o.grossProceeds ? fmtMoney(o.grossProceeds) : '—', detail: `${o.formType ?? ''}${o.underwriter ? ' · ' + o.underwriter : ''}${o.sharesOffered ? ' · ' + fmtNum(o.sharesOffered) + ' sh' : ''}`, tone: 'amber' });
+  });
+  (snap?.draws ?? []).forEach((d: any) => {
+    const dd = d.date ?? d.filingDate;
+    if (!inLens(dd)) return;
+    events.push({ date: dd, type: d.facilityType === 'atm' ? 'ATM Draw' : d.facilityType === 'equity-line' ? 'SEPA Draw' : d.facilityType === 'convertible' ? 'Convert Draw' : 'Draw', amount: d.amount ? fmtMoney(d.amount) : '—', detail: `${d.shares ? fmtNum(d.shares) + ' sh' : ''}${d.price ? ' @ $' + d.price.toFixed(2) : ''}`.trim() || '—', tone: 'red' });
+  });
+  (snap?.reverseSplits ?? []).forEach((r: any) => {
+    const dd = r.executionDate ?? r.announcementDate;
+    if (!inLens(dd)) return;
+    events.push({ date: dd, type: 'Reverse Split', amount: r.ratio ?? '—', detail: r.announcementDate ?? '', tone: 'zinc' });
+  });
+  (snap?.form4Txns ?? []).filter((t: any) => t.dilutive).forEach((t: any) => {
+    if (!inLens(t.txnDate)) return;
+    events.push({ date: t.txnDate, type: 'Insider Sale', amount: fmtNum(t.securities) + ' sh', detail: t.reportingOwner ?? '', tone: 'amber' });
+  });
+  return events.sort((a, b) => b.date.localeCompare(a.date));
 }
 
 export default function DilutionPage() {
@@ -1299,6 +1283,7 @@ export default function DilutionPage() {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState('all');
+  const [tendenciesLens, setTendenciesLens] = useState<'60d' | '6mo' | '1yr' | 'all'>('1yr');
   const [status, setStatus] = useState<string | null>(null);
 
   const load = useCallback(async (t: string, forceSync: boolean) => {
@@ -1803,9 +1788,10 @@ export default function DilutionPage() {
               </div>
             )}
 
-            {/* Tier 2 REMOVED — consolidated into DilutionOverview tabs above.
-                ProgramCard component retained for potential reuse. */}
-            {false && (() => {
+            {/* Detailed dilution programs — expandable cards with full terms +
+                source clause, filterable by type. The drill-down beneath the
+                overview tabs. */}
+            {(() => {
               const eqLines = (snapshot?.warrantNotes?.equityLines ?? []).map((el: any, i: number) => ({ ...el, programType: 'equity-line', filingDate: el.filingDate ?? '', securities: [] }));
               const progs = snapshot?.programs ?? [];
               // Also surface warrant offerings from 424B5 prospectuses
@@ -1829,7 +1815,7 @@ export default function DilutionPage() {
               return (
                 <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
                   <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-400">
-                    Dilution programs <span className="rounded bg-zinc-700 px-1.5 py-0.5 text-[9px] text-zinc-300">detail</span>
+                    Detailed dilution programs <span className="rounded bg-zinc-700 px-1.5 py-0.5 text-[9px] text-zinc-300">terms + clauses</span>
                   </div>
                   {/* Category tabs */}
                   <div className="mb-3 flex flex-wrap gap-1">
@@ -1866,10 +1852,11 @@ export default function DilutionPage() {
 
 
 
-            {/* Tier 3 — Dilution tendencies. TL;DR on frequency, mechanisms,
-                reverse splits, compliance — the company's dilution DNA. */}
+            {/* Tier 3 — Dilution tendencies. Short summary cards + detailed
+                event timeline, both lens-aware (60d / 6mo / 1yr / all). */}
             {(() => {
-              const ins = dilutionTendencies(snapshot);
+              const ins = dilutionTendencies(snapshot, tendenciesLens);
+              const events = dilutionEvents(snapshot, tendenciesLens);
               if (!ins.length) return null;
               const toneCls: Record<string, string> = {
                 red: 'border-red-500/20 bg-red-500/[0.03]',
@@ -1879,11 +1866,23 @@ export default function DilutionPage() {
               const txtCls: Record<string, string> = {
                 red: 'text-red-400', amber: 'text-amber-400', zinc: 'text-zinc-300',
               };
+              const lenses = ['60d', '6mo', '1yr', 'all'] as const;
               return (
                 <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-                  <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-500">
-                    Dilution tendencies <span className="text-zinc-700">· historical patterns</span>
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="text-xs uppercase tracking-wide text-zinc-500">Dilution tendencies</span>
+                    <span className="text-zinc-700 text-[10px]">· historical patterns</span>
+                    {/* Time-lens toggle */}
+                    <div className="ml-auto flex gap-1">
+                      {lenses.map((l) => (
+                        <button key={l} onClick={() => setTendenciesLens(l)}
+                          className={`rounded px-2 py-0.5 text-[10px] font-medium uppercase transition-colors ${tendenciesLens === l ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-zinc-300'}`}>
+                          {l}
+                        </button>
+                      ))}
+                    </div>
                   </div>
+                  {/* Short summary cards */}
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
                     {ins.map((it, i) => (
                       <div key={i} className={`rounded border p-2.5 ${toneCls[it.tone] ?? toneCls.zinc}`}>
@@ -1893,6 +1892,41 @@ export default function DilutionPage() {
                       </div>
                     ))}
                   </div>
+                  {/* Detailed event timeline */}
+                  {events.length > 0 && (
+                    <details className="group mt-3 rounded border border-zinc-800/60">
+                      <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 hover:bg-zinc-800/30">
+                        <svg className="h-3 w-3 shrink-0 text-zinc-500 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Event timeline</span>
+                        <span className="rounded bg-zinc-800 px-1.5 text-[10px] text-zinc-400">{events.length} events</span>
+                      </summary>
+                      <div className="border-t border-zinc-800/50 overflow-x-auto">
+                        <table className="w-full border-collapse">
+                          <thead className="border-b border-zinc-800">
+                            <tr>
+                              <th className={th}>Date</th>
+                              <th className={th}>Type</th>
+                              <th className={th}>Amount</th>
+                              <th className={th}>Detail</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-800/50">
+                            {events.map((e, i) => {
+                              const ec: Record<string,string> = { red: 'bg-red-500/15 text-red-400', amber: 'bg-amber-500/15 text-amber-400', zinc: 'bg-zinc-700 text-zinc-400' };
+                              return (
+                                <tr key={i}>
+                                  <td className={td + ' whitespace-nowrap text-zinc-500'}>{e.date}</td>
+                                  <td className={td}><span className={'rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase ' + (ec[e.tone] ?? ec.zinc)}>{e.type}</span></td>
+                                  <td className={td + ' font-medium text-zinc-200'}>{e.amount}</td>
+                                  <td className={td + ' text-zinc-500'}>{e.detail}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </details>
+                  )}
                 </div>
               );
             })()}

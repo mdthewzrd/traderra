@@ -453,17 +453,22 @@ function DilutionOverview({ snapshot }: { snapshot: any }) {
           </details>
         )}
 
-        {/* S-1 / F-1 — registration lifecycle: filed → amended → effective → withdrawn */}
+        {/* S-1 / F-1 — registration lifecycle: filed → amended → effective (8-K notice) → withdrawn */}
         {s1.length > 0 && (() => {
           const allFilings = snapshot?.filings ?? [];
           const has424 = allFilings.some((fl: any) => /^424B[345]/.test(fl.formType));
           const hasRW = allFilings.some((fl: any) => /RW/.test(fl.formType));
           const s1Regs = (snapshot?.registrations ?? []).filter((r: any) => /^S-1|^F-1/.test(r.formType));
           const s1RegTotal = s1Regs.reduce((a: number, r: any) => a + (r.aggregateOffering ?? 0), 0);
-          const statusFor1 = (ft: string): { label: string; cls: string } => {
+          // effectiveDate lookup by accessionNo (s1 comes from filings, effDate from registrations)
+          const effByAcc = new Map((snapshot?.registrations ?? []).map((r: any) => [r.accessionNo, r.effectiveDate]));
+          const anyEffective = s1.some((f: any) => effByAcc.get(f.accessionNo));
+          const statusFor1 = (ft: string, acc: string): { label: string; cls: string; date?: string } => {
             if (/RW/.test(ft)) return { label: 'withdrawn', cls: 'bg-zinc-700 text-zinc-500 line-through' };
+            const eff = effByAcc.get(acc);
+            if (eff) return { label: 'effective', cls: 'bg-emerald-500/15 text-emerald-400', date: eff };
             if (/\/A/.test(ft)) return { label: 'amended', cls: 'bg-amber-500/15 text-amber-300' };
-            if (has424) return { label: 'effective', cls: 'bg-emerald-500/15 text-emerald-400' };
+            if (has424) return { label: 'effective*', cls: 'bg-emerald-500/15 text-emerald-400' }; // inferred from 424B
             return { label: 'pending', cls: 'bg-zinc-800 text-zinc-500' };
           };
           return (
@@ -472,7 +477,7 @@ function DilutionOverview({ snapshot }: { snapshot: any }) {
               <svg className="h-3 w-3 shrink-0 text-zinc-500 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
               <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">S-1 / F-1 Registrations</span>
               <span className="rounded bg-zinc-800 px-1.5 text-[10px] text-zinc-400">{s1.length}</span>
-              <span className="text-[11px] text-zinc-500">· {s1RegTotal > 0 ? '$' + (s1RegTotal / M).toFixed(0) + 'M registered' : ''}{has424 ? ' · ' : hasRW ? ' · ' : ' · '}<span className={has424 ? 'text-emerald-400' : 'text-zinc-500'}>{has424 ? 'effective' : hasRW ? 'withdrawn' : 'pending'}</span></span>
+              <span className="text-[11px] text-zinc-500">· {s1RegTotal > 0 && '$' + (s1RegTotal / M).toFixed(0) + 'M registered'} · <span className={anyEffective ? 'text-emerald-400' : hasRW ? 'text-zinc-500' : 'text-zinc-500'}>{anyEffective ? 'effective' : hasRW ? 'withdrawn' : 'pending'}</span></span>
             </summary>
             <div className="border-t border-zinc-800/50 px-3 py-2">
             <div className="overflow-x-auto">
@@ -487,12 +492,12 @@ function DilutionOverview({ snapshot }: { snapshot: any }) {
                 </thead>
                 <tbody className="divide-y divide-zinc-800/50">
                   {s1.map((f: any, i: number) => {
-                    const st = statusFor1(f.formType);
+                    const st = statusFor1(f.formType, f.accessionNo);
                     return (
                       <tr key={i}>
                         <td className={td + ' whitespace-nowrap text-zinc-500'}>{f.filingDate}</td>
                         <td className={td}><span className="rounded bg-zinc-800 px-1 text-[10px] text-zinc-400">{f.formType}</span></td>
-                        <td className={td}><span className={'rounded px-1 text-[9px] font-semibold uppercase ' + st.cls}>{st.label}</span></td>
+                        <td className={td}><span className={'rounded px-1 text-[9px] font-semibold uppercase ' + st.cls}>{st.label}</span>{st.date && <span className="ml-1 text-[9px] text-zinc-600">{st.date}</span>}</td>
                         <td className={td + ' text-zinc-400'}>{f.primaryDesc ?? '—'}</td>
                       </tr>
                     );

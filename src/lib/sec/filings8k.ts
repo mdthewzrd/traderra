@@ -227,38 +227,52 @@ export interface SyncProgramsResult {
  *  unless force=true (re-parse to pick up parser improvements). */
 export async function syncMaterialAgreements(cik: string, opts: { force?: boolean } = {}): Promise<SyncProgramsResult> {
   try {
-    // Only 8-Ks with material-agreement items.
+    // Only 8-Ks with material-agreement or effectiveness items.
+    // 8.01: ATM amendments + effectiveness notices. 5.03: some effectiveness notices.
     const candidates = await prisma.dilutionFiling.findMany({
       where: {
         cik,
         formType: '8-K',
-        // 8.01 included: ATM amendments often reported under Other Events.
-        items: { hasSome: ['1.01', '2.03', '3.02', '3.03', '8.01'] },
+        items: { hasSome: ['1.01', '2.03', '3.02', '3.03', '5.03', '8.01'] },
       },
       select: { accessionNo: true, filingDate: true, primaryDoc: true, items: true, rawPayload: true },
       orderBy: { filingDate: 'desc' },
-      take: 30, // recent 30 — programs refresh + ATM amendments are frequent
+      take: 30,
     });
     let parsed = 0;
     let withDetail = 0;
     for (const f of candidates) {
-      const existing = (f.rawPayload ?? null) as { programDetail?: ProgramDetail; programParsed?: boolean } | null;
-      if (existing?.programParsed && !opts.force) continue; // idempotent
+      const existing = (f.rawPayload ?? null) as { programDetail?: ProgramDetail; programParsed?: boolean; effParsed?: boolean } | null;
+      // Idempotent: skip only if BOTH parsers have run (unless force).
+      if (existing?.programParsed && existing?.effParsed && !opts.force) continue;
       if (!f.primaryDoc) continue;
-      const detail = await fetchAndParseFiling(
+      // Combined parse: one body fetch serves both material-agreement +
+      // effectiveness-notice extraction. Re-fetch .txt only if BOTH empty.
+      const fd = f.filingDate.toISOString().slice(0, 10);
+      const combined = await fetchAndParseFiling(
         cik,
         f.accessionNo,
         f.primaryDoc,
-        (html) => parse8kMaterialAgreement(html, f.accessionNo, f.filingDate.toISOString().slice(0, 10), f.items ?? []),
-        (d) => !d,
+        (html) => ({
+          programDetail: parse8kMaterialAgreement(html, f.accessionNo, fd, f.items ?? []),
+          effNotice: parseEffectivenessNotice(html, fd),
+        }),
+        (d) => !d.programDetail && !d.effNotice,
       );
       parsed++;
-      // Mark parsed regardless (avoid re-fetching unmodeled agreements); store detail if found.
       await prisma.dilutionFiling.update({
         where: { accessionNo: f.accessionNo },
-        data: { rawPayload: { ...(existing ?? {}), programParsed: true, programDetail: detail ?? undefined } },
+        data: {
+          rawPayload: {
+            ...(existing ?? {}),
+            programParsed: true,
+            effParsed: true,
+            programDetail: combined?.programDetail ?? undefined,
+            effNotice: combined?.effNotice ?? undefined,
+          },
+        },
       });
-      if (detail) withDetail++;
+      if (combined?.programDetail) withDetail++;
     }
     return { status: 'success', parsed, withDetail };
   } catch (err) {
@@ -336,4 +350,75 @@ export async function getPrograms(cik: string): Promise<CompanyProgram[]> {
     if (replace) byKey.set(key, p);
   }
   return [...byKey.values()].sort((a, b) => (b.filingDate ?? '').localeCompare(a.filingDate ?? ''));
+}
+
+/**
+ * 8-K effectiveness-notice parser.
+ *
+ * When the SEC declares a registration statement effective, companies file an
+ * 8-K (usually Item 8.01 Other Events, sometimes 5.03) announcing it. This is
+ * the AUTHORITATIVE effective date — unlike inferring from 424B supplement
+ * presence (which only proves effectiveness happened, not when).
+ *
+ * Extracts: registration form type (S-1, S-3, F-1), file number (333-XXXXX),
+ * and effective date (stated in the notice, or the 8-K filing date itself).
+ *
+ * S-3ASR (automatic shelf) is effective upon FILING — no notice needed, so
+ * these notices are mainly for S-1, S-3 (non-auto), F-1, F-3.
+ */
+export interface EffectivenessNotice {
+  regFormType: string | null; // 'S-1', 'S-3', 'F-1', etc.
+  regNo: string | null; // '333-XXXXX' (SEC file number)
+  effectiveDate: string; // ISO date — stated in notice or = 8-K filing date
+}
+
+export function parseEffectivenessNotice(html: string, filingDate: string): EffectivenessNotice | null {
+  const text = stripHtml(html);
+  const head = text.slice(0, 20000);
+
+  // Strong positive signals — must have registration-statement context.
+  // "declared effective" = SEC acted; "became effective" / "notice of
+  // effectiveness" = it went live. All require a nearby registration statement
+  // reference to reject stock-plan / charter-amendment effectiveness.
+  const strongSig =
+    /(?:declared\s+effective|notice\s+of\s+effectiveness|registration\s+statement[^.]{0,100}(?:became|was|were|has|had)\s+effective)/i.test(head);
+  if (!strongSig) return null;
+
+  // Reject explicit negatives: "not yet effective" / "has not become effective".
+  if (/(?:not\s+yet\s+effective|has\s+not\s+become\s+effective|not\s+declared\s+effective)/i.test(head)) return null;
+
+  // Registration form type: "Form S-1" / "Form S-3" / "Form F-1" near effectiveness context.
+  const formMatch = head.match(/Form\s+([SF]-\d[\w/]*)/i);
+  const regFormType = formMatch ? formMatch[1].toUpperCase().replace(/\/A$/, '') : null;
+
+  // File number: "File No. 333-XXXXX" / "Registration No. 333-XXXXX".
+  const noMatch = head.match(/(?:File\s+No\.?|Registration\s+(?:Statement\s+)?No\.?)\s*(333-\d+)/i);
+  const regNo = noMatch ? noMatch[1] : null;
+
+  // Stated effective date: "effective on July 1, 2024" / "effective as of July 1, 2024".
+  // Falls back to the 8-K filing date (filed same day effectiveness is announced).
+  let effectiveDate = filingDate;
+  const dateMatch = head.match(/effective\s+(?:on|as\s+of)\s+([A-Z][a-z]+ \d{1,2},? \d{4})/i);
+  if (dateMatch) {
+    const parsed = new Date(dateMatch[1]);
+    if (!isNaN(parsed.getTime())) effectiveDate = parsed.toISOString().slice(0, 10);
+  }
+
+  return { regFormType, regNo, effectiveDate };
+}
+
+/** Read stored effectiveness notices (populated by syncMaterialAgreements). */
+export async function getEffectivenessNotices(cik: string): Promise<EffectivenessNotice[]> {
+  const rows = await prisma.dilutionFiling.findMany({
+    where: { cik, formType: '8-K' },
+    select: { rawPayload: true, filingDate: true },
+    orderBy: { filingDate: 'desc' },
+    take: 30,
+  });
+  const notices: EffectivenessNotice[] = [];
+  for (const r of rows) {
+    const rp = (r.rawPayload ?? null) as { effNotice?: EffectivenessNotice } | null;
+    if (rp?.effNotice) notices.push(rp.effNotice);
+  }
+  return notices;
 }

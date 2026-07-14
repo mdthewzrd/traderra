@@ -312,6 +312,7 @@ export interface DilutionSnapshot {
     salesChannel: string | null;
     agent: string | null;
     securitiesTypes: string[];
+    effectiveDate: string | null;
   }[];
   insiderDilutiveShares90d: number;
   overhang: {
@@ -725,6 +726,17 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
       })
       .map((f) => {
         const p = (f.rawPayload ?? {}) as Record<string, unknown>;
+        // Attach effective date from 8-K effectiveness notices.
+        // Match by form-type prefix (S-1, F-1, S-3) + notice date >= filing date.
+        const baseForm = f.formType.replace(/\/A$/, '').replace(/ASR$/, '');
+        const effMatch = effNotices
+          .filter((n) => n.regFormType && n.regFormType.startsWith(baseForm))
+          .filter((n) => {
+            const fDate = f.filingDate.toISOString().slice(0, 10);
+            // Notice must be on/after the registration was filed (effective comes after filing).
+            return n.effectiveDate >= fDate;
+          })
+          .sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate))[0];
         return {
           accessionNo: f.accessionNo,
           formType: f.formType,
@@ -734,6 +746,7 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
           salesChannel: (p.salesChannel as string | null) ?? null,
           agent: (p.agent as string | null) ?? null,
           securitiesTypes: (p.securitiesTypes as string[] | null) ?? [],
+          effectiveDate: effMatch?.effectiveDate ?? null,
         };
       }),
     insiderDilutiveShares90d: dilutiveShares90d,

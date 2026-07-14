@@ -880,6 +880,103 @@ function BottomTabs({ snapshot }: { snapshot: any }) {
   );
 }
 
+// Decode residual HTML entities + tags from SEC filing clause text so the
+// UI never shows raw &ldquo;/&rdquo;/&quot; garbage.
+function decodeEnt(s: string | null | undefined): string {
+  if (!s) return '';
+  return s
+    .replace(/&ldquo;|&#8220;/gi, '"')
+    .replace(/&rdquo;|&#8221;/gi, '"')
+    .replace(/&lsquo;|&rsquo;|&#8217;|&#8216;/gi, "'")
+    .replace(/&nbsp;|&#160;/gi, ' ')
+    .replace(/&mdash;|&#8212;/gi, '—')
+    .replace(/&ndash;|&#8211;/gi, '–')
+    .replace(/&hellip;|&#8230;/gi, '…')
+    .replace(/&quot;|&#34;/gi, '"')
+    .replace(/&apos;|&#39;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&amp;/gi, '&')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Plain-English one-liner TLDR synthesized from the structured fields —
+// replaces the truncated mid-sentence clause as the at-a-glance summary.
+function programTldr(pr: any): string {
+  const type: Record<string, string> = {
+    atm: 'ATM equity facility',
+    'equity-line': 'Standing equity line (SEPA)',
+    convertible: 'Convertible note facility',
+    'promissory-note': 'Promissory note',
+    'warrant-offering': 'Warrant offering',
+  };
+  const parts: string[] = [type[pr.programType] ?? pr.programType];
+  if (pr.counterparty) parts.push(`with ${pr.counterparty}`);
+  if (pr.maxCommitment != null) parts.push(`up to $${(pr.maxCommitment / 1e6).toFixed(0)}M`);
+  if (pr.pricing) parts.push(`priced ${pr.pricing}`);
+  if (pr.maturity) parts.push(`matures ${pr.maturity}`);
+  if (pr.drawCapPerPeriod) parts.push(`draw cap ${pr.drawCapPerPeriod}`);
+  if (pr.ownershipCap != null) parts.push(`${pr.ownershipCap}% ownership cap`);
+  return parts.filter(Boolean).join(' · ');
+}
+
+// Expandable program card: header (type + who + date + TLDR) always visible,
+// click reveals a structured terms grid + the full decoded source clause.
+// Fixes: double-$$ bug, undecoded HTML entities, mid-sentence truncation,
+// no drill-down.
+function ProgramCard({ pr }: { pr: any }) {
+  const [open, setOpen] = useState(false);
+  const label: Record<string, string> = { atm: 'ATM Offering', 'equity-line': 'Equity Line / SEPA', convertible: 'Convertible Note', 'promissory-note': 'Promissory Note', 'warrant-offering': 'Warrant Offering', 'material-agreement': 'Material Agreement' };
+  const tone: Record<string, string> = { atm: 'red', 'equity-line': 'red', convertible: 'amber', 'promissory-note': 'amber', 'warrant-offering': 'blue', 'material-agreement': 'zinc' };
+  const t = tone[pr.programType] ?? 'zinc';
+  const tc = t === 'red' ? 'border-red-500/20 bg-red-500/5' : t === 'amber' ? 'border-amber-500/20 bg-amber-500/5' : t === 'blue' ? 'border-blue-500/20 bg-blue-500/5' : 'border-zinc-700 bg-zinc-800/40';
+  const bc = t === 'red' ? 'bg-red-500/20 text-red-400' : t === 'amber' ? 'bg-amber-500/20 text-amber-400' : t === 'blue' ? 'bg-blue-500/20 text-blue-400' : 'bg-zinc-700 text-zinc-300';
+  const clause = decodeEnt(pr.description);
+  const terms: [string, string | null | undefined][] = [
+    ['Max commitment', pr.maxCommitment != null ? `$${(pr.maxCommitment / 1e6).toFixed(1)}M` : null],
+    ['Pricing', pr.pricing],
+    ['Ownership cap', pr.ownershipCap != null ? `${pr.ownershipCap}%` : null],
+    ['Maturity', pr.maturity],
+    ['Draw cap', pr.drawCapPerPeriod],
+    ['Securities', pr.securities?.length ? pr.securities.join(', ') : null],
+  ].filter(([, v]) => v) as [string, string][];
+  return (
+    <div className={`rounded border ${tc}`}>
+      <button type="button" onClick={() => setOpen((o) => !o)} className="flex w-full items-start gap-2 p-2 text-left hover:bg-white/[0.02]">
+        <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${bc}`}>{label[pr.programType] ?? pr.programType}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs">
+            {pr.counterparty && <span className="font-medium text-zinc-200">{pr.counterparty}</span>}
+            {pr.filingDate && <span className="text-zinc-600">{pr.filingDate}</span>}
+            {pr.maxCommitment != null && <span className="text-zinc-400">· ${(pr.maxCommitment / 1e6).toFixed(0)}M max</span>}
+          </div>
+          <div className="mt-0.5 truncate text-[11px] text-zinc-400">{programTldr(pr)}</div>
+        </div>
+        <svg className={`mt-1 h-3.5 w-3.5 shrink-0 text-zinc-500 transition-transform ${open ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m6 9 6 6 6-6" /></svg>
+      </button>
+      {open && (
+        <div className="border-t border-zinc-700/50 px-2 pb-2 pt-2">
+          {terms.length > 0 && (
+            <div className="mb-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] sm:grid-cols-3">
+              {terms.map(([k, v]) => (
+                <div key={k}><span className="text-zinc-600">{k}: </span><span className="text-zinc-300">{v}</span></div>
+              ))}
+            </div>
+          )}
+          {clause && (
+            <details className="group" open>
+              <summary className="cursor-pointer text-[10px] uppercase tracking-wide text-zinc-500 hover:text-zinc-300">Source clause</summary>
+              <div className="mt-1 max-h-48 overflow-y-auto rounded bg-zinc-950/50 p-2 text-[10px] leading-relaxed text-zinc-400">{clause}</div>
+            </details>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DilutionPage() {
   const [input, setInput] = useState('AAPL');
   const [ticker, setTicker] = useState('');
@@ -1374,41 +1471,12 @@ export default function DilutionPage() {
                 <div className="space-y-1.5">
                   {/* Equity lines / SEPA from 10-K notes (pre-existing standing facilities) */}
                   {snapshot!.warrantNotes?.equityLines?.map((el, i) => (
-                    <div key={`el${i}`} className="rounded border border-red-500/20 bg-red-500/5 p-2">
-                      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-xs">
-                        <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-400">Equity Line / SEPA</span>
-                        {el.counterparty && <span className="font-medium text-zinc-200">{el.counterparty}</span>}
-                        {el.maxCommitment !== null && <span className="text-zinc-400">· ${'$'}{(el.maxCommitment / 1e6).toFixed(0)}M max</span>}
-                        {el.pricing && <span className="text-zinc-400">· {el.pricing}</span>}
-                        {el.ownershipCap !== null && <span className="text-zinc-400">· {el.ownershipCap}% cap</span>}
-                      </div>
-                      <div className="mt-1 line-clamp-2 text-[10px] italic text-zinc-500">“{el.description.slice(0, 240)}{el.description.length > 240 ? '…' : ''}”</div>
-                    </div>
+                    <ProgramCard key={`el${i}`} pr={{ programType: 'equity-line', filingDate: '', securities: [], ...el }} />
                   ))}
-                  {/* 8-K material agreements (new) */}
-                  {snapshot!.programs?.map((pr, i) => {
-                    const label: Record<string,string> = { 'atm':'ATM Offering','equity-line':'Equity Line / SEPA','convertible':'Convertible Note','promissory-note':'Promissory Note','warrant-offering':'Warrant Offering','material-agreement':'Material Agreement' };
-                    const tone: Record<string,string> = { 'atm':'red','equity-line':'red','convertible':'amber','promissory-note':'amber','warrant-offering':'blue','material-agreement':'zinc' };
-                    const t = tone[pr.programType] ?? 'zinc';
-                    const tc = t==='red'?'border-red-500/20 bg-red-500/5':t==='amber'?'border-amber-500/20 bg-amber-500/5':t==='blue'?'border-blue-500/20 bg-blue-500/5':'border-zinc-700 bg-zinc-800/40';
-                    const bc = t==='red'?'bg-red-500/20 text-red-400':t==='amber'?'bg-amber-500/20 text-amber-400':t==='blue'?'bg-blue-500/20 text-blue-400':'bg-zinc-700 text-zinc-300';
-                    return (
-                      <div key={`pr${i}`} className={`rounded border p-2 ${tc}`}>
-                        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-xs">
-                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${bc}`}>{label[pr.programType] ?? pr.programType}</span>
-                          {pr.counterparty && <span className="font-medium text-zinc-200">{pr.counterparty}</span>}
-                          <span className="text-zinc-600">{pr.filingDate}</span>
-                          {pr.maxCommitment !== null && <span className="text-zinc-400">· ${'$'}{(pr.maxCommitment / 1e6).toFixed(0)}M max</span>}
-                          {pr.pricing && <span className="text-zinc-400">· {pr.pricing}</span>}
-                          {pr.ownershipCap !== null && <span className="text-zinc-400">· {pr.ownershipCap}% cap</span>}
-                          {pr.maturity && <span className="text-zinc-400">· matures {pr.maturity}</span>}
-                          {pr.drawCapPerPeriod && <span className="text-zinc-400">· {pr.drawCapPerPeriod}</span>}
-                          {pr.securities.length > 0 && <span className="text-zinc-500">· {pr.securities.join(', ')}</span>}
-                        </div>
-                        <div className="mt-1 line-clamp-2 text-[10px] italic text-zinc-500">“{pr.description.slice(0, 240)}{pr.description.length > 240 ? '…' : ''}”</div>
-                      </div>
-                    );
-                  })}
+                  {/* 8-K material agreements */}
+                  {snapshot!.programs?.map((pr, i) => (
+                    <ProgramCard key={`pr${i}`} pr={pr} />
+                  ))}
                 </div>
               </div>
             )}

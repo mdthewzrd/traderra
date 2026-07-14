@@ -13,7 +13,7 @@ import { REGISTRATION_FORMS } from '@/lib/sec/registration';
 import { DILUTIVE_TXN_CODES } from '@/lib/sec/form4';
 import { computeCompliance, type ComplianceResult } from '@/lib/dilution/compliance';
 import { getWarrantNotes, type ParsedWarrantNotes } from '@/lib/sec/warrant-notes';
-import { getPrograms, type CompanyProgram, type ProgramType } from '@/lib/sec/filings8k';
+import { getPrograms, type CompanyProgram, type ProgramType, getEffectivenessNotices } from '@/lib/sec/filings8k';
 import { getReverseSplits, type ReverseSplit } from '@/lib/sec/reverse-splits';
 import { splitAdjustment } from '@/lib/dilution/split-adjust';
 import { getDraws, type DrawEvent } from '@/lib/sec/draws';

@@ -555,6 +555,7 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
   })();
   const programs = await getPrograms(cik);
   const draws = await getDraws(cik);
+  const effNotices = await getEffectivenessNotices(cik);
   const programTypes = [...new Set(programs.map((p) => p.programType))];
 
   // Accurate 90-day dilutive-share sum from the FULL DB (not the display-capped

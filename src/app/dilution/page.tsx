@@ -977,6 +977,94 @@ function ProgramCard({ pr }: { pr: any }) {
   );
 }
 
+// Tier 1 — "usable now" summary. Per mechanism type, computes a headline
+// number (capacity/size) + activity insights (usage frequency, recency,
+// availability). Activity > moneyness: an OTM warrant filed yesterday matters
+// more than an ITM one from 2019. This replaces truncated clause fragments
+// with synthesized plain-language status.
+function dilutionCapacityCards(snap: any) {
+  const cards: { type: string; label: string; headline: string; sub: string; insights: string[]; tone: string }[] = [];
+  const px = snap?.inTheMoney?.price ?? null;
+  const now = Date.now();
+  const DAY = 86_400_000;
+  const c6mo = now - 180 * DAY;
+  const c90 = now - 90 * DAY;
+
+  // ATM / shelf — registered capacity + draws
+  const sh = snap?.shelfRemaining;
+  const atmRegs = (snap?.registrations ?? []).filter((r: any) => r.salesChannel === 'atm' || r.formType === 'S-3' || r.formType === 'S-3ASR');
+  if ((sh && sh.registered > 0) || atmRegs.length > 0) {
+    const reg = sh?.registered ?? atmRegs.reduce((a: number, r: any) => a + (r.aggregateOffering ?? 0), 0);
+    const sold = sh?.raised ?? 0;
+    const left = sh?.remaining ?? Math.max(0, reg - sold);
+    const ins: string[] = [];
+    if (sold > 0) ins.push(`$${(sold / 1e6).toFixed(1)}M sold`);
+    const atmDraws = (snap?.draws ?? []).filter((d: any) => d.facilityType === 'atm');
+    const d6 = atmDraws.filter((d: any) => d.date && Date.parse(d.date) >= c6mo);
+    if (d6.length > 0) ins.push(`Tapped ${d6.length}× in 6mo` + (d6.length >= 4 ? ' — heavy use' : ''));
+    const latest = atmRegs.sort((a: any, b: any) => Date.parse(b.filingDate) - Date.parse(a.filingDate))[0];
+    if (latest) { const d = now - Date.parse(latest.filingDate); ins.push(d < 90 * DAY ? 'Recently filed' : `Filed ${latest.filingDate.slice(0, 10)}`); }
+    if (left <= 0 && reg > 0) ins.push('Exhausted');
+    cards.push({ type: 'atm', label: 'ATM / Shelf', headline: reg > 0 ? `$${(left / 1e6).toFixed(1)}M` : '—', sub: reg > 0 ? `of $${(reg / 1e6).toFixed(0)}M registered` : `${atmRegs.length} filings`, insights: ins, tone: left > 0 ? 'orange' : 'zinc' });
+  }
+
+  // Equity lines / SEPA — standing facilities
+  const eqLines = [...(snap?.warrantNotes?.equityLines ?? []), ...((snap?.programs ?? []).filter((p: any) => p.programType === 'equity-line'))];
+  if (eqLines.length > 0) {
+    const eqMax = eqLines.reduce((a: number, e: any) => a + (e.maxCommitment ?? 0), 0);
+    const eqDraws = (snap?.draws ?? []).filter((d: any) => d.facilityType === 'equity-line');
+    const eqDrawn = eqDraws.reduce((a: number, d: any) => a + (d.amount ?? 0), 0);
+    const eqLeft = eqMax > 0 ? Math.max(0, eqMax - eqDrawn) : 0;
+    const ins: string[] = [];
+    const d6 = eqDraws.filter((d: any) => d.date && Date.parse(d.date) >= c6mo);
+    if (d6.length > 0) { ins.push(`Used ${d6.length}× in 6mo` + (d6.length >= 5 ? ' — frequently' : '')); }
+    else if (eqDrawn > 0) ins.push('No recent draws');
+    if (eqDrawn > 0) ins.push(`$${(eqDrawn / 1e6).toFixed(1)}M drawn total`);
+    // recency of agreement
+    const progDates = (snap?.programs ?? []).filter((p: any) => p.programType === 'equity-line' && p.filingDate).map((p: any) => Date.parse(p.filingDate));
+    if (progDates.length) { const latest = Math.max(...progDates); ins.push(now - latest < 90 * DAY ? 'Recently filed' : 'Active facility'); }
+    cards.push({ type: 'equity-line', label: 'Equity Line / SEPA', headline: eqMax > 0 ? `$${(eqLeft / 1e6).toFixed(1)}M` : `${eqLines.length}`, sub: eqMax > 0 ? `of $${(eqMax / 1e6).toFixed(0)}M max` : `${eqLines.length} active`, insights: ins, tone: eqLeft > 0 ? 'red' : 'zinc' });
+  }
+
+  // Warrants — active tranches, ITM + near-money + overhang
+  const wnWarr = snap?.warrantNotes?.warrants ?? [];
+  const regWarr = (snap?.offerings ?? []).flatMap((o: any) => o.warrantTranches ?? []);
+  const allWarr = [...wnWarr, ...regWarr];
+  const warrShares = allWarr.reduce((a: number, w: any) => a + (w.shares ?? 0), 0);
+  if (warrShares > 0) {
+    const isActive = (w: any) => { const ex = w.expiry ?? w.exercisable; return !ex || ex === 'N/A' || Date.parse(ex) > now; };
+    const active = allWarr.filter(isActive);
+    const itm = active.filter((w: any) => { const st = w.strike ?? w.exercisePrice; return st != null && px != null && px >= st; });
+    const near = active.filter((w: any) => { const st = w.strike ?? w.exercisePrice; return st != null && px != null && px >= st * 0.8 && px < st; });
+    const itmShares = itm.reduce((a: number, w: any) => a + (w.shares ?? 0), 0);
+    const nearShares = near.reduce((a: number, w: any) => a + (w.shares ?? 0), 0);
+    const ins: string[] = [`${active.length} active`];
+    if (itmShares > 0) ins.push(`${fmtNum(itmShares)} ITM`);
+    if (nearShares > 0) ins.push(`${fmtNum(nearShares)} near-money`);
+    const strikes = active.map((w: any) => w.strike ?? w.exercisePrice).filter((x: any): x is number => typeof x === 'number');
+    if (strikes.length) ins.push(`$${Math.min(...strikes).toFixed(2)}–$${Math.max(...strikes).toFixed(2)}`);
+    const oh = snap?.overhang?.warrant;
+    if (oh?.intrinsicPct != null) ins.push(`${oh.intrinsicPct.toFixed(1)}% overhang`);
+    cards.push({ type: 'warrant', label: 'Warrants', headline: `${fmtNum(warrShares)} sh`, sub: `${active.length} active · ${allWarr.length - active.length} expired`, insights: ins, tone: itmShares > 0 ? 'red' : nearShares > 0 ? 'amber' : 'blue' });
+  }
+
+  // Convertibles
+  const convs = snap?.warrantNotes?.convertibles ?? [];
+  const convProgs = (snap?.programs ?? []).filter((p: any) => p.programType === 'convertible');
+  const convShares = convs.reduce((a: number, c: any) => a + (c.shares ?? 0), 0);
+  if (convShares > 0 || convProgs.length > 0) {
+    const ins: string[] = [];
+    const oh = snap?.overhang?.convertible;
+    if (oh?.itm) ins.push('In the money');
+    if (oh?.strike != null) ins.push(`@ $${oh.strike.toFixed(2)}`);
+    if (oh?.intrinsicPct != null) ins.push(`${oh.intrinsicPct.toFixed(1)}% intrinsic`);
+    if (convProgs.length > 0) ins.push(`${convProgs.length} agreement${convProgs.length > 1 ? 's' : ''}`);
+    cards.push({ type: 'convertible', label: 'Convertibles', headline: convShares > 0 ? `${fmtNum(convShares)} sh` : `${convProgs.length} filed`, sub: convProgs.length > 0 ? `${convProgs.length} agreement${convProgs.length > 1 ? 's' : ''}` : '', insights: ins, tone: oh?.itm ? 'red' : 'purple' });
+  }
+
+  return cards;
+}
+
 export default function DilutionPage() {
   const [input, setInput] = useState('AAPL');
   const [ticker, setTicker] = useState('');
@@ -984,6 +1072,7 @@ export default function DilutionPage() {
   const [loading, setLoading] = useState(true); // true on mount → immediate spinner, proves page mounted
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detailTab, setDetailTab] = useState('all');
   const [status, setStatus] = useState<string | null>(null);
 
   const load = useCallback(async (t: string, forceSync: boolean) => {
@@ -1364,6 +1453,45 @@ export default function DilutionPage() {
                     )}
                   </div>
 
+                  {/* Tier 1 — Dilution capacity (usable now). Activity-aware summary:
+                      not just ITM, but usage frequency, recency, availability. */}
+                  {(() => {
+                    const cards = dilutionCapacityCards(snapshot);
+                    if (!cards.length) return null;
+                    const toneCls: Record<string, string> = {
+                      red: 'border-red-500/30 bg-red-500/[0.03]', orange: 'border-orange-500/30 bg-orange-500/[0.03]',
+                      amber: 'border-amber-500/30 bg-amber-500/[0.03]', blue: 'border-blue-500/30 bg-blue-500/[0.03]',
+                      purple: 'border-purple-500/30 bg-purple-500/[0.03]', zinc: 'border-zinc-700 bg-zinc-800/20',
+                    };
+                    const txtCls: Record<string, string> = {
+                      red: 'text-red-400', orange: 'text-orange-400', amber: 'text-amber-400',
+                      blue: 'text-blue-400', purple: 'text-purple-400', zinc: 'text-zinc-400',
+                    };
+                    return (
+                      <div className="mb-4">
+                        <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-500">
+                          Dilution capacity <span className="text-zinc-700">· usable now</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          {cards.map((c, i) => (
+                            <div key={i} className={`rounded-lg border p-2.5 ${toneCls[c.tone] ?? toneCls.zinc}`}>
+                              <div className={`text-[10px] font-semibold uppercase tracking-wide ${txtCls[c.tone] ?? 'text-zinc-400'}`}>{c.label}</div>
+                              <div className="mt-0.5 text-lg font-bold text-zinc-100">{c.headline}</div>
+                              {c.sub && <div className="text-[10px] text-zinc-500">{c.sub}</div>}
+                              {c.insights.length > 0 && (
+                                <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5">
+                                  {c.insights.map((ins, j) => (
+                                    <span key={j} className="text-[10px] text-zinc-400">· {ins}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* Dilution overview — Nexus-style tables, one per instrument type */}
                   <DilutionOverview snapshot={snapshot} />
                 </div>
@@ -1449,37 +1577,66 @@ export default function DilutionPage() {
               </div>
             )}
 
-            {/* Dilution programs — active mechanisms: ATM, equity-line/SEPA, promissory notes,
-                convertibles (from 8-K material agreements + 10-K facility notes). Matches
-                Nexus 'Offering Ability / ATM / Equity Lines / Convertible Notes' coverage. */}
-            {((snapshot?.programs?.length ?? 0) > 0 || (snapshot?.warrantNotes?.equityLines?.length ?? 0) > 0) && (
-              <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-                <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-400">
-                  Dilution programs
-                  <span className="rounded bg-zinc-700 px-1.5 py-0.5 text-[9px] text-zinc-300">8-K + 10-K</span>
-                </div>
-                <div className="mb-2 text-[10px] text-zinc-600">Active financing mechanisms — standing facilities + new agreements. Read the clause to verify terms.</div>
-                {eqLineMax > 0 && (
-                  <div className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 rounded border border-zinc-700/60 bg-zinc-800/30 px-2 py-1 text-[11px]">
-                    <span className="font-semibold uppercase tracking-wide text-zinc-400">Equity-line capacity</span>
-                    <span className="text-zinc-300">${(eqLineMax / 1e6).toFixed(1)}M max</span>
-                    <span className="text-emerald-400">${(eqLineDrawn / 1e6).toFixed(1)}M raised</span>
-                    <span className="font-semibold text-amber-300">${(eqLineRemaining! / 1e6).toFixed(1)}M remaining</span>
-                    {eqLineDrawn === 0 && <span className="text-[10px] text-zinc-600">(no draws parsed yet)</span>}
+            {/* Tier 2 — Dilution programs detail. Unified list with category tabs.
+                Every financing mechanism in one place, filterable by type.
+                Click any card to expand terms + source clause. */}
+            {(() => {
+              const eqLines = (snapshot?.warrantNotes?.equityLines ?? []).map((el: any, i: number) => ({ ...el, programType: 'equity-line', filingDate: el.filingDate ?? '', securities: [] }));
+              const progs = snapshot?.programs ?? [];
+              // Also surface warrant offerings from 424B5 prospectuses
+              const warrantOffers = (snapshot?.offerings ?? []).filter((o: any) => (o.warrantTranches ?? []).length > 0).map((o: any, i: number) => ({
+                programType: 'warrant-offering', filingDate: o.filingDate, counterparty: o.underwriter, maxCommitment: null,
+                pricing: o.pricePerShare != null ? '$' + o.pricePerShare.toFixed(2) + '/sh' : null,
+                ownershipCap: null, maturity: null, drawCapPerPeriod: null,
+                securities: ['warrant', 'pre-funded warrant', 'common stock'],
+                description: (o.warrantTranches ?? []).map((w: any) => `${fmtNum(w.shares ?? 0)} sh @ $${(w.strike ?? 0).toFixed(2)}` + (w.expiry ? ` exp ${w.expiry}` : '')).join('; '),
+                _key: 'wo' + i,
+              }));
+              const allProgs = [...eqLines, ...progs, ...warrantOffers];
+              if (allProgs.length === 0) return null;
+              const tabLabels: Record<string, string> = {
+                all: 'All', atm: 'ATM', 'equity-line': 'Equity Line', convertible: 'Converts',
+                'promissory-note': 'Notes', 'warrant-offering': 'Warrants', 'material-agreement': 'Other',
+              };
+              const tabOrder = ['all', 'atm', 'equity-line', 'warrant-offering', 'convertible', 'promissory-note', 'material-agreement'];
+              const available = tabOrder.filter((t) => t === 'all' || allProgs.some((p: any) => p.programType === t));
+              const filtered = detailTab === 'all' ? allProgs : allProgs.filter((p: any) => p.programType === detailTab);
+              return (
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+                  <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-wide text-zinc-400">
+                    Dilution programs <span className="rounded bg-zinc-700 px-1.5 py-0.5 text-[9px] text-zinc-300">detail</span>
                   </div>
-                )}
-                <div className="space-y-1.5">
-                  {/* Equity lines / SEPA from 10-K notes (pre-existing standing facilities) */}
-                  {snapshot!.warrantNotes?.equityLines?.map((el, i) => (
-                    <ProgramCard key={`el${i}`} pr={{ programType: 'equity-line', filingDate: '', securities: [], ...el }} />
-                  ))}
-                  {/* 8-K material agreements */}
-                  {snapshot!.programs?.map((pr, i) => (
-                    <ProgramCard key={`pr${i}`} pr={pr} />
-                  ))}
+                  {/* Category tabs */}
+                  <div className="mb-3 flex flex-wrap gap-1">
+                    {available.map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => setDetailTab(t)}
+                        className={`rounded px-2 py-1 text-[11px] font-medium transition-colors ${detailTab === t ? 'bg-zinc-100 text-zinc-900' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200'}`}
+                      >
+                        {tabLabels[t] ?? t}
+                        {t !== 'all' && <span className="ml-1 opacity-60">{allProgs.filter((p: any) => p.programType === t).length}</span>}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Equity-line aggregate bar (shown when relevant) */}
+                  {(detailTab === 'all' || detailTab === 'equity-line') && eqLineMax > 0 && (
+                    <div className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 rounded border border-zinc-700/60 bg-zinc-800/30 px-2 py-1 text-[11px]">
+                      <span className="font-semibold uppercase tracking-wide text-zinc-400">Equity-line capacity</span>
+                      <span className="text-zinc-300">${(eqLineMax / 1e6).toFixed(1)}M max</span>
+                      <span className="text-emerald-400">${(eqLineDrawn / 1e6).toFixed(1)}M raised</span>
+                      <span className="font-semibold text-amber-300">${(eqLineRemaining! / 1e6).toFixed(1)}M remaining</span>
+                      {eqLineDrawn === 0 && <span className="text-[10px] text-zinc-600">(no draws parsed yet)</span>}
+                    </div>
+                  )}
+                  <div className="space-y-1.5">
+                    {filtered.map((pr: any, i: number) => (
+                      <ProgramCard key={pr._key ?? `p${i}`} pr={pr} />
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
 
 

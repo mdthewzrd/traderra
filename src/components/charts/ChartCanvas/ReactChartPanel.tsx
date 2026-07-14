@@ -924,8 +924,14 @@ export function ReactChartPanel({ panelIdx }: { panelIdx: number }) {
     userPannedRef.current = true
     const zoomSens = useUIStore.getState().zoomSens
     const delta = e.deltaY > 0 ? Math.round(15 * zoomSens / 0.15) : -Math.round(15 * zoomSens / 0.15)
-    setViewBars(prev => Math.max(20, Math.min(bars.length || 500, prev + delta)))
-  }, [bars.length])
+    const next = Math.max(20, Math.min(bars.length || 500, viewBars + delta))
+    // Right-anchor zoom: hold the right edge (last visible bar) fixed instead of
+    // the left edge. Without this, zooming keeps viewStart put and the latest
+    // candle scrolls off-screen to the right (left-focused / "cuts off").
+    const rightEdge = viewStart + viewBars
+    setViewBars(next)
+    setViewStart(Math.max(warmupBars, Math.min(rightEdge - next, bars.length - next)))
+  }, [bars.length, viewStart, viewBars, warmupBars])
 
   // Attach wheel as a NON-PASSIVE native listener so preventDefault() actually works
   // (React's onWheel is passive by default → throws 'Unable to preventDefault inside

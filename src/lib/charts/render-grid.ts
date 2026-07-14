@@ -31,7 +31,7 @@ export function renderGrid(rc: RenderContext) {
   }
 
   // ── Vertical grid (candle boundaries) ──
-  const RIGHT_PAD = (window as any).RIGHT_PAD || 6
+  const RIGHT_PAD = (window as any).RIGHT_PAD || 10
   const barW = rc.barW
   const pxPerBar = chartW / (visible.length + RIGHT_PAD)
   const barsPerStep = Math.max(1, Math.round(80 / pxPerBar))
@@ -61,7 +61,7 @@ export function renderPriceAxis(rc: RenderContext, niceStep: number, gridMinP: n
 
 export function renderTimeAxis(rc: RenderContext) {
   const { ctx, W, H, chartW, TIME_H, visible, tf, barW, vs } = rc
-  const RIGHT_PAD = (window as any).RIGHT_PAD || 6
+  const RIGHT_PAD = (window as any).RIGHT_PAD || 10
   ctx.fillStyle = C.axisLabel
   ctx.font = `bold ${F.t}px Inter`
   ctx.textAlign = 'center'

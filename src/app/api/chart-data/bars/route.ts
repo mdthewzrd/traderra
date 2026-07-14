@@ -14,7 +14,8 @@ const POLY_BASE = 'https://api.polygon.io'
 
 // Module-level cache (persists across requests in pm2's long-running process)
 const barCache = new Map<string, { data: any; ts: number }>()
-const LIVE_TTL = 2 * 60 * 1000      // 2 min for data including today
+const LIVE_TTL = 15 * 1000         // 15s for data including today (was 2min — that
+                                  // throttled the 3s live polls to one refresh per 2min)
 const HIST_TTL = 60 * 60 * 1000     // 1 hr for fully-historical ranges
 
 // Fix D: persist barCache to disk so pm2 restarts don't force cold Polygon
@@ -132,6 +133,9 @@ export async function GET(request: NextRequest) {
     }
     return NextResponse.json(payload)
   } catch (e: any) {
+    // Graceful degradation: on Polygon error (incl. rate-limit 429s) or transient
+    // failure, serve the last good cached data instead of breaking the chart.
+    if (hit) return NextResponse.json(hit.data)
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }

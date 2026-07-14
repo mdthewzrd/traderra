@@ -20,7 +20,7 @@ import { renderCandles } from './render-candles'
 import { renderLivePriceLine } from './render-price-line'
 
 const VOL_FRAC_DEFAULT = 0.20
-const RIGHT_PAD = 6
+const RIGHT_PAD = 10
 
 export function renderPanelSetup(p: any): RenderContext | null {
   const { canvas, ctx, data, W, H, PRICE_W, TIME_H, viewStart, viewBars, cx, cy, tf, inds: pi } = p

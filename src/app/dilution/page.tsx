@@ -158,7 +158,6 @@ function mechanicsSummary(snap: any): { label: string; value: string; tone: stri
 // Nexus-parity dilution overview: one spacious <table> per instrument type,
 // full page width, no scroll box. Replaces the old cramped tabbed ProgramTabs.
 function DilutionOverview({ snapshot }: { snapshot: any }) {
-  const [tablesOpen, setTablesOpen] = useState(false);
   const M = 1e6;
   const px = snapshot?.inTheMoney?.price ?? null;
   const sharesFor = (maxDollars: number | null | undefined) =>
@@ -227,14 +226,7 @@ function DilutionOverview({ snapshot }: { snapshot: any }) {
       <div className="mb-3 flex items-center gap-2 text-zinc-400">
         <Layers className="h-4 w-4" />
         <span className="text-xs uppercase tracking-wide">Dilution overview</span>
-        <button
-          onClick={() => setTablesOpen((o) => !o)}
-          className="ml-auto flex items-center gap-1 rounded border border-zinc-700 px-2 py-0.5 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
-        >
-          <svg className={`h-3 w-3 transition-transform ${tablesOpen ? 'rotate-90' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
-          {tablesOpen ? 'Hide tables' : `Show ${shelf.length + atm.length + eqLines.length + warrants.length + converts.length + s1.length} tables`}
-        </button>
-        {px != null && !tablesOpen && <span className="text-[11px] text-zinc-500">price ${px}</span>}
+        {px != null && <span className="ml-auto text-[11px] text-zinc-500">price ${px}</span>}
       </div>
 
       {/* ── ROLLUP: full dilution scope at a glance ── */}
@@ -286,62 +278,17 @@ function DilutionOverview({ snapshot }: { snapshot: any }) {
         </div>
       )}
 
-      {tablesOpen && (
-      <div className="space-y-5">
-        {/* SHELVES */}
-        {shelf.length > 0 && (
-          <div>
-            <div className="mb-1.5 flex items-center gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">Shelves</span>
-              <span className="text-[10px] text-zinc-600">{shelf.length}</span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead className="border-b border-zinc-800">
-                  <tr>
-                    <th className={th}>Filed</th>
-                    <th className={th}>Form</th>
-                    <th className={th}>Amount</th>
-                    <th className={th}>Type</th>
-                    <th className={th}>Channel</th>
-                    <th className={th}>Agent</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-800/50">
-                  {shelf.map((r: any) => {
-                    const isWksi = floatVal != null && floatVal >= 700e6;
-                    const isBaby = /^S-3$/.test(r.formType) && !isWksi;
-                    return (
-                      <tr key={r.accessionNo}>
-                        <td className={td + ' whitespace-nowrap text-zinc-500'}>{r.filingDate}</td>
-                        <td className={td}><span className="rounded bg-zinc-800 px-1 text-[10px] text-zinc-400">{r.formType}</span></td>
-                        <td className={td + ' font-medium text-zinc-100'}>${(r.aggregateOffering / M).toFixed(0)}M</td>
-                        <td className={td}>{isWksi ? <span className="rounded bg-emerald-500/15 px-1 text-[9px] font-semibold uppercase text-emerald-300">WKSI</span> : isBaby ? <span className="rounded bg-amber-500/20 px-1 text-[9px] font-semibold uppercase text-amber-300">baby</span> : <span className="text-zinc-600">—</span>}</td>
-                        <td className={td}>{r.salesChannel === 'atm' ? <span className="rounded bg-red-500/20 px-1 text-[9px] font-semibold uppercase text-red-400">ATM</span> : <span className="text-zinc-600">—</span>}</td>
-                        <td className={td + ' text-zinc-500'}>{r.agent || '—'}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            {sr && (
-              <div className="mt-2 flex flex-wrap gap-x-4 text-[11px] text-zinc-500">
-                <span>Registered <span className="text-zinc-300">${(sr.registered / M).toFixed(0)}M</span></span>
-                <span>Raised <span className="text-zinc-300">${(sr.raised / M).toFixed(1)}M</span></span>
-                <span className="font-medium text-emerald-400">Remaining ${(sr.remaining / M).toFixed(1)}M ({sr.remainingPct.toFixed(0)}%)</span>
-              </div>
-            )}
-          </div>
-        )}
-
+      <div className="space-y-1.5">
         {/* ATM PROGRAMS */}
         {atm.length > 0 && (
-          <div>
-            <div className="mb-1.5 flex items-center gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">ATM programs</span>
-              <span className="text-[10px] text-zinc-600">{atm.length}</span>
-            </div>
+          <details className="group rounded border border-zinc-800/60">
+            <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 hover:bg-zinc-800/30">
+              <svg className="h-3 w-3 shrink-0 text-zinc-500 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">ATM Programs</span>
+              <span className="rounded bg-zinc-800 px-1.5 text-[10px] text-zinc-400">{atm.length}</span>
+              <span className="text-[11px] text-zinc-500">· {atm.reduce((a: number, r: any) => a + (Number(r.max) || 0), 0) > 0 ? '$' + (atm.reduce((a: number, r: any) => a + (Number(r.max) || 0), 0) / M).toFixed(0) + 'M max' : ''}</span>
+            </summary>
+            <div className="border-t border-zinc-800/50 px-3 py-2">
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead className="border-b border-zinc-800">
@@ -372,16 +319,20 @@ function DilutionOverview({ snapshot }: { snapshot: any }) {
                 </tbody>
               </table>
             </div>
-          </div>
+            </div>
+          </details>
         )}
 
         {/* EQUITY LINES */}
         {eqLines.length > 0 && (
-          <div>
-            <div className="mb-1.5 flex items-center gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">Equity lines</span>
-              <span className="text-[10px] text-zinc-600">{eqLines.length}</span>
-            </div>
+          <details className="group rounded border border-zinc-800/60">
+            <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 hover:bg-zinc-800/30">
+              <svg className="h-3 w-3 shrink-0 text-zinc-500 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">Equity Lines / SEPA</span>
+              <span className="rounded bg-zinc-800 px-1.5 text-[10px] text-zinc-400">{eqLines.length}</span>
+              <span className="text-[11px] text-zinc-500">· ${(eqMax / M).toFixed(0)}M max · <span className="text-emerald-400">${((eqMax - eqDrawn) / M).toFixed(0)}M remaining</span></span>
+            </summary>
+            <div className="border-t border-zinc-800/50 px-3 py-2">
             <div className="mb-2 flex flex-wrap gap-x-4 text-[11px]">
               <span className="text-zinc-500">Max <span className="text-zinc-300">${(eqMax / M).toFixed(1)}M</span></span>
               <span className="text-zinc-500">Drawn <span className="text-amber-400">${(eqDrawn / M).toFixed(1)}M</span></span>
@@ -414,17 +365,21 @@ function DilutionOverview({ snapshot }: { snapshot: any }) {
                 </tbody>
               </table>
             </div>
-            <div className="mt-1 text-[10px] text-zinc-600">Remaining = max − already sold, totaled across all lines (filings don't say which line was tapped).</div>
-          </div>
+              <div className="mt-1 text-[10px] text-zinc-600">Remaining = max − already sold, totaled across all lines.</div>
+            </div>
+          </details>
         )}
 
         {/* WARRANTS */}
         {warrants.length > 0 && (
-          <div>
-            <div className="mb-1.5 flex items-center gap-2">
+          <details className="group rounded border border-zinc-800/60">
+            <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 hover:bg-zinc-800/30">
+              <svg className="h-3 w-3 shrink-0 text-zinc-500 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
               <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">Warrants</span>
-              <span className="text-[10px] text-zinc-600">{warrants.length}{px != null && <span className="ml-1 text-zinc-600">· ${px}</span>}</span>
-            </div>
+              <span className="rounded bg-zinc-800 px-1.5 text-[10px] text-zinc-400">{warrants.length}</span>
+              <span className="text-[11px] text-zinc-500">· {fmtSh(warrantShares)} sh{warrantItmShares > 0 ? <span className="text-red-400"> · {fmtSh(warrantItmShares)} ITM</span> : ''}{px != null ? ` @ $${px}` : ''}</span>
+            </summary>
+            <div className="border-t border-zinc-800/50 px-3 py-2">
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead className="border-b border-zinc-800">
@@ -457,17 +412,21 @@ function DilutionOverview({ snapshot }: { snapshot: any }) {
                 </tbody>
               </table>
             </div>
-            <div className="mt-1 text-[10px] text-zinc-500"><span className="text-red-400">ITM</span> = in-the-money (exercise likely) · <span className="text-amber-400">NEAR</span> = within 20% of strike · <span className="text-fuchsia-400">pre-funded</span> = already paid.</div>
-          </div>
+              <div className="mt-1 text-[10px] text-zinc-500"><span className="text-red-400">ITM</span> = in-the-money · <span className="text-amber-400">NEAR</span> = within 20% of strike · <span className="text-fuchsia-400">pre-funded</span> = already paid.</div>
+            </div>
+          </details>
         )}
 
         {/* CONVERTIBLE NOTES */}
         {converts.length > 0 && (
-          <div>
-            <div className="mb-1.5 flex items-center gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">Convertible notes</span>
-              <span className="text-[10px] text-zinc-600">{converts.length}</span>
-            </div>
+          <details className="group rounded border border-zinc-800/60">
+            <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 hover:bg-zinc-800/30">
+              <svg className="h-3 w-3 shrink-0 text-zinc-500 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">Convertible Notes</span>
+              <span className="rounded bg-zinc-800 px-1.5 text-[10px] text-zinc-400">{converts.length}</span>
+              {overhangConv && <span className="text-[11px] text-zinc-500">· {overhangConv.shares ? fmtSh(overhangConv.shares) : ''} sh</span>}
+            </summary>
+            <div className="border-t border-zinc-800/50 px-3 py-2">
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead className="border-b border-zinc-800">
@@ -490,16 +449,19 @@ function DilutionOverview({ snapshot }: { snapshot: any }) {
                 </tbody>
               </table>
             </div>
-          </div>
+            </div>
+          </details>
         )}
 
         {/* S-1 / F-1 */}
         {s1.length > 0 && (
-          <div>
-            <div className="mb-1.5 flex items-center gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">S-1 / F-1 registrations</span>
-              <span className="text-[10px] text-zinc-600">{s1.length}</span>
-            </div>
+          <details className="group rounded border border-zinc-800/60">
+            <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 hover:bg-zinc-800/30">
+              <svg className="h-3 w-3 shrink-0 text-zinc-500 transition-transform group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-zinc-300">S-1 / F-1 Registrations</span>
+              <span className="rounded bg-zinc-800 px-1.5 text-[10px] text-zinc-400">{s1.length}</span>
+            </summary>
+            <div className="border-t border-zinc-800/50 px-3 py-2">
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead className="border-b border-zinc-800">
@@ -520,12 +482,12 @@ function DilutionOverview({ snapshot }: { snapshot: any }) {
                 </tbody>
               </table>
             </div>
-          </div>
+            </div>
+          </details>
         )}
 
-        {nothing && <div className="py-6 text-center text-xs text-zinc-500">No dilution facilities detected.</div>}
+        {nothing && <div className="py-3 text-center text-xs text-zinc-500">No dilution facilities detected.</div>}
       </div>
-      )}
     </div>
   );
 }
@@ -586,6 +548,7 @@ function BottomTabs({ snapshot }: { snapshot: any }) {
 
   const tabs = [
     { label: 'Past Offerings', n: pastOfferings.length },
+    { label: 'Shelf Regs', n: registrations.length },
     { label: 'Recent Filings', n: filings.length },
     { label: 'Shares & Float', n: sharesHistory.length },
     { label: 'Ownership', n: insiders.length },
@@ -644,8 +607,8 @@ function BottomTabs({ snapshot }: { snapshot: any }) {
         <div className="px-4 py-8 text-center text-sm text-zinc-600">No offerings or SEPA draws on file.</div>
       ))}
 
-      {/* Tab 1: Recent Filings */}
-      {tab === 1 && (
+      {/* Tab 2: Recent Filings */}
+      {tab === 2 && (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
@@ -689,8 +652,8 @@ function BottomTabs({ snapshot }: { snapshot: any }) {
         </div>
       )}
 
-      {/* Tab 2: Shares & Float */}
-      {tab === 2 && (
+      {/* Tab 3: Shares & Float */}
+      {tab === 3 && (
         <div className="p-4">
           {/* Public float — the headline number for this tab. Prefer SEC cover
               (authoritative, ~18% coverage); fall back to COMPUTED
@@ -809,11 +772,11 @@ function BottomTabs({ snapshot }: { snapshot: any }) {
         </div>
       )}
 
-      {/* Tab 3: Ownership — insider holdings from Form 4, or transaction
+      {/* Tab 4: Ownership — insider holdings from Form 4, or transaction
           activity when holdings aren't reportable (afterShares null, e.g.
           option grants). Many micro-caps have Form 4 sales but no holding
           figure — showing the transaction log fills the tab with real signal. */}
-      {tab === 3 && (
+      {tab === 4 && (
         <div className="p-4">
           {insiders.length ? (
             <>
@@ -1128,77 +1091,145 @@ function dilutionCapacityCards(snap: any) {
   return cards;
 }
 
-// Tier 3 — Dilution tendencies. Synthesizes historical patterns into a
-// TL;DR of the company's dilution behavior: offering frequency, preferred
-// mechanism, share growth velocity, reverse splits, insider selling, capital
-// cycle pressure, compliance issues. Answers: "what kind of diluter is this?"
+// Tier 3 — Dilution tendencies. Computes CONCRETE dilution metrics from
+// actual data: total raised, shares issued, growth rate, offering frequency,
+// preferred mechanism. Always shows numbers, not conditional flags.
 function dilutionTendencies(snap: any) {
   const now = Date.now();
   const DAY = 86_400_000;
   const ins: { label: string; value: string; detail?: string; tone: string }[] = [];
 
-  // 1. Offering frequency — count + $ raised in last 12 months
   const offerings = snap?.offerings ?? [];
-  const off12 = offerings.filter((o: any) => o.filingDate && Date.parse(o.filingDate) >= now - 365 * DAY);
-  const raised12 = off12.reduce((a: number, o: any) => a + (o.grossProceeds ?? 0), 0);
-  if (off12.length > 0) {
-    ins.push({ label: 'Offerings (12mo)', value: `${off12.length} raise${off12.length > 1 ? 's' : ''}`, detail: raised12 > 0 ? fmtMoney(raised12) + ' raised' : undefined, tone: off12.length >= 4 ? 'red' : off12.length >= 2 ? 'amber' : 'zinc' });
-  } else if (offerings.length > 0) {
-    const last = [...offerings].sort((a: any, b: any) => Date.parse(b.filingDate) - Date.parse(a.filingDate))[0];
-    const days = Math.floor((now - Date.parse(last.filingDate)) / DAY);
-    ins.push({ label: 'Last offering', value: days > 365 ? `${(days / 365).toFixed(1)}yr ago` : `${Math.round(days / 30)}mo ago`, tone: 'zinc' });
-  }
-
-  // 2. Preferred mechanism — most-used facility type from draws
   const draws = snap?.draws ?? [];
-  const facCounts: Record<string, number> = {};
-  const facAmt: Record<string, number> = {};
-  draws.forEach((d: any) => { facCounts[d.facilityType] = (facCounts[d.facilityType] ?? 0) + 1; facAmt[d.facilityType] = (facAmt[d.facilityType] ?? 0) + (d.amount ?? 0); });
-  const topFac = Object.entries(facCounts).sort((a, b) => b[1] - a[1])[0];
-  if (topFac) {
-    const name = topFac[0] === 'equity-line' ? 'SEPA / equity line' : topFac[0] === 'atm' ? 'ATM shelf' : topFac[0] === 'convertible' ? 'Convertibles' : topFac[0];
-    ins.push({ label: 'Go-to mechanism', value: name, detail: `${topFac[1]} draw${topFac[1] > 1 ? 's' : ''}` + (facAmt[topFac[0]] > 0 ? ' · ' + fmtMoney(facAmt[topFac[0]]) : ''), tone: 'red' });
+  const sharesHistory = (snap?.sharesHistory ?? []) as { period: string; outstanding: number }[];
+  const reverseSplits = snap?.reverseSplits ?? [];
+  const form4 = (snap?.form4Txns ?? []) as { txnDate: string; securities: number; dilutive: boolean }[];
+  const cash = snap?.cash;
+  const filings = snap?.filings ?? [];
+
+  // 1. TOTAL raised (all-time) — offerings + draws, concrete number
+  const offTotal = offerings.reduce((a: number, o: any) => a + (o.grossProceeds ?? 0), 0);
+  const drawTotal = draws.reduce((a: number, d: any) => a + (d.amount ?? d.proceeds ?? 0), 0);
+  const raisedAll = offTotal + drawTotal;
+  const totalEvents = offerings.length + draws.length;
+  if (raisedAll > 0) {
+    const off12 = offerings.filter((o: any) => o.filingDate && Date.parse(o.filingDate) >= now - 365 * DAY);
+    const draw12 = draws.filter((d: any) => (d.date ?? d.filingDate) && Date.parse(d.date ?? d.filingDate) >= now - 365 * DAY);
+    const count12 = off12.length + draw12.length;
+    ins.push({
+      label: 'Total raised (all-time)',
+      value: fmtMoney(raisedAll),
+      detail: `${totalEvents} raise${totalEvents !== 1 ? 's' : ''}` + (count12 > 0 ? ` · ${count12} in last 12mo` : ''),
+      tone: totalEvents >= 8 ? 'red' : totalEvents >= 4 ? 'amber' : 'zinc',
+    });
   }
 
-  // 3. Share growth velocity (YoY)
-  const hist = snap?.sharesHistory ?? [];
-  if (hist.length >= 2) {
-    const sorted = [...hist].sort((a: any, b: any) => Date.parse(a.period) - Date.parse(b.period));
-    const latest = sorted[sorted.length - 1];
-    const old = sorted.find((p: any) => Date.parse(latest.period) - Date.parse(p.period) >= 300 * DAY);
-    if (old && old.outstanding > 0) {
-      const growth = ((latest.outstanding - old.outstanding) / old.outstanding) * 100;
-      ins.push({ label: 'Share growth (YoY)', value: `${growth > 0 ? '+' : ''}${growth.toFixed(0)}%`, detail: `${fmtNum(latest.outstanding)} sh now`, tone: growth > 100 ? 'red' : growth > 30 ? 'amber' : 'zinc' });
+  // 2. SHARES issued via dilution — sum of shares offered + draw shares
+  const shOffered = offerings.reduce((a: number, o: any) => a + (o.sharesOffered ?? 0), 0);
+  const shDrawn = draws.reduce((a: number, d: any) => a + (d.shares ?? 0), 0);
+  const sharesIssued = shOffered + shDrawn;
+  if (sharesIssued > 0) {
+    ins.push({
+      label: 'Shares issued',
+      value: fmtNum(sharesIssued) + ' sh',
+      detail: 'via offerings + draws',
+      tone: 'amber',
+    });
+  }
+
+  // 3. SHARE GROWTH — from oldest to newest in sharesHistory
+  if (sharesHistory.length >= 2) {
+    const sorted = [...sharesHistory].sort((a, b) => Date.parse(a.period) - Date.parse(b.period));
+    const oldest = sorted[0];
+    const newest = sorted[sorted.length - 1];
+    if (oldest.outstanding > 0 && oldest.outstanding !== newest.outstanding) {
+      const growth = ((newest.outstanding - oldest.outstanding) / oldest.outstanding) * 100;
+      const years = (Date.parse(newest.period) - Date.parse(oldest.period)) / (365 * DAY);
+      ins.push({
+        label: years > 1.5 ? 'Share growth' : 'Share change',
+        value: `${growth > 0 ? '+' : ''}${growth.toFixed(0)}%`,
+        detail: years > 1.5 ? `over ${years.toFixed(1)}yr` : undefined,
+        tone: growth > 200 ? 'red' : growth > 50 ? 'amber' : 'zinc',
+      });
     }
   }
 
-  // 4. Reverse splits — classic serial-diluter signal
-  const rs = snap?.reverseSplits ?? [];
-  if (rs.length > 0) {
-    const last = rs[0];
-    const days = last.executionDate ? Math.floor((now - Date.parse(last.executionDate)) / DAY) : null;
-    ins.push({ label: 'Reverse splits', value: `${rs.length}×`, detail: last.ratio + (days != null ? ` · ${days > 365 ? (days / 365).toFixed(1) + 'yr' : Math.round(days / 30) + 'mo'} ago` : ''), tone: rs.length >= 2 ? 'red' : 'amber' });
+  // 4. PREFERRED MECHANISM — most-used facility type
+  const facCounts: Record<string, number> = {};
+  const facAmt: Record<string, number> = {};
+  offerings.forEach((o: any) => {
+    const t = o.offeringType ?? o.formType ?? 'unknown';
+    facCounts[t] = (facCounts[t] ?? 0) + 1;
+    facAmt[t] = (facAmt[t] ?? 0) + (o.grossProceeds ?? 0);
+  });
+  draws.forEach((d: any) => {
+    const t = d.facilityType ?? 'draw';
+    facCounts[t] = (facCounts[t] ?? 0) + 1;
+    facAmt[t] = (facAmt[t] ?? 0) + (d.amount ?? 0);
+  });
+  const topFac = Object.entries(facCounts).sort((a, b) => b[1] - a[1])[0];
+  if (topFac && topFac[1] > 0) {
+    const nameMap: Record<string, string> = {
+      'equity-line': 'SEPA / Equity Line',
+      atm: 'ATM Shelf',
+      convertible: 'Convertibles',
+      'promissory-note': 'Promissory Notes',
+      underwritten: 'Underwritten',
+    };
+    const name = nameMap[topFac[0]] ?? topFac[0];
+    ins.push({
+      label: 'Go-to mechanism',
+      value: name,
+      detail: `${topFac[1]}× ${facAmt[topFac[0]] > 0 ? '· ' + fmtMoney(facAmt[topFac[0]]) : ''}`,
+      tone: 'red',
+    });
   }
 
-  // 5. Insider selling (Form 4, 90d)
-  const form4 = snap?.form4Txns ?? [];
-  const sells90 = form4.filter((t: any) => t.dilutive && Date.parse(t.txnDate) >= now - 90 * DAY);
+  // 5. REVERSE SPLITS — serial diluter signal
+  if (reverseSplits.length > 0) {
+    const last = [...reverseSplits].sort((a: any, b: any) => Date.parse(b.executionDate ?? b.announcementDate) - Date.parse(a.executionDate ?? a.announcementDate))[0];
+    const d = now - Date.parse(last.executionDate ?? last.announcementDate);
+    const rel = d < 365 * DAY ? Math.round(d / 30 / DAY) + 'mo ago' : (d / (365 * DAY)).toFixed(1) + 'yr ago';
+    ins.push({
+      label: 'Reverse splits',
+      value: `${reverseSplits.length}×`,
+      detail: last.ratio + ' · last ' + rel,
+      tone: reverseSplits.length >= 2 ? 'red' : 'amber',
+    });
+  }
+
+  // 6. INSIDER selling (90d)
+  const sells90 = form4.filter((t) => t.dilutive && Date.parse(t.txnDate) >= now - 90 * DAY);
   if (sells90.length > 0) {
-    const sh = sells90.reduce((a: number, t: any) => a + t.securities, 0);
-    ins.push({ label: 'Insider selling (90d)', value: `${sells90.length} txn${sells90.length > 1 ? 's' : ''}`, detail: fmtNum(sh) + ' sh', tone: 'amber' });
+    const sh = sells90.reduce((a, t) => a + t.securities, 0);
+    ins.push({
+      label: 'Insider selling (90d)',
+      value: `${sells90.length} sale${sells90.length !== 1 ? 's' : ''}`,
+      detail: fmtNum(sh) + ' sh',
+      tone: 'amber',
+    });
   }
 
-  // 6. Capital cycle — burn rate vs cash
-  const cash = snap?.cash;
+  // 7. CAPITAL CYCLE — runway pressure
   if (cash?.monthlyCashFlow != null && cash.monthlyCashFlow < 0 && cash.projectedCash != null) {
     const monthsLeft = cash.projectedCash / Math.abs(cash.monthlyCashFlow);
-    ins.push({ label: 'Capital cycle', value: monthsLeft < 3 ? 'Capital crisis' : monthsLeft < 6 ? 'Needs capital soon' : monthsLeft < 12 ? 'Will need capital' : 'Funded', detail: `${monthsLeft.toFixed(0)}mo runway left`, tone: monthsLeft < 6 ? 'red' : monthsLeft < 12 ? 'amber' : 'zinc' });
+    ins.push({
+      label: 'Runway',
+      value: monthsLeft < 12 ? `${monthsLeft.toFixed(0)}mo left` : 'Funded',
+      detail: cash.projectedCash != null ? fmtMoney(cash.projectedCash) + ' cash' : undefined,
+      tone: monthsLeft < 6 ? 'red' : monthsLeft < 12 ? 'amber' : 'zinc',
+    });
   }
 
-  // 7. Compliance — late filings (NT-10-Q/K notices)
-  const late = (snap?.filings ?? []).filter((f: any) => /^NT-10/.test(f.formType));
+  // 8. COMPLIANCE — late filings (NT-10 notices)
+  const late = filings.filter((f: any) => /^NT-10/.test(f.formType));
   if (late.length > 0) {
-    ins.push({ label: 'Late filings', value: `${late.length} NT notice${late.length > 1 ? 's' : ''}`, detail: 'Failed to file on time', tone: 'red' });
+    ins.push({
+      label: 'Late filings',
+      value: `${late.length} NT notice${late.length !== 1 ? 's' : ''}`,
+      detail: 'Failed to file on time',
+      tone: 'red',
+    });
   }
 
   return ins;

@@ -380,7 +380,7 @@ export async function getWarrantNotes(cik: string): Promise<ParsedWarrantNotes |
       // shares+strike would keep both. Key on shares; on collision keep the
       // HIGHER strike (warrant exercise prices exceed the concurrent share price,
       // so max filters out the share-price bleed). null strike = lowest.
-      const k = `${w.shares ?? 'x'}`;
+      const k = w.shares != null ? `${w.shares}` : `x|${w.exercisePrice ?? '?'}`;
       const cur = seenW.get(k);
       if (!cur) seenW.set(k, w);
       else {

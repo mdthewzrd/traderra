@@ -109,7 +109,7 @@ export async function POST(req: Request) {
         form4: { status: form4Res.status, parsed: form4Res.parsed, inserted: form4Res.inserted },
         offerings: { status: offeringsRes.status, parsed: offeringsRes.parsed, withDetail: offeringsRes.withDetail },
         registrations: { status: registrationsRes.status, parsed: registrationsRes.parsed, withDetail: registrationsRes.withDetail },
-        warrantNotes: { status: warrantNotesRes.status, withDetail: warrantNotesRes.withDetail },
+        warrantNotes: { status: warrantNotesRes.status, parsed: warrantNotesRes.parsed, withDetail: warrantNotesRes.withDetail },
         programs: { status: programsRes.status, parsed: programsRes.parsed, withDetail: programsRes.withDetail },
         splits: { parsed: splitsRes.parsed, found: splitsRes.found },
         efts: { searched: eftsRes.searched, fetched: eftsRes.fetched, found: eftsRes.found, created: eftsRes.created },

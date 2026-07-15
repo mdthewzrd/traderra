@@ -632,10 +632,32 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
     }
     // Drop XBRL aggregate when per-tranche 10-K detail exists — the aggregate
     // overlaps the breakdown and double-counts the same warrants.
-    if (rows.some(r => r.source === '10-K notes')) {
-      return rows.filter(r => r.source !== 'XBRL');
+    let result = rows.some(r => r.source === '10-K notes')
+      ? rows.filter(r => r.source !== 'XBRL')
+      : rows;
+
+    // Cross-source merge: 10-K notes rows often have shares+strike but no
+    // expiry/exercisable (those live in the 424B5 prospectus). 424B5 rows
+    // have expiry but may lack shares. Merge by strike tolerance to fill
+    // gaps — this is how Nexus shows complete warrant terms.
+    const tenK = result.filter(r => r.source === '10-K notes');
+    const four24 = result.filter(r => r.source === '424B5');
+    if (tenK.length && four24.length) {
+      for (const t of tenK) {
+        const match = four24.find(f =>
+          t.strike != null && f.strike != null && Math.abs(t.strike - f.strike) < 0.01,
+        );
+        if (match) {
+          if (t.expiry == null && match.expiry != null) t.expiry = match.expiry;
+          if (t.exercisable == null && match.exercisable != null) t.exercisable = match.exercisable;
+          if (t.shares == null && match.shares != null) t.shares = match.shares;
+          // Remove the now-redundant 424B5 row to avoid duplicates
+          match.strike = -999; // marker for removal
+        }
+      }
+      result = result.filter(r => r.strike !== -999);
     }
-    return rows;
+    return result;
   })();
 
   // Post-report capital raises: add back offering proceeds dated AFTER the

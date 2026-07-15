@@ -137,7 +137,9 @@ function extractWarrantScheduleTable(text: string): WarrantNoteRow[] | null {
   return rows.length ? rows : null;
 }
 
-export function parseWarrantNotesHtml(html: string, accessionNo: string): ParsedWarrantNotes {
+const WORD_YEARS: Record<string, number> = { one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10 };
+
+export function parseWarrantNotesHtml(html: string, accessionNo: string, filingDate?: Date | null): ParsedWarrantNotes {
   const text = stripHtml(html);
   const chunks = clauses(text);
   const DATE = /([A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})/;
@@ -170,8 +172,26 @@ export function parseWarrantNotesHtml(html: string, accessionNo: string): Parsed
         ?? c.match(/\$\s*([\d,.]+)\s+per\s+share[^.]{0,20}?exercis/i)
         ?? c.match(/\$\s*([\d,.]+)\s+per\s+share/i);
       if (ep) exercisePrice = scaleMoney(ep[1]);
-      const ex = c.match(/expir(?:e|es|ing|ation|y)[^.]{0,30}?(?:on)?\s*([A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})/i);
+      // Expiry: absolute date — widened window from [^.]{0,30} to [\s\S]{0,60}
+      // because warrant terms span sentence boundaries (the period-split clause
+      // boundary truncates the match before the date appears).
+      const ex = c.match(/expir(?:e|es|ing|ation|y)[\s\S]{0,60}?(?:on)?\s*([A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})/i);
       if (ex) expiry = ex[1];
+      // Expiry: relative term — "for five years", "expiring five years after",
+      // "term of N years". Compute from filing date. Without this, ALL
+      // relative-term warrants show null expiry (the majority).
+      if (!expiry && filingDate) {
+        const yr = c.match(/(?:for|term\s+of|expir(?:e|es|ing|ation|y)[\s\S]{0,20}?(?:after)?|following)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+years?/i)
+          ?? c.match(/(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+years?\s+from\s+/i);
+        if (yr) {
+          const yrs = /^\d+$/.test(yr[1]) ? parseInt(yr[1], 10) : (WORD_YEARS[yr[1].toLowerCase()] ?? null);
+          if (yrs) {
+            const d = new Date(filingDate);
+            d.setFullYear(d.getFullYear() + yrs);
+            expiry = d.toISOString().slice(0, 10);
+          }
+        }
+      }
       const ed = c.match(/exercisable(?:\s+(?:commencing|beginning|on|until))?\s+(?:on\s+)?([A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})/i);
       if (ed) exercisableDate = ed[1];
       else if (/exercisable\s+(?:immediately|upon\s+issuance|as\s+of\s+issuance)/i.test(c)) exercisableDate = 'immediately';
@@ -277,7 +297,7 @@ export async function syncWarrantNotes(
       where: { cik, formType: { in: ['10-K', '10-Q'] } },
       orderBy: { filingDate: 'desc' },
       take: 4, // latest 10-K + latest few 10-Qs
-      select: { accessionNo: true, primaryDoc: true, rawPayload: true },
+      select: { accessionNo: true, primaryDoc: true, filingDate: true, rawPayload: true },
     });
     let parsed = 0;
     let withDetail = 0;
@@ -295,7 +315,7 @@ export async function syncWarrantNotes(
         cik,
         filing.accessionNo,
         filing.primaryDoc,
-        (html) => parseWarrantNotesHtml(html, filing.accessionNo),
+        (html) => parseWarrantNotesHtml(html, filing.accessionNo, filing.filingDate),
         (n) => n.warrants.length === 0 && n.convertibles.length === 0,
       );
       if (!notes) continue; // primary + .txt both failed — leave unmarked, retry later

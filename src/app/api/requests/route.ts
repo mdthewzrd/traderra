@@ -6,6 +6,10 @@ import { NextRequest, NextResponse } from 'next/server'
  * The bridge reads/writes the same .pi/memory/memory.db that Renata's
  * request_create / request_list tools use — so a web submission appears
  * in Renata's inbox instantly.
+ *
+ * When the bridge isn't reachable (e.g. Vercel serverless, or bridge down),
+ * degrade gracefully — return empty / soft-error with 200 instead of 502,
+ * so the inbox shows "no requests" rather than crashing the UI.
  */
 const BRIDGE = 'http://localhost:9876'
 
@@ -15,8 +19,8 @@ export async function GET(req: NextRequest) {
     const r = await fetch(`${BRIDGE}/api/requests${qs}`, { cache: 'no-store' })
     const data = await r.json()
     return NextResponse.json(data, { status: r.status })
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 502 })
+  } catch {
+    return NextResponse.json([], { status: 200 })
   }
 }
 
@@ -39,7 +43,7 @@ export async function POST(req: NextRequest) {
     })
     const data = await r.json()
     return NextResponse.json(data, { status: r.status })
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 502 })
+  } catch {
+    return NextResponse.json({ error: 'Bridge unavailable' }, { status: 200 })
   }
 }

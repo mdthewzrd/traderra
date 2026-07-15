@@ -1793,6 +1793,11 @@ function RowDrawer({
   const [chartExpanded, setChartExpanded] = useState(false)
   const [panOffset, setPanOffset] = useState(0)   // extra days beyond base dayOffset (◀/▶)
   const [extraDays, setExtraDays] = useState(0)   // widened view (+=3/7/14)
+  const ZOOM_RANGES = { '6m': { before: 126, after: 25 }, '1y': { before: 252, after: 25 }, '2y': { before: 504, after: 25 }, '3y': { before: 756, after: 25 } } as const
+  const [zoomPreset, setZoomPreset] = useState<string | null>(null)  // daily zoom-out: null = perfect default | '6m'|'1y'|'2y'|'3y'
+  // N trading days before D0 + ~1mo after (the post-gap move). null => no zoomDays =>
+  // ScanMiniChart behaves exactly as the "perfect" starting daily chart.
+  const zoomDays = zoomPreset ? ZOOM_RANGES[zoomPreset] : undefined
   const navDayOffset = (tf === 'D' ? 6 : 1) + panOffset
   const [mounted, setMounted] = useState(false)
   const chartWrapRef = useRef<HTMLDivElement>(null)
@@ -1875,16 +1880,20 @@ function RowDrawer({
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              <button onClick={() => setPanOffset(p => p - 1)} title="Pan back 1 day" className="text-[11px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>◀</button>
-              <button onClick={() => { setPanOffset(0); setExtraDays(0) }} title="Reset to D0" className="text-[10px] px-1.5 py-0.5 rounded font-mono font-bold" style={{ color: C.BG, background: C.GOLD }}>D0</button>
-              <button onClick={() => setPanOffset(p => p + 1)} title="Pan forward 1 day" className="text-[11px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>▶</button>
+              <button onClick={() => { setZoomPreset(null); setPanOffset(p => p - 1) }} title="Pan back 1 day" className="text-[11px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>◀</button>
+              <button onClick={() => { setPanOffset(0); setExtraDays(0); setZoomPreset(null) }} title="Reset to D0" className="text-[10px] px-1.5 py-0.5 rounded font-mono font-bold" style={{ color: C.BG, background: C.GOLD }}>D0</button>
+              <button onClick={() => { setZoomPreset(null); setPanOffset(p => p + 1) }} title="Pan forward 1 day" className="text-[11px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>▶</button>
               <span className="w-px h-3" style={{ background: C.BORDER }} />
-              <button onClick={() => { setPanOffset(p => p + 3); setExtraDays(d => d + 3) }} title="Progress forward 3 days" className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>+3d</button>
-              <button onClick={() => { setPanOffset(p => p + 7); setExtraDays(d => d + 7) }} title="Progress forward 7 days" className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>+7d</button>
-              <button onClick={() => { setPanOffset(p => p + 14); setExtraDays(d => d + 14) }} title="Progress forward 14 days" className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>+14d</button>
+              <button onClick={() => { setZoomPreset(null); setPanOffset(p => p + 3); setExtraDays(d => d + 3) }} title="Progress forward 3 days" className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>+3d</button>
+              <button onClick={() => { setZoomPreset(null); setPanOffset(p => p + 7); setExtraDays(d => d + 7) }} title="Progress forward 7 days" className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>+7d</button>
+              <button onClick={() => { setZoomPreset(null); setPanOffset(p => p + 14); setExtraDays(d => d + 14) }} title="Progress forward 14 days" className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>+14d</button>
+              <span className="w-px h-3" style={{ background: C.BORDER }} />
+              {(['6m','1y','2y','3y'] as const).map(k => (
+                <button key={k} onClick={() => { setZoomPreset(p => p === k ? null : k); setPanOffset(0); setExtraDays(0) }} title={`Zoom out to ~${k} of daily history before D0`} className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={zoomPreset === k ? { color: C.BG, background: C.GOLD } : { color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>{k}</button>
+              ))}
             </div>
             <div ref={chartWrapRef} className="flex-1 min-h-0 overflow-hidden">
-              <ScanMiniChart symbol={row.symbol} tf={tf} date={row.signalDate} height={Math.max(80, chartH - 22)} settings={settings} dark={C === DARK as any} dayOffset={navDayOffset} extraDays={extraDays} compact />
+              <ScanMiniChart symbol={row.symbol} tf={tf} date={row.signalDate} height={Math.max(80, chartH - 22)} settings={settings} dark={C === DARK as any} dayOffset={navDayOffset} extraDays={extraDays} zoomDays={zoomDays as any} compact />
             </div>
             {/* indicator bar — templates + dropdown toggle (mirrors /scanner & /live-feed) */}
             <div className="shrink-0 space-y-1.5">

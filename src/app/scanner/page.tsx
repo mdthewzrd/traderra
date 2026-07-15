@@ -640,13 +640,16 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
     } else {
       // Forward window: D0 + nav offset + ~5 trading days. Keeps zoom-out focused on
       // D0 and the immediate aftermath (trendbreak plays out in 1-5 days), not 30d forward.
-      toDate.setDate(toDate.getDate() + dayOffset + 7)
-      if (tf === '5') fromDate.setDate(fromDate.getDate() - 3)
-      else if (tf === '15') fromDate.setDate(fromDate.getDate() - 12)
-      else if (tf === '60') fromDate.setDate(fromDate.getDate() - 70)
-      else if (tf === '120') fromDate.setDate(fromDate.getDate() - 90)
-      else if (tf === '240') fromDate.setDate(fromDate.getDate() - 150)
-      else fromDate.setDate(fromDate.getDate() - 360)
+      let fwdDays = dayOffset + 7
+      let backDays = tf === '5' ? 3 : tf === '15' ? 12 : tf === '60' ? 70 : tf === '120' ? 90 : tf === '240' ? 150 : 360
+      // Multi-year zoom-out (zoomDays) needs a wider fetch so the zoom view actually has
+      // data. No zoomDays => identical to before — scanner/live-feed/backtest unaffected.
+      if (zoomDays) {
+        backDays = Math.max(backDays, Math.ceil(zoomDays.before * 1.5) + 10)
+        fwdDays = Math.max(fwdDays, Math.ceil(zoomDays.after * 1.5) + 10)
+      }
+      toDate.setDate(toDate.getDate() + fwdDays)
+      fromDate.setDate(fromDate.getDate() - backDays)
     }
     params.set('from', fromDate.toISOString().slice(0, 10))
     params.set('to', toDate.toISOString().slice(0, 10))
@@ -654,7 +657,7 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
       .then(r => { if (!r.ok) throw new Error(`Bars API ${r.status}`); return r.json() })
       .then(data => { setAllBars((data.bars || []).filter((b: any) => b.time != null)); setLoading(false) })
       .catch(() => { setAllBars([]); setLoading(false) })
-  }, [symbol, tf, date, dayOffset, centerOnDate])
+  }, [symbol, tf, date, dayOffset, centerOnDate, zoomDays?.before, zoomDays?.after])
 
   // For "trade next day" setups (e.g. MDR swing), the chart's D0/focal day is the
   // next trading day after the signal date. Derived from actual bars so it's

@@ -62,7 +62,7 @@ export function parseProspectusHtml(html: string, filingDate?: Date): ParsedOffe
   const text = stripHtml(html).replace(/\$\s+/g, '$').replace(/(\d)\s+(?=\d)/g, '$1');
   // Offer terms live on the cover page + offering summary (first ~2-3 pages).
   // Deep-prose numbers (risk factors, exhibits) are noise — scope extraction there.
-  const cover = text.slice(0, 8000);
+  const cover = text.slice(0, 30000);
   const coverLower = cover.toLowerCase();
 
   // shares offered — cover-scoped (first ~2 pages), so the headline "N shares of
@@ -133,7 +133,7 @@ export function parseProspectusHtml(html: string, filingDate?: Date): ParsedOffe
     // Must have a terms signal to avoid prose mentions (risk factors, etc.).
     if (!/exercis|expir|exercise\s+price|strike\s+price/i.test(zone)) continue;
     // Shares: "warrants to purchase (up to) N shares" / "N warrants".
-    const sh = zone.match(/(?:purchase|for|of|to\s+purchase|represent|accompany|concurrent|issu(?:e|ing|ed))\s+(?:up\s+to\s+|an\s+aggregate\s+of\s+|equal\s+to\s+)?([\d,.]+)\s*(?:million|billion|thousand)?\s+shares?/i);
+    const sh = zone.match(/(?:purchase|for|of|to\s+purchase|represent|accompany|concurrent|issu(?:e|ing|ed))\s+(?:up\s+to\s+|an\s+aggregate\s+of\s+|equal\s+to\s+)?([\d,.]+)\s*(?:million|billion|thousand)?\s+(?:shares?|warrants?)/i);
     const shares = sh ? scaleNum(sh[1]) : null;
     // Strike: "exercise price of $Y" / "exercisable at $Y".
     const ep = zone.match(/exercise\s+price\s+(?:of\s+|equal\s+to\s+)?\$([\d,.]+(?:\.\d{1,4})?)/i)

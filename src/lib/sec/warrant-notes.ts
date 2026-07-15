@@ -177,12 +177,19 @@ export function parseWarrantNotesHtml(html: string, accessionNo: string, filingD
       // boundary truncates the match before the date appears).
       const ex = c.match(/expir(?:e|es|ing|ation|y)[\s\S]{0,60}?(?:on)?\s*([A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})/i);
       if (ex) expiry = ex[1];
+      // Perpetual / no-expiry warrants: "did not expire until exercised in
+      // full". Mark as perpetual so the table shows it instead of null.
+      if (!expiry && /expir(?:e|es|ing)?[^.]{0,20}?(?:until|upon)\s+(?:exercis|the\s+earlier)|no\s+expir|without\s+expir/i.test(c)) {
+        expiry = 'perpetual';
+      }
       // Expiry: relative term — "for five years", "expiring five years after",
-      // "term of N years". Compute from filing date. Without this, ALL
-      // relative-term warrants show null expiry (the majority).
+      // "term of N years", "five-year anniversary of [issuance]". Compute from
+      // filing date. Without this, ALL relative-term warrants show null expiry.
       if (!expiry && filingDate) {
-        const yr = c.match(/(?:for|term\s+of|expir(?:e|es|ing|ation|y)[\s\S]{0,20}?(?:after)?|following)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+years?/i)
-          ?? c.match(/(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+years?\s+from\s+/i);
+        const yr = c.match(/(?:for|term\s+of|expir(?:e|es|ing|ation|y)[\s\S]{0,20}?(?:after)?|following|anniversary\s+of)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+years?/i)
+          ?? c.match(/(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+years?\s+from\s+/i)
+          // Hyphenated anniversary: "five-year anniversary of the issuance date"
+          ?? c.match(/(\d+|one|two|three|four|five|six|seven|eight|nine|ten)[- ]year(?:s)?\s+anniversary/i);
         if (yr) {
           const yrs = /^\d+$/.test(yr[1]) ? parseInt(yr[1], 10) : (WORD_YEARS[yr[1].toLowerCase()] ?? null);
           if (yrs) {
@@ -194,7 +201,7 @@ export function parseWarrantNotesHtml(html: string, accessionNo: string, filingD
       }
       const ed = c.match(/exercisable(?:\s+(?:commencing|beginning|on|until))?\s+(?:on\s+)?([A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})/i);
       if (ed) exercisableDate = ed[1];
-      else if (/exercisable\s+(?:immediately|upon\s+issuance|as\s+of\s+issuance)/i.test(c)) exercisableDate = 'immediately';
+      else if (/(?:immediately|upon\s+issuance|as\s+of\s+issuance)\s+exercisable|exercisable\s+(?:immediately|upon\s+issuance|as\s+of\s+issuance)/i.test(c)) exercisableDate = 'immediately';
 
       // Only keep clauses with at least one structured fact (avoid prose-only).
       if (shares != null || exercisePrice != null || expiry != null || exercisableDate != null) {

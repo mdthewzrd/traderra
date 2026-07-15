@@ -1858,6 +1858,8 @@ export default function DilutionPage() {
               const ins = dilutionTendencies(snapshot, tendenciesLens);
               const events = dilutionEvents(snapshot, tendenciesLens);
               if (!ins.length) return null;
+              const th = 'py-2 pr-4 text-left text-[10px] font-medium uppercase tracking-wide text-zinc-500 whitespace-nowrap';
+              const td = 'py-1.5 pr-4 text-xs align-top';
               const toneCls: Record<string, string> = {
                 red: 'border-red-500/20 bg-red-500/[0.03]',
                 amber: 'border-amber-500/20 bg-amber-500/[0.03]',

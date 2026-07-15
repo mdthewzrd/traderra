@@ -1612,21 +1612,27 @@ export default function DilutionPage() {
                 )}
                 {/* Float — SEC public float (cover) or computed (outstanding − restricted).
                     Critical for baby-shelf / WKSI classification + dilution math. */}
-                {floatVal != null && (
-                  <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs">
-                    <span title="Public float = non-restricted shares × price (SEC cover / computed)">
-                      <span className="text-zinc-500">Float</span> <span className="font-semibold text-zinc-200">{fmtNum(snapshot.publicFloat?.shares ?? snapshot.computedFloat?.shares)} sh</span> <span className="text-zinc-400">· {fmtMoney(floatVal)}</span>
-                    </span>
-                    {snapshot.sharesLatest?.outstanding != null && (
-                      <span title="Shares outstanding (latest SEC cover)">
-                        <span className="text-zinc-500">Out</span> <span className="font-semibold text-zinc-200">{fmtNum(snapshot.sharesLatest.outstanding)}</span>
+                {(() => {
+                  const pxF = snapshot.inTheMoney?.price ?? null;
+                  const fv = snapshot.publicFloat?.value ?? (snapshot.computedFloat?.shares != null && pxF != null ? snapshot.computedFloat.shares * pxF : null);
+                  if (fv == null) return null;
+                  const asOf = snapshot.publicFloat?.asOf || snapshot.computedFloat?.asOf;
+                  return (
+                    <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                      <span title="Public float = non-restricted shares × price (SEC cover / computed)">
+                        <span className="text-zinc-500">Float</span> <span className="font-semibold text-zinc-200">{fmtNum(snapshot.publicFloat?.shares ?? snapshot.computedFloat?.shares)} sh</span> <span className="text-zinc-400">· {fmtMoney(fv)}</span>
                       </span>
-                    )}
-                    {(snapshot.publicFloat?.asOf || snapshot.computedFloat?.asOf) && (
-                      <span className="text-zinc-600">as of {(snapshot.publicFloat?.asOf || snapshot.computedFloat?.asOf)!.slice(0, 10)}</span>
-                    )}
-                  </div>
-                )}
+                      {snapshot.sharesLatest?.outstanding != null && (
+                        <span title="Shares outstanding (latest SEC cover)">
+                          <span className="text-zinc-500">Out</span> <span className="font-semibold text-zinc-200">{fmtNum(snapshot.sharesLatest.outstanding)}</span>
+                        </span>
+                      )}
+                      {asOf && (
+                        <span className="text-zinc-600">as of {asOf.slice(0, 10)}</span>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
               <div
                 className={`rounded-lg border p-4 ${

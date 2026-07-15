@@ -1889,11 +1889,11 @@ function RowDrawer({
               <button onClick={() => { setZoomPreset(null); setPanOffset(p => p + 14); setExtraDays(d => d + 14) }} title="Progress forward 14 days" className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>+14d</button>
               <span className="w-px h-3" style={{ background: C.BORDER }} />
               {(['6m','1y','2y','3y'] as const).map(k => (
-                <button key={k} onClick={() => { setZoomPreset(p => p === k ? null : k); setPanOffset(0); setExtraDays(0) }} title={`Zoom out to ~${k} of daily history before D0`} className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={zoomPreset === k ? { color: C.BG, background: C.GOLD } : { color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>{k}</button>
+                <button key={k} onClick={() => { setZoomPreset(p => p === k ? null : k); setPanOffset(0); setExtraDays(0) }} title={`Zoom out to ~${k} of daily history before D0 (daily only)`} className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={zoomPreset === k && tf === 'D' ? { color: C.BG, background: C.GOLD } : { color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>{k}</button>
               ))}
             </div>
             <div ref={chartWrapRef} className="flex-1 min-h-0 overflow-hidden">
-              <ScanMiniChart symbol={row.symbol} tf={tf} date={row.signalDate} height={Math.max(80, chartH - 22)} settings={settings} dark={C === DARK as any} dayOffset={navDayOffset} extraDays={extraDays} zoomDays={zoomDays as any} compact />
+              <ScanMiniChart symbol={row.symbol} tf={tf} date={row.signalDate} height={Math.max(80, chartH - 22)} settings={settings} dark={C === DARK as any} dayOffset={navDayOffset} extraDays={extraDays} zoomDays={tf === 'D' ? zoomDays as any : undefined} compact />
             </div>
             {/* indicator bar — templates + dropdown toggle (mirrors /scanner & /live-feed) */}
             <div className="shrink-0 space-y-1.5">

@@ -39,6 +39,10 @@ model User {
   playbookTrades PlaybookTrade[]
   corpusDatabases CorpusDatabase[]
 
+  // Journal — folders + content items (entries/notes/strategies)
+  folders      Folder[]
+  contentItems ContentItem[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -289,6 +293,55 @@ model Trade {
   @@index([userId])
   @@index([symbol])
   @@index([date])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Journal — folders + content items (trade entries, notes, strategies)
+// Backs the /journal page. A flat folder tree per user; content items
+// (the actual journal entries) live inside folders.
+// ─────────────────────────────────────────────────────────────
+model Folder {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentId  String?  // null = root. Self-referential tree.
+  parent    Folder?  @relation("FolderParent", fields: [parentId], references: [id], onDelete: SetNull)
+  children  Folder[] @relation("FolderParent")
+
+  name      String
+  icon      String   @default("folder")
+  color     String   @default("#888")
+  position  Int      @default(0)
+
+  contentItems ContentItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([parentId])
+}
+
+model ContentItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folderId  String?
+  folder    Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
+  // 'trade_entry' | 'document' | 'note' | 'strategy' | 'research' | 'review'
+  type      String   @default("note")
+  title     String
+  content   Json?
+  metadata  Json?
+  tags      String[] @default([])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([folderId])
+  @@index([type])
 }
 
 // Learning System Models

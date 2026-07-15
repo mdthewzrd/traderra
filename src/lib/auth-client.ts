@@ -2,9 +2,10 @@
 
 import { createAuthClient } from 'better-auth/react'
 
-export const authClient = createAuthClient({
-  baseURL: process.env.NEXT_PUBLIC_BETTER_AUTH_URL || 'http://localhost:3199',
-})
+// Auth is mounted inside Next.js at /api/auth/* (toNextJsHandler).
+// Use same-origin so it works via localhost AND tailscale IP — the old
+// http://localhost:3199 pointed at a standalone server that was never started.
+export const authClient = createAuthClient()
 
 export interface AuthState {
   isSignedIn: boolean

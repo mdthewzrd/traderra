@@ -1,3 +1,4 @@
+import { TopNav } from '@/components/layout/top-nav'
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import '../styles/globals.css'
@@ -72,6 +73,7 @@ export default function RootLayout({
       </head>
       <body className={`${inter.variable} font-sans antialiased studio-bg min-h-screen`} style={{ fontSize: 13 }}>
         <StudioTheme>
+          <TopNav />
           <TraderraProvider>
             <GlobalTraderraProvider>
               <GuestModeProvider>

@@ -76,6 +76,9 @@ export interface ConvertibleNoteRow {
   principal: number | null;
   maturity: string | null; // "due 2027" or date — when converts/matures
   conversionPrice: number | null;
+  // 'active' = outstanding dilution; 'redeemed' = exchanged/settled/no longer
+  // outstanding — excluded from active overhang, shown as history only.
+  status: 'active' | 'redeemed';
 }
 
 export interface EquityLineNoteRow {
@@ -106,21 +109,61 @@ export interface ParsedWarrantNotes {
  *  appears in most 10-Ks with warrants and is FAR more complete than prose
  *  clause extraction, which misses expiry/exercisable split across sentences.
  *  Returns null when no schedule table is found (caller falls back to prose). */
-function extractWarrantScheduleTable(text: string): WarrantNoteRow[] | null {
-  const headerIdx = text.search(/(schedule\s+of\s+(?:the\s+)?(?:company'?s\s+)?outstanding\s+warrants|outstanding\s+warrants\s+(?:as\s+of|is\s+as\s+follows))/i);
+function extractWarrantScheduleTable(text: string, filingDate?: Date | null): WarrantNoteRow[] | null {
+  const headerIdx = text.search(
+    /schedule\s+of\s+(?:the\s+)?(?:company'?s\s+)?warrants?\s+outstanding|schedule\s+of\s+(?:the\s+)?(?:company'?s\s+)?outstanding\s+warrants|following\s+warrants\s+(?:were\s+)?outstanding/i,
+  );
   if (headerIdx < 0) return null;
-  const block = text.slice(headerIdx, headerIdx + 3000);
-  // Row: "<Type> Warrants <shares> $<price> <issuance M/D/Y> <expiry M/D/Y>"
-  const re = /([A-Za-z][A-Za-z ()/.\-]{1,40}?Warrants)\s+([\d,]+(?:\.\d+)?)\s+\$\s*([\d,.]+)\s+(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{1,2}\/\d{1,2}\/\d{2,4})/g;
+  const block = text.slice(headerIdx, headerIdx + 3000)
+    .split(/schedule\s+of\s+warrants\s+activity|the\s+following\s+table\s+shows|warrant\s+activity/i)[0];
+  // Row: "<Type> Warrants <shares> $<price> <expiration>"
+  // Price is matched LAZILY because HTML table-cell merging fuses price+date
+  // without spaces ('$14,329.4709/09/27'). Expiration can be date/-/None/*/n/a.
+  const re = /([A-Za-z][A-Za-z0-9 ()/.,'\-]{1,40}?[Ww]arrants?)\s+([\d,]+)\s+\$\s*([\d,.]+?)\s*(\d{1,2}\/\d{1,2}\/\d{2,4}|none|-|\*|n\/a)/gi;
   const rows: WarrantNoteRow[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(block))) {
-    const type = m[1].trim().replace(/^(?:.*(?:Expiration Date|Issuance Date|Exercise Price)\s+)/i, '');
+    // Strip leading classification column values that bleed into next row's type.
+    let type = m[1].trim();
+    for (const prefix of ['Equity', 'Liability', 'Total']) {
+      if (type.startsWith(prefix + ' ')) { type = type.slice(prefix.length + 1); break; }
+    }
     const shares = parseInt(m[2].replace(/,/g, ''), 10);
     const price = parseFloat(m[3].replace(/,/g, ''));
-    if (isNaN(shares) || shares < 50) continue;
-    // Enrich exercisable: scan ALL occurrences of this series (the table row
-    // itself has no exercisable clause; the discussion appears in prose elsewhere).
+    if (isNaN(shares) || shares < 50 || isNaN(price)) continue;
+
+    // Expiration: date from table, perpetual for None/-, or enrich from footnote.
+    let expiry: string | null = null;
+    const expRaw = m[4].trim().toLowerCase();
+    if (/\d{1,2}\/\d{1,2}\/\d{2,4}/.test(m[4])) {
+      expiry = m[4].trim();
+    } else if (expRaw === 'none' || expRaw === '-') {
+      expiry = 'perpetual';
+    }
+    // When table shows '-'/'*'/'None', search for expire-language footnote.
+    if (!expiry || expiry === 'perpetual') {
+      const escType = type.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const fm = text.match(new RegExp(
+        `(?:\\*|${escType})[^.]{0,30}?${escType}[^.]{0,100}?expir[^.]{0,120}`, 'i'));
+      if (fm) {
+        const dm = fm[0].match(/\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/);
+        if (dm) {
+          expiry = dm[1];
+        } else if (filingDate) {
+          const yr = fm[0].match(/(\d+|one|two|three|four|five|six|seven|eight|nine|ten)[- ]?years?/i);
+          if (yr) {
+            const yrs = /^\d+$/.test(yr[1]) ? parseInt(yr[1], 10) : (WORD_YEARS[yr[1].toLowerCase()] ?? null);
+            if (yrs) {
+              const d = new Date(filingDate);
+              d.setFullYear(d.getFullYear() + yrs);
+              expiry = d.toISOString().slice(0, 10);
+            }
+          }
+        }
+      }
+    }
+
+    // Enrich exercisable from prose (table row has no exercisable clause).
     let exercisableDate: string | null = null;
     let searchFrom = 0;
     while (exercisableDate == null) {
@@ -129,12 +172,81 @@ function extractWarrantScheduleTable(text: string): WarrantNoteRow[] | null {
       const ctx = text.slice(Math.max(0, sIdx - 150), sIdx + 250);
       const ed = ctx.match(/exercisable(?:\s+(?:commencing|beginning|on|until))?\s+(?:on\s+)?([A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})/i);
       if (ed) exercisableDate = ed[1];
-      else if (/exercisable\s+(?:immediately|upon\s+issuance|as\s+of\s+issuance)|immediately\s+exercisable/i.test(ctx)) exercisableDate = 'immediately';
+      else if (/(?:immediately|upon\s+issuance|as\s+of\s+issuance)\s+exercisable|exercisable\s+(?:immediately|upon\s+issuance|as\s+of\s+issuance)/i.test(ctx)) exercisableDate = 'immediately';
       searchFrom = sIdx + 1;
     }
-    rows.push({ description: `${type} — ${shares.toLocaleString()} sh @ $${price}, issued ${m[4]}, expires ${m[5]}`, shares, exercisePrice: price, expiry: m[5], exercisableDate });
+
+    rows.push({
+      description: `${type} — ${shares.toLocaleString()} sh @ $${price}${expiry ? ', exp ' + expiry : ''}`,
+      shares, exercisePrice: price, expiry, exercisableDate,
+    });
   }
   return rows.length ? rows : null;
+}
+
+/** Assemble per-instrument convertible note detail from 10-K narrative.
+ *  Unlike warrants (which live in schedule tables), convertibles appear as
+ *  issuance PROSE: principal stated in one clause, conversion price + maturity
+ *  in the next 1–3 clauses. The clause-splitter emits these as separate rows and
+ *  grabs the price as "principal" (e.g. NVVE: $80.8 conversion price shown as
+ *  principal). This pass anchors on each "convertible note" mention, scans a
+ *  ~1500-char window for principal + price + maturity, and emits ONE row per note.
+ *  WINDOWED (not global) so it can't catastrophically backtrack on the multi-MB
+ *  complete-submission .txt fallback. Returns null when nothing is found. */
+function extractConvertibleDetail(text: string, filingDate?: Date | null): ConvertibleNoteRow[] | null {
+  void filingDate;
+  const NOISE_RE = /\b(?:interest\s+expense|(?:decrease|increase)\s+in\s+interest|change\s+in\s+fair\s+value|recorded[^.]{0,30}?in\s+income|operating\s+lease|lease\s+liabilit|(?:gain|loss)\s+on\s+(?:the\s+)?(?:conversion|exchange|extinguish|settlement))\b/i;
+  const REDEEMED_RE = /\b(?:no\s+longer(?:\s+\w+){0,4}\s+outstanding|prior\s+to\s+(?:the\s+)?(?:exchange|redempt|repay|settl|extinguish)|exchange[d]?\s+agreement|exchange[d]?\s+(?:the\s+)?(?:convertible|notes)|\bredeemed\b|\brepaid\b|\brepurchas|\bretired\b|\bsettled\b|\bextinguis|was\s+comprised\s+of|converted\s+(?:into|to)\s+(?:shares\s+of\s+)?common)\b/i;
+
+  const rows: ConvertibleNoteRow[] = [];
+  const seen = new Set<string>();
+  // Anchor on each "convertible note/debenture" mention — cheap single pass.
+  const reCN = /convertible\s+(?:notes?|debentures?|promissory\s+notes?|preferred\s+notes?)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = reCN.exec(text))) {
+    const win = text.slice(Math.max(0, m.index - 600), m.index + 900);
+    if (NOISE_RE.test(win)) continue;
+
+    // Principal in window: "principal [amount] [of] $N" (principal-led) OR
+    // "$N [million] of [Senior] Convertible Notes" (value-led). Take the LARGEST
+    // principal figure in the window so a footnote total wins over a partial.
+    let principal: number | null = null;
+    const prA = win.match(/(?:aggregate\s+)?principal\s+(?:amount\s+)?(?:of\s+|equal\s+to\s+)?\$?\s*([\d,]+(?:\.\d+)?)\s*(million|billion|thousand)?/i);
+    const prB = win.match(/\$?\s*([\d,]+(?:\.\d+)?)\s*(million|billion)\s+(?:of\s+)?(?:the\s+)?(?:aggregate\s+)?(?:principal\s+(?:amount\s+)?(?:of\s+)?)?(?:[A-Z][\w'-]*\s+){0,3}(?:convertible|senior)\s+[\w\s'-]{0,18}?\bnotes?\b/i);
+    for (const cand of [prA, prB]) {
+      if (!cand) continue;
+      const p = scaleMoney(cand[1] + (cand[2] ? ' ' + cand[2] : ''));
+      if (p == null || p < 1000) continue;
+      if (principal == null || p > principal) principal = p;
+    }
+    if (principal == null) continue; // no real principal here — not an issuance mention
+
+    // Conversion price ("conversion price of $Y", "price per share of $Y",
+    // "convertible ... at $Y per share"). Discount phrasing ("62% of...") → null.
+    let conversionPrice: number | null = null;
+    const cp = win.match(/conversion\s+price\s+(?:of\s+|equal\s+to\s+|was\s+changed\s+to\s+)?\$?\s*([\d,.]+)/i)
+      ?? win.match(/(?:fixed\s+)?(?:conversion\s+)?price\s+per\s+share\s+(?:of\s+|equal\s+to\s+)?\$?\s*([\d,.]+)/i)
+      ?? win.match(/convertible(?:[^.]{0,45}?)at\s+(?:a\s+)?(?:fixed\s+)?\$?\s*([\d,.]+)\s*(?:per\s+share)?/i);
+    if (cp) conversionPrice = scaleMoney(cp[1]);
+
+    // Maturity ("maturity date of <DATE>", "due <DATE/Year>").
+    let maturity: string | null = null;
+    const mt = win.match(/matur(?:e|ity)(?:\s+date)?(?:\s+(?:of|on|in))?\s+([A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+\d{4})/i)
+      ?? win.match(/matur(?:e|ity)(?:\s+date)?(?:\s+(?:of|on|in))?\s+(\d{4})/i)
+      ?? win.match(/\bdue\s+([A-Z][a-z]{2,8}\.?\s+\d{1,2},?\s+\d{4})/i)
+      ?? win.match(/\bdue\s+(\d{4})/i);
+    if (mt) maturity = mt[1];
+
+    const k = `${principal}|${conversionPrice}|${maturity}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const status: 'active' | 'redeemed' = REDEEMED_RE.test(win) ? 'redeemed' : 'active';
+    rows.push({
+      description: win.slice(win.indexOf('convertible') < 0 ? 0 : Math.max(0, win.indexOf('convertible') - 40), 130).replace(/\s+/g, ' ').trim(),
+      principal, maturity, conversionPrice, status,
+    });
+  }
+  return rows.length ? rows.slice(0, 12) : null;
 }
 
 const WORD_YEARS: Record<string, number> = { one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10 };
@@ -222,8 +334,19 @@ export function parseWarrantNotesHtml(html: string, accessionNo: string, filingD
       const cp = c.match(/conversion\s+price\s+of\s+(?:\$)?([\d,.]+)/i);
       if (cp) conversionPrice = scaleMoney(cp[1]);
 
-      if (principal != null || maturity != null || conversionPrice != null) {
-        convertibles.push({ description: c, principal, maturity, conversionPrice });
+      // Negative-status filter: a clause mentioning converts + a $ figure isn't
+      // always an outstanding instrument. Drop pure accounting noise (interest-
+      // expense discussion, fair-value income entries, operating-lease tables)
+      // and mark exchanged/redeemed/no-longer-outstanding converts 'redeemed' so
+      // they're excluded from active overhang but still visible as history.
+      // Without this, ERNA shows ~$18M phantom convert dilution for a name that
+      // exchanged all its notes in 2024.
+      const NOISE_RE = /\b(?:interest\s+expense|(?:decrease|increase)\s+in\s+interest|change\s+in\s+fair\s+value|recorded(?:\s+(?:approximately|a|an)?\s*\$?[\d,.]+\s*(?:million|billion)?)?\s+in\s+income|operating\s+lease|lease\s+liabilit|(?:gain|loss)\s+on\s+(?:the\s+)?(?:conversion|exchange|extinguish))\b/i;
+      const REDEEMED_RE = /\b(?:no\s+longer(?:\s+\w+){0,4}\s+outstanding|prior\s+to\s+(?:the\s+)?(?:exchange|redempt|repay|settl|extinguish)|exchange[d]?\s+agreement|exchange[d]?\s+(?:the\s+)?(?:convertible|notes)|\bredeemed\b|\brepaid\b|\brepurchas|\bretired\b|\bsettled\b|\bextinguis|was\s+comprised\s+of|converted\s+(?:into|to)\s+(?:shares\s+of\s+)?common\s+stock)\b/i;
+      const isNoise = NOISE_RE.test(c);
+      const isRedeemed = !isNoise && REDEEMED_RE.test(c);
+      if (!isNoise && (principal != null || maturity != null || conversionPrice != null)) {
+        convertibles.push({ description: c, principal, maturity, conversionPrice, status: isRedeemed ? 'redeemed' : 'active' });
       }
     }
 
@@ -270,12 +393,16 @@ export function parseWarrantNotesHtml(html: string, accessionNo: string, filingD
   // Prefer the warrant SCHEDULE TABLE (complete: shares+strike+expiry per
   // tranche) over prose clauses when present. Prose misses expiry because the
   // sentence-splitter can't join detail spread across clauses.
-  const tableWarrants = extractWarrantScheduleTable(text);
+  const tableWarrants = extractWarrantScheduleTable(text, filingDate);
+  // Prefer assembled convertible detail (principal + price + maturity per note)
+  // over the per-clause prose rows, which split a note across clauses and grab
+  // the conversion price as "principal".
+  const tableConverts = extractConvertibleDetail(text, filingDate);
 
   return {
     warrantNotesParsed: true,
     warrants: dedup(tableWarrants ?? warrants).slice(0, 12),
-    convertibles: dedup(convertibles).slice(0, 12),
+    convertibles: dedup(tableConverts ?? convertibles).slice(0, 12),
     equityLines: dedup(equityLines).slice(0, 6),
     goingConcern,
     source: `10-K ${accessionNo}`,
@@ -300,11 +427,28 @@ export async function syncWarrantNotes(
 ): Promise<SyncWarrantNotesResult> {
   const force = opts?.force === true;
   try {
-    const filings = await prisma.dilutionFiling.findMany({
-      where: { cik, formType: { in: ['10-K', '10-Q'] } },
-      orderBy: { filingDate: 'desc' },
-      take: 4, // latest 10-K + latest few 10-Qs
-      select: { accessionNo: true, primaryDoc: true, filingDate: true, rawPayload: true },
+    // Latest 10-K (annual note schedules — the authoritative warrant/convert
+    //    tranche list) PLUS latest few 10-Qs (new facilities surface there
+    //    first). Recent 10-Qs can crowd the 10-K out of a plain `take`, so
+    //    fetch them separately and merge by accessionNo.
+    const [latest10K, recent10Q] = await Promise.all([
+      prisma.dilutionFiling.findFirst({
+        where: { cik, formType: '10-K' },
+        orderBy: { filingDate: 'desc' },
+        select: { accessionNo: true, primaryDoc: true, filingDate: true, rawPayload: true },
+      }),
+      prisma.dilutionFiling.findMany({
+        where: { cik, formType: '10-Q' },
+        orderBy: { filingDate: 'desc' },
+        take: 3,
+        select: { accessionNo: true, primaryDoc: true, filingDate: true, rawPayload: true },
+      }),
+    ]);
+    const seenAcc = new Set<string>();
+    const filings = [latest10K, ...recent10Q].filter((f): f is NonNullable<typeof f> => {
+      if (!f || seenAcc.has(f.accessionNo)) return false;
+      seenAcc.add(f.accessionNo);
+      return true;
     });
     let parsed = 0;
     let withDetail = 0;

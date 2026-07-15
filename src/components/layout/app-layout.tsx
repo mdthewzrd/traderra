@@ -31,7 +31,7 @@ export function AppLayout({
       {/* Optional Page Header - Adjusts for sidebar */}
       {showPageHeader && (
         <div className={`fixed top-16 left-0 right-0 z-40 transition-all duration-300 studio-surface border-b border-[#1a1a1a]`} style={{ direction: 'ltr' }}>
-          <div className={`w-full transition-all duration-300 ${aiSidebarOpen ? 'pr-[480px]' : ''} overflow-x-auto`}>
+          <div className="w-full overflow-x-auto">
             {pageHeaderContent}
           </div>
         </div>
@@ -41,12 +41,10 @@ export function AppLayout({
       <div className={`flex w-full ${showPageHeader ? 'pt-36' : 'pt-16'}`} style={{ direction: 'ltr' }}>
         {/* Page Content */}
         <main
-          className="flex-1 transition-all duration-300 overflow-x-hidden"
-          style={{ marginRight: aiSidebarOpen ? '480px' : '0px', direction: 'ltr' }}
-          data-sidebar-open={aiSidebarOpen}
-          data-margin-right={aiSidebarOpen ? '480px' : '0px'}
+          className="flex-1 overflow-x-hidden"
+          style={{ direction: 'ltr' }}
         >
-          <div className="w-full overflow-x-hidden">
+          <div className="w-full pr-6 overflow-x-hidden">
             {children}
           </div>
         </main>

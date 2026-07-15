@@ -196,13 +196,13 @@ export default function DailySummaryPage() {
     >
       <div className="p-6">
           {error && (
-            <div className="mx-auto max-w-6xl mb-6">
+            <div className="mx-auto max-w-[1500px] mb-6">
               <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
                 <p className="text-red-400 text-sm">Error loading trades: {error}</p>
               </div>
             </div>
           )}
-          <div className="mx-auto max-w-6xl space-y-6">
+          <div className="mx-auto max-w-[1500px] space-y-6">
             {/* Quick Stats */}
             <div id="daily-summary-stats-section">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

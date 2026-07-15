@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react'
 import { AppLayout } from '@/components/layout/app-layout'
+import { useAuth } from '@/lib/auth-client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import { useComponentRegistry, type ScrollBehavior } from '@/lib/ag-ui/component-registry'
@@ -38,8 +39,9 @@ function EnhancedJournalContent({
   searchQuery,
   filters
 }: EnhancedJournalContentProps) {
-  // Mock user ID - in real app, this would come from auth
-  const userId = 'default_user'
+  // Real authenticated user (parent gates rendering to signed-in users only)
+  const { userId: authUserId } = useAuth()
+  const userId = authUserId || ''
 
   // Folder and content management
   const {
@@ -51,7 +53,7 @@ function EnhancedJournalContent({
     isCreating,
     isUpdating,
     isDeleting
-  } = useFolderTree(userId)
+  } = useFolderTree(userId, !!userId)
 
   const {
     items: contentItems,
@@ -107,8 +109,8 @@ function EnhancedJournalContent({
     }
   })
 
-  // Legacy journal entries (for demonstration)
-  const [legacyEntries] = useState(mockJournalEntries)
+  // Legacy journal entries kept empty — real entries come from the API now
+  const [legacyEntries] = useState<any[]>([])
 
   // Find selected folder
   const selectedFolder = useMemo(() => {
@@ -388,6 +390,7 @@ function EnhancedJournalContent({
 }
 
 export default function EnhancedJournalPage() {
+  const { isLoaded, isSignedIn } = useAuth()
   const [selectedFolderId, setSelectedFolderId] = useState<string>()
   const [searchQuery, setSearchQuery] = useState('')
   const [filters, setFilters] = useState({
@@ -404,6 +407,15 @@ export default function EnhancedJournalPage() {
         pageClassName="min-h-screen"
         showPageHeader={false}
       >
+        {!isLoaded ? (
+          <div className="flex items-center justify-center h-[60vh] text-zinc-500">Loading your journal…</div>
+        ) : !isSignedIn ? (
+          <div className="flex flex-col items-center justify-center h-[60vh] gap-3 text-center">
+            <div className="text-2xl font-bold text-zinc-300">Sign in to journal</div>
+            <p className="text-zinc-500 max-w-sm">Your trade journal entries are tied to your account. Sign in to create, save, and organize entries.</p>
+            <a href="/sign-in" className="mt-2 px-5 py-2 rounded-lg bg-amber-500 text-zinc-950 font-semibold hover:bg-amber-400 transition-colors">Sign in</a>
+          </div>
+        ) : (
         <div className="flex-1 flex h-full">
           <JournalLayout>
             <EnhancedJournalContent
@@ -413,6 +425,7 @@ export default function EnhancedJournalPage() {
               />
           </JournalLayout>
         </div>
+        )}
       </AppLayout>
       <Toaster
         position="bottom-right"

@@ -8,9 +8,9 @@
 import { FolderNode } from '@/components/folders/FolderTree'
 
 // API Base Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:6500'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '' // same-origin Next routes (the FastAPI backend was never built)
 const API_PREFIX = '/api/folders'
-const USE_MOCK_API = process.env.NEXT_PUBLIC_USE_MOCK_API !== 'false' // Default to true for development
+const USE_MOCK_API = false // real backend now lives at /api/folders/* (Next route handlers)
 
 // Types matching backend Pydantic models
 export interface ApiFolder {

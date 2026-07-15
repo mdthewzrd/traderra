@@ -88,7 +88,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('traderra-sidebar-open')
-      return saved ? JSON.parse(saved) : true
+      return saved ? JSON.parse(saved) : false
     }
     return true
   })

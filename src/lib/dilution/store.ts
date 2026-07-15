@@ -374,6 +374,20 @@ export interface DilutionSnapshot {
     // exercisable now), 'pending' (exercisable date in future), 'expired'.
     status: string;
   }[];
+  // Unified convertible table — mirror of the warrant table. Parses 10-K note
+  // detail (principal, conversion price, maturity) and derives share overhang
+  // from principal ÷ conversion price. Falls back to the XBRL aggregate
+  // convertible overhang (shares only, no terms) when no note detail exists.
+  convertibles: {
+    source: 'XBRL' | '10-K notes';
+    principal: number | null;
+    conversionPrice: number | null;
+    shares: number | null;
+    maturity: string | null;
+    description: string;
+    filingDate: string;
+    status: string;
+  }[];
   // Actual cash-raising events under dilution facilities (SEPA/equity-line
   // share sales, convertible/promissory note advances, ATM sales), parsed
   // from 10-Q/10-K bodies. Each = one draw with $ raised, shares, facility,
@@ -660,6 +674,51 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
     return result;
   })();
 
+  // Unified convertible table — mirror of the warrant table. Parses 10-K note
+  // detail (principal, conversion price, maturity) and derives the share
+  // overhang from principal ÷ conversion price. Falls back to the XBRL
+  // aggregate convertible overhang (shares only, no terms) when no note detail.
+  const convertibleStatus = (maturity: string | null): string => {
+    if (maturity) {
+      const yr = maturity.match(/\b(20\d{2})\b/);
+      if (yr) { const d = new Date(parseInt(yr[1], 10), 11, 31); if (d.getTime() < Date.now()) return 'matured'; }
+      const d = new Date(maturity);
+      if (!isNaN(d.getTime()) && d.getTime() < Date.now()) return 'matured';
+    }
+    return 'active';
+  };
+  const convertibles = (() => {
+    const rows: {
+      source: 'XBRL' | '10-K notes';
+      principal: number | null; conversionPrice: number | null; shares: number | null;
+      maturity: string | null; description: string; filingDate: string; status: string;
+    }[] = [];
+    if (warrantNotes?.convertibles) {
+      const cnDate = warrantNotes.parsedAt ? warrantNotes.parsedAt.slice(0, 10) : '';
+      for (const c of warrantNotes.convertibles) {
+        const shares = c.principal != null && c.conversionPrice != null && c.conversionPrice > 0
+          ? c.principal / c.conversionPrice : null;
+        rows.push({
+          source: '10-K notes', principal: c.principal, conversionPrice: c.conversionPrice,
+          shares, maturity: c.maturity, description: c.description, filingDate: cnDate,
+          status: c.status === 'redeemed' ? 'redeemed' : convertibleStatus(c.maturity),
+        });
+      }
+    }
+    if (overhang?.convertible) {
+      rows.push({
+        source: 'XBRL', principal: null, conversionPrice: overhang.convertible.strike,
+        shares: overhang.convertible.shares, maturity: null,
+        description: `Aggregate XBRL overhang (period ${overhang.convertible.period})${overhang.splitNote ? ` · split-adj (${overhang.splitNote})` : ''}`,
+        filingDate: overhang.convertible.period, status: 'active',
+      });
+    }
+    // Drop XBRL aggregate when parsed note detail exists (avoids double-count).
+    return rows.some((r) => r.source === '10-K notes')
+      ? rows.filter((r) => r.source !== 'XBRL')
+      : rows;
+  })();
+
   // Post-report capital raises: add back offering proceeds dated AFTER the
   // cash report date. Without this, a company that just raised $20M looks
   // destitute because linear burn from the stale report date wipes it out.
@@ -742,17 +801,18 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
           warrantTranches: (p.warrantTranches as Array<{ shares: number | null; strike: number | null; expiry: string | null; exercisable: string | null; description: string }> | null) ?? [],
         };
       }),
-    registrations: registrationFilings
-      .filter((f) => {
-        const p = (f.rawPayload ?? null) as { registrationParsed?: boolean } | null;
-        return !!p?.registrationParsed;
-      })
-      .map((f) => {
-        const p = (f.rawPayload ?? {}) as Record<string, unknown>;
-        // Attach effective date from 8-K effectiveness notices.
-        // Match by form-type prefix (S-1, F-1, S-3) + notice date >= filing date.
-        const baseForm = f.formType.replace(/\/A$/, '').replace(/ASR$/, '');
-        const effMatch = effNotices
+    registrations: (() => {
+      const regs = registrationFilings
+        .filter((f) => {
+          const p = (f.rawPayload ?? null) as { registrationParsed?: boolean } | null;
+          return !!p?.registrationParsed;
+        })
+        .map((f) => {
+          const p = (f.rawPayload ?? {}) as Record<string, unknown>;
+          // Attach effective date from 8-K effectiveness notices.
+          // Match by form-type prefix (S-1, F-1, S-3) + notice date >= filing date.
+          const baseForm = f.formType.replace(/\/A$/, '').replace(/ASR$/, '');
+          const effMatch = effNotices
           .filter((n) => n.regFormType && n.regFormType.startsWith(baseForm))
           .filter((n) => {
             const fDate = f.filingDate.toISOString().slice(0, 10);
@@ -771,7 +831,17 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
           securitiesTypes: (p.securitiesTypes as string[] | null) ?? [],
           effectiveDate: effMatch?.effectiveDate ?? null,
         };
-      }),
+      });
+      // Dedup amendments: S-3 + S-3/A for the same deal → keep latest only.
+      // Key = base form (stripped of /A) + agent + amount + salesChannel.
+      const seen = new Map<string, (typeof regs)[number]>();
+      for (const r of regs.sort((a, b) => b.filingDate.localeCompare(a.filingDate))) {
+        const base = r.formType.replace(/\/A$/, '').replace(/ASR$/, '');
+        const k = `${base}|${r.agent ?? ''}|${Math.round((r.aggregateOffering ?? 0) / 1000)}|${r.salesChannel ?? ''}`;
+        if (!seen.has(k)) seen.set(k, r);
+      }
+      return [...seen.values()].sort((a, b) => b.filingDate.localeCompare(a.filingDate));
+    })(),
     insiderDilutiveShares90d: dilutiveShares90d,
     overhang,
     inTheMoney,
@@ -779,6 +849,7 @@ export async function getSnapshot(cik: string): Promise<DilutionSnapshot> {
     shelfRemaining,
     warrantNotes,
     warrants,
+    convertibles,
     draws,
     programs,
     programTypes,

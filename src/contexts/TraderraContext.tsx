@@ -394,7 +394,7 @@ export function TraderraProvider({ children }: TraderraProviderProps) {
         const savedChatPreferences = localStorage.getItem('traderra_chat_preferences')
         if (savedChatPreferences) {
           const parsed = JSON.parse(savedChatPreferences)
-          return parsed.isSidebarOpen !== undefined ? parsed.isSidebarOpen : true
+          return parsed.isSidebarOpen !== undefined ? parsed.isSidebarOpen : false
         }
       } catch (error) {
         console.warn('Failed to load chat preferences from localStorage:', error)

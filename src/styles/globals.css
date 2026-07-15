@@ -14,9 +14,9 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Force JetBrains Mono globally */
+/* Global base font — Inter (sans) via next/font. No global mono. */
 *, *::before, *::after {
-  font-family: 'JetBrains Mono', monospace !important;
+  font-family: var(--font-sans), 'Inter', system-ui, -apple-system, sans-serif;
 }
 input[type="date"]::-webkit-calendar-picker-indicator {
   filter: invert(0.6);

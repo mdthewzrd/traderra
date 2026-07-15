@@ -178,6 +178,110 @@ function Clock() {
 }
 
 // ── Page ────────────────────────────────────────────────────
+// ── Gap Stat Checker (fixed bottom panel) ──
+const CAS_LABEL = ['15m c<prior15mLow', '5m c<5mVWAP', '15m c<15mVWAP', '5m 9/20 flip', '5m c<prior5mLow', '15m c<prior5mLow']
+const WIN_OPTS = ['1y', '2y', '5y', 'all'] as const
+function pct(x: number | null | undefined, d = 0): string { return x == null || isNaN(x) ? '—' : (x * 100).toFixed(d) + '%' }
+function GapStatsView({ data }: { data: any }) {
+  const a = data.agg50
+  const cRow = (ci: number) => { const c = a.cascades[String(ci + 1)]; return `${ci + 1} ${CAS_LABEL[ci]}: ${c.newHod}/${c.fired} (${pct(c.rate)})` }
+  const sStat = (label: string, val: any, sub?: string) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '2px 0' }}>
+      <span style={{ color: W.MUTED, fontSize: 11 }}>{label}</span>
+      <span style={{ color: W.TEXT, fontSize: 11, fontFamily: 'monospace' }}>{val}{sub ? <span style={{ color: W.MUTED, fontSize: 10 }}> {sub}</span> : null}</span>
+    </div>
+  )
+  return (
+    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+      {/* left: aggregate (50% set) */}
+      <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div style={{ fontSize: 10, color: W.GOLD, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>Aggregate · 50%+ gaps</div>
+        {sStat('gap count', `${data.count50}`, `· 20%+: ${data.count20}`)}
+        {sStat('fade rate (c<o)', pct(a.fadeRate))}
+        {sStat('avg range', `$${a.avgRange.toFixed(2)}`)}
+        {sStat('high time avg/med', `${a.avgHighTime || '—'} / ${a.medHighTime || '—'}`, `faded n=${a.fadedN}`)}
+        {sStat('low time avg/med', `${a.avgLowTime || '—'} / ${a.medLowTime || '—'}`)}
+        {sStat('PMH break', pct(a.pmhBreakFreq), `· +${pct(a.pmhBreakAvgPct, 1)}`)}
+        {sStat('fade depth / PDC', pct(a.fadeDepthAvgPct, 1))}
+        <div style={{ fontSize: 10, color: W.GOLD, textTransform: 'uppercase', letterSpacing: 0.5, margin: '6px 0 2px' }}>new HOD after trigger</div>
+        {[0, 1, 2, 3, 4, 5].map(ci => <div key={ci} style={{ fontSize: 10, fontFamily: 'monospace', color: W.TEXT }}>{cRow(ci)}</div>)}
+      </div>
+      {/* right: per-date table */}
+      <div style={{ flex: 1, overflow: 'auto', maxHeight: 280 }}>
+        <table style={{ borderCollapse: 'collapse', fontSize: 10, fontFamily: 'monospace', width: '100%' }}>
+          <thead>
+            <tr style={{ position: 'sticky', top: 0, background: W.BG }}>
+              {['Date', 'Gap', 'Real O→C', 'PMH', 'RTH Hi', 'RTH Lo', 'HiT', 'LoT', 'Fade', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6'].map(h =>
+                <th key={h} style={{ padding: '3px 5px', textAlign: 'right', color: W.MUTED, borderBottom: `1px solid ${W.BORDER}`, whiteSpace: 'nowrap' }}>{h}</th>)
+              }
+            </tr>
+          </thead>
+          <tbody>
+            {(data.days as any[]).map(d => (
+              <tr key={d.date} style={d.faded ? { background: W.GOLD_DIM } : {}}>
+                <td style={{ padding: '3px 5px', textAlign: 'right', color: W.TEXT, whiteSpace: 'nowrap' }}>{d.date}</td>
+                <td style={{ padding: '3px 5px', textAlign: 'right', color: d.g50 ? W.GOLD : W.TEXT }}>{pct(d.gapPct)}</td>
+                <td style={{ padding: '3px 5px', textAlign: 'right', color: W.MUTED, whiteSpace: 'nowrap' }}>${(d.realOpen ?? d.open).toFixed(2)}→${(d.realClose ?? d.close).toFixed(2)}</td>
+                <td style={{ padding: '3px 5px', textAlign: 'right', color: W.MUTED }}>{d.pmh != null ? '$' + d.pmh.toFixed(2) : '—'}</td>
+                <td style={{ padding: '3px 5px', textAlign: 'right', color: W.TEXT }}>{d.rthHigh != null ? '$' + d.rthHigh.toFixed(2) : '—'}</td>
+                <td style={{ padding: '3px 5px', textAlign: 'right', color: W.TEXT }}>{d.rthLow != null ? '$' + d.rthLow.toFixed(2) : '—'}</td>
+                <td style={{ padding: '3px 5px', textAlign: 'right', color: W.MUTED }}>{d.highTime || '—'}</td>
+                <td style={{ padding: '3px 5px', textAlign: 'right', color: W.MUTED }}>{d.lowTime || '—'}</td>
+                <td style={{ padding: '3px 5px', textAlign: 'right', color: d.close < d.open ? '#f87171' : '#34d399' }}>{d.close < d.open ? '▼' : '▲'}</td>
+                {d.c.map((cv: boolean | null, i: number) => (
+                  <td key={i} style={{ padding: '3px 5px', textAlign: 'right', color: cv === null ? W.MUTED : cv ? '#34d399' : '#f87171' }}>{cv === null ? '·' : cv ? '✓' : '✗'}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+function GapStatChecker() {
+  const [open, setOpen] = useState(false)
+  const [input, setInput] = useState('')
+  const [ticker, setTicker] = useState('')
+  const [win, setWin] = useState<typeof WIN_OPTS[number]>('2y')
+  const [data, setData] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const run = async (tk: string, w: string) => {
+    const t = (tk || ticker).toUpperCase().trim(); if (!t) return
+    setTicker(t); setLoading(true); setError(''); setData(null)
+    try {
+      const r = await fetch(`/api/gap-stats?ticker=${encodeURIComponent(t)}&window=${w}`)
+      const j = await r.json(); if (!r.ok) throw new Error(j.error || 'failed'); setData(j)
+    } catch (e: any) { setError(e.message) } finally { setLoading(false) }
+  }
+  const hdrBtn = (active: boolean): React.CSSProperties => active ? { fontSize: 10, padding: '2px 8px', borderRadius: 3, color: W.BG, background: W.GOLD, border: 'none', cursor: 'pointer', fontFamily: 'monospace' } : { fontSize: 10, padding: '2px 8px', borderRadius: 3, color: W.MUTED, background: W.SURFACE2, border: `1px solid ${W.BORDER}`, cursor: 'pointer', fontFamily: 'monospace' }
+  return (
+    <div style={{ width: 380, maxWidth: 400, flexShrink: 0, background: '#0f1623', border: `1px solid ${W.GOLD_BORDER}`, borderRadius: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.4)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderBottom: open ? `1px solid ${W.BORDER}` : 'none' }}>
+        <button onClick={() => setOpen(o => !o)} style={{ fontSize: 12, fontWeight: 600, color: open ? W.GOLD : W.MUTED, background: 'transparent', border: 'none', cursor: 'pointer' }}>🔍 Gap Stat Checker {open ? '▾' : '▸'}</button>
+        {open && (<>
+          <form onSubmit={e => { e.preventDefault(); run(input, win) }} style={{ display: 'flex', gap: 4 }}>
+            <input value={input} onChange={e => setInput(e.target.value.toUpperCase())} placeholder="TICKER" style={{ background: W.SURFACE2, color: W.TEXT, border: `1px solid ${W.BORDER}`, borderRadius: 3, padding: '3px 8px', fontSize: 12, fontFamily: 'monospace', width: 90, textTransform: 'uppercase' }} />
+            <button type="submit" style={hdrBtn(true)}>Go</button>
+          </form>
+          <div style={{ display: 'flex', gap: 2 }}>
+            {WIN_OPTS.map(w => <button key={w} onClick={() => { setWin(w); if (ticker) run(ticker, w) }} style={hdrBtn(win === w)}>{w}</button>)}
+          </div>
+          {ticker && !loading && !error && <span style={{ color: W.MUTED, fontSize: 11, fontFamily: 'monospace' }}>{ticker} · 20%+ {data?.count20 ?? '—'} · 50%+ {data?.count50 ?? '—'}</span>}
+        </>)}
+      </div>
+      {open && (
+        <div style={{ padding: '8px 12px' }}>
+          {loading && <div style={{ color: W.MUTED, fontSize: 12 }}>Computing gap stats — first lookup fetches years of 5m/15m bars…</div>}
+          {error && <div style={{ color: '#f87171', fontSize: 12 }}>{error}</div>}
+          {data && <GapStatsView data={data} />}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function LiveScanPage() {
   const router = useRouter()
 

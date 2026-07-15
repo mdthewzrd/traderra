@@ -2415,7 +2415,7 @@ function StatisticsPageContent() {
       </div>
 
       {/* Main content container */}
-      <div className={`flex flex-col pt-16 transition-all duration-300 ${aiSidebarOpen ? 'mr-[480px]' : ''}`}>
+      <div className="flex flex-col pt-16">
         {/* Page Header */}
         <div className="studio-surface border-b border-[#1a1a1a] px-6 py-4">
           <div className="flex items-center justify-between">

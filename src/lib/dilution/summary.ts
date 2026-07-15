@@ -82,6 +82,8 @@ export interface MagnitudeInput {
     shelfType: string;
     salesChannel: string | null;
     filingDate: string;
+    agent?: string | null;
+    formType?: string;
   }[];
   offerings: {
     grossProceeds: number | null;
@@ -96,6 +98,20 @@ export interface MagnitudeInput {
     convertible: { shares: number; strike: number | null; period: string } | null;
     overhangPct: number | null;
   } | null;
+  // Parsed warrant schedule (424B5 + 10-K notes) — authoritative per-tranche
+  // detail (shares/strike/expiry/exercisable). Preferred over overhang.warrant
+  // (stale XBRL aggregate) for the warrant bullet + dilution-ability scoring.
+  warrants?: {
+    shares: number | null; strike: number | null;
+    expiry?: string | null; exercisable?: string | null; status?: string; description?: string;
+  }[];
+  // Parsed convertible note schedule (10-K notes + XBRL fallback) — parallel to
+  // warrants. Carries principal, conversion price (strike), maturity, derived
+  // shares (principal ÷ conv price). Preferred for the convert bullet.
+  convertibles?: {
+    principal: number | null; conversionPrice: number | null; shares: number | null;
+    maturity?: string | null; status?: string;
+  }[];
   draws?: {
     amount: number | null;
     shares: number | null;
@@ -269,12 +285,46 @@ export function deriveDilutionSummary(
   // Warrant overhang from XBRL (magnitude.overhang.warrant) — the price-
   // dependent dilution threat. Mirrors the shelf pattern: a presence component
   // plus a magnitude component when the overhang is large vs float.
-  const warrantOverhang = magnitude?.overhang?.warrant ?? null;
-  const warrantHas = warrantOverhang !== null && warrantOverhang.shares > 0;
+  // Warrant overhang — prefer the PARSED warrant schedule (424B5 + 10-K notes:
+  // per-tranche shares/strike/expiry) over the stale XBRL aggregate overhang.
+  // The two disagreed before (ERNA: 840K@$17 parsed vs 0.86M@$0.07 XBRL).
+  // Aggregate parsed tranches for the bullet; fall back to overhang only when
+  // no parsed warrants exist.
+  const wpx = magnitude?.price ?? null;
+  const sharesOut = magnitude?.sharesOutstanding ?? null;
+  const parsedWarrants = (magnitude?.warrants ?? []).filter(
+    (w) => w.shares != null && (w.shares as number) > 0,
+  );
+  const warrantAgg = (() => {
+    if (parsedWarrants.length) {
+      const totalShares = parsedWarrants.reduce((s, w) => s + (w.shares as number), 0);
+      const priced = parsedWarrants.filter((w) => w.strike != null && (w.strike as number) > 0 && (w.strike as number) < 10000);
+      const weightedStrike = priced.length
+        ? priced.reduce((s, w) => s + (w.strike as number) * (w.shares as number), 0) / priced.reduce((s, w) => s + (w.shares as number), 0)
+        : null;
+      return { shares: totalShares, strike: weightedStrike as number | null, count: parsedWarrants.length, period: '' };
+    }
+    const ov = magnitude?.overhang?.warrant ?? null;
+    return ov && ov.shares > 0 ? { shares: ov.shares, strike: ov.strike, count: 1, period: ov.period } : null;
+  })();
+  const warrantHas = warrantAgg !== null && warrantAgg.shares > 0;
+  const warrantPct = warrantHas && sharesOut && sharesOut > 0 ? (warrantAgg!.shares / sharesOut) * 100 : null;
   const warrantDetail = warrantHas
-    ? `${(warrantOverhang!.shares / 1e6).toFixed(2)}M shares${warrantOverhang!.strike !== null ? ` · $${warrantOverhang!.strike.toFixed(2)} strike` : ''} @ ${warrantOverhang!.period}`
+    ? `${(warrantAgg!.shares / 1e6).toFixed(2)}M shares${warrantAgg!.strike !== null ? ` · $${warrantAgg!.strike.toFixed(2)} strike` : ''}${warrantAgg!.count > 1 ? ` · ${warrantAgg!.count} tranches` : ''}${warrantAgg!.period ? ` @ ${warrantAgg!.period}` : ''}`
     : 'none';
   const overhangPct = magnitude?.overhang?.overhangPct ?? null;
+  // Convertible overhang — prefer the PARSED note schedule (principal, conv
+  // price, maturity) over the XBRL aggregate. Shares derived = principal ÷
+  // conv price. Parallel to the warrant logic above.
+  const parsedConverts = (magnitude?.convertibles ?? []).filter(
+    (c) => c.status !== 'redeemed' && ((c.shares != null && (c.shares as number) > 0) || (c.principal != null && c.principal > 0)),
+  );
+  const convertAgg = (() => {
+    if (!parsedConverts.length) return null;
+    const totalShares = parsedConverts.reduce((s, c) => s + (c.shares ?? 0), 0);
+    const totalPrincipal = parsedConverts.reduce((s, c) => s + (c.principal ?? 0), 0);
+    return { shares: totalShares, principal: totalPrincipal, count: parsedConverts.length };
+  })();
 
   // --- Draw pressure (the most direct short-bias signal) ---
   // ACTUAL cash raised under dilution facilities in recent quarterlies.
@@ -339,27 +389,53 @@ export function deriveDilutionSummary(
   const atmProg = progs.filter((p) => p.programType === 'atm');
   const convProg = progs.filter((p) => p.programType === 'convertible');
   const sr = magnitude?.shelfRemaining ?? null;
-  if (sr && sr.remaining > 0) { abilScore += sr.remaining >= 50e6 ? 40 : 30; abilBullets.push(`Shelf: $${(sr.remaining / 1e6).toFixed(0)}M of $${(sr.registered / 1e6).toFixed(0)}M remaining (tappable).`); }
-  else if (shelfRecent) { abilScore += 10; abilBullets.push('Shelf active; remaining capacity unclear.'); }
-  // Equity line / SEPA — from programs (with capacity) OR filing tag fallback.
+  // ATM registrations — deduped agent for the bullet narrative.
+  const atmRegs = (magnitude?.registrations ?? []).filter((r) => r.salesChannel === 'atm');
+  const atmAgent = atmRegs.map((r) => r.agent).find((a) => a) ?? null;
+  // --- Shelf / ATM: $ capacity remaining, tappable at market price. ---
+  if (sr && sr.remaining > 0) {
+    abilScore += sr.remaining >= 50e6 ? 40 : 30;
+    abilBullets.push(`ATM/shelf: $${(sr.remaining / 1e6).toFixed(1)}M of $${(sr.registered / 1e6).toFixed(0)}M left${atmAgent ? ` (${atmAgent})` : ''} — tappable at market.`);
+  } else if (shelfRecent) {
+    abilScore += 10;
+    abilBullets.push('ATM/shelf active — remaining capacity unclear.');
+  } else if (atmProg.length || atm.length) {
+    abilScore += 20;
+    abilBullets.push(`ATM agreement${atmAgent ? ` (${atmAgent})` : ''} — tappable at market.`);
+  }
+  // --- Equity line / SEPA: draw at market, up to committed max. ---
   if (eqProg.length) {
     abilScore += 35;
     const cap = Math.max(0, ...eqProg.map((p) => p.maxCommitment ?? 0));
-    abilBullets.push(`Equity line / SEPA${cap > 0 ? ` up to $${(cap / 1e6).toFixed(0)}M` : ''}${eqProg[0].counterparty ? ` (${eqProg[0].counterparty})` : ''}.`);
-  } else if (equityLine.length) { abilScore += 35; abilBullets.push(`Equity line / SEPA active (${equityLine.length}).`); }
-  if (atmProg.length) { abilScore += 25; abilBullets.push(`ATM agreement (${atmProg.length}).`); }
-  else if (atm.length) { abilScore += 25; abilBullets.push(`ATM agreement (${atm.length}).`); }
-  if (convProg.length || convertible.length) { abilScore += 20; abilBullets.push(`Convertible outstanding (${convProg.length || convertible.length}).`); }
+    abilBullets.push(`SEPA / equity line${cap > 0 ? `: up to $${(cap / 1e6).toFixed(0)}M` : ''}${eqProg[0].counterparty ? ` (${eqProg[0].counterparty})` : ''} — tappable at market.`);
+  } else if (equityLine.length) {
+    abilScore += 35;
+    abilBullets.push(`SEPA / equity line: ${equityLine.length} active — tappable at market.`);
+  }
+  // --- Convertible: dilutes on conversion (price-dependent). ---
+  const convCount = convProg.length || convertible.length || (convertAgg?.count ?? 0);
+  if (convCount) {
+    abilScore += 20;
+    if (convertAgg) {
+      const cpr = convertAgg.principal > 0 ? `$${(convertAgg.principal / 1e6).toFixed(1)}M principal` : `${convertAgg.count} note(s)`;
+      const csh = convertAgg.shares > 0 ? ` · ${(convertAgg.shares / 1e6).toFixed(2)}M shares` : '';
+      const convItm = wpx != null && parsedConverts.some((c) => c.conversionPrice != null && (c.conversionPrice as number) > 0 && (c.conversionPrice as number) <= wpx);
+      abilBullets.push(`Convertible: ${cpr}${csh}${convItm ? ' — IN THE MONEY (conversion likely)' : ''}.`);
+    } else {
+      abilBullets.push(`Convertible: ${convCount} outstanding.`);
+    }
+  }
+  // --- S-1: shelf filed but not yet effective. ---
   const s1Filed = tagged('shelf').filter((f) => /^S-1(\/A)?$/.test(f.formType));
-  if (s1Filed.length) { abilScore += 10; abilBullets.push('S-1 filed (good to go pending effectiveness).'); }
-  // Warrant overhang is dilution ability (sell-side capacity) — merged here.
-  const wpx = magnitude?.price ?? null;
+  if (s1Filed.length) { abilScore += 10; abilBullets.push('S-1 filed — pending effectiveness.'); }
+  // --- Warrants: lead with ITM / OTM (the actionable bit). ---
   if (warrantHas) {
-    abilScore += overhangPct != null && overhangPct >= 20 ? 40 : overhangPct != null && overhangPct >= 5 ? 20 : 8;
-    const w = warrantOverhang!;
+    abilScore += warrantPct != null && warrantPct >= 20 ? 40 : warrantPct != null && warrantPct >= 5 ? 20 : 8;
+    const w = warrantAgg!;
     const itm = w.strike != null && wpx != null && wpx > w.strike;
     if (itm) abilScore += 15;
-    abilBullets.push(`${(w.shares / 1e6).toFixed(2)}M warrants${w.strike != null ? ` @ $${w.strike.toFixed(2)}` : ''}${overhangPct != null ? ` · ${overhangPct.toFixed(0)}% of shares` : ''}${itm ? ' · IN THE MONEY (exercise likely)' : wpx != null ? ' · out of the money' : ''}.`);
+    const status = itm ? 'IN THE MONEY — exercise likely' : wpx != null && w.strike != null ? `below $${w.strike.toFixed(2)} strike` : '';
+    abilBullets.push(`Warrants: ${(w.shares / 1e6).toFixed(2)}M${w.strike != null ? ` @ $${w.strike.toFixed(2)}` : ''}${warrantPct != null ? ` (${warrantPct.toFixed(0)}% of shares)` : ''}${status ? ' — ' + status : ''}.`);
   }
   if (!abilBullets.length) abilBullets.push('No tappable dilution facilities detected.');
   const dilutionAbility: SubRating = { score: clamp100(abilScore), tier: tierFromScore(clamp100(abilScore)), bullets: abilBullets };

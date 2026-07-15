@@ -1,12 +1,12 @@
 'use client'
 import { usePathname } from 'next/navigation'
 import { Footer } from '@/components/layout/footer'
-import { RenataSidebar } from '@/components/layout/renata-sidebar'
 import { AgentSystemInitializer } from '@/components/agents/AgentSystemInitializer'
 
 /**
- * Main app layout — wraps pages with Footer, Renata AI sidebar, and Agent system.
- * Backtest page (/backtest) hides the Renata sidebar and footer.
+ * Main app layout — wraps journal/traderra pages with Footer + Agent system.
+ * Renata AI sidebar removed on request (2026-07-15).
+ * Backtest page (/backtest) hides the footer.
  */
 export default function MainLayout({
   children,
@@ -23,7 +23,6 @@ export default function MainLayout({
         {children}
         {!isBacktest && <Footer />}
       </div>
-      {!isBacktest && <RenataSidebar />}
     </>
   )
 }

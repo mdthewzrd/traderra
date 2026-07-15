@@ -50,7 +50,7 @@ export default function HomePage() {
     <div className="min-h-screen bg-[#0a0a0a]">
       {/* Header */}
       <header className="border-b border-[#1a1a1a] bg-[#0a0a0a]">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-[1800px] mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-lg bg-primary/20 border border-primary/40 flex items-center justify-center">
               <Brain className="h-6 w-6 text-primary" />
@@ -87,7 +87,7 @@ export default function HomePage() {
       </header>
 
       {/* Hero */}
-      <section className="max-w-7xl mx-auto px-6 pt-16 pb-12">
+      <section className="max-w-[1800px] mx-auto px-6 pt-16 pb-12">
         <div className="text-center max-w-3xl mx-auto">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-xs font-medium mb-6">
             <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
@@ -104,7 +104,7 @@ export default function HomePage() {
       </section>
 
       {/* Tool Cards */}
-      <section className="max-w-7xl mx-auto px-6 pb-16">
+      <section className="max-w-[1800px] mx-auto px-6 pb-16">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {tools.map((tool) => (
             <a
@@ -133,7 +133,7 @@ export default function HomePage() {
       </section>
 
       {/* Quick Stats */}
-      <section className="max-w-7xl mx-auto px-6 pb-16">
+      <section className="max-w-[1800px] mx-auto px-6 pb-16">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
             { label: 'Tickers Scanned', value: '16,416', sub: 'US Equities' },
@@ -151,7 +151,7 @@ export default function HomePage() {
       </section>
 
       {/* Existing Pages */}
-      <section className="max-w-7xl mx-auto px-6 pb-16">
+      <section className="max-w-[1800px] mx-auto px-6 pb-16">
         <h3 className="text-sm font-medium text-[#666] uppercase tracking-wider mb-4">Trading Journal</h3>
         <div className="flex gap-2">
           {existingPages.map((page) => (

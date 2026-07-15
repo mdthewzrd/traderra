@@ -159,6 +159,7 @@ function mechanicsSummary(snap: any): { label: string; value: string; tone: stri
 // full page width, no scroll box. Replaces the old cramped tabbed ProgramTabs.
 function DilutionOverview({ snapshot }: { snapshot: any }) {
   const [ovTab, setOvTab] = useState(0);
+  const now = Date.now();
   const M = 1e6;
   const px = snapshot?.inTheMoney?.price ?? null;
   const sharesFor = (maxDollars: number | null | undefined) =>
@@ -167,7 +168,14 @@ function DilutionOverview({ snapshot }: { snapshot: any }) {
     ...((snapshot?.warrantNotes?.equityLines ?? []).map((el: any, i: number) => ({ key: 'el' + i, date: '', who: el.counterparty, max: el.maxCommitment, extra: [el.pricing, el.ownershipCap != null ? el.ownershipCap + '% cap' : null].filter(Boolean).join(' · ') }))),
     ...((snapshot?.programs ?? []).filter((p: any) => p.programType === 'equity-line').map((p: any, i: number) => ({ key: 'pr' + i, date: p.filingDate, who: p.counterparty, max: p.maxCommitment, extra: [p.pricing, p.ownershipCap != null ? p.ownershipCap + '% cap' : null].filter(Boolean).join(' · ') }))),
   ];
-  const warrants = snapshot?.warrants ?? [];
+  // Filter junk warrant rows: drop entries with no meaningful shares
+  // AND no meaningful strike (noise), and filter absurd strike parse errors
+  // (>$10K strike is clearly a mis-parsed dollar amount).
+  const warrants = (snapshot?.warrants ?? []).filter((w: any) => {
+    const hasShares = w.shares != null && w.shares > 0;
+    const validStrike = w.strike != null && w.strike > 0 && w.strike < 10000;
+    return hasShares || validStrike;
+  });
   const converts = [
     ...((snapshot?.programs ?? []).filter((p: any) => p.programType === 'convertible').map((p: any, i: number) => ({ key: 'cv' + i, date: p.filingDate, who: p.counterparty, max: p.maxCommitment, extra: [p.maturity ? 'matures ' + p.maturity : null, p.pricing].filter(Boolean).join(' · ') }))),
   ];
@@ -368,6 +376,7 @@ function DilutionOverview({ snapshot }: { snapshot: any }) {
                     <th className={th}>Filed</th>
                     <th className={th}>Counterparty</th>
                     <th className={th}>Max</th>
+                    <th className={th}>Last Used</th>
                     <th className={th}>Status</th>
                     <th className={th}>Terms</th>
                   </tr>
@@ -375,11 +384,16 @@ function DilutionOverview({ snapshot }: { snapshot: any }) {
                 <tbody className="divide-y divide-zinc-800/50">
                   {eqLines.map((r: any) => {
                     const st = statusFor(r.date);
+                    // Match draws to this line by facilityName containing counterparty
+                    const lineDraws = (snapshot?.draws ?? []).filter((d: any) => d.facilityType === 'equity-line' && r.who && d.facilityName && (d.facilityName.includes(r.who) || r.who.includes(d.facilityName)));
+                    const lastUse = lineDraws.filter((d: any) => d.date).sort((a: any, b: any) => b.date.localeCompare(a.date))[0];
+                    const isRecentDraw = lastUse && (now - Date.parse(lastUse.date)) < 90 * 86400000;
                     return (
                       <tr key={r.key}>
                         <td className={td + ' whitespace-nowrap text-zinc-500'}>{r.date || '—'}</td>
                         <td className={td + ' text-zinc-200'}>{r.who || 'equity line'}</td>
                         <td className={td}>{r.max != null ? <span className="font-medium text-zinc-100">${(Number(r.max) / M).toFixed(1)}M</span> : '—'}</td>
+                        <td className={td}>{lastUse ? <span className={isRecentDraw ? 'text-emerald-400' : 'text-zinc-500'}>{lastUse.date}{lineDraws.length > 1 && <span className="text-zinc-600"> · {lineDraws.length}×</span>}</span> : <span className="text-zinc-600">—</span>}</td>
                         <td className={td}>{st ? <span className={'rounded px-1 py-px text-[9px] font-semibold uppercase ' + st.cls}>{st.label}</span> : <span className="text-zinc-600">—</span>}</td>
                         <td className={td + ' text-zinc-500'}>{r.extra || '—'}</td>
                       </tr>

@@ -38,6 +38,7 @@ export default function GapStatsPage() {
  const [input, setInput] = useState('')
  const [ticker, setTicker] = useState('')
  const [win, setWin] = useState<(typeof WIN_OPTS)[number]>('2y')
+ const [minGap, setMinGap] = useState<20 | 50>(50)
  const [data, setData] = useState<any>(null)
  const [loading, setLoading] = useState(false)
  const [error, setError] = useState('')
@@ -45,8 +46,8 @@ export default function GapStatsPage() {
  const [chartMode, setChartMode] = useState<'single' | '2stack'>('2stack')
  const [selectedDay, setSelectedDay] = useState<string | null>(null)
 
- const persist = (tk: string, w: string, hist: string[]) => {
-  try { localStorage.setItem(LS_KEY, JSON.stringify({ ticker: tk, win: w, history: hist })) } catch {}
+ const persist = (tk: string, w: string, hist: string[], mg: number) => {
+  try { localStorage.setItem(LS_KEY, JSON.stringify({ ticker: tk, win: w, history: hist, minGap: mg })) } catch {}
  }
 
  const run = async (tk: string, w: string) => {
@@ -61,7 +62,7 @@ export default function GapStatsPage() {
    if (j.days?.length) setSelectedDay(j.days[0].date)
    setHistory(prev => {
     const next = [t, ...prev.filter(x => x !== t)].slice(0, 24)
-    persist(t, w, next)
+    persist(t, w, next, minGap)
     return next
    })
   } catch (e: any) { setError(e.message) } finally { setLoading(false) }
@@ -73,12 +74,14 @@ export default function GapStatsPage() {
    const s = JSON.parse(localStorage.getItem(LS_KEY) || '{}')
    if (Array.isArray(s.history)) setHistory(s.history)
    if (s.win) setWin(s.win)
+   if (s.minGap === 20 || s.minGap === 50) setMinGap(s.minGap)
    if (s.ticker) { setInput(s.ticker); run(s.ticker, s.win || '2y') }
   } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
  }, [])
 
- const a = data?.agg50
+ const a = minGap === 50 ? data?.agg50 : data?.agg20
+ const shownDays = data ? (minGap === 50 ? (data.days as any[]).filter((d: any) => d.g50) : (data.days as any[])) : []
 
  return (
   <div className="min-h-screen bg-[#0a0a0a] text-[#e0e0e0]">
@@ -119,6 +122,15 @@ export default function GapStatsPage() {
        <button key={w} onClick={() => { setWin(w); if (ticker) run(ticker, w) }}
         className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${win === w ? 'bg-[#D4AF37] text-[#0a0a0a] font-bold' : 'bg-[#141c2b] text-[#9ca3af] border border-[#1f2937] hover:text-[#e0e0e0]'}`}>
         {w}
+       </button>
+      ))}
+     </div>
+     <div className="flex items-center gap-1 ml-3">
+      <span className="text-xs text-[#666] mr-2">Min Gap</span>
+      {[20, 50].map(g => (
+       <button key={g} onClick={() => setMinGap(g as 20 | 50)}
+        className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${minGap === g ? 'bg-[#D4AF37] text-[#0a0a0a] font-bold' : 'bg-[#141c2b] text-[#9ca3af] border border-[#1f2937] hover:text-[#e0e0e0]'}`}>
+        {g}%
        </button>
       ))}
      </div>
@@ -170,9 +182,9 @@ export default function GapStatsPage() {
      <div className="space-y-6">
       {/* Metric cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-       <MetricCard label="Gaps 20%+" value={String(data.count20)} sub={`${data.count50} at 50%+`} accent />
-       <MetricCard label="Gaps 50%+" value={String(data.count50)} />
-       <MetricCard label="Fade Rate" value={pct(a.fadeRate)} sub="close < open" tone={a.fadeRate >= 0.6 ? 'good' : 'neutral'} />
+       <MetricCard label="Gaps 20%+" value={String(data.count20)} sub={`${data.count50} at 50%+`} accent={minGap === 20} />
+       <MetricCard label="Gaps 50%+" value={String(data.count50)} accent={minGap === 50} />
+       <MetricCard label="Fade Rate" value={pct(a.fadeRate)} sub={`${Math.round(a.fadeRate * a.n)} of ${a.n} faded`} tone={a.fadeRate >= 0.6 ? 'good' : 'neutral'} />
        <MetricCard label="Avg Range" value={`$${a.avgRange.toFixed(2)}`} sub="RTH hi−lo" />
        <MetricCard label="Fade Depth" value={pct(a.fadeDepthAvgPct, 1)} sub="of PDC" tone="good" />
        <MetricCard label="PMH Break" value={pct(a.pmhBreakFreq)} sub={`+${pct(a.pmhBreakAvgPct, 1)} avg`} />
@@ -225,7 +237,7 @@ export default function GapStatsPage() {
       </div>
 
       {/* Per-date table */}
-      <Panel title="Gap Day History" subtitle={`${data.days.length} gap days · sorted newest first`}>
+      <Panel title="Gap Day History" subtitle={`${shownDays.length} gap days · min ${minGap}% · sorted newest first`}>
        <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
         <table className="w-full text-xs">
          <thead className="sticky top-0 bg-[#0f1623] z-10">
@@ -236,7 +248,7 @@ export default function GapStatsPage() {
           </tr>
          </thead>
          <tbody>
-          {(data.days as any[]).map(d => (
+          {shownDays.map(d => (
            <tr key={d.date} onClick={() => setSelectedDay(d.date)} className={`border-b border-[#1f2937]/50 hover:bg-[#141c2b] cursor-pointer ${d.faded ? 'bg-[#D4AF37]/[0.04]' : ''} ${selectedDay === d.date ? 'bg-[#D4AF37]/[0.10]' : ''}`}>
             <td className="px-3 py-2 text-right text-[#e0e0e0] whitespace-nowrap">{d.date}</td>
             <td className={`px-3 py-2 text-right ${d.g50 ? 'text-[#D4AF37] font-bold' : 'text-[#e0e0e0]'}`}>{pct(d.gapPct)}</td>

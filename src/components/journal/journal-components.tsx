@@ -277,6 +277,9 @@ interface JournalTemplate {
   contentTemplate: string
 }
 
+// Shared prose classes — gold section headers (h1) for the playbook "doc" look
+const PROSE_CLS = "[&_p]:mb-3 [&_p]:text-gray-300 [&_p]:leading-relaxed [&_strong]:text-white [&_strong]:font-bold [&_em]:text-gray-400 [&_em]:italic [&_ul]:ml-4 [&_ul]:mb-3 [&_ul]:list-disc [&_ul]:text-gray-300 [&_li]:mb-1 [&_li]:text-gray-300 [&_h1]:text-[#D4AF37] [&_h1]:font-bold [&_h1]:uppercase [&_h1]:tracking-wide [&_h1]:text-xs [&_h1]:mb-1 [&_h1]:mt-5 [&_h2]:text-white [&_h2]:font-semibold [&_h2]:text-sm [&_h2]:mb-2 [&_h2]:mt-3 [&_h3]:text-[#D4AF37]/80 [&_h3]:font-semibold [&_h3]:text-xs [&_h3]:mb-2 [&_h3]:mt-3"
+
 const journalTemplates: JournalTemplate[] = [
   {
     id: 'trading-analysis',
@@ -573,6 +576,45 @@ const journalTemplates: JournalTemplate[] = [
 <hr>
 
 <p>Create any structure you need for your trading journal, research notes, or analysis.</p>`
+  },
+  {
+    id: 'daily-review',
+    name: 'Daily Review',
+    description: 'Daily desk review — PM notes, watchlist, exec & recap',
+    icon: <FileText className="h-4 w-4" />,
+    category: 'analysis',
+    fields: [
+      { id: 'dayPnl', label: 'Day P&L ($)', type: 'number', placeholder: '0.00', required: true },
+      { id: 'mood', label: 'Market Mood', type: 'select', options: ['Risk-On', 'Risk-Off', 'Choppy', 'Volatile', 'Trend Day'], defaultValue: 'Risk-On', required: true },
+    ],
+    contentTemplate: `<h1>PM Notes</h1>
+<ul>
+<li>SPY / QQQ levels:</li>
+<li>Catalysts &amp; news:</li>
+<li>Overall bias for the day:</li>
+</ul>
+
+<h1>Trade Watchlist</h1>
+<ul>
+<li>Ticker — key level &amp; trigger:</li>
+<li>Ticker — key level &amp; trigger:</li>
+<li>Ticker — key level &amp; trigger:</li>
+</ul>
+
+<h1>Exec</h1>
+<ul>
+<li>Trades taken &amp; sizing:</li>
+<li>Fills &amp; slippage:</li>
+<li>Risk used / stops hit:</li>
+</ul>
+
+<h1>Daily Review</h1>
+<ul>
+<li>What worked:</li>
+<li>What to fix:</li>
+<li>Key lesson:</li>
+<li>Tomorrow's action item:</li>
+</ul>`
   }
 ]
 
@@ -604,7 +646,7 @@ export function JournalEntryCard({ entry, onEdit, onDelete }: JournalEntryCardPr
   const [isExpanded, setIsExpanded] = useState(false)
 
   return (
-    <div data-testid="journal-entry-card" className="studio-surface rounded-lg p-6 hover:bg-[#0f0f0f] transition-colors">
+    <div data-testid="journal-entry-card" className="studio-surface rounded-lg p-6 border-l-2 border-[#D4AF37]/40 hover:border-[#D4AF37] transition-colors">
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1">
@@ -691,16 +733,16 @@ export function JournalEntryCard({ entry, onEdit, onDelete }: JournalEntryCardPr
         ))}
       </div>
 
-      {/* Trade Details */}
+      {/* Details */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <div>
-          <div className="text-xs studio-muted">Setup</div>
-          <div className="text-sm studio-text">{entry.setup}</div>
+          <div className="text-[10px] uppercase tracking-wider font-bold text-[#555570]">Setup</div>
+          <div className="text-sm studio-text mt-1">{entry.setup}</div>
         </div>
         <div>
-          <div className="text-xs studio-muted">Bias</div>
+          <div className="text-[10px] uppercase tracking-wider font-bold text-[#555570]">Bias</div>
           <div className={cn(
-            'text-sm font-medium',
+            'text-sm font-medium mt-1',
             entry.bias === 'Long' ? 'text-trading-profit' :
             entry.bias === 'Short' ? 'text-trading-loss' : 'text-trading-neutral'
           )}>
@@ -708,16 +750,14 @@ export function JournalEntryCard({ entry, onEdit, onDelete }: JournalEntryCardPr
           </div>
         </div>
         <div>
-          <div className="text-xs studio-muted">Emotion</div>
-          <div className="text-sm capitalize studio-text">{entry.emotion}</div>
+          <div className="text-[10px] uppercase tracking-wider font-bold text-[#555570]">Emotion</div>
+          <div className="text-sm capitalize studio-text mt-1">{entry.emotion}</div>
         </div>
         <div>
-          <div className="text-xs studio-muted">Category</div>
-          <div className={cn(
-            'text-sm capitalize font-medium',
-            entry.category === 'win' ? 'text-trading-profit' : 'text-trading-loss'
-          )}>
-            {entry.category}
+          <div className="text-[10px] uppercase tracking-wider font-bold text-[#555570]">Result</div>
+          <div className="flex items-center gap-1.5 mt-1">
+            <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', entry.category === 'win' ? 'bg-trading-profit' : 'bg-trading-loss')} />
+            <span className="text-sm capitalize studio-text">{entry.category}</span>
           </div>
         </div>
       </div>
@@ -727,12 +767,12 @@ export function JournalEntryCard({ entry, onEdit, onDelete }: JournalEntryCardPr
         <div className="text-sm studio-text">
           {isExpanded ? (
             <div
-              className="[&_p]:mb-3 [&_p]:text-gray-300 [&_p]:leading-relaxed [&_strong]:text-white [&_strong]:font-bold [&_em]:text-gray-400 [&_em]:italic [&_ul]:ml-4 [&_ul]:mb-3 [&_ul]:list-disc [&_ul]:text-gray-300 [&_li]:mb-1 [&_li]:text-gray-300 [&_h1]:text-white [&_h1]:font-semibold [&_h1]:text-base [&_h1]:mb-2 [&_h1]:mt-4 [&_h2]:text-white [&_h2]:font-semibold [&_h2]:text-sm [&_h2]:mb-2 [&_h2]:mt-3 [&_h3]:text-white [&_h3]:font-medium [&_h3]:text-sm [&_h3]:mb-2 [&_h3]:mt-3"
+              className={PROSE_CLS}
               dangerouslySetInnerHTML={{ __html: entry.content }}
             />
           ) : (
             <div
-              className="line-clamp-3 [&_p]:mb-3 [&_p]:text-gray-300 [&_p]:leading-relaxed [&_strong]:text-white [&_strong]:font-bold [&_em]:text-gray-400 [&_em]:italic [&_ul]:ml-4 [&_ul]:mb-3 [&_ul]:list-disc [&_ul]:text-gray-300 [&_li]:mb-1 [&_li]:text-gray-300 [&_h1]:text-white [&_h1]:font-semibold [&_h1]:text-base [&_h1]:mb-2 [&_h1]:mt-4 [&_h2]:text-white [&_h2]:font-semibold [&_h2]:text-sm [&_h2]:mb-2 [&_h2]:mt-3 [&_h3]:text-white [&_h3]:font-medium [&_h3]:text-sm [&_h3]:mb-2 [&_h3]:mt-3"
+              className={`line-clamp-3 ${PROSE_CLS}`}
               dangerouslySetInnerHTML={{
                 __html: entry.content.length > 300
                   ? entry.content.substring(0, 300) + '...'

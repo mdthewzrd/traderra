@@ -153,6 +153,26 @@ function EnhancedJournalContent({
           template: tradeData.template || '',
           createdAt: item.created_at
         })
+      } else if (item.type === 'daily_review' && item.content) {
+        const d = item.content.doc_data || {}
+        const dayPnl = typeof d.dayPnl === 'number' ? d.dayPnl : parseFloat(d.dayPnl || 0)
+        entries.push({
+          id: item.id,
+          date: (d.date || item.created_at || new Date().toISOString()).split('T')[0],
+          title: item.title,
+          strategy: 'Daily Review',
+          side: 'N/A',
+          setup: d.mood || '—',
+          bias: 'Neutral',
+          pnl: dayPnl || 0,
+          rating: 3,
+          tags: item.tags,
+          content: d.sections || '',
+          emotion: 'neutral',
+          category: dayPnl >= 0 ? 'win' : 'loss',
+          template: 'daily-review',
+          createdAt: item.created_at
+        })
       }
     })
 
@@ -227,28 +247,45 @@ function EnhancedJournalContent({
 
   const handleSaveEntry = useCallback(async (newEntry: any) => {
     try {
+      const isDailyReview = newEntry.template === 'daily-review'
+      const tagsArr = Array.isArray(newEntry.tags)
+        ? newEntry.tags
+        : (typeof newEntry.tags === 'string' ? newEntry.tags.split(',').map((tag: string) => tag.trim()).filter(Boolean) : [])
+
       // Create as content item in selected folder
       await createContent(
         newEntry.title,
-        'trade_entry',
+        isDailyReview ? 'daily_review' : 'trade_entry',
         selectedFolderId,
-        {
-          content: {
-            trade_data: {
-              symbol: newEntry.symbol,
-              side: newEntry.side,
-              entry_price: parseFloat(newEntry.entryPrice),
-              exit_price: parseFloat(newEntry.exitPrice),
-              pnl: parseFloat(newEntry.pnl),
-              rating: newEntry.rating,
-              emotion: newEntry.emotion,
-              category: newEntry.category,
-              setup_analysis: newEntry.content
-            },
-            blocks: [] // For future rich text editor
-          },
-          tags: newEntry.tags.split(',').map((tag: string) => tag.trim())
-        }
+        isDailyReview
+          ? {
+              content: {
+                doc_data: {
+                  date: newEntry.date,
+                  dayPnl: parseFloat(newEntry.dayPnl || '0'),
+                  mood: newEntry.mood,
+                  sections: newEntry.content
+                }
+              },
+              tags: tagsArr
+            }
+          : {
+              content: {
+                trade_data: {
+                  symbol: newEntry.symbol,
+                  side: newEntry.side,
+                  entry_price: parseFloat(newEntry.entryPrice),
+                  exit_price: parseFloat(newEntry.exitPrice),
+                  pnl: parseFloat(newEntry.pnl),
+                  rating: newEntry.rating,
+                  emotion: newEntry.emotion,
+                  category: newEntry.category,
+                  setup_analysis: newEntry.content
+                },
+                blocks: [] // For future rich text editor
+              },
+              tags: tagsArr
+            }
       )
 
       setShowNewEntryModal(false)

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+
 import { cn } from '@/lib/utils'
 import { usePnLMode } from '@/contexts/TraderraContext'
 import { useComponentRegistry } from '@/lib/ag-ui/component-registry'
@@ -11,22 +11,12 @@ interface PnLModeToggleProps {
 
 export function PnLModeToggle({ className }: PnLModeToggleProps) {
   const { pnlMode, setPnLMode, isGrossPnL, isNetPnL } = usePnLMode()
-  const [forceUpdate, setForceUpdate] = useState(0)
 
-  // Register P&L mode component with AG-UI registry
+  // Register with AG-UI registry — call setPnLMode directly (no hacks).
   useComponentRegistry('pnl-mode', {
-    setState: (state) => {
-      console.log('🎯 PnLModeToggle received state change:', state)
-      if (state === 'gross' || state === 'net') {
-        console.log('🎯 PnLModeToggle setting mode to:', state)
-        // Force a re-render by updating state
-        setForceUpdate(prev => prev + 1)
-        // Use setTimeout to ensure the state update happens after the current render cycle
-        setTimeout(() => {
-          setPnLMode(state)
-        }, 0)
-      }
-    }
+    setState: (state: string) => {
+      if (state === 'gross' || state === 'net') setPnLMode(state)
+    },
   })
 
   return (

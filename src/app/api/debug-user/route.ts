@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET() {
   try {
-    const { userId } = getAuthUserId(request)
+    const userId = await getAuthUserId(request)
 
     // Get trade counts for this user
     const tradeCount = userId ? await prisma.trade.count({

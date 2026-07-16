@@ -15,7 +15,14 @@ function extractTokenFromHeaders(h?: Headers | null): string | null {
   if (authHeader?.startsWith('Bearer ')) return authHeader.slice(7).trim()
   const cookie = h.get('cookie') || ''
   const m = cookie.match(/better-auth\.session_token=([^;\s]+)/)
-  if (m) return decodeURIComponent(m[1])
+  if (m) {
+    // better-auth cookie format is "token.signature" — the session table
+    // stores only the token half, so strip the signature suffix before lookup.
+    let val = decodeURIComponent(m[1])
+    const dot = val.indexOf('.')
+    if (dot > 0) val = val.slice(0, dot)
+    return val
+  }
   return null
 }
 

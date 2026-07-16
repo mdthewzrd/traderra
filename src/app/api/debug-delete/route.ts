@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 export async function DELETE() {
   try {
-    const { userId } = getAuthUserId(request)
+    const userId = await getAuthUserId(request)
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

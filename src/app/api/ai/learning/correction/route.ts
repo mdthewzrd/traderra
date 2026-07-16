@@ -5,7 +5,7 @@ import { prisma } from '../../../../../lib/prisma'
 // Learning correction API for storing user rules and preferences
 export async function POST(request: Request) {
   try {
-    const { userId } = getAuthUserId(request)
+    const userId = await getAuthUserId(request)
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
 // GET endpoint to retrieve active learning rules
 export async function GET(request: Request) {
   try {
-    const { userId } = getAuthUserId(request)
+    const userId = await getAuthUserId(request)
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -135,7 +135,7 @@ export async function GET(request: Request) {
 // PATCH endpoint to update rule usage and confidence
 export async function PATCH(request: Request) {
   try {
-    const { userId } = getAuthUserId(request)
+    const userId = await getAuthUserId(request)
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

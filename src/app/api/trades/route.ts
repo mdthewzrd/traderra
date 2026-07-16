@@ -157,7 +157,7 @@ export async function GET(request: Request) {
   try {
     console.log('🔍 API /trades called - NODE_ENV:', process.env.NODE_ENV)
 
-    const { userId } = getAuthUserId(request)
+    const userId = await getAuthUserId(request)
     console.log('🔐 Auth check - userId:', userId ? `authenticated (${userId})` : 'not authenticated')
 
     // Parse URL for query parameters
@@ -193,7 +193,7 @@ export async function GET(request: Request) {
 // POST /api/trades - Save multiple trades for the authenticated user
 export async function POST(request: Request) {
   try {
-    const { userId } = getAuthUserId(request)
+    const userId = await getAuthUserId(request)
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -261,7 +261,7 @@ export async function POST(request: Request) {
 export async function DELETE() {
   try {
     console.log('🗑️ DELETE /api/trades called')
-    const { userId } = getAuthUserId(request)
+    const userId = await getAuthUserId(request)
     console.log('🔐 Auth userId:', userId)
 
     if (!userId) {

@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react'
 import { AppLayout } from '@/components/layout/app-layout'
+import { TraderraSubNav } from '@/components/layout/traderra-sub-nav'
 import { useAuth } from '@/lib/auth-client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
@@ -374,7 +375,7 @@ function EnhancedJournalContent({
 
       {/* Loading Overlay */}
       {(isCreating || isUpdating || isDeleting) && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
           <div className="bg-[#1a1a1a] rounded-lg p-6 text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
             <p className="text-sm studio-text">
@@ -405,7 +406,8 @@ export default function EnhancedJournalPage() {
     <QueryClientProvider client={queryClient}>
       <AppLayout
         pageClassName="min-h-screen"
-        showPageHeader={false}
+        showPageHeader={true}
+        pageHeaderContent={<TraderraSubNav />}
       >
         {!isLoaded ? (
           <div className="flex items-center justify-center h-[60vh] text-zinc-500">Loading your journal…</div>

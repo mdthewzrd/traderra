@@ -1155,7 +1155,7 @@ export function NewEntryModal({ isOpen, onClose, onSave, editingEntry }: NewEntr
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
+    <div className="fixed inset-0 z-[100] overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen px-4 py-8">
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 

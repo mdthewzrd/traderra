@@ -84,14 +84,9 @@ export function ChatProvider({ children }: ChatProviderProps) {
   const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
-  // Sidebar and status state with localStorage persistence
-  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('traderra-sidebar-open')
-      return saved ? JSON.parse(saved) : false
-    }
-    return true
-  })
+  // Sidebar permanently removed (2026-07-15). Force false so no component
+  // reserves the 480px right gutter anymore.
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>(() => {
     if (typeof window !== 'undefined') {

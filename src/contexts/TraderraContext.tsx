@@ -387,21 +387,8 @@ export function TraderraProvider({ children }: TraderraProviderProps) {
   // ========================================
   // CHAT STATE
   // ========================================
-  const [isSidebarOpen, setIsSidebarOpenState] = useState(() => {
-    // Initialize from localStorage to avoid race condition
-    if (typeof window !== 'undefined') {
-      try {
-        const savedChatPreferences = localStorage.getItem('traderra_chat_preferences')
-        if (savedChatPreferences) {
-          const parsed = JSON.parse(savedChatPreferences)
-          return parsed.isSidebarOpen !== undefined ? parsed.isSidebarOpen : false
-        }
-      } catch (error) {
-        console.warn('Failed to load chat preferences from localStorage:', error)
-      }
-    }
-    return true // Default to open
-  })
+  // Sidebar permanently removed (2026-07-15). Force false — no 480px gutter.
+  const [isSidebarOpen, setIsSidebarOpenState] = useState(false)
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
   const [chatLoaded, setChatLoaded] = useState(false) // Track when localStorage loading completes

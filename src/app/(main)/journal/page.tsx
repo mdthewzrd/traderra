@@ -352,7 +352,7 @@ function EnhancedJournalContent({
       <div className="space-y-6">
         {/* Journal Statistics */}
         <div id="journal-stats-section">
-          <JournalStats />
+          <JournalStats entries={displayEntries as any} />
         </div>
 
         {/* Results Summary */}

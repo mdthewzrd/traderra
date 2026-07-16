@@ -890,7 +890,8 @@ export function JournalFilters({ filters, onFiltersChange }: JournalFiltersProps
   )
 }
 
-export function JournalStats() {
+export function JournalStats({ entries = [] }: { entries?: JournalEntry[] }) {
+  const allEntries = entries.length > 0 ? entries : []
   const now = new Date()
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
@@ -899,7 +900,7 @@ export function JournalStats() {
   // Helper function to calculate metrics for a time period
   const calculatePeriodStats = (daysBack: number) => {
     const cutoffDate = new Date(now.getTime() - daysBack * 24 * 60 * 60 * 1000)
-    const periodEntries = mockJournalEntries.filter(entry =>
+    const periodEntries = allEntries.filter(entry =>
       new Date(entry.date) >= cutoffDate
     )
 
@@ -923,9 +924,9 @@ export function JournalStats() {
   const stats30d = calculatePeriodStats(30)
   const stats90d = calculatePeriodStats(90)
 
-  const totalEntries = mockJournalEntries.length
-  const totalPnL = mockJournalEntries.reduce((sum, entry) => sum + entry.pnl, 0)
-  const avgRating = totalEntries > 0 ? mockJournalEntries.reduce((sum, entry) => sum + entry.rating, 0) / totalEntries : 0
+  const totalEntries = allEntries.length
+  const totalPnL = allEntries.reduce((sum, entry) => sum + entry.pnl, 0)
+  const avgRating = totalEntries > 0 ? allEntries.reduce((sum, entry) => sum + entry.rating, 0) / totalEntries : 0
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">

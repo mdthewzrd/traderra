@@ -10,13 +10,11 @@ import { useComponentRegistry, type ScrollBehavior } from '@/lib/ag-ui/component
 import { JournalLayout } from '@/components/journal/JournalLayout'
 import {
   JournalEntryCard,
-  JournalStats,
   NewEntryModal,
   mockJournalEntries
 } from '@/components/journal/journal-components'
 import { useFolderTree, useFolderContent, useFolderDragDrop } from '@/hooks/useFolders'
 import { FolderNode } from '@/components/folders/FolderTree'
-import { cn } from '@/lib/utils'
 
 // Create a query client for React Query
 const queryClient = new QueryClient({
@@ -29,19 +27,21 @@ const queryClient = new QueryClient({
 })
 
 interface EnhancedJournalContentProps {
-  selectedFolderId?: string
   searchQuery?: string
   filters?: any
 }
 
 function EnhancedJournalContent({
-  selectedFolderId,
   searchQuery,
   filters
 }: EnhancedJournalContentProps) {
   // Real authenticated user (parent gates rendering to signed-in users only)
   const { userId: authUserId } = useAuth()
   const userId = authUserId || ''
+
+  // Selected folder is owned here so the sidebar (JournalLayout) and the
+  // content list share ONE source of truth.
+  const [selectedFolderId, setSelectedFolderId] = useState<string>()
 
   // Folder and content management
   const {
@@ -74,7 +74,6 @@ function EnhancedJournalContent({
 
   // UI state
   const [showNewEntryModal, setShowNewEntryModal] = useState(false)
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
 
   // Register journal components with AG-UI registry
   useComponentRegistry('journal.new-entry-modal', {
@@ -347,14 +346,16 @@ function EnhancedJournalContent({
   }
 
   return (
-    <>
-      {/* Main Content */}
-      <div className="space-y-6">
-        {/* Journal Statistics */}
-        <div id="journal-stats-section">
-          <JournalStats entries={displayEntries as any} />
-        </div>
-
+    <JournalLayout
+      folders={folders as any}
+      foldersLoading={foldersLoading}
+      selectedFolderId={selectedFolderId}
+      onFolderSelect={setSelectedFolderId}
+      onCreateFolder={(name) => createFolder(name || 'New Folder', selectedFolderId)}
+      showNewEntryButton
+      onNewEntry={() => setShowNewEntryModal(true)}
+    >
+      <div className="space-y-4">
         {/* Results Summary */}
         <div className="flex items-center justify-between">
           <div className="text-sm studio-muted">
@@ -372,12 +373,9 @@ function EnhancedJournalContent({
           )}
         </div>
 
-        {/* Journal Entries */}
+        {/* Journal Entries — doc-focused single column */}
         <div id="journal-entries-section">
-          <div className={cn(
-            'gap-6',
-            viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3' : 'space-y-6'
-          )}>
+          <div className="space-y-6">
           {filteredEntries.length > 0 ? (
             filteredEntries.map((entry) => (
               <JournalEntryCard
@@ -389,7 +387,7 @@ function EnhancedJournalContent({
               />
             ))
           ) : (
-            <div className="studio-surface rounded-lg p-12 text-center col-span-full">
+            <div className="studio-surface rounded-lg p-12 text-center">
               <div className="text-6xl mb-4">📁</div>
               <h3 className="text-lg font-semibold studio-text mb-2">
                 {selectedFolder ? (
@@ -441,21 +439,12 @@ function EnhancedJournalContent({
           </div>
         </div>
       )}
-    </>
+    </JournalLayout>
   )
 }
 
 export default function EnhancedJournalPage() {
   const { isLoaded, isSignedIn } = useAuth()
-  const [selectedFolderId, setSelectedFolderId] = useState<string>()
-  const [searchQuery, setSearchQuery] = useState('')
-  const [filters, setFilters] = useState({
-    search: '',
-    category: '',
-    emotion: '',
-    symbol: '',
-    rating: 0
-  })
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -469,15 +458,7 @@ export default function EnhancedJournalPage() {
             <a href="/sign-in" className="mt-2 px-5 py-2 rounded-lg bg-amber-500 text-zinc-950 font-semibold hover:bg-amber-400 transition-colors">Sign in</a>
           </div>
         ) : (
-        <div className="flex-1 flex h-full">
-          <JournalLayout>
-            <EnhancedJournalContent
-              selectedFolderId={selectedFolderId}
-                searchQuery={searchQuery}
-                filters={filters}
-              />
-          </JournalLayout>
-        </div>
+          <EnhancedJournalContent />
         )}
       </AppLayout>
       <Toaster

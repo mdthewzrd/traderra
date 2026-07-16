@@ -168,7 +168,7 @@ function cacheAndReturn(cacheKey: string, dateRange: DateRange): DateRange {
   return dateRange
 }
 
-function getDateRange(range: DateRangeOption | LegacyDateRange, customStart?: Date | null, customEnd?: Date | null): DateRange {
+export function getDateRange(range: DateRangeOption | LegacyDateRange, customStart?: Date | null, customEnd?: Date | null): DateRange {
   const now = new Date()
   const cacheKey = `${range}-${customStart?.toISOString()}-${customEnd?.toISOString()}`
   console.log('[GET DATE RANGE] Called with:', {

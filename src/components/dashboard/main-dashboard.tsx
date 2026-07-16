@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, lazy, Suspense } from 'react'
+import { useState, useMemo, lazy, Suspense } from 'react'
 import { AppLayout } from '../layout/app-layout'
 import { CalendarRow } from './calendar-row'
 import { MetricsWithToggles } from './metric-toggles'
@@ -12,7 +12,7 @@ import { TabbedWidget } from './tabbed-widget'
 import { StandaloneRenataChat } from '@/components/chat/standalone-renata-chat'
 import { BarChart3, Clock, Calendar, TrendingUp, Target, Activity } from 'lucide-react'
 import { useTrades } from '@/hooks/useTrades'
-import { useDateRange } from '@/contexts/TraderraContext'
+import { useDateRange, getDateRange } from '@/contexts/TraderraContext'
 
 // PERFORMANCE: Dynamic imports for heavy chart components to reduce initial bundle size
 // These load only when the dashboard is rendered, not on initial page load
@@ -131,8 +131,18 @@ export function MainDashboard() {
 
   // Load trade data and apply date filtering
   const { trades, isLoading: tradesLoading, error: tradesError } = useTrades()
-  const { getFilteredData } = useDateRange()
-  const filteredTrades = getFilteredData(trades || [])
+  const { selectedRange, customStartDate, customEndDate } = useDateRange()
+  // Single-source filtering: derive the range from the primitive selectedRange so the
+  // filtered set updates the instant a date button is clicked (no object-identity chain).
+  const filteredTrades = useMemo(() => {
+    if (!trades?.length) return []
+    const { start, end } = getDateRange(selectedRange, customStartDate, customEndDate)
+    return (trades as any[]).filter(t => {
+      const d = new Date(t.date ?? t.timestamp ?? t.createdAt)
+      if (isNaN(d.getTime())) return true
+      return d >= start && d <= end
+    })
+  }, [trades, selectedRange, customStartDate, customEndDate])
 
   // CopilotKit action hooks removed - calendar actions now handled directly via simplified chat API
 

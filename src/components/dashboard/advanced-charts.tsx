@@ -522,7 +522,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 }
 
 export function AdvancedEquityChart({ trades }: { trades: TraderraTrade[] }) {
-  const { getFilteredData, getDateRangeLabel } = useDateRange()
+  const { getDateRangeLabel } = useDateRange()
   const { displayMode } = useDisplayMode()
   const { mode } = usePnLMode()
 
@@ -531,7 +531,7 @@ export function AdvancedEquityChart({ trades }: { trades: TraderraTrade[] }) {
     if (!trades || trades.length === 0) return []
 
     // First filter trades by date range, then process
-    const dateFilteredTrades = getFilteredData(trades) || []
+    const dateFilteredTrades = trades || []
 
     // Sort trades by date
     const sortedTrades = [...dateFilteredTrades].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
@@ -583,7 +583,7 @@ export function AdvancedEquityChart({ trades }: { trades: TraderraTrade[] }) {
     }
 
     return data
-  }, [trades, mode, getFilteredData, displayMode]) // Re-calculate when trades, PnL mode, date range, or display mode changes
+  }, [trades, mode, displayMode]) // Re-calculate when trades, PnL mode, date range, or display mode changes
 
   const filteredData = equityData // Data is already filtered
 
@@ -657,7 +657,7 @@ export function AdvancedEquityChart({ trades }: { trades: TraderraTrade[] }) {
 }
 
 export function PerformanceDistributionChart({ trades }: { trades: TraderraTrade[] }) {
-  const { getFilteredData, getDateRangeLabel } = useDateRange()
+  const { getDateRangeLabel } = useDateRange()
   const { displayMode } = useDisplayMode()
   const { mode } = usePnLMode()
 
@@ -666,7 +666,7 @@ export function PerformanceDistributionChart({ trades }: { trades: TraderraTrade
     if (!trades || trades.length === 0) return []
 
     // First filter trades by date range, then process
-    const dateFilteredTrades = getFilteredData(trades) || []
+    const dateFilteredTrades = trades || []
 
     // Group trades by date and sum both P&L and R-multiples using correct mode (gross vs net)
     const dailyData = dateFilteredTrades.reduce((acc: { [key: string]: { pnl: number; rMultiple: number; trades: number } }, trade) => {
@@ -690,7 +690,7 @@ export function PerformanceDistributionChart({ trades }: { trades: TraderraTrade
         trades: data.trades
       }))
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-  }, [trades, mode, getFilteredData]) // Re-calculate when trades, PnL mode, or date range changes
+  }, [trades, mode]) // Re-calculate when trades, PnL mode, or date range changes
 
   // Validate data (already filtered by date range)
   const validatedData = validateDataConsistency(dailyPnLData, 3)
@@ -831,7 +831,7 @@ export function WinLossChart() {
 
 export function SymbolPerformanceChart({ trades }: { trades: TraderraTrade[] }) {
   const [showWins, setShowWins] = useState(true)
-  const { getDateRangeLabel, getFilteredData } = useDateRange()
+  const { getDateRangeLabel } = useDateRange()
   const { displayMode } = useDisplayMode()
   const { mode } = usePnLMode()
 
@@ -851,7 +851,7 @@ export function SymbolPerformanceChart({ trades }: { trades: TraderraTrade[] }) 
     if (!trades || trades.length === 0) return { winners: [], losers: [], all: [] }
 
     // First filter trades by date range, then process
-    const dateFilteredTrades = getFilteredData(trades) || []
+    const dateFilteredTrades = trades || []
 
     // Aggregate P&L and R-multiples by symbol from real trades
     const symbolPerformance = dateFilteredTrades.reduce((acc: { [key: string]: { symbol: string; pnl: number; rMultiple: number; trades: number } }, trade) => {
@@ -889,7 +889,7 @@ export function SymbolPerformanceChart({ trades }: { trades: TraderraTrade[] }) 
     })
 
     return { winners, losers, all: allSymbols }
-  }, [trades, mode, getFilteredData, displayMode, showWins]) // Re-calculate when trades, PnL mode, date range, display mode, or W/L filter changes
+  }, [trades, mode, displayMode, showWins]) // Re-calculate when trades, PnL mode, date range, display mode, or W/L filter changes
 
   const displayData = showWins ? symbolPerformanceData.winners : symbolPerformanceData.losers
 
@@ -969,7 +969,7 @@ export function SymbolPerformanceChart({ trades }: { trades: TraderraTrade[] }) 
 
 export function BiggestTradesChart({ trades }: { trades: TraderraTrade[] }) {
   const [showWins, setShowWins] = useState(true)
-  const { getDateRangeLabel, getFilteredData } = useDateRange()
+  const { getDateRangeLabel } = useDateRange()
   const { mode } = usePnLMode()
 
   // Convert real trade data to best/worst trades format with memoization
@@ -977,7 +977,7 @@ export function BiggestTradesChart({ trades }: { trades: TraderraTrade[] }) {
     if (!trades || trades.length === 0) return { bestTrades: [], worstTrades: [] }
 
     // First filter trades by date range, then process
-    const dateFilteredTrades = getFilteredData(trades) || []
+    const dateFilteredTrades = trades || []
 
     // Convert trades to the expected format and sort using correct mode (gross vs net)
     const formattedTrades = dateFilteredTrades.map(trade => {
@@ -1007,7 +1007,7 @@ export function BiggestTradesChart({ trades }: { trades: TraderraTrade[] }) {
       .slice(0, 15)
 
     return { bestTrades, worstTrades }
-  }, [trades, mode, getFilteredData]) // Re-calculate when trades, PnL mode, or date range changes
+  }, [trades, mode]) // Re-calculate when trades, PnL mode, or date range changes
 
   const currentData = showWins ? bestTrades : worstTrades
 

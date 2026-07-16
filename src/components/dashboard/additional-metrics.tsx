@@ -33,12 +33,11 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 // Performance by Day of Week - Fixed logic
 export function DayOfWeekChart({ trades }: { trades: TraderraTrade[] }) {
-  const { getFilteredData } = useDateRange()
   const { displayMode } = useDisplayMode()
   const { mode } = usePnLMode()
 
   const dayOfWeekData = useMemo(() => {
-    const filteredTrades = getFilteredData(trades)
+    const filteredTrades = trades || []
 
     const dayStats = {
       'Monday': { pnl: 0, rMultiple: 0, trades: 0 },
@@ -113,7 +112,7 @@ export function DayOfWeekChart({ trades }: { trades: TraderraTrade[] }) {
         : `$${dayStats[day].pnl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       trades: dayStats[day].trades
     }))
-  }, [trades, getFilteredData, displayMode, mode])
+  }, [trades, displayMode, mode])
 
   const formatValue = (value: number) => {
     if (displayMode === 'r') {
@@ -175,7 +174,6 @@ export function DayOfWeekChart({ trades }: { trades: TraderraTrade[] }) {
 
 // Performance by Month - Very valuable for tracking long-term trends
 export function MonthlyPerformanceChart({ trades }: { trades: TraderraTrade[] }) {
-  const { getFilteredData } = useDateRange()
   const { displayMode } = useDisplayMode()
   const { mode } = usePnLMode()
 
@@ -280,12 +278,11 @@ export function MonthlyPerformanceChart({ trades }: { trades: TraderraTrade[] })
 
 // Performance by Stock Price - Like TraderVue's price buckets
 export function PerformanceByPriceChart({ trades }: { trades: TraderraTrade[] }) {
-  const { getFilteredData } = useDateRange()
   const { displayMode } = useDisplayMode()
   const { mode } = usePnLMode()
 
   const priceData = useMemo(() => {
-    const filteredTrades = getFilteredData(trades)
+    const filteredTrades = trades || []
 
     const priceBuckets = {
       '< $2.00': { pnl: 0, rMultiple: 0, trades: 0 },
@@ -331,7 +328,7 @@ export function PerformanceByPriceChart({ trades }: { trades: TraderraTrade[] })
           : `$${stats.pnl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
         trades: stats.trades
       }))
-  }, [trades, getFilteredData, displayMode, mode])
+  }, [trades, displayMode, mode])
 
   const maxAbsValue = Math.max(...priceData.map(d => Math.abs(d.value)))
 
@@ -380,12 +377,11 @@ export function PerformanceByPriceChart({ trades }: { trades: TraderraTrade[] })
 
 // Average Trade P&L by Position Size - TraderVue inspired metric
 export function PerformanceByPositionSizeChart({ trades }: { trades: TraderraTrade[] }) {
-  const { getFilteredData } = useDateRange()
   const { displayMode } = useDisplayMode()
   const { mode } = usePnLMode()
 
   const positionSizeData = useMemo(() => {
-    const filteredTrades = getFilteredData(trades)
+    const filteredTrades = trades || []
 
     const sizeBuckets = {
       '0 - 49': { pnl: 0, rMultiple: 0, trades: 0 },
@@ -440,7 +436,7 @@ export function PerformanceByPositionSizeChart({ trades }: { trades: TraderraTra
       })
 
     return result
-  }, [trades, getFilteredData, displayMode, mode])
+  }, [trades, displayMode, mode])
 
   const maxAbsValue = Math.max(...positionSizeData.map(d => Math.abs(d.totalValue)))
 
@@ -489,13 +485,12 @@ export function PerformanceByPositionSizeChart({ trades }: { trades: TraderraTra
 
 // Performance by Tag - Shows which strategies/setups are most profitable
 export function WinRateAnalysisChart({ trades }: { trades: TraderraTrade[] }) {
-  const { getFilteredData } = useDateRange()
   const { displayMode } = useDisplayMode()
   const { mode } = usePnLMode()
   const [sortDirection, setSortDirection] = useState<'desc' | 'asc'>('desc') // desc = highest first, asc = lowest first
 
   const tagData = useMemo(() => {
-    const filteredTrades = getFilteredData(trades)
+    const filteredTrades = trades || []
 
     // Aggregate performance by tags/strategies
     const tagStats: { [key: string]: { pnl: number, rMultiple: number, trades: number, wins: number } } = {}
@@ -570,7 +565,7 @@ export function WinRateAnalysisChart({ trades }: { trades: TraderraTrade[] }) {
           ? b.totalValue - a.totalValue  // Highest first (biggest winners first)
           : a.totalValue - b.totalValue  // Lowest first (biggest losers first)
       })
-  }, [trades, getFilteredData, displayMode, mode, sortDirection])
+  }, [trades, displayMode, mode, sortDirection])
 
   const maxAbsValue = Math.max(...tagData.map(d => Math.abs(d.totalValue)))
 

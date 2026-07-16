@@ -44,7 +44,7 @@ export function RequestInbox() {
 
   const loadReqs = useCallback(async () => {
     try {
-      const r = await fetch('/api/requests?project=traderra', { cache: 'no-store' })
+      const r = await fetch('/api/requests?project=edge-dev', { cache: 'no-store' })
       if (r.ok) setReqs(await r.json())
     } catch { /* bridge may be down — badge stays quiet */ }
   }, [])
@@ -124,14 +124,7 @@ export function RequestInbox() {
     <>
       {/* Modal */}
       {open && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => setOpen(false)}
-        >
-          <div
-            className="w-full max-w-lg overflow-hidden rounded-xl border border-zinc-700/80 bg-zinc-900 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed top-16 right-0 bottom-0 z-50 flex w-full max-w-[400px] flex-col overflow-y-auto border-l border-zinc-800 bg-zinc-900 shadow-2xl">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
               <div className="flex items-center gap-2">
@@ -236,8 +229,7 @@ export function RequestInbox() {
                 )}
               </>
             )}
-          </div>
-        </div>
+      </div>
       )}
     </>
   )

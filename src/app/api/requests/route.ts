@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     const payload = {
       type: 'feature',
       priority: 'normal',
-      project: 'traderra',
+      project: 'edge-dev',
       triaged_by: 'human',
       ...body,
     }

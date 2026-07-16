@@ -295,9 +295,27 @@ function EnhancedJournalContent({
   }, [createContent, selectedFolderId])
 
   const handleEditEntry = useCallback((entry: any) => {
-    // TODO: Implement edit functionality
+    // Inline editing handled by the card's own edit mode
     console.log('Edit entry:', entry)
   }, [])
+
+  // Save inline body edits — PUT replaces the whole content object, so rebuild it
+  // from the raw content item with only the body field changed.
+  const handleUpdateBody = useCallback(async (id: string, html: string) => {
+    const item = contentItems.find((c: any) => c.id === id)
+    if (!item) return
+    const content = { ...(item.content || {}) }
+    if (item.type === 'daily_review') {
+      content.doc_data = { ...(content.doc_data || {}), sections: html }
+    } else {
+      content.trade_data = { ...(content.trade_data || {}), setup_analysis: html }
+    }
+    try {
+      await updateContent(id, { content })
+    } catch (error) {
+      console.error('Failed to update entry body:', error)
+    }
+  }, [contentItems, updateContent])
 
   const handleDeleteEntry = useCallback(async (id: string) => {
     try {
@@ -367,6 +385,7 @@ function EnhancedJournalContent({
                 entry={entry as any}
                 onEdit={handleEditEntry}
                 onDelete={handleDeleteEntry}
+                onUpdateBody={handleUpdateBody}
               />
             ))
           ) : (

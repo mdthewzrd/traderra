@@ -640,10 +640,13 @@ interface JournalEntryCardProps {
   entry: JournalEntry
   onEdit: (entry: JournalEntry) => void
   onDelete: (id: string) => void
+  onUpdateBody?: (id: string, html: string) => void
 }
 
-export function JournalEntryCard({ entry, onEdit, onDelete }: JournalEntryCardProps) {
+export function JournalEntryCard({ entry, onEdit, onDelete, onUpdateBody }: JournalEntryCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [draft, setDraft] = useState(entry.content)
 
   return (
     <div data-testid="journal-entry-card" className="studio-surface rounded-lg p-6 border-l-2 border-[#D4AF37]/40 hover:border-[#D4AF37] transition-colors">
@@ -703,9 +706,9 @@ export function JournalEntryCard({ entry, onEdit, onDelete }: JournalEntryCardPr
         <div className="flex items-center space-x-2">
           <button
             data-testid="edit-journal-entry"
-            onClick={() => onEdit(entry)}
+            onClick={() => { setDraft(entry.content); setIsExpanded(true); setIsEditing(true) }}
             className="p-2 hover:bg-[#1a1a1a] rounded transition-colors"
-            title="Edit entry"
+            title="Edit body inline"
           >
             <Edit className="h-4 w-4 studio-muted hover:studio-text" />
           </button>
@@ -762,34 +765,49 @@ export function JournalEntryCard({ entry, onEdit, onDelete }: JournalEntryCardPr
         </div>
       </div>
 
-      {/* Content Preview */}
+      {/* Content — click pencil to edit inline */}
       <div className="mb-4">
-        <div className="text-sm studio-text">
-          {isExpanded ? (
-            <div
-              className={PROSE_CLS}
-              dangerouslySetInnerHTML={{ __html: entry.content }}
+        {isEditing ? (
+          <div className="space-y-3">
+            <RichTextEditor
+              value={draft}
+              onChange={setDraft}
+              placeholder="Write your review, notes, and observations..."
             />
-          ) : (
-            <div
-              className={`line-clamp-3 ${PROSE_CLS}`}
-              dangerouslySetInnerHTML={{
-                __html: entry.content.length > 300
-                  ? entry.content.substring(0, 300) + '...'
-                  : entry.content
-              }}
-            />
-          )}
-        </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { onUpdateBody?.(entry.id, draft); setIsEditing(false) }}
+                className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => { setDraft(entry.content); setIsEditing(false) }}
+                className="px-4 py-2 rounded-md text-sm font-medium studio-muted hover:studio-text transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="text-sm studio-text">
+            {isExpanded ? (
+              <div className={PROSE_CLS} dangerouslySetInnerHTML={{ __html: entry.content }} />
+            ) : (
+              <div className={`line-clamp-3 ${PROSE_CLS}`} dangerouslySetInnerHTML={{ __html: entry.content.length > 300 ? entry.content.substring(0, 300) + '...' : entry.content }} />
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Expand/Collapse Button */}
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="text-sm text-primary hover:text-primary/80 transition-colors"
-      >
-        {isExpanded ? 'Show Less' : 'Read More'}
-      </button>
+      {!isEditing && (
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="text-sm text-primary hover:text-primary/80 transition-colors"
+        >
+          {isExpanded ? 'Show Less' : 'Read More'}
+        </button>
+      )}
     </div>
   )
 }
@@ -1372,14 +1390,11 @@ export function NewEntryModal({ isOpen, onClose, onSave, editingEntry }: NewEntr
                   <p className="text-xs studio-muted">Separate tags with commas</p>
                 </div>
 
-                {/* Rich Text Content */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium studio-text">Content</label>
-                  <RichTextEditor
-                    value={formData.content || ''}
-                    onChange={(content) => setFormData({ ...formData, content })}
-                    placeholder="Write your analysis, notes, and observations..."
-                  />
+                {/* Body is authored inline on the card after create — nothing to draft here */}
+                <div className="rounded-lg p-4 border border-[#1a1a2e] bg-[#0c0c14]">
+                  <p className="text-sm text-[#b0b0c0]">
+                    Body is written <span className="text-[#D4AF37] font-medium">inline on the card</span> after you create it — close this and start writing.
+                  </p>
                 </div>
 
                 {/* Form Actions */}

@@ -81,13 +81,13 @@ export default function RootLayout({
                   <TradeUploadProvider>
                     <ToastProvider />
                     {children}
+                    <RequestInbox />
                   </TradeUploadProvider>
                 </QueryProvider>
               </GuestModeProvider>
             </GlobalTraderraProvider>
           </TraderraProvider>
         </StudioTheme>
-        <RequestInbox />
       </body>
     </html>
   )

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useChatContext } from '@/contexts/TraderraContext'
 
 type Req = {
   id: string
@@ -31,7 +32,6 @@ const STATUS_LABEL: Record<string, string> = {
 
 export function RequestInbox() {
   const [open, setOpen] = useState(false)
-  const [showList, setShowList] = useState(false)
   const [title, setTitle] = useState('')
   const [message, setMessage] = useState('')
   const [imgs, setImgs] = useState<string[]>([])
@@ -39,6 +39,7 @@ export function RequestInbox() {
   const [reqs, setReqs] = useState<Req[]>([])
   const [sent, setSent] = useState<string | null>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
+  const { setIsSidebarOpen } = useChatContext()
 
   const openCount = reqs.filter((r) => r.status !== 'done').length
 
@@ -104,14 +105,13 @@ export function RequestInbox() {
         setSent(created?.id ?? 'REQ')
         setTitle(''); setMessage(''); setImgs([])
         await loadReqs()
-        setShowList(true)
       }
     } finally {
       setSending(false)
     }
   }
 
-  const reset = () => { setSent(null); setShowList(true) }
+  const reset = () => { setSent(null) }
 
   // open via top-nav "Renata" button (no more floating FAB)
   useEffect(() => {
@@ -120,35 +120,40 @@ export function RequestInbox() {
     return () => window.removeEventListener('open-request-inbox', handler)
   }, [])
 
+  // Sync panel-open state to the context so AppLayout reserves a right gutter
+  // (pushes main content left instead of overlaying it).
+  useEffect(() => { setIsSidebarOpen(open) }, [open, setIsSidebarOpen])
+
+  const close = () => setOpen(false)
+
   return (
     <>
-      {/* Modal */}
+      {/* Docked right-side panel — pushes main content left via context */}
       {open && (
-        <div className="fixed top-16 right-0 bottom-0 z-50 flex w-full max-w-[400px] flex-col overflow-y-auto border-l border-zinc-800 bg-zinc-900 shadow-2xl">
+        <div className="fixed top-16 right-0 bottom-0 z-50 flex w-[400px] max-w-full flex-col studio-surface border-l studio-border">
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
+            <div className="flex shrink-0 items-center justify-between border-b studio-border px-4 py-3">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-amber-300">Send to Renata</span>
+                <span className="text-sm font-semibold text-primary">Send to Renata</span>
                 {openCount > 0 && (
-                  <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-400">
-                    {openCount} open
-                  </span>
+                  <span className="rounded-full bg-[#1a1a1a] px-2 py-0.5 text-[10px] studio-muted">{openCount} open</span>
                 )}
               </div>
-              <button onClick={() => setOpen(false)} className="text-zinc-500 hover:text-zinc-300">
+              <button onClick={close} className="studio-muted hover:studio-text">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6 6 18M6 6l12 12" /></svg>
               </button>
             </div>
 
+            <div className="flex flex-1 flex-col overflow-y-auto">
             {sent ? (
               /* Sent confirmation */
               <div className="px-4 py-8 text-center">
                 <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400">
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6 9 17l-5-5" /></svg>
                 </div>
-                <p className="text-sm text-zinc-200">Sent — <span className="font-mono text-emerald-300">{sent}</span></p>
-                <p className="mt-1 text-xs text-zinc-500">Renata will pick it up. Track it in the list below.</p>
-                <button onClick={reset} className="mt-4 rounded-md bg-zinc-800 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-700">New request</button>
+                <p className="text-sm studio-text">Sent — <span className="font-mono text-emerald-300">{sent}</span></p>
+                <p className="mt-1 text-xs studio-muted">Renata will pick it up in the edge-dev project.</p>
+                <button onClick={reset} className="mt-4 rounded-md bg-[#1a1a1a] px-3 py-1.5 text-xs studio-text hover:bg-[#222]">New request</button>
               </div>
             ) : (
               <>
@@ -158,7 +163,7 @@ export function RequestInbox() {
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="Short title — what do you need?"
-                    className="w-full rounded-md border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-amber-500/60"
+                    className="w-full rounded-md border studio-border bg-[#0a0a0a] px-3 py-2 text-sm studio-text placeholder:text-[#555] outline-none focus:border-primary/60"
                     autoFocus
                   />
                   <textarea
@@ -167,15 +172,15 @@ export function RequestInbox() {
                     onChange={(e) => setMessage(e.target.value)}
                     onPaste={onPaste}
                     placeholder="Describe it. Paste a screenshot with Ctrl+V."
-                    rows={4}
-                    className="w-full resize-none rounded-md border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 outline-none focus:border-amber-500/60"
+                    rows={5}
+                    className="w-full resize-none rounded-md border studio-border bg-[#0a0a0a] px-3 py-2 text-sm studio-text placeholder:text-[#555] outline-none focus:border-primary/60"
                   />
                   {imgs.length > 0 && (
                     <div className="flex flex-wrap gap-2">
                       {imgs.map((u) => (
                         <div key={u} className="group relative">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={u} alt="screenshot" className="h-16 w-16 rounded border border-zinc-700 object-cover" />
+                          <img src={u} alt="screenshot" className="h-16 w-16 rounded border studio-border object-cover" />
                           <button
                             onClick={() => removeImg(u)}
                             className="absolute -right-1.5 -top-1.5 hidden h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] text-white group-hover:flex"
@@ -186,50 +191,47 @@ export function RequestInbox() {
                   )}
                 </div>
 
-                {/* Actions */}
-                <div className="flex items-center justify-between border-t border-zinc-800 px-4 py-3">
+                {/* Send action */}
+                <div className="flex shrink-0 items-center justify-end gap-2 border-t studio-border px-4 py-3">
+                  <button onClick={close} className="rounded-md px-3 py-1.5 text-xs studio-muted hover:studio-text">Cancel</button>
                   <button
-                    onClick={() => { setShowList((s) => !s); if (!showList) loadReqs() }}
-                    className="text-xs text-zinc-500 hover:text-zinc-300"
+                    onClick={submit}
+                    disabled={!title.trim() || sending}
+                    className="rounded-md bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    {showList ? '▲ Hide' : `▼ Your requests (${reqs.length})`}
+                    {sending ? 'Sending…' : 'Send →'}
                   </button>
-                  <div className="flex gap-2">
-                    <button onClick={() => setOpen(false)} className="rounded-md px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200">Cancel</button>
-                    <button
-                      onClick={submit}
-                      disabled={!title.trim() || sending}
-                      className="rounded-md bg-amber-500 px-4 py-1.5 text-xs font-semibold text-zinc-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      {sending ? 'Sending…' : 'Send →'}
-                    </button>
-                  </div>
                 </div>
-
-                {/* Request list */}
-                {showList && (
-                  <div className="max-h-56 overflow-y-auto border-t border-zinc-800 px-2 py-2">
-                    {reqs.length === 0 ? (
-                      <p className="px-2 py-4 text-center text-xs text-zinc-600">No requests yet.</p>
-                    ) : (
-                      reqs.slice(0, 30).map((r) => (
-                        <div key={r.id} className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-zinc-800/50">
-                          <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ring-1 ${STATUS_STYLE[r.status] ?? 'bg-zinc-800 text-zinc-400 ring-zinc-700'}`}>
-                            {STATUS_LABEL[r.status] ?? r.status}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-xs text-zinc-200">
-                              <span className="font-mono text-zinc-500">{r.id}</span> {r.title}
-                            </p>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
               </>
             )}
-      </div>
+
+            {/* Recent requests — always visible at the bottom of the panel */}
+            <div className="shrink-0 border-t studio-border px-4 py-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider studio-muted">Recent requests</span>
+                <button onClick={loadReqs} className="text-[10px] studio-muted hover:studio-text">refresh</button>
+              </div>
+              <div className="max-h-60 space-y-1 overflow-y-auto">
+                {reqs.length === 0 ? (
+                  <p className="py-3 text-center text-xs studio-muted">No requests yet.</p>
+                ) : (
+                  reqs.slice(0, 30).map((r) => (
+                    <div key={r.id} className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-[#1a1a1a]">
+                      <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ring-1 ${STATUS_STYLE[r.status] ?? 'bg-[#1a1a1a] studio-muted ring-[#333]'}`}>
+                        {STATUS_LABEL[r.status] ?? r.status}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs studio-text">
+                          <span className="font-mono studio-muted">{r.id}</span> {r.title}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            </div>
+        </div>
       )}
     </>
   )

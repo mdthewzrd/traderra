@@ -1163,9 +1163,12 @@ export function NewEntryModal({ isOpen, onClose, onSave, editingEntry }: NewEntr
   const handleTemplateSelect = (template: JournalTemplate) => {
     setSelectedTemplate(template)
 
+    // Auto-title daily reviews with today's date
+    const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+
     // Initialize form with template defaults
     const initialData = {
-      title: '',
+      title: template.id === 'daily-review' ? `Daily Review - ${today}` : '',
       rating: 3,
       tags: '',
       content: template.contentTemplate,

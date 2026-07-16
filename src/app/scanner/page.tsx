@@ -887,14 +887,24 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
         ctx.closePath(); ctx.fill()
       }
     }
-    // Find bar whose epoch is closest to target (must be within 5min)
+    // Bar interval from the data itself (intraday gap between consecutive bars).
+    // Tolerance scales with it: a 300s cap was right for 5m bars, but on 15m/30m/
+    // 60m charts an entry/exit that lands mid-window is >5min from any bar and got
+    // dropped. Use ~55% of one bar so the NEAREST bar always matches.
+    let barStep = 300
+    for (let i = 1; i < bars.length; i++) {
+      const dt = bars[i].time - bars[i - 1].time
+      if (dt > 0) { barStep = dt; break }
+    }
+    const barTol = Math.max(300, barStep * 0.55)
+    // Find bar whose epoch is closest to target (within barTol)
     const findBar = (epoch: number) => {
       let bestIdx = -1, bestDist = Infinity
       for (let i = 0; i < bars.length; i++) {
         const d = Math.abs(bars[i].time - epoch)
         if (d < bestDist) { bestDist = d; bestIdx = i }
       }
-      return bestDist <= 300 ? bestIdx : -1
+      return bestDist <= barTol ? bestIdx : -1
     }
     // (marker drawing moved to end of render — after all indicators)
     const _markerQueue: { idx: number; price: number; type: 'entry' | 'exit' }[] = []

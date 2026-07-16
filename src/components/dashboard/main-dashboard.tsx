@@ -151,7 +151,7 @@ export function MainDashboard() {
       <div className="px-6 pb-6">
         <div className="mx-auto max-w-[1800px] space-y-8">
           {/* Weekly calendar view + date range controls (in content flow so it never overlaps stats) */}
-          <CalendarRow aiSidebarOpen={aiSidebarOpen} />
+          <CalendarRow aiSidebarOpen={aiSidebarOpen} trades={trades} />
 
           {/* Performance Metrics */}
           <MetricsWithToggles trades={filteredTrades} />

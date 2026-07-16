@@ -7,7 +7,6 @@ import { useDisplayMode } from '@/contexts/TraderraContext'
 import { TraderViewDateSelector } from '@/components/ui/traderview-date-selector'
 import { usePnLMode } from '@/contexts/TraderraContext'
 import { getPnLValue } from '@/utils/trade-statistics'
-import { useQuery } from '@tanstack/react-query'
 import { TraderraTrade } from '@/utils/csv-parser'
 import { DisplayModeToggle } from '@/components/ui/display-mode-toggle'
 
@@ -109,28 +108,19 @@ function CalendarDay({ date, day, pnl, trades, isToday }: CalendarDayProps) {
 
 interface CalendarRowProps {
   aiSidebarOpen?: boolean
+  trades?: TraderraTrade[]
 }
 
-export function CalendarRow({ aiSidebarOpen = false }: CalendarRowProps) {
+export function CalendarRow({ aiSidebarOpen = false, trades: propTrades }: CalendarRowProps) {
   const { dateRange, setDateRange, currentWeekStart, setCurrentWeekStart, getCalendarLabel } = useDateRange()
   const { displayMode, setDisplayMode } = useDisplayMode()
   const { mode } = usePnLMode()
 
-  // Fetch real trade data
-  const { data: tradesData } = useQuery({
-    queryKey: ['trades'],
-    queryFn: async () => {
-      const response = await fetch('/api/trades')
-      if (!response.ok) {
-        throw new Error('Failed to fetch trades')
-      }
-      const data = await response.json()
-      return data.trades as TraderraTrade[]
-    }
-  })
+  // Use trades passed from parent (MainDashboard via useTrades) — single source of truth
+  const trades = propTrades || []
 
   // Generate week data based on real trade data and current context
-  const weekData = generateWeekData(currentWeekStart, tradesData || [], mode)
+  const weekData = generateWeekData(currentWeekStart, trades, mode)
   const totalWeekPnL = weekData.reduce((sum, day) => sum + day.pnl, 0)
   const totalWeekTrades = weekData.reduce((sum, day) => sum + day.trades, 0)
 

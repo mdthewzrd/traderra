@@ -2,6 +2,7 @@
 
 import React from 'react'
 import { TopNavigation } from './top-nav'
+import { TraderraSubNav } from './traderra-sub-nav'
 import { useChatContext } from '@/contexts/TraderraContext'
 
 interface AppLayoutProps {
@@ -28,23 +29,21 @@ export function AppLayout({
         </div>
       </div>
 
-      {/* Optional Page Header - Adjusts for sidebar */}
-      {showPageHeader && (
-        <div className={`fixed top-16 left-0 right-0 z-40 transition-all duration-300 studio-surface border-b border-[#1a1a1a]`} style={{ direction: 'ltr' }}>
-          <div className="w-full overflow-x-auto">
-            {pageHeaderContent}
-          </div>
+      {/* Traderra Sub-Nav — always shown on every (main) page */}
+      <div className="fixed top-16 left-0 right-0 z-40 studio-surface border-b border-[#1a1a1a]" style={{ direction: 'ltr' }}>
+        <div className="w-full overflow-x-auto">
+          <TraderraSubNav />
         </div>
-      )}
+      </div>
 
-      {/* Main content container with sidebar */}
-      <div className={`flex w-full ${showPageHeader ? 'pt-36' : 'pt-16'}`} style={{ direction: 'ltr' }}>
-        {/* Page Content */}
+      {/* Main content (pageHeaderContent renders in-flow so it never overlaps the fixed bars) */}
+      <div className="flex w-full pt-36" style={{ direction: 'ltr' }}>
         <main
           className="flex-1 overflow-x-hidden"
           style={{ direction: 'ltr' }}
         >
           <div className="w-full pr-6 overflow-x-hidden">
+            {showPageHeader && pageHeaderContent}
             {children}
           </div>
         </main>

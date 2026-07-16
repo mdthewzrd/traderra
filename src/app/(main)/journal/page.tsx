@@ -2,7 +2,6 @@
 
 import React, { useState, useCallback, useMemo } from 'react'
 import { AppLayout } from '@/components/layout/app-layout'
-import { TraderraSubNav } from '@/components/layout/traderra-sub-nav'
 import { useAuth } from '@/lib/auth-client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
@@ -404,11 +403,7 @@ export default function EnhancedJournalPage() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AppLayout
-        pageClassName="min-h-screen"
-        showPageHeader={true}
-        pageHeaderContent={<TraderraSubNav />}
-      >
+      <AppLayout pageClassName="min-h-screen">
         {!isLoaded ? (
           <div className="flex items-center justify-center h-[60vh] text-zinc-500">Loading your journal…</div>
         ) : !isSignedIn ? (

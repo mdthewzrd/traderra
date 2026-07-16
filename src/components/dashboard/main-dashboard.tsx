@@ -3,7 +3,6 @@
 import { useState, useMemo, lazy, Suspense } from 'react'
 import { AppLayout } from '../layout/app-layout'
 import { CalendarRow } from './calendar-row'
-import { TraderraSubNav } from '@/components/layout/traderra-sub-nav'
 import { MetricsWithToggles } from './metric-toggles'
 import { useChatContext } from '@/contexts/TraderraContext'
 import { useComponentRegistry, type ScrollBehavior } from '@/lib/ag-ui/component-registry'
@@ -148,11 +147,7 @@ export function MainDashboard() {
   // CopilotKit action hooks removed - calendar actions now handled directly via simplified chat API
 
   return (
-    <AppLayout
-      pageClassName="min-h-screen"
-      showPageHeader={true}
-      pageHeaderContent={<TraderraSubNav />}
-    >
+    <AppLayout pageClassName="min-h-screen">
       <div className="px-6 pb-6">
         <div className="mx-auto max-w-[1800px] space-y-8">
           {/* Weekly calendar view + date range controls (in content flow so it never overlaps stats) */}

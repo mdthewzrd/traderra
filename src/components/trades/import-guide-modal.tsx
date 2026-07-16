@@ -26,7 +26,7 @@ export function ImportGuideModal({ isOpen, onClose }: ImportGuideModalProps) {
       {/* Modal */}
       <div
         className="fixed inset-0 z-[1001] flex items-center justify-center p-4 pointer-events-none"
-        style={{ top: '64px', paddingRight: aiSidebarOpen ? '480px' : '0px' }}
+        style={{ top: '64px' }}
       >
         <div className="pointer-events-auto relative w-full max-w-2xl max-h-[90vh] mx-4 studio-surface rounded-lg shadow-xl overflow-hidden">
         {/* Header */}

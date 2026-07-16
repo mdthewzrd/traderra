@@ -147,7 +147,7 @@ export function MainDashboard() {
       }
     >
       <div className="px-6 pb-6">
-        <div className="mx-auto max-w-5xl space-y-8">
+        <div className="mx-auto max-w-[1800px] space-y-8">
           {/* Performance Metrics */}
           <MetricsWithToggles trades={filteredTrades} />
 

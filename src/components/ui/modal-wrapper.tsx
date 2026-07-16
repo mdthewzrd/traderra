@@ -48,7 +48,7 @@ export function ModalWrapper({ children, isOpen, onClose }: ModalWrapperProps) {
         className="fixed inset-0 z-[70] flex items-center justify-center p-4 pointer-events-none"
         style={{
           top: '64px', // Below top nav
-          paddingRight: aiSidebarOpen ? '480px' : '0px' // Account for sidebar
+          paddingRight: '0px' // Sidebar removed — always 0
         }}
       >
         <div className="pointer-events-auto">

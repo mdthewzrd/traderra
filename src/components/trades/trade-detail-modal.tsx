@@ -145,7 +145,7 @@ export function TradeDetailModal({ trade, isOpen, onClose }: TradeDetailModalPro
       {/* Modal */}
       <div
         className="fixed inset-0 z-[1001] flex items-center justify-center p-4 pointer-events-none"
-        style={{ top: '64px', paddingRight: aiSidebarOpen ? '480px' : '0px' }}
+        style={{ top: '64px' }}
       >
         <div className="pointer-events-auto relative w-full max-w-7xl max-h-[95vh] mx-4 studio-surface rounded-lg shadow-xl overflow-hidden">
         {/* Header */}

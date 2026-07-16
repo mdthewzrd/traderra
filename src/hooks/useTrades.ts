@@ -59,13 +59,13 @@ export function useTrades() {
 
   // Load trades when user is authenticated or in guest mode
   useEffect(() => {
-    // PERFORMANCE: Prevent duplicate calls on mount
-    if (hasLoadedRef.current) return
-    hasLoadedRef.current = true
-
-    // Prioritize authenticated user data over guest mode
     if (isSignedIn) {
-      // Authenticated user: load from API (ignore guest mode)
+      // Authenticated user: load from API (ignore guest mode). Guard against
+      // duplicate fetches, but only after we actually kick off a load — otherwise
+      // the guard trips on the first render (before isLoaded flips true) and the
+      // empty-state branch below never runs, leaving isLoading stuck forever.
+      if (hasLoadedRef.current) return
+      hasLoadedRef.current = true
       loadTrades()
     } else if (isGuestMode && hasGuestData) {
       // Guest mode: use mock data
@@ -73,7 +73,7 @@ export function useTrades() {
       setIsLoading(false)
       setError(null)
     } else if (isLoaded && !isSignedIn && !isGuestMode) {
-      // Not authenticated and not in guest mode: show empty state
+      // Auth resolved and no session / no guest data: show empty state.
       setTrades([])
       setIsLoading(false)
     }

@@ -328,7 +328,7 @@ export function TradeUploadModal({ isOpen, onClose, onUploadComplete }: TradeUpl
       {/* Modal */}
       <div
         className="fixed inset-0 z-[1001] flex items-center justify-center p-4 pointer-events-none"
-        style={{ top: '64px', paddingRight: aiSidebarOpen ? '480px' : '0px' }}
+        style={{ top: '64px' }}
       >
         <div className="pointer-events-auto bg-[#1a1a2e] rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-700">
         {/* Header */}

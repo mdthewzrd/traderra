@@ -166,7 +166,7 @@ export function CalendarRow({ aiSidebarOpen = false }: CalendarRowProps) {
 
   return (
     <div className="studio-surface border-b border-[#1a1a1a] py-2 sm:py-3">
-      <div className={`px-2 sm:px-3 transition-all duration-300 ${aiSidebarOpen ? 'max-w-[calc(100vw-480px)]' : ''}`}>
+      <div className="px-2 sm:px-3">
         {/* Header */}
         <div className="flex items-center justify-between mb-1 sm:mb-2">
         <div className="flex items-center space-x-1">

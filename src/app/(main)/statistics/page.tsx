@@ -4,7 +4,6 @@ import { useState, useMemo, useEffect } from 'react'
 import { useComponentRegistry, type ScrollBehavior } from '@/lib/ag-ui/component-registry'
 import { Download, RefreshCw, Calendar, FileText, AlertTriangle, BarChart3, Settings, X, Filter, Target, TrendingUp, Upload } from 'lucide-react'
 import { AppLayout } from '@/components/layout/app-layout'
-import { TopNavigation } from '@/components/layout/top-nav'
 import { TraderViewDateSelector } from '@/components/ui/traderview-date-selector'
 import { DisplayModeToggle } from '@/components/ui/display-mode-toggle'
 import { useDateRange, usePnLMode, useDisplayMode, useChatContext } from '@/contexts/TraderraContext'
@@ -2408,14 +2407,7 @@ function StatisticsPageContent() {
   }
 
   return (
-    <div className="studio-bg">
-      {/* Fixed Top Navigation - Full Width */}
-      <div className="fixed top-0 left-0 right-0 w-full z-50">
-        <TopNavigation onAiToggle={() => setAiSidebarOpen(!aiSidebarOpen)} aiOpen={aiSidebarOpen} />
-      </div>
-
-      {/* Main content container */}
-      <div className="flex flex-col pt-16">
+    <AppLayout pageClassName="studio-bg min-h-screen">
         {/* Page Header */}
         <div className="studio-surface border-b border-[#1a1a1a] px-6 py-4">
           <div className="flex items-center justify-between">
@@ -2554,7 +2546,7 @@ function StatisticsPageContent() {
         )}
 
         {/* Statistics content */}
-        <main className="flex-1 overflow-auto p-4 md:p-6 min-w-0">
+        <div className="p-4 md:p-6">
           <div className="w-full">
             {tradesLoading ? (
               <div className="flex items-center justify-center h-64">
@@ -2626,10 +2618,8 @@ function StatisticsPageContent() {
               </div>
             </div>
           </div>
-        </main>
-      </div>
-
-    </div>
+        </div>
+    </AppLayout>
   )
 }
 

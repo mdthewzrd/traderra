@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react'
-import { unstable_batchedUpdates } from 'react-dom'
 import { createPortal } from 'react-dom'
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useDateRange, type DateRangeOption } from '@/contexts/TraderraContext'
@@ -205,35 +204,21 @@ export function TraderViewDateSelector({ className = '' }: TraderViewDateSelecto
     getDateRangeLabel
   } = useDateRange()
 
-  // Force re-render when currentDateRange changes for any range
-  // CRITICAL FIX: Move isMounted declaration before usage to prevent temporal dead zone error
   const [isMounted, setIsMounted] = useState(false)
-  const [forceRenderKey, setForceRenderKey] = useState(0)
   const currentDateRangeLabel = currentDateRange?.label || ''
 
   // Portal popup positioning
   const [popupPosition, setPopupPosition] = useState({ top: 0, left: 0 })
   const buttonRef = useRef<HTMLDivElement>(null)
 
-  // CRITICAL FIX: Update force render key when selectedRange or currentDateRangeLabel changes
-  // This ensures the custom range display always shows the current date range
-  useEffect(() => {
-    setForceRenderKey(prev => prev + 1)
-  }, [selectedRange, currentDateRangeLabel])
-
-  // DISABLED: Polling mechanism was causing infinite re-render loops
-  // The React context should handle synchronization properly without polling
-
-  const [isRendered, setIsRendered] = useState(false)
   const [showCalendar, setShowCalendar] = useState(false)
   const [tempStartDate, setTempStartDate] = useState(customStartDate || new Date())
   const [tempEndDate, setTempEndDate] = useState(customEndDate || new Date())
   const calendarRef = useRef<HTMLDivElement>(null)
 
-  // Prevent hydration mismatch and ensure faster mounting
+  // Prevent hydration mismatch
   useEffect(() => {
     setIsMounted(true)
-    setIsRendered(true)
   }, [])
 
   // Quick range options - memoized for performance
@@ -356,29 +341,21 @@ export function TraderViewDateSelector({ className = '' }: TraderViewDateSelecto
     }
   }, [showCalendar])
 
-  // State update counter - minimized for performance
-  const [forceUpdate, setForceUpdate] = useState(0)
-
   const handleQuickRange = useCallback((range: DateRangeOption) => {
     // Handle G (previous) and N (next) navigation
     if (range === 'prev') {
-      // Navigate to previous period based on current range
       const currentStart = currentDateRange.start
       const currentEnd = currentDateRange.end
       const diff = currentEnd.getTime() - currentStart.getTime()
       const newStart = new Date(currentStart.getTime() - diff)
       const newEnd = new Date(currentEnd.getTime() - diff)
-      unstable_batchedUpdates(() => {
-        setCustomRange(newStart, newEnd)
-        setDateRange('custom')
-        setShowCalendar(false)
-        setForceUpdate(prev => prev + 1)
-      })
+      setCustomRange(newStart, newEnd)
+      setDateRange('custom')
+      setShowCalendar(false)
       return
     }
 
     if (range === 'next') {
-      // Navigate to next period based on current range
       const currentStart = currentDateRange.start
       const currentEnd = currentDateRange.end
       const diff = currentEnd.getTime() - currentStart.getTime()
@@ -387,25 +364,19 @@ export function TraderViewDateSelector({ className = '' }: TraderViewDateSelecto
       // Don't go past today
       const now = new Date()
       if (newStart <= now) {
-        unstable_batchedUpdates(() => {
-          setCustomRange(
-            newStart > now ? now : newStart,
-            newEnd > now ? now : newEnd
-          )
-          setDateRange('custom')
-          setShowCalendar(false)
-          setForceUpdate(prev => prev + 1)
-        })
+        setCustomRange(
+          newStart > now ? now : newStart,
+          newEnd > now ? now : newEnd
+        )
+        setDateRange('custom')
+        setShowCalendar(false)
       }
       return
     }
 
-    // Batch all state updates together to prevent multiple re-renders
-    unstable_batchedUpdates(() => {
-      setDateRange(range)
-      setShowCalendar(false)
-      setForceUpdate(prev => prev + 1)
-    })
+    // React 18 auto-batches these state updates
+    setDateRange(range)
+    setShowCalendar(false)
   }, [setDateRange, currentDateRange, setCustomRange])
 
   const handleCalendarOpen = useCallback(() => {
@@ -418,22 +389,16 @@ export function TraderViewDateSelector({ className = '' }: TraderViewDateSelecto
       })
     }
 
-    // Batch state updates for calendar opening
-    unstable_batchedUpdates(() => {
-      // Initialize temp dates with current date range (from currentDateRange)
-      // This ensures the popup shows the currently selected range
-      setTempStartDate(currentDateRange.start)
-      setTempEndDate(currentDateRange.end)
-      setShowCalendar(true)
-    })
+    // Initialize temp dates with current date range (from currentDateRange)
+    // This ensures the popup shows the currently selected range
+    setTempStartDate(currentDateRange.start)
+    setTempEndDate(currentDateRange.end)
+    setShowCalendar(true)
   }, [currentDateRange])
 
   const handleApplyCustomRange = useCallback(() => {
-    // Batch state updates for custom range application
-    unstable_batchedUpdates(() => {
-      setCustomRange(tempStartDate, tempEndDate)
-      setShowCalendar(false)
-    })
+    setCustomRange(tempStartDate, tempEndDate)
+    setShowCalendar(false)
   }, [tempStartDate, tempEndDate, setCustomRange])
 
   // Enhanced hydration protection with better state awareness

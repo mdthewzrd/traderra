@@ -7,10 +7,12 @@ interface BlockNoteEditorProps {
   value: string
   onChange: (value: string) => void
   placeholder?: string
+  fullHeight?: boolean
 }
 
-export function BlockNoteEditor({ value, onChange, placeholder }: BlockNoteEditorProps) {
+export function BlockNoteEditor({ value, onChange, placeholder, fullHeight }: BlockNoteEditorProps) {
   const [isInitialized, setIsInitialized] = useState(false)
+  const [lightbox, setLightbox] = useState<string | null>(null)
   const editorRef = useRef<HTMLDivElement>(null)
   const isUpdatingFromProp = useRef(false)
 
@@ -57,6 +59,42 @@ export function BlockNoteEditor({ value, onChange, placeholder }: BlockNoteEdito
       onChange(newContent)
     }
   }, [onChange])
+
+  // Inline image paste (matches /playbook + /database pattern) — inserts an
+  // <img> at the cursor so it shows up in the doc, persists with innerHTML,
+  // and is clickable to zoom. Images pasted as data URLs.
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+    let hasImage = false
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        const file = items[i].getAsFile()
+        if (!file) continue
+        hasImage = true
+        e.preventDefault()
+        const reader = new FileReader()
+        reader.onload = () => {
+          const dataUrl = reader.result as string
+          // Insert <img> at the current cursor position in the contentEditable.
+          editorRef.current?.focus()
+          document.execCommand('insertImage', false, dataUrl)
+          // Sync the new HTML back to the parent.
+          handleInput()
+        }
+        reader.readAsDataURL(file)
+      }
+    }
+  }, [handleInput])
+
+  // Click an inline image to open a lightbox (playbook-style).
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    const target = e.target as HTMLElement
+    if (target.tagName === 'IMG') {
+      const src = (target as HTMLImageElement).getAttribute('src')
+      if (src) setLightbox(src)
+    }
+  }, [])
 
   // Modern approach to text formatting using Selection API
   const applyFormat = useCallback((tag: string) => {
@@ -180,9 +218,12 @@ export function BlockNoteEditor({ value, onChange, placeholder }: BlockNoteEdito
 
       <div
         ref={editorRef}
+        data-bn-editor
         contentEditable
         onInput={handleInput}
-        className="w-full min-h-[200px] max-h-[400px] overflow-y-auto p-4 bg-transparent text-studio-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary leading-relaxed prose prose-invert max-w-none [&_p]:mb-3 [&_p]:text-gray-300 [&_strong]:text-white [&_strong]:font-bold [&_em]:text-gray-400 [&_em]:italic [&_ul]:ml-4 [&_ul]:list-disc [&_ul]:text-gray-300 [&_li]:mb-1 [&_li]:text-gray-300 [&_h1]:text-white [&_h1]:font-bold [&_h1]:text-xl [&_h1]:mb-4 [&_h2]:text-white [&_h2]:font-semibold [&_h2]:text-lg [&_h2]:mb-3 empty:before:content-[attr(data-placeholder)] empty:before:text-gray-500 empty:before:italic empty:before:pointer-events-none"
+        onPaste={handlePaste}
+        onClick={handleClick}
+        className={`w-full ${fullHeight ? 'min-h-full' : 'min-h-[200px] max-h-[400px]'} overflow-y-auto p-4 bg-transparent text-studio-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary leading-relaxed prose prose-invert max-w-none [&_p]:mb-3 [&_p]:text-gray-300 [&_strong]:text-white [&_strong]:font-bold [&_em]:text-gray-400 [&_em]:italic [&_ul]:ml-4 [&_ul]:list-disc [&_ul]:text-gray-300 [&_li]:mb-1 [&_li]:text-gray-300 [&_h1]:text-white [&_h1]:font-bold [&_h1]:text-xl [&_h1]:mb-4 [&_h2]:text-white [&_h2]:font-semibold [&_h2]:text-lg [&_h2]:mb-3 empty:before:content-[attr(data-placeholder)] empty:before:text-gray-500 empty:before:italic empty:before:pointer-events-none`}
         style={{
           color: '#e5e5e5',
           fontFamily: 'Inter, system-ui, sans-serif',
@@ -227,6 +268,29 @@ export function BlockNoteEditor({ value, onChange, placeholder }: BlockNoteEdito
         suppressContentEditableWarning={true}
         data-placeholder={placeholder || "Start writing your journal entry..."}
       />
+      {/* Inline image styling + click-to-zoom lightbox */}
+      <style>{`
+        [data-bn-editor] img {
+          display: block;
+          max-width: 100%;
+          height: auto;
+          border-radius: 8px;
+          border: 1px solid #1f2937;
+          margin: 8px 0;
+          cursor: zoom-in;
+          transition: opacity .15s;
+        }
+        [data-bn-editor] img:hover { opacity: .92; }
+      `}</style>
+      {lightbox && (
+        <div
+          onClick={() => setLightbox(null)}
+          style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out' }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={lightbox} alt="" style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 8, objectFit: 'contain' }} />
+        </div>
+      )}
 
       <div className="p-2 text-xs studio-muted border-t studio-border bg-[#0a0a0a]">
         ✨ <strong>Tip:</strong> Select text and click formatting buttons, or use Ctrl+B/Ctrl+I (Windows) or Cmd+B/Cmd+I (Mac) shortcuts

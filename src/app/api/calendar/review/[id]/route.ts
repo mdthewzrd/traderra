@@ -38,3 +38,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   })
   return NextResponse.json(contentToApi(updated))
 }
+
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const userId = await uid(req)
+  if (!userId) return NextResponse.json({ detail: 'Unauthorized' }, { status: 401 })
+  const { id } = await params
+  const item = await own(userId, id)
+  if (!item) return NextResponse.json({ detail: 'not found' }, { status: 404 })
+  await prisma.contentItem.delete({ where: { id } })
+  return NextResponse.json({ ok: true })
+}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Loader2, FileText, LayoutTemplate } from 'lucide-react'
+import { X, Loader2, FileText, LayoutTemplate, Trash2 } from 'lucide-react'
 import { BlockNoteEditor } from '@/components/journal/BlockNoteEditor'
 
 const DAILY_REVIEW_TEMPLATE = `<h1>PM Notes</h1>
@@ -59,6 +59,16 @@ export function ReviewDrawer({
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  // Lock page scroll while the drawer is open — otherwise wheel events over a
+  // panel with no internal overflow bubble up to document.body and scroll the
+  // site behind the overlay.
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
 
   // Ensure a review doc exists for this date, then load it.
   useEffect(() => {
@@ -105,6 +115,21 @@ export function ReviewDrawer({
     }
   }
 
+  const remove = async () => {
+    if (!doc) return
+    if (!window.confirm(`Delete "${doc.title || 'this review'}"? This cannot be undone.`)) return
+    setDeleting(true)
+    try {
+      const r = await fetch(`/api/calendar/review/${doc.id}`, { method: 'DELETE' })
+      if (!r.ok) throw new Error('delete failed')
+      onChanged(); onClose()
+    } catch {
+      window.alert('Failed to delete review. Please try again.')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const pretty = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
 
   return (
@@ -130,13 +155,19 @@ export function ReviewDrawer({
               Save
             </button>
           )}
+          {doc && (
+            <button onClick={remove} disabled={deleting} title="Delete review"
+              className="p-1.5 rounded-lg text-red-400/70 hover:text-red-400 hover:bg-red-950/40 disabled:opacity-40">
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            </button>
+          )}
           <button onClick={onClose} className="p-1.5 rounded-lg studio-muted hover:studio-text hover:bg-[#141c2b]">
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 min-h-0 flex flex-col">
+        {/* Body — editor is the single scroll container (flex-1 min-h-0); body is overflow-hidden so wheel events never bubble to the page */}
+        <div className="flex-1 min-h-0 flex flex-col px-5 py-4 overflow-hidden">
           {loading ? (
             <div className="flex items-center justify-center py-20 studio-muted">
               <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading review…

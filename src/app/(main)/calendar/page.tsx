@@ -102,6 +102,7 @@ export default function CalendarPage() {
   // Daily reviews linked to calendar dates (ContentItems of type 'review').
   const [reviews, setReviews] = useState<Record<string, { id: string; title: string; updated_at: string }>>({})
   const [openDate, setOpenDate] = useState<{ date: string; reviewId: string | null } | null>(null)
+  const [selectedDay, setSelectedDay] = useState<string | null>(null)
 
   const loadReviews = useCallback((year: number) => {
     fetch(`/api/calendar/reviews?from=${year}-01-01&to=${year}-12-31`, { cache: 'no-store' })
@@ -448,6 +449,29 @@ export default function CalendarPage() {
     }
   }
 
+  // Trades + summary for the selected day in day view.
+  const dayTrades = useMemo(() => {
+    if (!selectedDay) return []
+    return displayTrades.filter(t => {
+      const tds = t.date instanceof Date
+        ? t.date.toISOString().split('T')[0]
+        : (typeof t.date === 'string' ? t.date.split('T')[0] : t.date)
+      return tds === selectedDay
+    })
+  }, [selectedDay, displayTrades])
+
+  const daySummary = useMemo(() => {
+    let pnl = 0
+    dayTrades.forEach(t => {
+      let p = t.pnl || 0
+      if (isGrossPnL && t.commission) p += Math.abs(t.commission)
+      pnl += p
+    })
+    const winners = dayTrades.filter(t => (t.pnl || 0) > 0).length
+    const losers = dayTrades.filter(t => (t.pnl || 0) < 0).length
+    return { pnl, winners, losers, count: dayTrades.length }
+  }, [dayTrades, isGrossPnL])
+
   return (
     <AppLayout
       showPageHeader={true}
@@ -508,7 +532,93 @@ export default function CalendarPage() {
       {/* Main Content */}
       <div className="overflow-y-auto px-6 py-4">
         <div className="max-w-[1800px] mx-auto">
-          {viewMode === 'year' ? (
+          {selectedDay ? (
+            <div className="space-y-6">
+              <button
+                onClick={() => setSelectedDay(null)}
+                className="flex items-center space-x-2 text-sm studio-muted hover:text-studio-text transition-colors"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                <span>Back to {viewMode === 'year' ? 'Year' : 'Month'} View</span>
+              </button>
+
+              <div className="studio-surface border p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="text-2xl font-bold studio-text">
+                      {new Date(selectedDay + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                    </h2>
+                    <p className="text-sm studio-muted mt-1">
+                      {daySummary.count > 0 ? `${daySummary.count} trade${daySummary.count !== 1 ? 's' : ''} · ${daySummary.winners}W / ${daySummary.losers}L` : 'No trades recorded'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => openDateCell(selectedDay, reviews[selectedDay]?.id ?? null)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#D4AF37]/10 border border-[#D4AF37]/30 text-[#D4AF37] hover:bg-[#D4AF37]/20 text-sm font-medium"
+                  >
+                    <FileText className="h-4 w-4" />
+                    {reviews[selectedDay] ? 'Open Review' : 'Add Review'}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-4 gap-4 mb-6">
+                  <div className="bg-[#0a0a0a] rounded-lg p-4">
+                    <div className="text-xs studio-muted mb-1">{displayMode === 'r' ? 'Day R' : 'Net P&amp;L'}</div>
+                    <div className={`text-xl font-bold ${daySummary.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {formatValue(daySummary.pnl)}
+                    </div>
+                  </div>
+                  <div className="bg-[#0a0a0a] rounded-lg p-4">
+                    <div className="text-xs studio-muted mb-1">Trades</div>
+                    <div className="text-xl font-bold studio-text">{daySummary.count}</div>
+                  </div>
+                  <div className="bg-[#0a0a0a] rounded-lg p-4">
+                    <div className="text-xs studio-muted mb-1">Winners</div>
+                    <div className="text-xl font-bold text-green-400">{daySummary.winners}</div>
+                  </div>
+                  <div className="bg-[#0a0a0a] rounded-lg p-4">
+                    <div className="text-xs studio-muted mb-1">Losers</div>
+                    <div className="text-xl font-bold text-red-400">{daySummary.losers}</div>
+                  </div>
+                </div>
+
+                {dayTrades.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left studio-muted border-b border-[#1a1a1a]">
+                          <th className="py-2 pr-4">Symbol</th>
+                          <th className="py-2 pr-4">Side</th>
+                          <th className="py-2 pr-4 text-right">Entry</th>
+                          <th className="py-2 pr-4 text-right">Exit</th>
+                          <th className="py-2 pr-4 text-right">Qty</th>
+                          <th className="py-2 pr-4 text-right">P&amp;L</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dayTrades.map((t) => (
+                          <tr key={t.id} className="border-b border-[#1a1a1a]/50">
+                            <td className="py-2 pr-4 font-medium studio-text">{t.symbol}</td>
+                            <td className="py-2 pr-4">
+                              <span className={t.side === 'long' ? 'text-green-400' : 'text-red-400'}>{t.side}</span>
+                            </td>
+                            <td className="py-2 pr-4 text-right studio-muted">${(t.entry_price || 0).toFixed(2)}</td>
+                            <td className="py-2 pr-4 text-right studio-muted">${(t.exit_price || 0).toFixed(2)}</td>
+                            <td className="py-2 pr-4 text-right studio-muted">{t.quantity}</td>
+                            <td className={`py-2 pr-4 text-right font-semibold ${(t.pnl || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              {(t.pnl || 0) >= 0 ? '+' : ''}${(t.pnl || 0).toFixed(2)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="py-12 text-center studio-muted">No trades recorded for this day.</div>
+                )}
+              </div>
+            </div>
+          ) : viewMode === 'year' ? (
             /* Yearly View - All Months */
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {monthsData.map((monthData) => {
@@ -647,11 +757,11 @@ export default function CalendarPage() {
                     return (
                       <div
                         key={dateKey}
-                        onClick={() => dayInfo.isCurrentMonth && openDateCell(dateKey, reviews[dateKey]?.id ?? null)}
+                        onClick={() => dayInfo.isCurrentMonth && setSelectedDay(dateKey)}
                         className={`
                           min-h-[140px] p-2 cursor-pointer transition-colors hover:ring-1 hover:ring-[#D4AF37]/40
                           ${!dayInfo.isCurrentMonth
-                            ? 'opacity-30 bg-[#0a0a0a]'
+                            ? 'opacity-30 bg-[#0a0a0a] pointer-events-none'
                             : pnl > 0
                               ? 'bg-green-900/50'
                               : pnl < 0
@@ -671,16 +781,23 @@ export default function CalendarPage() {
                                   {dayInfo.trades}
                                 </div>
                               )}
-                              <span title={reviews[dateKey] ? 'Open review' : 'Add review'} className="flex h-5 w-5 items-center justify-center rounded text-[#D4AF37]/70 text-xs pointer-events-none">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); openDateCell(dateKey, reviews[dateKey]?.id ?? null) }}
+                                title={reviews[dateKey] ? 'Open review' : 'Add review'}
+                                className="flex h-5 w-5 items-center justify-center rounded text-[#D4AF37]/70 hover:text-[#D4AF37] hover:bg-[#141c2b] text-xs"
+                              >
                                 {reviews[dateKey] ? <FileText className="h-3 w-3 text-[#D4AF37]" /> : <Plus className="h-3 w-3" />}
-                              </span>
+                              </button>
                             </div>
                           </div>
                           {reviews[dateKey] && dayInfo.isCurrentMonth && (
-                            <div className="flex items-center gap-1 mt-1 px-1 py-0.5 rounded bg-[#D4AF37]/10 border border-[#D4AF37]/20 truncate pointer-events-none">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); openDateCell(dateKey, reviews[dateKey]?.id ?? null) }}
+                              className="flex items-center gap-1 mt-1 px-1 py-0.5 rounded bg-[#D4AF37]/10 border border-[#D4AF37]/20 hover:bg-[#D4AF37]/20 text-left w-full"
+                            >
                               <FileText className="h-2.5 w-2.5 text-[#D4AF37] shrink-0" />
                               <span className="text-[10px] text-[#D4AF37] truncate">{reviews[dateKey].title}</span>
-                            </div>
+                            </button>
                           )}
                           {dayInfo.isCurrentMonth && pnl !== 0 && (
                             <div className={`text-sm font-bold text-center ${pnl > 0 ? 'text-green-400' : pnl < 0 ? 'text-red-400' : 'text-gray-500'}`}>

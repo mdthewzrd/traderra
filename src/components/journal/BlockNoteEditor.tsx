@@ -223,7 +223,7 @@ export function BlockNoteEditor({ value, onChange, placeholder, fullHeight }: Bl
         onInput={handleInput}
         onPaste={handlePaste}
         onClick={handleClick}
-        className={`w-full ${fullHeight ? 'min-h-full' : 'min-h-[200px] max-h-[400px]'} overflow-y-auto p-4 bg-transparent text-studio-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary leading-relaxed prose prose-invert max-w-none [&_p]:mb-3 [&_p]:text-gray-300 [&_strong]:text-white [&_strong]:font-bold [&_em]:text-gray-400 [&_em]:italic [&_ul]:ml-4 [&_ul]:list-disc [&_ul]:text-gray-300 [&_li]:mb-1 [&_li]:text-gray-300 [&_h1]:text-white [&_h1]:font-bold [&_h1]:text-xl [&_h1]:mb-4 [&_h2]:text-white [&_h2]:font-semibold [&_h2]:text-lg [&_h2]:mb-3 empty:before:content-[attr(data-placeholder)] empty:before:text-gray-500 empty:before:italic empty:before:pointer-events-none`}
+        className={`w-full ${fullHeight ? 'flex-1 min-h-0' : 'min-h-[200px] max-h-[400px]'} overflow-y-auto p-4 bg-transparent text-studio-text focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary leading-relaxed prose prose-invert max-w-none [&_p]:mb-3 [&_p]:text-gray-300 [&_strong]:text-white [&_strong]:font-bold [&_em]:text-gray-400 [&_em]:italic [&_ul]:ml-4 [&_ul]:list-disc [&_ul]:text-gray-300 [&_li]:mb-1 [&_li]:text-gray-300 [&_h1]:text-white [&_h1]:font-bold [&_h1]:text-xl [&_h1]:mb-4 [&_h2]:text-white [&_h2]:font-semibold [&_h2]:text-lg [&_h2]:mb-3 empty:before:content-[attr(data-placeholder)] empty:before:text-gray-500 empty:before:italic empty:before:pointer-events-none`}
         style={{
           color: '#e5e5e5',
           fontFamily: 'Inter, system-ui, sans-serif',

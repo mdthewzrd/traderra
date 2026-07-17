@@ -11,3 +11,8 @@ __pycache__/
 prisma/*.db
 prisma/prisma/
 .env.local
+
+# runtime uploads / cache / logs
+public/inbox/
+.cache/
+scripts/watchdog.log

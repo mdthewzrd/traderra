@@ -4,33 +4,55 @@ import { useState, useEffect } from 'react'
 import { X, Loader2, FileText, LayoutTemplate, Trash2 } from 'lucide-react'
 import { BlockNoteEditor } from '@/components/journal/BlockNoteEditor'
 
-export const DAILY_REVIEW_TEMPLATE = `<h1>PM Notes</h1>
+export const DAILY_REVIEW_TEMPLATE = `<h2 class="r-label">Market Context</h2>
+<p class="r-hint">Indices, breadth, regime — what kind of day was it?</p>
 <ul>
-<li>SPY / QQQ levels:</li>
-<li>Catalysts &amp; news:</li>
-<li>Overall bias for the day:</li>
+<li><strong>SPY / QQQ:</strong> open, key levels, trend</li>
+<li><strong>Breadth &amp; volatility:</strong> VIX, advance/decline</li>
+<li><strong>Sector strength:</strong> leading / lagging</li>
+<li><strong>Overall bias:</strong> risk-on / risk-off / mixed</li>
 </ul>
 
-<h1>Trade Watchlist</h1>
+<hr class="r-div" />
+
+<h2 class="r-label">Watchlist &amp; Thesis</h2>
+<p class="r-hint">Names on radar and why — the plan heading into the session.</p>
 <ul>
-<li>Ticker — key level &amp; trigger:</li>
-<li>Ticker — key level &amp; trigger:</li>
-<li>Ticker — key level &amp; trigger:</li>
+<li><strong>Ticker —</strong> key level + trigger + thesis</li>
+<li><strong>Ticker —</strong> key level + trigger + thesis</li>
+<li><strong>Ticker —</strong> key level + trigger + thesis</li>
 </ul>
 
-<h1>Exec</h1>
+<hr class="r-div" />
+
+<h2 class="r-label">Execution</h2>
+<p class="r-hint">Trades taken — entry, sizing, risk.</p>
 <ul>
-<li>Trades taken &amp; sizing:</li>
-<li>Fills &amp; slippage:</li>
-<li>Risk used / stops hit:</li>
+<li><strong>Trade 1 —</strong> side, entry, exit, size, R</li>
+<li><strong>Trade 2 —</strong> side, entry, exit, size, R</li>
+<li><strong>Fills &amp; slippage:</strong></li>
+<li><strong>Risk used / stops hit:</strong></li>
 </ul>
 
-<h1>Daily Review</h1>
+<hr class="r-div" />
+
+<h2 class="r-label">Performance</h2>
+<p class="r-hint">What worked, what didn't — grade the process, not just the P&amp;L.</p>
 <ul>
-<li>What worked:</li>
-<li>What to fix:</li>
-<li>Key lesson:</li>
-<li>Tomorrow's action item:</li>
+<li><strong>Winners —</strong> why they worked</li>
+<li><strong>Losers —</strong> what went wrong</li>
+<li><strong>Mistakes / process breaks:</strong></li>
+<li><strong>Did I follow the plan?</strong></li>
+</ul>
+
+<hr class="r-div" />
+
+<h2 class="r-label">Takeaways</h2>
+<p class="r-hint">The lesson + tomorrow's action.</p>
+<ul>
+<li><strong>Key lesson:</strong></li>
+<li><strong>What to do differently:</strong></li>
+<li><strong>Tomorrow's plan &amp; watchlist:</strong></li>
 </ul>`
 
 interface ReviewDoc {

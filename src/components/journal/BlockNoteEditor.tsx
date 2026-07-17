@@ -281,6 +281,21 @@ export function BlockNoteEditor({ value, onChange, placeholder, fullHeight }: Bl
           transition: opacity .15s;
         }
         [data-bn-editor] img:hover { opacity: .92; }
+        /* Playbook-style structured section labels for daily reviews */
+        [data-bn-editor] h2.r-label {
+          color: #D4AF37; text-transform: uppercase; letter-spacing: 0.06em;
+          font-size: 12px; font-weight: 700; margin: 22px 0 2px 0; line-height: 1.2;
+        }
+        [data-bn-editor] p.r-hint {
+          color: #6b7280; font-size: 11px; margin: 0 0 8px 0; font-style: normal; line-height: 1.3;
+        }
+        [data-bn-editor] hr.r-div {
+          border: 0; border-top: 1px solid #1a1a1a; margin: 18px 0;
+        }
+        [data-bn-editor] .r-meta {
+          color: #9ca3af; font-size: 12px; margin: 2px 0;
+        }
+        [data-bn-editor] .r-meta strong { color: #e5e5e5; }
       `}</style>
       {lightbox && (
         <div

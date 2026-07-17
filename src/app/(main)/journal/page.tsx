@@ -8,6 +8,7 @@ import { Toaster } from 'sonner'
 import { useComponentRegistry, type ScrollBehavior } from '@/lib/ag-ui/component-registry'
 
 import { JournalLayout } from '@/components/journal/JournalLayout'
+import { DailyReviewsSection } from '@/components/journal/daily-reviews-section'
 import {
   JournalEntryCard,
   NewEntryModal,
@@ -356,6 +357,8 @@ function EnhancedJournalContent({
       onNewEntry={() => setShowNewEntryModal(true)}
     >
       <div className="space-y-4">
+        <DailyReviewsSection />
+
         {/* Results Summary */}
         <div className="flex items-center justify-between">
           <div className="text-sm studio-muted">

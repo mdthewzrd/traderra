@@ -1,15 +1,16 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { AppLayout } from '@/components/layout/app-layout'
 import { DisplayModeToggle } from '@/components/ui/display-mode-toggle'
 import { PnLModeToggle } from '@/components/ui/pnl-mode-toggle'
 import { TraderViewDateSelector } from '@/components/ui/traderview-date-selector'
 import { useChatContext, useDateRange, usePnLMode, useDisplayMode } from '@/contexts/TraderraContext'
 import { useTrades } from '@/hooks/useTrades'
-import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Calendar, Plus, FileText } from 'lucide-react'
 import { useComponentRegistry } from '@/lib/ag-ui/component-registry'
 import { useCopilotReadable } from '@/hooks/useCopilotReadableWithContext'
+import { ReviewDrawer } from '@/components/calendar/review-drawer'
 
 type ViewMode = 'year' | 'month'
 
@@ -97,6 +98,21 @@ export default function CalendarPage() {
 
   // Track if we've already initialized with detected year
   const [initializedWithTrades, setInitializedWithTrades] = useState(false)
+
+  // Daily reviews linked to calendar dates (ContentItems of type 'review').
+  const [reviews, setReviews] = useState<Record<string, { id: string; title: string; updated_at: string }>>({})
+  const [openDate, setOpenDate] = useState<{ date: string; reviewId: string | null } | null>(null)
+
+  const loadReviews = useCallback((year: number) => {
+    fetch(`/api/calendar/reviews?from=${year}-01-01&to=${year}-12-31`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d) setReviews(d.reviews || {}) })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => { loadReviews(currentYear) }, [currentYear, loadReviews])
+
+  const openDateCell = (date: string, reviewId: string | null) => setOpenDate({ date, reviewId })
 
   // Update current year when detected year changes (e.g., after trades load)
   // Only do this once on initial load, then respect user's manual changes
@@ -631,8 +647,9 @@ export default function CalendarPage() {
                     return (
                       <div
                         key={dateKey}
+                        onClick={() => dayInfo.isCurrentMonth && openDateCell(dateKey, reviews[dateKey]?.id ?? null)}
                         className={`
-                          min-h-[140px] p-2
+                          min-h-[140px] p-2 cursor-pointer transition-colors hover:ring-1 hover:ring-[#D4AF37]/40
                           ${!dayInfo.isCurrentMonth
                             ? 'opacity-30 bg-[#0a0a0a]'
                             : pnl > 0
@@ -648,12 +665,23 @@ export default function CalendarPage() {
                             <span className={`text-sm ${isToday ? 'bg-primary text-white px-2 py-0.5' : 'studio-text'}`}>
                               {dayInfo.day}
                             </span>
-                            {hasTrades && (
-                              <div className={`text-xs px-1 py-0.5 ${pnl >= 0 ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
-                                {dayInfo.trades}
-                              </div>
-                            )}
+                            <div className="flex items-center gap-1">
+                              {hasTrades && (
+                                <div className={`text-xs px-1 py-0.5 ${pnl >= 0 ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
+                                  {dayInfo.trades}
+                                </div>
+                              )}
+                              <span title={reviews[dateKey] ? 'Open review' : 'Add review'} className="flex h-5 w-5 items-center justify-center rounded text-[#D4AF37]/70 text-xs pointer-events-none">
+                                {reviews[dateKey] ? <FileText className="h-3 w-3 text-[#D4AF37]" /> : <Plus className="h-3 w-3" />}
+                              </span>
+                            </div>
                           </div>
+                          {reviews[dateKey] && dayInfo.isCurrentMonth && (
+                            <div className="flex items-center gap-1 mt-1 px-1 py-0.5 rounded bg-[#D4AF37]/10 border border-[#D4AF37]/20 truncate pointer-events-none">
+                              <FileText className="h-2.5 w-2.5 text-[#D4AF37] shrink-0" />
+                              <span className="text-[10px] text-[#D4AF37] truncate">{reviews[dateKey].title}</span>
+                            </div>
+                          )}
                           {dayInfo.isCurrentMonth && pnl !== 0 && (
                             <div className={`text-sm font-bold text-center ${pnl > 0 ? 'text-green-400' : pnl < 0 ? 'text-red-400' : 'text-gray-500'}`}>
                               {formatValue(pnl)}
@@ -669,6 +697,14 @@ export default function CalendarPage() {
           )}
         </div>
       </div>
+      {openDate && (
+        <ReviewDrawer
+          date={openDate.date}
+          reviewId={openDate.reviewId}
+          onClose={() => setOpenDate(null)}
+          onChanged={() => loadReviews(currentYear)}
+        />
+      )}
     </AppLayout>
   )
 }

@@ -16,6 +16,9 @@ model User {
   name     String?
   emailVerified Boolean @default(false)
   image    String?
+  // Access control — owner approves new sign-ups
+  role     String @default("user")    // 'owner' | 'admin' | 'user'
+  status   String @default("pending")  // 'pending' | 'approved' | 'rejected'
   trades   Trade[]
   learningFeedback LearningFeedback[]
   learningRules    LearningRule[]

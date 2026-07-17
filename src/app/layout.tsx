@@ -11,6 +11,8 @@ import { GlobalTraderraProvider } from '@/components/global/GlobalTraderraProvid
 import { GuestModeProvider } from '@/contexts/GuestModeContext'
 import { TradeUploadProvider } from '@/components/providers/trade-upload-provider'
 import { RequestInbox } from '@/components/inbox/RequestInbox'
+import { InboxPush } from '@/components/layout/inbox-push'
+import { ApprovalGuard } from '@/components/layout/approval-guard'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -73,15 +75,17 @@ export default function RootLayout({
       </head>
       <body className={`${inter.variable} font-sans antialiased studio-bg min-h-screen`} style={{ fontSize: 13 }}>
         <StudioTheme>
-          <TopNav />
           <TraderraProvider>
+            <TopNav />
             <GlobalTraderraProvider>
               <GuestModeProvider>
                 <QueryProvider>
                   <TradeUploadProvider>
                     <ToastProvider />
-                    {children}
-                    <RequestInbox />
+                    <ApprovalGuard>
+                      <InboxPush>{children}</InboxPush>
+                      <RequestInbox />
+                    </ApprovalGuard>
                   </TradeUploadProvider>
                 </QueryProvider>
               </GuestModeProvider>

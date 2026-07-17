@@ -1,10 +1,11 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { AppLayout } from '@/components/layout/app-layout'
 import {
   Settings,
   User,
+  Users,
   Shield,
   Bell,
   Palette,
@@ -45,10 +46,15 @@ const settingsSections = [
   { id: 'appearance', name: 'Appearance', icon: Palette },
   { id: 'data', name: 'Data & Exports', icon: Database },
   { id: 'security', name: 'Security', icon: Shield },
+  { id: 'users', name: 'User Management', icon: Users },
 ]
 
 function SettingsPageContent() {
   const [activeSection, setActiveSection] = useState('profile')
+  // User management (admin only)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [allUsers, setAllUsers] = useState<any[]>([])
+  const [userActing, setUserActing] = useState<string | null>(null)
   const [showApiKey, setShowApiKey] = useState(false)
   const [unsavedChanges, setUnsavedChanges] = useState(false)
 
@@ -268,7 +274,7 @@ function SettingsPageContent() {
   // Register settings components with AG-UI registry
   useComponentRegistry('settings.section', {
     setState: (state) => {
-      if (typeof state === 'string' && ['profile', 'trading', 'integrations', 'notifications', 'appearance', 'data', 'security'].includes(state)) {
+      if (typeof state === 'string' && ['profile', 'trading', 'integrations', 'notifications', 'appearance', 'data', 'security', 'users'].includes(state)) {
         setActiveSection(state)
       }
     }
@@ -1327,6 +1333,110 @@ function SettingsPageContent() {
     </div>
   )
 
+  // Detect admin role on mount (so the User Management nav item shows for owner/admin)
+  useEffect(() => {
+    fetch('/api/auth/me', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(d => {
+        const u = d.user
+        setIsAdmin(u && (u.role === 'owner' || u.role === 'admin') && u.status === 'approved')
+      })
+      .catch(() => {})
+  }, [])
+
+  // Load users for the admin User Management panel
+  useEffect(() => {
+    if (activeSection !== 'users') return
+    fetch('/api/admin/users', { cache: 'no-store' })
+      .then(r => {
+        if (r.status === 403) { setIsAdmin(false); return null }
+        setIsAdmin(true)
+        return r.json()
+      })
+      .then(d => { if (d) setAllUsers(d.users || []) })
+      .catch(() => {})
+  }, [activeSection])
+
+  const actOnUser = async (userId: string, action: 'approve' | 'reject', role?: string) => {
+    setUserActing(userId)
+    await fetch(`/api/admin/${action}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(role ? { userId, role } : { userId }),
+    })
+    setUserActing(null)
+    fetch('/api/admin/users', { cache: 'no-store' })
+      .then(r => r.json()).then(d => setAllUsers(d.users || [])).catch(() => {})
+  }
+
+  const renderUserManagement = () => {
+    if (!isAdmin) {
+      return (
+        <div className="p-8 text-center text-[#666]">
+          Only the account owner or an admin can manage users.
+        </div>
+      )
+    }
+    const statusColor = (s: string) =>
+      s === 'approved' ? 'text-green-400 bg-green-500/10' :
+      s === 'pending' ? 'text-amber-400 bg-amber-500/10' :
+      'text-red-400 bg-red-500/10'
+    return (
+      <div>
+        <h2 className="text-xl font-bold mb-1">User Management</h2>
+        <p className="text-sm text-[#666] mb-6">Approve access requests and manage user roles. New sign-ups require your approval.</p>
+        <div className="rounded-lg border border-[#1f2937] overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-[#0f1623]">
+              <tr className="text-left text-[#666]">
+                <th className="px-4 py-3 font-medium">User</th>
+                <th className="px-4 py-3 font-medium">Role</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {allUsers.map((u: any) => (
+                <tr key={u.id} className="border-t border-[#141c2b]">
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-[#e0e0e0]">{u.name || u.email || 'Unknown'}</div>
+                    {u.email && u.name && <div className="text-xs text-[#666]">{u.email}</div>}
+                  </td>
+                  <td className="px-4 py-3 capitalize text-[#9ca3af]">{u.role}</td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-block px-2 py-0.5 rounded text-xs capitalize ${statusColor(u.status)}`}>{u.status}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-2">
+                      {u.status !== 'approved' && (
+                        <button onClick={() => actOnUser(u.id, 'approve')} disabled={userActing === u.id}
+                          className="px-3 py-1 rounded-md bg-green-500/15 text-green-400 hover:bg-green-500/25 text-xs disabled:opacity-40">Approve</button>
+                      )}
+                      {u.status === 'approved' && u.role === 'user' && (
+                        <button onClick={() => actOnUser(u.id, 'approve', 'admin')} disabled={userActing === u.id}
+                          className="px-3 py-1 rounded-md bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 text-xs disabled:opacity-40">Make Admin</button>
+                      )}
+                      {u.status === 'approved' && u.role === 'admin' && (
+                        <button onClick={() => actOnUser(u.id, 'approve', 'user')} disabled={userActing === u.id}
+                          className="px-3 py-1 rounded-md bg-[#1f2937] text-[#9ca3af] hover:bg-[#2a3441] text-xs disabled:opacity-40">Demote</button>
+                      )}
+                      {u.status !== 'rejected' && (
+                        <button onClick={() => actOnUser(u.id, 'reject')} disabled={userActing === u.id}
+                          className="px-3 py-1 rounded-md bg-red-500/15 text-red-400 hover:bg-red-500/25 text-xs disabled:opacity-40">Reject</button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {allUsers.length === 0 && (
+                <tr><td colSpan={4} className="px-4 py-8 text-center text-[#666]">No users found.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )
+  }
+
   const renderActiveSection = () => {
     switch (activeSection) {
       case 'profile':
@@ -1343,6 +1453,8 @@ function SettingsPageContent() {
         return renderDataSettings()
       case 'security':
         return renderSecuritySettings()
+      case 'users':
+        return renderUserManagement()
       default:
         return renderProfileSettings()
     }
@@ -1429,7 +1541,7 @@ function SettingsPageContent() {
           <div className="w-64 studio-border border-r flex-shrink-0">
           <nav className="p-4">
             <ul className="space-y-1">
-              {settingsSections.map((section) => (
+              {settingsSections.filter(s => s.id !== 'users' || isAdmin).map((section) => (
                 <li key={section.id}>
                   <button
                     onClick={() => setActiveSection(section.id)}

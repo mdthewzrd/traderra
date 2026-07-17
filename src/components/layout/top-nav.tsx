@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { Brain, Github, Search, Radio, Gauge, Database, LineChart as LineChartIcon, FlaskConical, BookOpen, Droplets, TestTube, MessageCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useChatContext } from '@/contexts/TraderraContext'
+import { ApprovalBell } from '@/components/layout/approval-bell'
 
 // Edge-dev trading tools — the real daily-use nav.
 const edgeTools = [
@@ -24,6 +26,7 @@ const HIDDEN_PREFIXES = ['/journal', '/trades', '/dashboard', '/calendar', '/sta
 
 function NavInner({ forceShow = false }: { forceShow?: boolean }) {
   const pathname = usePathname()
+  const { isSidebarOpen } = useChatContext()
   // Render nothing during SSR / static collection (avoids pages-manifest crash).
   // Hydrates on client — same pattern RequestInbox uses safely in the root layout.
   const [mounted, setMounted] = useState(false)
@@ -86,9 +89,15 @@ function NavInner({ forceShow = false }: { forceShow?: boolean }) {
 
       {/* Right side */}
       <div className="flex items-center gap-2">
+        <ApprovalBell />
         <button
-          onClick={() => window.dispatchEvent(new CustomEvent('open-request-inbox'))}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 transition-all"
+          onClick={() => window.dispatchEvent(new CustomEvent(isSidebarOpen ? 'close-request-inbox' : 'open-request-inbox'))}
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold border transition-all",
+            isSidebarOpen
+              ? "text-[#0a0a0a] bg-amber-500 border-amber-500"
+              : "text-amber-300 bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20"
+          )}
           title="Send to Renata"
         >
           <MessageCircle className="h-4 w-4" />

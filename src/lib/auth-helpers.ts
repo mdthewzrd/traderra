@@ -1,6 +1,7 @@
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { headers as nextHeaders } from 'next/headers'
+import { OWNER_EMAIL, isAdminRole } from '@/lib/access'
 
 // Resolve userId for a request. NOTE: better-auth's getSession() via next/headers
 // does NOT reliably resolve sessions in this app's route handlers (verified 401
@@ -52,4 +53,46 @@ export async function getAuthUserId(request?: Request): Promise<string | null> {
   } catch {}
 
   return null
+}
+
+export interface CurrentUser {
+  id: string
+  email: string | null
+  name: string | null
+  role: string
+  status: string
+}
+
+/**
+ * Resolve the full current-user record (incl. role/status) for a request.
+ * Auto-corrects OWNER_EMAIL to role:owner + status:approved so the owner can
+ * never be locked out, even if the DB is reset.
+ */
+export async function getCurrentUser(request?: Request): Promise<CurrentUser | null> {
+  const userId = await getAuthUserId(request)
+  if (!userId) return null
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, name: true, role: true, status: true },
+  })
+  if (!user) return null
+  if (user.email?.toLowerCase() === OWNER_EMAIL.toLowerCase()) {
+    if (user.role !== 'owner' || user.status !== 'approved') {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { role: 'owner', status: 'approved' },
+      })
+      user.role = 'owner'
+      user.status = 'approved'
+    }
+  }
+  return user
+}
+
+/** Require an approved admin-or-owner user. Returns the user or null. */
+export async function requireAdmin(request?: Request): Promise<CurrentUser | null> {
+  const user = await getCurrentUser(request)
+  if (!user) return null
+  if (!isAdminRole(user.role) || user.status !== 'approved') return null
+  return user
 }

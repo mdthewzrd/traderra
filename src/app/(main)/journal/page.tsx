@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo, useEffect } from 'react'
 import { AppLayout } from '@/components/layout/app-layout'
 import { useAuth } from '@/lib/auth-client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -8,7 +8,8 @@ import { Toaster } from 'sonner'
 import { useComponentRegistry, type ScrollBehavior } from '@/lib/ag-ui/component-registry'
 
 import { JournalLayout } from '@/components/journal/JournalLayout'
-import { DailyReviewsSection } from '@/components/journal/daily-reviews-section'
+import { ReviewDocView } from '@/components/journal/review-doc-view'
+import { Plus, FileText, ChevronRight } from 'lucide-react'
 import {
   JournalEntryCard,
   NewEntryModal,
@@ -57,13 +58,55 @@ function EnhancedJournalContent({
   } = useFolderTree(userId, !!userId)
 
   // Virtual "Daily Reviews" node — NOT a DB folder. Reviews are date-keyed
-  // ContentItems (type:'review'); this sentinel makes them discoverable in the
-  // sidebar. Selecting it shows the reviews view in the content pane.
+  // ContentItems (type:'review'); each review becomes a child doc in the tree.
   const DAILY_REVIEWS_ID = '__daily_reviews__'
-  const foldersWithReviews = useMemo<FolderNode[]>(() => [
-    { id: DAILY_REVIEWS_ID, name: 'Daily Reviews', icon: 'calendar', color: '#D4AF37', position: -1, children: [], contentCount: 0 },
-    ...(folders || [])
-  ], [folders])
+  const [reviews, setReviews] = useState<{ id: string; title: string; _date: string; updated_at: string }[]>([])
+  const loadReviews = useCallback(() => {
+    const y = new Date().getFullYear()
+    fetch(`/api/calendar/reviews?from=${y - 1}-01-01&to=${y}-12-31`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const map = (d?.reviews || {}) as Record<string, { id: string; title: string; updated_at: string }>
+        setReviews(
+          Object.entries(map)
+            .map(([date, r]) => ({ ...r, _date: date }))
+            .sort((a, b) => (a._date < b._date ? 1 : -1))
+        )
+      })
+      .catch(() => {})
+  }, [])
+  useEffect(() => { loadReviews() }, [loadReviews])
+
+  const foldersWithReviews = useMemo<FolderNode[]>(() => {
+    const reviewChildren: FolderNode[] = reviews.map((r) => ({
+      id: r.id,
+      name: r.title || 'Daily Review',
+      parentId: DAILY_REVIEWS_ID,
+      icon: 'file-text',
+      color: '#D4AF37',
+      position: 0,
+      children: [],
+      contentCount: 0,
+    }))
+    return [
+      { id: DAILY_REVIEWS_ID, name: 'Daily Reviews', icon: 'calendar', color: '#D4AF37', position: -1, children: reviewChildren, contentCount: reviews.length, isExpanded: true },
+      ...(folders || []),
+    ]
+  }, [folders, reviews])
+
+  const selectedReview = reviews.find((r) => r.id === selectedFolderId) || null
+
+  const openTodayReview = useCallback(async () => {
+    const today = new Date().toISOString().split('T')[0]
+    try {
+      const r = await fetch('/api/calendar/reviews', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: today }),
+      })
+      const d = r.ok ? await r.json() : null
+      if (d?.id) { loadReviews(); setSelectedFolderId(d.id) }
+    } catch {}
+  }, [loadReviews])
 
   const {
     items: contentItems,
@@ -365,11 +408,48 @@ function EnhancedJournalContent({
       showNewEntryButton={selectedFolderId !== DAILY_REVIEWS_ID}
       onNewEntry={() => setShowNewEntryModal(true)}
     >
-      <div className="space-y-4">
-        <DailyReviewsSection />
-
-        {selectedFolderId !== DAILY_REVIEWS_ID && (<>
-        {/* Results Summary */}
+        {selectedReview ? (
+          <ReviewDocView
+            key={selectedReview.id}
+            reviewId={selectedReview.id}
+            onChanged={loadReviews}
+            onDeleted={() => { loadReviews(); setSelectedFolderId(DAILY_REVIEWS_ID) }}
+            onBack={() => setSelectedFolderId(DAILY_REVIEWS_ID) }
+          />
+        ) : selectedFolderId === DAILY_REVIEWS_ID ? (
+          <div className="max-w-3xl mx-auto px-6 py-6">
+            <div className="flex items-center justify-between pb-4 border-b border-[#1a1a1a]">
+              <h2 className="text-2xl font-bold studio-text">Daily Reviews</h2>
+              <button onClick={openTodayReview} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#D4AF37] text-[#0a0a0a] text-sm font-semibold hover:opacity-90">
+                <Plus className="h-4 w-4" /> New Today
+              </button>
+            </div>
+            {reviews.length === 0 ? (
+              <div className="py-16 text-center studio-muted">
+                <p className="mb-3">No daily reviews yet.</p>
+                <button onClick={openTodayReview} className="text-[#D4AF37] hover:underline">Create today&apos;s review →</button>
+              </div>
+            ) : (
+              <div className="mt-4 space-y-2">
+                {reviews.map((r) => (
+                  <button key={r.id} onClick={() => setSelectedFolderId(r.id)}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-[#0f0f0f] border border-[#1a1a1a] hover:border-[#D4AF37]/40 hover:bg-[#141c2b] transition-colors text-left">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#D4AF37]/10 text-[#D4AF37]">
+                      <FileText className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium studio-text truncate">{r.title}</span>
+                      <span className="block text-xs studio-muted">{new Date(r._date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                    </span>
+                    <ChevronRight className="h-4 w-4 studio-muted shrink-0" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4">
+          {/* Results Summary */}
         <div className="flex items-center justify-between">
           <div className="text-sm studio-muted">
             {selectedFolder ? (
@@ -430,8 +510,8 @@ function EnhancedJournalContent({
           )}
         </div>
         </div>
-        </>)}
-      </div>
+          </div>
+        )}
 
       {/* New Entry Modal */}
       <NewEntryModal

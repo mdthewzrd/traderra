@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { X, Loader2, FileText, LayoutTemplate, Trash2 } from 'lucide-react'
 import { BlockNoteEditor } from '@/components/journal/BlockNoteEditor'
 
-const DAILY_REVIEW_TEMPLATE = `<h1>PM Notes</h1>
+export const DAILY_REVIEW_TEMPLATE = `<h1>PM Notes</h1>
 <ul>
 <li>SPY / QQQ levels:</li>
 <li>Catalysts &amp; news:</li>

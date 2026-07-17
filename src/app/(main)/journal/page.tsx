@@ -9,7 +9,8 @@ import { useComponentRegistry, type ScrollBehavior } from '@/lib/ag-ui/component
 
 import { JournalLayout } from '@/components/journal/JournalLayout'
 import { ReviewDocView } from '@/components/journal/review-doc-view'
-import { Plus, FileText, ChevronRight } from 'lucide-react'
+import { ReviewImportModal } from '@/components/journal/review-import-modal'
+import { Plus, FileText, ChevronRight, Upload } from 'lucide-react'
 import {
   JournalEntryCard,
   NewEntryModal,
@@ -94,6 +95,7 @@ function EnhancedJournalContent({
     ]
   }, [folders, reviews])
 
+  const [showImport, setShowImport] = useState(false)
   const selectedReview = reviews.find((r) => r.id === selectedFolderId) || null
 
   const openTodayReview = useCallback(async () => {
@@ -420,9 +422,14 @@ function EnhancedJournalContent({
           <div className="max-w-3xl mx-auto px-6 py-6">
             <div className="flex items-center justify-between pb-4 border-b border-[#1a1a1a]">
               <h2 className="text-2xl font-bold studio-text">Daily Reviews</h2>
-              <button onClick={openTodayReview} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#D4AF37] text-[#0a0a0a] text-sm font-semibold hover:opacity-90">
-                <Plus className="h-4 w-4" /> New Today
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowImport(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#2a2a2a] text-sm studio-text hover:border-[#D4AF37]/50 hover:bg-[#D4AF37]/5 transition-colors">
+                  <Upload className="h-4 w-4" /> Import
+                </button>
+                <button onClick={openTodayReview} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#D4AF37] text-[#0a0a0a] text-sm font-semibold hover:opacity-90">
+                  <Plus className="h-4 w-4" /> New Today
+                </button>
+              </div>
             </div>
             {reviews.length === 0 ? (
               <div className="py-16 text-center studio-muted">
@@ -518,6 +525,13 @@ function EnhancedJournalContent({
         isOpen={showNewEntryModal}
         onClose={() => setShowNewEntryModal(false)}
         onSave={handleSaveEntry}
+      />
+
+      {/* Import Reviews Modal */}
+      <ReviewImportModal
+        isOpen={showImport}
+        onClose={() => setShowImport(false)}
+        onImported={loadReviews}
       />
 
       {/* Loading Overlay */}

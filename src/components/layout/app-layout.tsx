@@ -42,7 +42,7 @@ export function AppLayout({
           className="flex-1 overflow-x-hidden"
           style={{ direction: 'ltr' }}
         >
-          <div className={`w-full overflow-x-hidden transition-[padding] duration-300 ${aiSidebarOpen ? 'pr-[400px]' : 'pr-6'}`}>
+          <div className="w-full overflow-x-hidden pr-6">
             {showPageHeader && pageHeaderContent}
             {children}
           </div>

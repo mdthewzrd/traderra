@@ -648,9 +648,6 @@ export function TraderraProvider({ children }: TraderraProviderProps) {
       if (parsed.customStartDate && parsed.customEndDate) {
         setCustomRange(new Date(parsed.customStartDate), new Date(parsed.customEndDate))
       }
-      if (parsed.chatPreferences?.isSidebarOpen !== undefined) {
-        setIsSidebarOpen(parsed.chatPreferences.isSidebarOpen)
-      }
     } catch (error) {
       console.error('Failed to import user preferences:', error)
     }
@@ -735,18 +732,9 @@ export function TraderraProvider({ children }: TraderraProviderProps) {
       console.warn('Failed to load current conversation ID from localStorage:', error)
     }
 
-    // Load chat preferences from localStorage
-    try {
-      const savedChatPreferences = localStorage.getItem(STORAGE_KEYS.CHAT_PREFERENCES)
-      if (savedChatPreferences) {
-        const parsed = JSON.parse(savedChatPreferences)
-        if (parsed.isSidebarOpen !== undefined) {
-          setIsSidebarOpenState(parsed.isSidebarOpen)
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to load chat preferences from localStorage:', error)
-    }
+    // Inbox panel state is EPHEMERAL — always starts closed.
+    // (Previously restored isSidebarOpen from localStorage, which applied the
+    //  content push on load with no panel visible.)
 
     // Mark chat as loaded after all localStorage operations complete
     setChatLoaded(true)

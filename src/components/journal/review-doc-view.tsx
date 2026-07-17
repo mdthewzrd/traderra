@@ -56,6 +56,17 @@ function SectionField({ label, hint, section, onChange, onImageClick }: {
   const [local, setLocal] = useState(section.text)
   const pushRef = useRef(section.text)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const taRef = useRef<HTMLTextAreaElement>(null)
+
+  // Auto-grow: each field sizes to its own content so a one-liner is compact
+  // and a long block expands to show everything (no internal scrolling).
+  const autoSize = useCallback(() => {
+    const el = taRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [])
+  useEffect(() => { autoSize() }, [local, autoSize])
 
   useEffect(() => {
     if (section.text !== pushRef.current && section.text !== local) {
@@ -100,8 +111,9 @@ function SectionField({ label, hint, section, onChange, onImageClick }: {
         }}
         onBlur={flush}
         onPaste={onPaste}
+        ref={taRef}
         placeholder="Write here… (paste screenshots straight in)"
-        className="w-full border rounded-lg px-3 py-2 text-sm leading-relaxed resize-y focus:outline-none min-h-[120px]"
+        className="w-full border rounded-lg px-3 py-2 text-sm leading-relaxed overflow-hidden resize-none focus:outline-none min-h-[2.5rem]"
         style={{ background: C.SURFACE, borderColor: C.BORDER, color: C.TEXT }}
       />
       {section.annots.length > 0 && (

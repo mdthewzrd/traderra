@@ -56,6 +56,15 @@ function EnhancedJournalContent({
     isDeleting
   } = useFolderTree(userId, !!userId)
 
+  // Virtual "Daily Reviews" node — NOT a DB folder. Reviews are date-keyed
+  // ContentItems (type:'review'); this sentinel makes them discoverable in the
+  // sidebar. Selecting it shows the reviews view in the content pane.
+  const DAILY_REVIEWS_ID = '__daily_reviews__'
+  const foldersWithReviews = useMemo<FolderNode[]>(() => [
+    { id: DAILY_REVIEWS_ID, name: 'Daily Reviews', icon: 'calendar', color: '#D4AF37', position: -1, children: [], contentCount: 0 },
+    ...(folders || [])
+  ], [folders])
+
   const {
     items: contentItems,
     total: totalContent,
@@ -348,17 +357,18 @@ function EnhancedJournalContent({
 
   return (
     <JournalLayout
-      folders={folders as any}
+      folders={foldersWithReviews as any}
       foldersLoading={foldersLoading}
       selectedFolderId={selectedFolderId}
       onFolderSelect={setSelectedFolderId}
-      onCreateFolder={(name) => createFolder(name || 'New Folder', selectedFolderId)}
-      showNewEntryButton
+      onCreateFolder={(name) => createFolder(name || 'New Folder', selectedFolderId === DAILY_REVIEWS_ID ? undefined : selectedFolderId)}
+      showNewEntryButton={selectedFolderId !== DAILY_REVIEWS_ID}
       onNewEntry={() => setShowNewEntryModal(true)}
     >
       <div className="space-y-4">
         <DailyReviewsSection />
 
+        {selectedFolderId !== DAILY_REVIEWS_ID && (<>
         {/* Results Summary */}
         <div className="flex items-center justify-between">
           <div className="text-sm studio-muted">
@@ -420,6 +430,7 @@ function EnhancedJournalContent({
           )}
         </div>
         </div>
+        </>)}
       </div>
 
       {/* New Entry Modal */}

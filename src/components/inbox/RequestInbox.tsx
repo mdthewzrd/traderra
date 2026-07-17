@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { Loader2 } from 'lucide-react'
 import { useChatContext } from '@/contexts/TraderraContext'
 
 type Req = {
@@ -34,7 +35,7 @@ export function RequestInbox() {
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [message, setMessage] = useState('')
-  const [imgs, setImgs] = useState<string[]>([])
+  const [imgs, setImgs] = useState<{ id: string; preview: string; url: string | null; uploading: boolean; error: boolean }[]>([])
   const [sending, setSending] = useState(false)
   const [reqs, setReqs] = useState<Req[]>([])
   const [sent, setSent] = useState<string | null>(null)
@@ -64,34 +65,49 @@ export function RequestInbox() {
       if (item.type.startsWith('image/')) {
         const file = item.getAsFile()
         if (!file) continue
-        const reader = new FileReader()
-        reader.onload = async () => {
-          const dataUrl = reader.result as string
-          try {
-            const up = await fetch('/api/inbox-upload', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ dataUrl }),
-            })
-            if (up.ok) {
-              const { url } = await up.json()
-              setImgs((p) => [...p, url])
-            }
-          } catch { /* ignore failed upload */ }
+        // Instant local preview — don't wait for the upload round-trip.
+        const id = (crypto as any).randomUUID?.() ?? String(Date.now() + Math.random())
+        const preview = URL.createObjectURL(file)
+        setImgs((p) => [...p, { id, preview, url: null, uploading: true, error: false }])
+        try {
+          const dataUrl: string = await new Promise((res, rej) => {
+            const reader = new FileReader()
+            reader.onload = () => res(reader.result as string)
+            reader.onerror = rej
+            reader.readAsDataURL(file)
+          })
+          const up = await fetch('/api/inbox-upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dataUrl }),
+          })
+          if (up.ok) {
+            const { url } = await up.json()
+            setImgs((p) => p.map((im) => (im.id === id ? { ...im, url, uploading: false } : im)))
+          } else {
+            setImgs((p) => p.map((im) => (im.id === id ? { ...im, uploading: false, error: true } : im)))
+          }
+        } catch {
+          setImgs((p) => p.map((im) => (im.id === id ? { ...im, uploading: false, error: true } : im)))
         }
-        reader.readAsDataURL(file)
       }
     }
   }, [])
 
-  const removeImg = (u: string) => setImgs((p) => p.filter((x) => x !== u))
+  const removeImg = (id: string) =>
+    setImgs((p) => {
+      const im = p.find((x) => x.id === id)
+      if (im) URL.revokeObjectURL(im.preview)
+      return p.filter((x) => x.id !== id)
+    })
 
   const submit = async () => {
     if (!title.trim() || sending) return
     setSending(true)
     try {
       const ctx = typeof window !== 'undefined' ? `\n\n— sent from ${window.location.pathname}` : ''
-      const imgLinks = imgs.length ? `\n\nScreenshots:\n${imgs.map((u) => `${window.location.origin}${u}`).join('\n')}` : ''
+      const uploaded = imgs.filter((i) => i.url)
+      const imgLinks = uploaded.length ? `\n\nScreenshots:\n${uploaded.map((u) => `${window.location.origin}${u.url}`).join('\n')}` : ''
       const r = await fetch('/api/requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -103,7 +119,9 @@ export function RequestInbox() {
       if (r.ok) {
         const created = await r.json()
         setSent(created?.id ?? 'REQ')
-        setTitle(''); setMessage(''); setImgs([])
+        setTitle(''); setMessage('')
+        imgs.forEach((i) => URL.revokeObjectURL(i.preview))
+        setImgs([])
         await loadReqs()
       }
     } finally {
@@ -113,11 +131,24 @@ export function RequestInbox() {
 
   const reset = () => { setSent(null) }
 
-  // open via top-nav "Renata" button (no more floating FAB)
+  // Extract screenshot paths embedded in a request description.
+  // Matches both /api/inbox-asset/NNN.ext (new) and /inbox/NNN.ext (legacy).
+  const screenshotsOf = (desc?: string): string[] => {
+    if (!desc) return []
+    const m = desc.match(/(?:\/api\/inbox-asset|\/inbox)\/[^\s)]+\.(?:png|jpe?g|gif|webp)/gi)
+    return m ? m : []
+  }
+
+  // open/close via top-nav "Renata" button (toggle)
   useEffect(() => {
-    const handler = () => setOpen(true)
-    window.addEventListener('open-request-inbox', handler)
-    return () => window.removeEventListener('open-request-inbox', handler)
+    const open = () => setOpen(true)
+    const close = () => setOpen(false)
+    window.addEventListener('open-request-inbox', open)
+    window.addEventListener('close-request-inbox', close)
+    return () => {
+      window.removeEventListener('open-request-inbox', open)
+      window.removeEventListener('close-request-inbox', close)
+    }
   }, [])
 
   // Sync panel-open state to the context so AppLayout reserves a right gutter
@@ -177,12 +208,22 @@ export function RequestInbox() {
                   />
                   {imgs.length > 0 && (
                     <div className="flex flex-wrap gap-2">
-                      {imgs.map((u) => (
-                        <div key={u} className="group relative">
+                      {imgs.map((im) => (
+                        <div key={im.id} className="group relative">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={u} alt="screenshot" className="h-16 w-16 rounded border studio-border object-cover" />
+                          <img src={im.preview} alt="screenshot" className={`h-16 w-16 rounded border studio-border object-cover ${im.uploading ? 'opacity-40' : ''}`} />
+                          {im.uploading && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                            </div>
+                          )}
+                          {im.error && (
+                            <div className="absolute inset-0 flex items-center justify-center rounded bg-rose-500/40" title="Upload failed — try again">
+                              <span className="text-xs font-bold text-white">!</span>
+                            </div>
+                          )}
                           <button
-                            onClick={() => removeImg(u)}
+                            onClick={() => removeImg(im.id)}
                             className="absolute -right-1.5 -top-1.5 hidden h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] text-white group-hover:flex"
                           >×</button>
                         </div>
@@ -215,18 +256,30 @@ export function RequestInbox() {
                 {reqs.length === 0 ? (
                   <p className="py-3 text-center text-xs studio-muted">No requests yet.</p>
                 ) : (
-                  reqs.slice(0, 30).map((r) => (
+                  reqs.slice(0, 30).map((r) => {
+                    const shots = screenshotsOf(r.description)
+                    return (
                     <div key={r.id} className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-[#1a1a1a]">
                       <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ring-1 ${STATUS_STYLE[r.status] ?? 'bg-[#1a1a1a] studio-muted ring-[#333]'}`}>
                         {STATUS_LABEL[r.status] ?? r.status}
                       </span>
+                      {shots.length > 0 && (
+                        <div className="relative mt-0.5 shrink-0">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={shots[0]} alt="screenshot" className="h-8 w-8 rounded border studio-border object-cover" />
+                          {shots.length > 1 && (
+                            <span className="absolute -bottom-1 -right-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">{shots.length}</span>
+                          )}
+                        </div>
+                      )}
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-xs studio-text">
                           <span className="font-mono studio-muted">{r.id}</span> {r.title}
                         </p>
                       </div>
                     </div>
-                  ))
+                    )
+                  })
                 )}
               </div>
             </div>

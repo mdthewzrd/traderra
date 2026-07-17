@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     mkdirSync(dir, { recursive: true })
     const name = `${Date.now()}.${ext}`
     writeFileSync(join(dir, name), Buffer.from(m[2], 'base64'))
-    return NextResponse.json({ url: `/inbox/${name}` })
+    return NextResponse.json({ url: `/api/inbox-asset/${name}` })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }

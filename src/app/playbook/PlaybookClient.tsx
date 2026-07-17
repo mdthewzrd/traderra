@@ -271,7 +271,7 @@ export default function PlaybookClient() {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden" style={{ background: C.BG, color: C.TEXT }}>
+    <div className="flex h-screen w-full overflow-hidden" style={{ background: C.BG, color: C.TEXT }}>
       {/* ── LEFT RAIL ── */}
       <aside className="w-72 shrink-0 border-r flex flex-col" style={{ background: C.SURFACE, borderColor: C.BORDER }}>
         <div className="px-4 py-3.5 border-b flex items-center justify-between" style={{ borderColor: C.BORDER }}>

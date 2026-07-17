@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ChevronLeft, Trash2, Loader2, LayoutTemplate } from 'lucide-react'
+import { ChevronLeft, Trash2, Loader2, LayoutTemplate, Paperclip } from 'lucide-react'
 
 interface ReviewDocViewProps {
   reviewId: string
@@ -75,6 +75,18 @@ function SectionField({ label, hint, section, onChange, onImageClick }: {
     // eslint-disable-next-line react-hooks-exhaustive-deps
   }, [section.text])
 
+  const fileRef = useRef<HTMLInputElement>(null)
+  const onFiles = async (files: FileList | null) => {
+    if (!files) return
+    const imgs = Array.from(files).filter((f) => f.type.startsWith('image/'))
+    if (imgs.length === 0) return
+    const reads = await Promise.all(imgs.map((f) => new Promise<string>((res) => {
+      const r = new FileReader(); r.onload = () => res(r.result as string); r.readAsDataURL(f)
+    })))
+    onChange({ text: local, annots: [...section.annots, ...reads.map((ref) => ({ ref, caption: '' }))] })
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
   const flush = () => {
     if (timer.current) { clearTimeout(timer.current); timer.current = null }
     if (local !== pushRef.current) { pushRef.current = local; onChange({ text: local, annots: section.annots }) }
@@ -116,6 +128,12 @@ function SectionField({ label, hint, section, onChange, onImageClick }: {
         className="w-full border rounded-lg px-3 py-2 text-sm leading-relaxed overflow-hidden resize-none focus:outline-none min-h-[2.5rem]"
         style={{ background: C.SURFACE, borderColor: C.BORDER, color: C.TEXT }}
       />
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={() => fileRef.current?.click()} className="flex items-center gap-1 text-[11px] studio-muted hover:text-[#D4AF37]">
+          <Paperclip className="h-3 w-3" /> attach charts
+        </button>
+        <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => onFiles(e.target.files)} />
+      </div>
       {section.annots.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {section.annots.map((a, i) => (
@@ -136,14 +154,34 @@ function SectionField({ label, hint, section, onChange, onImageClick }: {
 }
 
 export function ReviewDocView({ reviewId, onChanged, onDeleted, onBack }: ReviewDocViewProps) {
-  const [doc, setDoc] = useState<{ id: string; title: string; content: ReviewContent } | null>(null)
+  const [doc, setDoc] = useState<{ id: string; title: string; date: string; content: ReviewContent } | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [dayTrades, setDayTrades] = useState<any[]>([])
   const [lightbox, setLightbox] = useState<string | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Auto-populated trades for this review's date (read-only computed view).
+  useEffect(() => {
+    const date = doc?.date
+    if (!date) { setDayTrades([]); return }
+    let alive = true
+    fetch('/api/trades?limit=1000', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!alive || !d?.trades) return
+        const ts = d.trades.filter((t: any) => {
+          const td = t.date instanceof Date ? t.date.toISOString() : String(t.date)
+          return td.split('T')[0] === date
+        })
+        setDayTrades(ts)
+      })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [doc?.date])
 
   useEffect(() => {
     let alive = true
@@ -152,7 +190,7 @@ export function ReviewDocView({ reviewId, onChanged, onDeleted, onBack }: Review
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (alive && d) {
-          setDoc({ id: d.id, title: d.title || '', content: parseContent(d.content) })
+          setDoc({ id: d.id, title: d.title || '', date: d.metadata?.reviewDate || '', content: parseContent(d.content) })
         }
       })
       .finally(() => { if (alive) setLoading(false) })
@@ -266,6 +304,57 @@ export function ReviewDocView({ reviewId, onChanged, onDeleted, onBack }: Review
       </div>
 
       {/* Legacy / imported content — preserves old HTML reviews + imports */}
+      {/* Day's trades — auto-populated from the DB by reviewDate (read-only) */}
+      <div className="mt-6">
+        <label className="text-xs uppercase tracking-wider font-bold" style={{ color: C.GOLD }}>Day&apos;s Trades</label>
+        <p className="text-[10px] mt-0.5 mb-2" style={{ color: C.MUTED }}>Auto-populated from your recorded trades for this date.</p>
+        {dayTrades.length === 0 ? (
+          <div className="border rounded-lg px-3 py-4 text-center text-xs studio-muted" style={{ background: C.SURFACE, borderColor: C.BORDER }}>
+            No trades recorded for this date.
+          </div>
+        ) : (
+          <div className="border rounded-lg overflow-hidden" style={{ borderColor: C.BORDER }}>
+            <div className="flex items-center justify-between px-3 py-2 text-xs" style={{ background: '#0a0a0a', color: C.MUTED }}>
+              <span>{dayTrades.length} trade{dayTrades.length !== 1 ? 's' : ''}</span>
+              <span>
+                {dayTrades.filter((t) => (t.pnl || 0) > 0).length}W / {dayTrades.filter((t) => (t.pnl || 0) < 0).length}L ·{' '}
+                <span style={{ color: dayTrades.reduce((s, t) => s + (t.pnl || 0), 0) >= 0 ? '#4ade80' : '#f87171' }}>
+                  {dayTrades.reduce((s, t) => s + (t.pnl || 0), 0) >= 0 ? '+' : ''}${dayTrades.reduce((s, t) => s + (t.pnl || 0), 0).toFixed(0)}
+                </span>
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-left" style={{ color: C.MUTED, borderBottom: `1px solid ${C.BORDER}` }}>
+                    <th className="py-2 px-3">Symbol</th>
+                    <th className="py-2 px-3">Side</th>
+                    <th className="py-2 px-3 text-right">Entry</th>
+                    <th className="py-2 px-3 text-right">Exit</th>
+                    <th className="py-2 px-3 text-right">Qty</th>
+                    <th className="py-2 px-3 text-right">P&amp;L</th>
+                    <th className="py-2 px-3 text-right">R</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dayTrades.map((t) => (
+                    <tr key={t.id} style={{ borderBottom: '1px solid #141414' }}>
+                      <td className="py-2 px-3 font-medium" style={{ color: C.TEXT }}>{t.symbol}</td>
+                      <td className="py-2 px-3"><span style={{ color: String(t.side || '').toLowerCase().startsWith('l') ? '#4ade80' : '#f87171' }}>{t.side}</span></td>
+                      <td className="py-2 px-3 text-right" style={{ color: C.MUTED }}>${(t.entryPrice || 0).toFixed(2)}</td>
+                      <td className="py-2 px-3 text-right" style={{ color: C.MUTED }}>${(t.exitPrice || 0).toFixed(2)}</td>
+                      <td className="py-2 px-3 text-right" style={{ color: C.MUTED }}>{t.quantity}</td>
+                      <td className="py-2 px-3 text-right font-semibold" style={{ color: (t.pnl || 0) >= 0 ? '#4ade80' : '#f87171' }}>{(t.pnl || 0) >= 0 ? '+' : ''}${(t.pnl || 0).toFixed(0)}</td>
+                      <td className="py-2 px-3 text-right" style={{ color: C.MUTED }}>{t.rMultiple != null ? `${t.rMultiple.toFixed(2)}R` : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
       {doc.content.legacyHtml && (
         <div className="mt-6">
           <label className="text-xs uppercase tracking-wider font-bold" style={{ color: C.MUTED }}>Imported Notes</label>

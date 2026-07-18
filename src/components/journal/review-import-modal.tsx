@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { X, Upload, FileText, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
+import { X, Upload, FileText, Loader2, CheckCircle2, AlertCircle, FolderOpen } from 'lucide-react'
 
 interface ReviewImportModalProps {
   isOpen: boolean
@@ -116,9 +116,10 @@ const titleFromFilename = (name: string) =>
 export function ReviewImportModal({ isOpen, onClose, onImported }: ReviewImportModalProps) {
   const [items, setItems] = useState<ParsedReview[]>([])
   const [busy, setBusy] = useState(false)
-  const [result, setResult] = useState<{ created: number; updated: number; skipped: number } | null>(null)
+  const [result, setResult] = useState<{ created: number; updated: number; merged: number; skipped: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const folderRef = useRef<HTMLInputElement>(null)
 
   if (!isOpen) return null
 
@@ -167,7 +168,7 @@ export function ReviewImportModal({ isOpen, onClose, onImported }: ReviewImportM
       })
       const d = r.ok ? await r.json() : null
       if (!d) throw new Error('import failed')
-      setResult({ created: d.created, updated: d.updated, skipped: d.skipped })
+      setResult({ created: d.created, updated: d.updated, merged: d.merged ?? 0, skipped: d.skipped })
       onImported()
     } catch (e: any) {
       setError(e?.message || 'Import failed.')
@@ -196,14 +197,14 @@ export function ReviewImportModal({ isOpen, onClose, onImported }: ReviewImportM
                 <CheckCircle2 className="h-12 w-12 mx-auto text-green-400 mb-3" />
                 <h3 className="text-lg font-semibold studio-text mb-1">Import complete</h3>
                 <p className="text-sm studio-muted">
-                  {result.created} created · {result.updated} updated · {result.skipped} skipped
+                  {result.created} created · {result.updated} updated · {result.merged ? `${result.merged} merged · ` : ''}{result.skipped} skipped
                 </p>
                 <button onClick={close} className="mt-5 px-5 py-2 rounded-lg bg-[#D4AF37] text-[#0a0a0a] text-sm font-semibold hover:opacity-90">Done</button>
               </div>
             ) : (
               <>
                 <p className="text-sm studio-muted">
-                  Export your Notion database as <strong className="studio-text">Markdown &amp; CSV</strong>, then drop the <code className="text-[#D4AF37]">.md</code> files here. We&apos;ll detect the date from each file (filename or first line) — check the preview before importing.
+                  Export your Notion database as <strong className="studio-text">Markdown &amp; CSV</strong>, then bring the <code className="text-[#D4AF37]">.md</code> files in. Pick individual files, or select the whole unzipped export folder — duplicates on the same date are <strong className="studio-text">merged</strong> (never lost), and anything with &quot;weekly&quot; in the title is tagged separately.
                 </p>
 
                 {/* Drop zone */}
@@ -213,8 +214,17 @@ export function ReviewImportModal({ isOpen, onClose, onImported }: ReviewImportM
                 >
                   <FileText className="h-8 w-8 studio-muted mx-auto mb-2" />
                   <p className="text-sm studio-text font-medium">Click to select .md files</p>
-                  <p className="text-xs studio-muted mt-1">or drag them here — multiple files OK</p>
+                  <p className="text-xs studio-muted mt-1">or use the folder button below to import a whole export</p>
                   <input ref={inputRef} type="file" accept=".md,text/markdown" multiple className="hidden"
+                    onChange={(e) => onFiles(e.target.files)} />
+                </div>
+
+                <div className="flex items-center justify-center">
+                  <button type="button" onClick={() => folderRef.current?.click()}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#2a2a2a] text-sm studio-text hover:border-[#D4AF37]/50 hover:bg-[#D4AF37]/5 transition-colors">
+                    <FolderOpen className="h-4 w-4" /> Select entire folder
+                  </button>
+                  <input ref={folderRef} type="file" {...({ webkitdirectory: '', directory: '' } as any)} multiple className="hidden"
                     onChange={(e) => onFiles(e.target.files)} />
                 </div>
 

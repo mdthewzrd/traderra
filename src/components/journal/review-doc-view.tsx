@@ -370,7 +370,7 @@ export function ReviewDocView({ reviewId, onChanged, onDeleted, onBack }: Review
             onClick={() => {
               if (!window.confirm('Remove the imported notes block? This cannot be undone.')) return
               const next = { ...doc, content: { sections: doc.content.sections } }
-              setDoc(next); scheduleSave(next.title, next.content)
+              setDoc(next); save(next.title, next.content)
             }}
             className="mt-2 text-[11px] text-red-400/70 hover:text-red-400"
           >Remove imported notes</button>

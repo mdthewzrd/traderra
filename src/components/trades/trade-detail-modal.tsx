@@ -37,13 +37,14 @@ export function TradeDetailModal({ trade, isOpen, onClose }: TradeDetailModalPro
   const [isEditMode, setIsEditMode] = useState(false)
   const [editedTrade, setEditedTrade] = useState(trade)
 
-  if (!isOpen) return null
-
-  // Reset edit mode and edited trade when modal opens with new trade
+  // Reset edit mode and edited trade when modal opens with new trade.
+  // MUST be before the early return — hooks can't be conditional.
   React.useEffect(() => {
     setIsEditMode(false)
     setEditedTrade(trade)
   }, [trade.id])
+
+  if (!isOpen) return null
 
   const handleEditToggle = () => {
     if (isEditMode) {

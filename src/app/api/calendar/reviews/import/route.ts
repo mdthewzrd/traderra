@@ -40,8 +40,17 @@ export async function POST(req: NextRequest) {
     const rawTitle = typeof r.title === 'string' && r.title.trim() ? r.title.trim().slice(0, 200) : ''
     const content = typeof r.content === 'string' ? r.content : ''
     const isWeekly = /weekly/i.test(rawTitle)
-    const tags = isWeekly ? ['weekly-review'] : ['calendar-linked']
-    const title = rawTitle || (isWeekly ? `Weekly Review - ${date}` : `Daily Review - ${new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`)
+    const importedAt = new Date().toISOString()
+    const tags = isWeekly ? ['weekly-review', 'imported'] : ['calendar-linked', 'imported']
+    // ALWAYS use the clean 'Daily Review - <date>' title (matches the template).
+    // The original Notion title is preserved in the content header for provenance.
+    const title = isWeekly
+      ? `Weekly Review - ${new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+      : `Daily Review - ${new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+    // Prepend original title to content so nothing is lost.
+    const finalContent = rawTitle && !/^Daily Review|^Weekly Review/.test(rawTitle)
+      ? `<p><em>Originally: "${rawTitle.replace(/</g,'&lt;')}"</em></p>${content}`
+      : content
 
     try {
       // Weeklies: dedup by date+title (never merge into dailies).
@@ -57,22 +66,19 @@ export async function POST(req: NextRequest) {
 
       if (existingId) {
         if (isWeekly) {
-          // Weekly: overwrite (same doc, refresh content).
-          await prisma.contentItem.update({ where: { id: existingId }, data: { title, content } })
+          await prisma.contentItem.update({ where: { id: existingId }, data: { title, content: finalContent, tags } })
           results.push({ date, status: 'updated', id: existingId })
         } else {
-          // Daily: MERGE — append with a divider noting the additional review.
           const cur = await prisma.contentItem.findUnique({ where: { id: existingId }, select: { title: true, content: true } })
-          const mergedTitle = `Daily Review - ${new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+          const mergedTitle = title
           const divider = `<hr /><p><em>— additional review ("${rawTitle || 'untitled'}"):</em></p>`
-          const mergedContent = `${cur?.content ?? ''}${divider}${content}`
-          // Preserve all original titles in the merged content header for provenance.
-          await prisma.contentItem.update({ where: { id: existingId }, data: { title: mergedTitle, content: mergedContent } })
+          const mergedContent = `${cur?.content ?? ''}${divider}${finalContent}`
+          await prisma.contentItem.update({ where: { id: existingId }, data: { title: mergedTitle, content: mergedContent, tags } })
           results.push({ date, status: 'merged', id: existingId })
         }
       } else {
         const created = await prisma.contentItem.create({
-          data: { userId, type: 'review', title, content, metadata: { reviewDate: date }, tags },
+          data: { userId, type: 'review', title, content: finalContent, metadata: { reviewDate: date, importedAt }, tags },
         })
         if (!isWeekly) byDate.set(date, created.id)
         results.push({ date, status: 'created', id: created.id })

@@ -10,7 +10,7 @@ import { useComponentRegistry, type ScrollBehavior } from '@/lib/ag-ui/component
 import { JournalLayout } from '@/components/journal/JournalLayout'
 import { ReviewDocView } from '@/components/journal/review-doc-view'
 import { ReviewImportModal } from '@/components/journal/review-import-modal'
-import { Plus, FileText, ChevronRight, Upload } from 'lucide-react'
+import { Plus, FileText, ChevronRight, Upload, Wand2, Undo2 } from 'lucide-react'
 import {
   JournalEntryCard,
   NewEntryModal,
@@ -96,6 +96,36 @@ function EnhancedJournalContent({
   }, [folders, reviews])
 
   const [showImport, setShowImport] = useState(false)
+  const [busy, setBusy] = useState<'normalize' | 'undo' | null>(null)
+
+  const normalizeTitles = async () => {
+    if (!window.confirm('Rename every review to the clean "Daily Review - <date>" format? Original titles are preserved inside each review. Safe to run any time.')) return
+    setBusy('normalize')
+    try {
+      const res = await fetch('/api/calendar/reviews/normalize', { method: 'POST' })
+      const d = await res.json()
+      if (!res.ok) throw new Error(d.error || 'failed')
+      await loadReviews()
+      alert(`Done. Renamed ${d.renamed} of ${d.total} reviews.`)
+    } catch (e: any) {
+      alert('Normalize failed: ' + (e?.message || e))
+    } finally { setBusy(null) }
+  }
+
+  const undoImport = async () => {
+    if (!window.confirm('DELETE every review that came in via Import? Reviews you created manually are untouched. This cannot be undone.')) return
+    if (!window.confirm('Are you sure? This removes ALL imported reviews in one shot.')) return
+    setBusy('undo')
+    try {
+      const res = await fetch('/api/calendar/reviews/normalize?undo=imported', { method: 'POST' })
+      const d = await res.json()
+      if (!res.ok) throw new Error(d.error || 'failed')
+      await loadReviews()
+      alert(`Deleted ${d.deleted} imported reviews.`)
+    } catch (e: any) {
+      alert('Undo failed: ' + (e?.message || e))
+    } finally { setBusy(null) }
+  }
   const selectedReview = reviews.find((r) => r.id === selectedFolderId) || null
 
   const openTodayReview = useCallback(async () => {
@@ -423,6 +453,16 @@ function EnhancedJournalContent({
             <div className="flex items-center justify-between pb-4 border-b border-[#1a1a1a]">
               <h2 className="text-2xl font-bold studio-text">Daily Reviews</h2>
               <div className="flex items-center gap-2">
+                <button onClick={undoImport} disabled={busy !== null}
+                  title="Delete every imported review"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#2a2a2a] text-sm studio-muted hover:text-red-300 hover:border-red-900/50 disabled:opacity-40 transition-colors">
+                  <Undo2 className="h-4 w-4" /> {busy === 'undo' ? 'Working…' : 'Undo import'}
+                </button>
+                <button onClick={normalizeTitles} disabled={busy !== null}
+                  title="Rename all reviews to 'Daily Review - <date>'"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#2a2a2a] text-sm studio-text hover:border-[#D4AF37]/50 hover:bg-[#D4AF37]/5 disabled:opacity-40 transition-colors">
+                  <Wand2 className="h-4 w-4" /> {busy === 'normalize' ? 'Working…' : 'Clean up titles'}
+                </button>
                 <button onClick={() => setShowImport(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#2a2a2a] text-sm studio-text hover:border-[#D4AF37]/50 hover:bg-[#D4AF37]/5 transition-colors">
                   <Upload className="h-4 w-4" /> Import
                 </button>

@@ -39,16 +39,20 @@ export async function POST(req: NextRequest) {
     }
     const rawTitle = typeof r.title === 'string' && r.title.trim() ? r.title.trim().slice(0, 200) : ''
     const content = typeof r.content === 'string' ? r.content : ''
-    const isWeekly = /weekly/i.test(rawTitle)
+    const kind = (r.kind === 'daily' || r.kind === 'weekly' || r.kind === 'trade-review' || r.kind === 'setup-review') ? r.kind : 'daily'
+    const isWeekly = kind === 'weekly'
     const importedAt = new Date().toISOString()
-    const tags = isWeekly ? ['weekly-review', 'imported'] : ['calendar-linked', 'imported']
-    // ALWAYS use the clean 'Daily Review - <date>' title (matches the template).
-    // The original Notion title is preserved in the content header for provenance.
-    const title = isWeekly
-      ? `Weekly Review - ${new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
-      : `Daily Review - ${new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+    // Only dailies + weeklies get the 'calendar-linked'/'weekly-review' tag.
+    // Trade/setup reviews get their own tag so they don't pollute the calendar.
+    const tags = kind === 'daily'
+      ? ['calendar-linked', 'imported']
+      : kind === 'weekly'
+        ? ['weekly-review', 'imported']
+        : [kind, 'imported']
+    const titlePrefix = kind === 'daily' ? 'Daily Review' : kind === 'weekly' ? 'Weekly Review' : kind === 'trade-review' ? 'Trade Review' : 'Setup Review'
+    const title = `${titlePrefix} - ${new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
     // Prepend original title to content so nothing is lost.
-    const finalContent = rawTitle && !/^Daily Review|^Weekly Review/.test(rawTitle)
+    const finalContent = rawTitle && !/^Daily Review|^Weekly Review|^Trade Review|^Setup Review/.test(rawTitle)
       ? `<p><em>Originally: "${rawTitle.replace(/</g,'&lt;')}"</em></p>${content}`
       : content
 
@@ -78,9 +82,9 @@ export async function POST(req: NextRequest) {
         }
       } else {
         const created = await prisma.contentItem.create({
-          data: { userId, type: 'review', title, content: finalContent, metadata: { reviewDate: date, importedAt }, tags },
+          data: { userId, type: 'review', title, content: finalContent, metadata: { reviewDate: date, importedAt, kind }, tags },
         })
-        if (!isWeekly) byDate.set(date, created.id)
+        if (!isWeekly && kind === 'daily') byDate.set(date, created.id)
         results.push({ date, status: 'created', id: created.id })
       }
     } catch (e: any) {

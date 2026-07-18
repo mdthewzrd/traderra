@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { ChevronLeft, Trash2, Loader2, LayoutTemplate, Paperclip } from 'lucide-react'
-import { TradeDetailModal } from '@/components/trades/trade-detail-modal'
+import { TradingChart } from '@/components/charts/trading-chart'
 
 interface ReviewDocViewProps {
   reviewId: string
@@ -162,7 +162,7 @@ export function ReviewDocView({ reviewId, onChanged, onDeleted, onBack }: Review
   const [savedFlash, setSavedFlash] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [dayTrades, setDayTrades] = useState<any[]>([])
-  const [selectedTrade, setSelectedTrade] = useState<any | null>(null)
+  const [expandedTradeId, setExpandedTradeId] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -339,17 +339,38 @@ export function ReviewDocView({ reviewId, onChanged, onDeleted, onBack }: Review
                   </tr>
                 </thead>
                 <tbody>
-                  {dayTrades.map((t) => (
-                    <tr key={t.id} onClick={() => setSelectedTrade(t)} className="cursor-pointer hover:bg-[#141c2b]" style={{ borderBottom: '1px solid #141414' }}>
-                      <td className="py-2 px-3 font-medium" style={{ color: C.TEXT }}>{t.symbol}</td>
+                  {dayTrades.flatMap((t) => {
+                    const isOpen = expandedTradeId === t.id
+                    return [
+                    <tr key={t.id} onClick={() => setExpandedTradeId(isOpen ? null : t.id)} className="cursor-pointer hover:bg-[#141c2b]" style={{ borderBottom: '1px solid #141414' }}>
+                      <td className="py-2 px-3 font-medium" style={{ color: C.TEXT }}>{t.symbol} {isOpen && <span className="text-[10px] studio-muted ml-1">▾</span>}</td>
                       <td className="py-2 px-3"><span style={{ color: String(t.side || '').toLowerCase().startsWith('l') ? '#4ade80' : '#f87171' }}>{t.side}</span></td>
                       <td className="py-2 px-3 text-right" style={{ color: C.MUTED }}>${(t.entryPrice || 0).toFixed(2)}</td>
                       <td className="py-2 px-3 text-right" style={{ color: C.MUTED }}>${(t.exitPrice || 0).toFixed(2)}</td>
                       <td className="py-2 px-3 text-right" style={{ color: C.MUTED }}>{t.quantity}</td>
                       <td className="py-2 px-3 text-right font-semibold" style={{ color: (t.pnl || 0) >= 0 ? '#4ade80' : '#f87171' }}>{(t.pnl || 0) >= 0 ? '+' : ''}${(t.pnl || 0).toFixed(0)}</td>
                       <td className="py-2 px-3 text-right" style={{ color: C.MUTED }}>{t.rMultiple != null ? `${t.rMultiple.toFixed(2)}R` : '—'}</td>
-                    </tr>
-                  ))}
+                    </tr>,
+                    isOpen && (
+                      <tr key={t.id + '-chart'}>
+                        <td colSpan={7} className="px-3 pb-3" style={{ background: '#0a0a0a' }}>
+                          <div className="text-[10px] uppercase tracking-wider font-bold mb-1" style={{ color: C.GOLD }}>{t.symbol} · {new Date(t.entryTime).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' })}</div>
+                          <TradingChart
+                            symbol={t.symbol}
+                            height={320}
+                            trade={{
+                              entryTime: t.entryTime,
+                              exitTime: t.exitTime,
+                              entryPrice: t.entryPrice,
+                              exitPrice: t.exitPrice,
+                              side: t.side === 'Long' ? 'Long' : 'Short',
+                            }}
+                          />
+                        </td>
+                      </tr>
+                    ),
+                    ]
+                  })}
                 </tbody>
               </table>
             </div>
@@ -383,15 +404,6 @@ export function ReviewDocView({ reviewId, onChanged, onDeleted, onBack }: Review
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={lightbox} alt="" style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 8, objectFit: 'contain' }} />
         </div>
-      )}
-
-      {/* Trade mini-chart — reuses the /trades page detail modal */}
-      {selectedTrade && (
-        <TradeDetailModal
-          trade={selectedTrade}
-          isOpen={!!selectedTrade}
-          onClose={() => setSelectedTrade(null)}
-        />
       )}
     </div>
   )

@@ -947,8 +947,53 @@ const TradingChartComponent = function TradingChart({ symbol, trade, className, 
       console.log(`   [${i}] ${candlestickData.x[i]} -> ${chartTime.getUTCHours()}:${chartTime.getUTCMinutes().toString().padStart(2, '0')}`)
     }
 
-    const entryIndex = findClosestIndex(entryTime)
-    const exitIndex = findClosestIndex(exitTime)
+    // Candle x-axis times are TRUE UTC (from Polygon epoch ms), but the trade's
+    // entryTime/exitTime are Eastern wall-clock values mislabeled with a 'Z'.
+    // Add the US-Eastern offset (EDT=4h / EST=5h) so the arrow matches the
+    // candle the trader actually traded, instead of landing ~4h early.
+    const easternOffsetMinutes = (() => {
+      const y = new Date(entryTime).getUTCFullYear()
+      const m = new Date(entryTime).getUTCMonth() + 1
+      // US DST: 2nd Sunday of March -> 1st Sunday of November
+      const secondSunMar = (d: number) => { const s = new Date(Date.UTC(y, 2, d)); while (s.getUTCDay() !== 0) s.setUTCDate(s.getUTCDate() + 1); return s }
+      const firstSunNov = (d: number) => { const s = new Date(Date.UTC(y, 10, d)); while (s.getUTCDay() !== 0) s.setUTCDate(s.getUTCDate() + 1); return s }
+      const dstStart = secondSunMar(8).getTime()
+      const dstEnd = firstSunNov(1).getTime()
+      const t = new Date(entryTime).getTime()
+      return (t >= dstStart && t < dstEnd) ? 240 : 300 // EDT -4h, EST -5h
+    })()
+    const toTrueUtcIso = (iso: string) => new Date(new Date(iso).getTime() + easternOffsetMinutes * 60000).toISOString()
+    const entryTimeUtc = toTrueUtcIso(entryTime)
+    const exitTimeUtc = toTrueUtcIso(exitTime)
+
+    const entryIndex = findClosestIndex(entryTimeUtc)
+    const exitIndex = findClosestIndex(exitTimeUtc)
+
+    // Entry/exit AVG PRICE LINES — horizontal dashed lines at the actual fill
+    // price. These don't depend on time-axis placement, so they're always
+    // correct even if the arrow index is slightly off.
+    shapes.push({
+      type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y',
+      y0: trade.entryPrice, y1: trade.entryPrice,
+      line: { color: trade.side === 'Long' ? '#3b82f6' : '#f59e0b', width: 1.5, dash: 'dashdot' },
+    })
+    shapes.push({
+      type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y',
+      y0: trade.exitPrice, y1: trade.exitPrice,
+      line: { color: trade.side === 'Long' ? '#10b981' : '#ef4444', width: 1.5, dash: 'dot' },
+    })
+    annotations.push({
+      xref: 'paper', x: 1, yref: 'y', y: trade.entryPrice,
+      text: `Avg Entry $${trade.entryPrice.toFixed(2)}`, showarrow: false,
+      font: { color: trade.side === 'Long' ? '#3b82f6' : '#f59e0b', size: 10 },
+      xanchor: 'right', yanchor: 'bottom', bgcolor: 'rgba(10,10,10,0.7)',
+    })
+    annotations.push({
+      xref: 'paper', x: 1, yref: 'y', y: trade.exitPrice,
+      text: `Avg Exit $${trade.exitPrice.toFixed(2)}`, showarrow: false,
+      font: { color: trade.side === 'Long' ? '#10b981' : '#ef4444', size: 10 },
+      xanchor: 'right', yanchor: 'top', bgcolor: 'rgba(10,10,10,0.7)',
+    })
 
     console.log(`🎯 Final arrow positions: Entry index=${entryIndex}, Exit index=${exitIndex}`)
 

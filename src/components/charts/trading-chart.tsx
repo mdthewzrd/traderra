@@ -152,6 +152,11 @@ const TradingChartComponent = function TradingChart({ symbol, trade, className, 
     low: number
     close: number
   } | null>(null)
+  // Cumulative split ratio between the trade's entry date and today, so we can
+  // project the raw trade fill prices onto the split-adjusted candle series.
+  // E.g. 2:1 split since trade → adjPrice = rawPrice * 2. 1.0 = no adjustment.
+  const [splitFactor, setSplitFactor] = useState(1)  // applied to prices
+  const [splitLabel, setSplitLabel] = useState<string>('')  // shown in header, e.g. '(post 2:1 split)'
 
   // Timeframe configuration - memoized for performance
   const getTimeframeConfig = useCallback((timeframe: string) => {
@@ -482,6 +487,43 @@ const TradingChartComponent = function TradingChart({ symbol, trade, className, 
       loadChartData()
     }
   }, [symbol, trade, timeframe, focusDate])
+
+  // Fetch historical splits for the symbol and compute the cumulative split
+  // factor between the trade's entry date and today. Polygon /v3/splits
+  // returns splits newest-first with ratio (e.g. 2 = 2-for-1). We multiply
+  // every ratio whose ex-date is AFTER the trade entry (those restate the
+  // pre-split shares upward to match today's share count).
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      if (!trade || !symbol) { setSplitFactor(1); setSplitLabel(''); return }
+      try {
+        const entryDate = new Date(trade.entryTime).toISOString().slice(0, 10)
+        const res = await fetch(`https://api.polygon.io/v3/reference/splits?ticker=${symbol}&order=desc&limit=50&sort=execution_date&apikey=${POLYGON_API_KEY}`)
+        if (!res.ok) return
+        const j = await res.json()
+        const splits = Array.isArray(j?.results) ? j.results : []
+        let factor = 1
+        const applied: string[] = []
+        for (const s of splits) {
+          // execution_date is the ex-date in Polygon's splits endpoint.
+          const ex = typeof s.execution_date === 'string' ? s.execution_date.slice(0, 10) : null
+          if (!ex) continue
+          if (ex > entryDate) {
+            const ratio = typeof s.ratio === 'number' && s.ratio > 0 ? s.ratio : null
+            if (ratio) { factor *= ratio; applied.push(`${ratio}:1 (${ex})`) }
+          }
+        }
+        if (cancelled) return
+        setSplitFactor(factor)
+        setSplitLabel(applied.length ? ` · adj ${applied.join(', ')}` : '')
+      } catch {
+        if (!cancelled) { setSplitFactor(1); setSplitLabel('') }
+      }
+    }
+    run()
+    return () => { cancelled = true }
+  }, [symbol, trade])
 
   if (error) {
     return (
@@ -969,28 +1011,36 @@ const TradingChartComponent = function TradingChart({ symbol, trade, className, 
     const entryIndex = findClosestIndex(entryTimeUtc)
     const exitIndex = findClosestIndex(exitTimeUtc)
 
+    // Candles are split-adjusted (Polygon adjusted=true). The trade's actual
+    // fill prices are RAW (what the trader paid). Project them onto the
+    // adjusted series so arrows stay glued to the candles even after splits.
+    // Labels continue to show the RAW price the trader actually paid.
+    const adjEntry = trade.entryPrice * splitFactor
+    const adjExit = trade.exitPrice * splitFactor
+
     // Entry/exit AVG PRICE LINES — horizontal dashed lines at the actual fill
-    // price. These don't depend on time-axis placement, so they're always
-    // correct even if the arrow index is slightly off.
+    // price, projected onto the adjusted series. These don't depend on
+    // time-axis placement, so they're always correct even if the arrow index
+    // is slightly off.
     shapes.push({
       type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y',
-      y0: trade.entryPrice, y1: trade.entryPrice,
+      y0: adjEntry, y1: adjEntry,
       line: { color: trade.side === 'Long' ? '#3b82f6' : '#f59e0b', width: 1.5, dash: 'dashdot' },
     })
     shapes.push({
       type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y',
-      y0: trade.exitPrice, y1: trade.exitPrice,
+      y0: adjExit, y1: adjExit,
       line: { color: trade.side === 'Long' ? '#10b981' : '#ef4444', width: 1.5, dash: 'dot' },
     })
     annotations.push({
-      xref: 'paper', x: 1, yref: 'y', y: trade.entryPrice,
-      text: `Avg Entry $${trade.entryPrice.toFixed(2)}`, showarrow: false,
+      xref: 'paper', x: 1, yref: 'y', y: adjEntry,
+      text: `Avg Entry $${trade.entryPrice.toFixed(2)}${splitFactor !== 1 ? ` (adj $${adjEntry.toFixed(2)})` : ''}`, showarrow: false,
       font: { color: trade.side === 'Long' ? '#3b82f6' : '#f59e0b', size: 10 },
       xanchor: 'right', yanchor: 'bottom', bgcolor: 'rgba(10,10,10,0.7)',
     })
     annotations.push({
-      xref: 'paper', x: 1, yref: 'y', y: trade.exitPrice,
-      text: `Avg Exit $${trade.exitPrice.toFixed(2)}`, showarrow: false,
+      xref: 'paper', x: 1, yref: 'y', y: adjExit,
+      text: `Avg Exit $${trade.exitPrice.toFixed(2)}${splitFactor !== 1 ? ` (adj $${adjExit.toFixed(2)})` : ''}`, showarrow: false,
       font: { color: trade.side === 'Long' ? '#10b981' : '#ef4444', size: 10 },
       xanchor: 'right', yanchor: 'top', bgcolor: 'rgba(10,10,10,0.7)',
     })
@@ -1002,12 +1052,12 @@ const TradingChartComponent = function TradingChart({ symbol, trade, className, 
       const entryArrow: TradeArrow = {
         id: 'trade_entry',
         time: candlestickData.x[entryIndex],
-        price: trade.entryPrice,
+        price: adjEntry,
         type: 'entry',
         side: trade.side,
-        label: `${trade.side} Entry: $${trade.entryPrice.toFixed(2)}`
+        label: `${trade.side} Entry: $${trade.entryPrice.toFixed(2)}${splitFactor !== 1 ? ` (adj $${adjEntry.toFixed(2)})` : ''}`
       }
-      const entryAnnotations = createArrowAnnotation(entryArrow, candlestickData.x[entryIndex], trade.entryPrice, true, isProfitable)
+      const entryAnnotations = createArrowAnnotation(entryArrow, candlestickData.x[entryIndex], adjEntry, true, isProfitable)
       annotations.push(...entryAnnotations)
     }
 
@@ -1016,12 +1066,12 @@ const TradingChartComponent = function TradingChart({ symbol, trade, className, 
       const exitArrow: TradeArrow = {
         id: 'trade_exit',
         time: candlestickData.x[exitIndex],
-        price: trade.exitPrice,
+        price: adjExit,
         type: 'exit',
         side: trade.side,
-        label: `Exit: $${trade.exitPrice.toFixed(2)}`
+        label: `Exit: $${trade.exitPrice.toFixed(2)}${splitFactor !== 1 ? ` (adj $${adjExit.toFixed(2)})` : ''}`
       }
-      const exitAnnotations = createArrowAnnotation(exitArrow, candlestickData.x[exitIndex], trade.exitPrice, false, isProfitable)
+      const exitAnnotations = createArrowAnnotation(exitArrow, candlestickData.x[exitIndex], adjExit, false, isProfitable)
       annotations.push(...exitAnnotations)
     }
   }

@@ -20,6 +20,7 @@ interface ParsedReview {
   size: number
   kind: ReviewKind       // auto-classified category
   selected: boolean      // include in this import?
+  mdParentDir: string    // webkitRelativePath dir of the .md — used to resolve sibling image files
 }
 
 const KIND_META: Record<ReviewKind, { label: string; badge: string; desc: string }> = {
@@ -146,6 +147,11 @@ const titleFromFilename = (name: string) =>
 
 export function ReviewImportModal({ isOpen, onClose, onImported }: ReviewImportModalProps) {
   const [items, setItems] = useState<ParsedReview[]>([])
+  // Map of every image file in the picked folder, keyed by BOTH its full
+  // webkitRelativePath and its basename — so we can match Notion's relative
+  // <img src="sibling-folder/image.png"> references during import.
+  const imageMapRef = useRef<Map<string, File>>(new Map())
+  const [imgProgress, setImgProgress] = useState<{ done: number; total: number } | null>(null)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<{ created: number; updated: number; merged: number; skipped: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -160,9 +166,20 @@ export function ReviewImportModal({ isOpen, onClose, onImported }: ReviewImportM
   const onFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return
     setError(null); setResult(null)
-    const arr = Array.from(files).filter((f) => /\.md$/i.test(f.name))
-    if (arr.length === 0) { setError('No .md files found. Export your Notion database as Markdown & CSV.') ;return }
-    const parsed: ParsedReview[] = await Promise.all(arr.map(async (f) => {
+    const arr = Array.from(files)
+    const mdFiles = arr.filter((f) => /\.md$/i.test(f.name))
+    if (mdFiles.length === 0) { setError('No .md files found. Export your Notion database as Markdown & CSV.') ;return }
+    // Collect bundled image files (whole-folder uploads include them as siblings).
+    const imgRe = /\.(png|jpe?g|gif|webp)$/i
+    const imgMap = new Map<string, File>()
+    for (const f of arr) {
+      if (!imgRe.test(f.name)) continue
+      const rel = (f as any).webkitRelativePath || f.name
+      imgMap.set(rel, f)
+      imgMap.set(f.name, f)  // also index by basename for bare-filename refs
+    }
+    imageMapRef.current = imgMap
+    const parsed: ParsedReview[] = await Promise.all(mdFiles.map(async (f) => {
       const text = await f.text()
       let date = detectDate(f.name) || detectDate(text.slice(0, 500))
       let confident = !!date
@@ -173,6 +190,8 @@ export function ReviewImportModal({ isOpen, onClose, onImported }: ReviewImportM
       }
       const title = titleFromFilename(f.name)
       const kind = classifyReview(f.name, title, text.slice(0, 400))
+      const rel = (f as any).webkitRelativePath || ''
+      const mdParentDir = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : ''
       return {
         filename: f.name,
         date: date || '',
@@ -181,6 +200,7 @@ export function ReviewImportModal({ isOpen, onClose, onImported }: ReviewImportM
         contentMd: text,
         size: f.size,
         kind,
+        mdParentDir,
         // Default: only daily reviews are pre-selected. Everything else stays
         // visible but unchecked so the user can opt in or assign.
         selected: kind === 'daily',
@@ -208,21 +228,81 @@ export function ReviewImportModal({ isOpen, onClose, onImported }: ReviewImportM
   const selectAllOfKind = (kind: ReviewKind, val: boolean) =>
     setItems((prev) => prev.map((it) => (it.kind === kind ? { ...it, selected: val } : it)))
 
+  /**
+   * Walk every <img> in the converted HTML and, when the src resolves to a
+   * bundled File in imageMapRef, upload it via /api/inbox-upload and rewrite
+   * the src to the served URL. Leaves already-served srcs alone. Sequential
+   * uploads with progress callback (typical Notion export = 1–3 imgs/page).
+   */
+  const rewriteImageSrcs = async (
+    html: string,
+    mdParentDir: string,
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<string> => {
+    const imgMap = imageMapRef.current
+    if (imgMap.size === 0) return html  // individual-file pick — no bundled images
+    const matches = [...html.matchAll(/<img\b[^>]*\bsrc="([^"]+)"[^>]*>/gi)]
+    if (matches.length === 0) return html
+    let done = 0
+    let out = html
+    for (const m of matches) {
+      const rawSrc = m[1]
+      if (/^(https?:\/\/|data:|\/api\/|\/)/.test(rawSrc)) { done++; onProgress?.(done, matches.length); continue }
+      const decoded = (() => { try { return decodeURIComponent(rawSrc) } catch { return rawSrc } })()
+      // Try resolving against the .md's parent dir, then bare, then basename.
+      const candidates = [
+        mdParentDir ? `${mdParentDir}/${decoded}` : decoded,
+        decoded,
+        decoded.split('/').pop() || '',
+      ]
+      let file: File | undefined
+      for (const c of candidates) { file = imgMap.get(c); if (file) break }
+      if (file) {
+        try {
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const r = new FileReader(); r.onload = () => resolve(String(r.result)); r.onerror = reject; r.readAsDataURL(file!)
+          })
+          const res = await fetch('/api/inbox-upload', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dataUrl }),
+          })
+          const d = res.ok ? await res.json() : null
+          if (d?.url) out = out.replace(`src="${rawSrc}"`, `src="${d.url}"`)
+        } catch { /* leave broken */ }
+      }
+      done++; onProgress?.(done, matches.length)
+    }
+    return out
+  }
+
   const doImport = async () => {
     const valid = items.filter((it) => it.selected && /^\d{4}-\d{2}-\d{2}$/.test(it.date))
     if (valid.length === 0) { setError('No files selected. Tick the checkbox on the files you want to import.') ; return }
     setBusy(true); setError(null)
     try {
+      // Pass 1: convert MD → HTML, then upload any bundled images and rewrite srcs.
+      const processed = []
+      let totalImgs = 0, doneImgs = 0
+      // First count total images across selected reviews for progress display.
+      for (const it of valid) {
+        const html = mdToHtml(it.contentMd)
+        const matches = [...html.matchAll(/<img\b[^>]*\bsrc="([^"]+)"[^>]*>/gi)]
+          .filter((m) => !/^(https?:\/\/|data:|\/api\/|\/)/.test(m[1]))
+        totalImgs += matches.length
+      }
+      if (totalImgs > 0) setImgProgress({ done: 0, total: totalImgs })
+      for (const it of valid) {
+        const html = mdToHtml(it.contentMd)
+        const rewritten = await rewriteImageSrcs(html, it.mdParentDir, (d, t) => {
+          doneImgs += (d - (doneImgs % t || 0))
+          setImgProgress({ done: Math.min(doneImgs, totalImgs), total: totalImgs })
+        })
+        processed.push({ date: it.date, title: it.title, content: rewritten, kind: it.kind })
+      }
+      setImgProgress(null)
       const r = await fetch('/api/calendar/reviews/import', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          reviews: valid.map((it) => ({
-            date: it.date,
-            title: it.title,
-            content: mdToHtml(it.contentMd),
-            kind: it.kind,
-          })),
-        }),
+        body: JSON.stringify({ reviews: processed }),
       })
       const d = r.ok ? await r.json() : null
       if (!d) throw new Error('import failed')
@@ -231,7 +311,7 @@ export function ReviewImportModal({ isOpen, onClose, onImported }: ReviewImportM
     } catch (e: any) {
       setError(e?.message || 'Import failed.')
     } finally {
-      setBusy(false)
+      setBusy(false); setImgProgress(null)
     }
   }
 
@@ -396,7 +476,7 @@ export function ReviewImportModal({ isOpen, onClose, onImported }: ReviewImportM
                       className="flex items-center gap-2 px-5 py-2 rounded-lg bg-[#D4AF37] text-[#0a0a0a] text-sm font-semibold hover:opacity-90 disabled:opacity-40"
                     >
                       {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                      {busy ? 'Importing…' : `Import ${selectedCount || ''}`}
+                      {busy ? (imgProgress && imgProgress.total > 0 ? `Uploading images ${imgProgress.done}/${imgProgress.total}` : 'Importing…') : `Import ${selectedCount || ''}`}
                     </button>
                   </div>
                 </div>

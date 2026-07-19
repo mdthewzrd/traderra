@@ -37,7 +37,7 @@ function parseContent(raw: unknown): ReviewContent {
           const ex = p.sections[s.key]
           sections[s.key] = { text: typeof ex?.text === 'string' ? ex.text : '', annots: Array.isArray(ex?.annots) ? ex.annots : [] }
         }
-        return { sections, legacyHtml: typeof p.legacyHtml === 'string' ? p.legacyHtml : undefined }
+        return { sections, legacyHtml: sanitizeLegacyHtml(typeof p.legacyHtml === 'string' ? p.legacyHtml : undefined) }
       }
     } catch { /* fall through */ }
   }
@@ -45,7 +45,33 @@ function parseContent(raw: unknown): ReviewContent {
   const sections: Record<string, SectionData> = {}
   for (const s of REVIEW_SECTIONS) sections[s.key] = { text: '', annots: [] }
   const legacy = typeof raw === 'string' && raw.trim() ? raw : undefined
-  return { sections, legacyHtml: legacy }
+  return { sections, legacyHtml: sanitizeLegacyHtml(legacy) }
+}
+
+/**
+ * Replace <img> tags whose src is a relative path (i.e. points at a Notion
+ * export sibling folder that was never uploaded) with a styled placeholder
+ * showing the original filename. Served sources (http://, data:, /api/...)
+ * are left intact. Same treatment for <a href> pointing at bundled files
+ * (.csv/.xlsx/etc.) — those were lost alongside the images.
+ */
+function sanitizeLegacyHtml(html: string | undefined): string | undefined {
+  if (!html) return html
+  // <img src="..." ...> — capture src and alt
+  let out = html.replace(/<img\b[^>]*\bsrc="([^"]+)"[^>]*>/gi, (full, src: string) => {
+    if (/^(https?:\/\/|data:|\/api\/|\/)/.test(src)) return full
+    const decoded = (() => { try { return decodeURIComponent(src) } catch { return src } })()
+    const name = decoded.split('/').pop() || decoded
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;margin:6px 0;border:1px dashed #444;border-radius:6px;background:#1a1a1a;color:#888;font-size:12px;"><span style="font-size:16px;">🖼️</span><span>Image not imported: <code style="color:#aaa;">${name.replace(/</g,'&lt;')}</code><br/><span style="font-size:11px;color:#666;">Re-import this review with its source folder to recover.</span></span></div>`
+  })
+  // <a href="..."> — only intercept Notion-bundled file types
+  out = out.replace(/<a\b([^>]*?)\bhref="([^"]+)"([^>]*)>(.*?)<\/a>/gi, (full, pre: string, href: string, post: string, text: string) => {
+    if (/^(https?:\/\/|mailto:|data:|\/api\/|\/|#)/.test(href)) return full
+    const decoded = (() => { try { return decodeURIComponent(href) } catch { return href } })()
+    const name = decoded.split('/').pop() || decoded
+    return `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;margin:2px 0;border:1px dashed #444;border-radius:4px;background:#1a1a1a;color:#888;font-size:11px;">📎 ${text.replace(/<[^>]+>/g,'')} — ${name.replace(/</g,'&lt;')} not imported</span>`
+  })
+  return out
 }
 
 function SectionField({ label, hint, section, onChange, onImageClick }: {

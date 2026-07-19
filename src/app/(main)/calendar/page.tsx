@@ -10,7 +10,7 @@ import { useTrades } from '@/hooks/useTrades'
 import { ChevronLeft, ChevronRight, Calendar, Plus, FileText } from 'lucide-react'
 import { useComponentRegistry } from '@/lib/ag-ui/component-registry'
 import { useCopilotReadable } from '@/hooks/useCopilotReadableWithContext'
-import { ReviewDrawer } from '@/components/calendar/review-drawer'
+import { ReviewDocView } from '@/components/journal/review-doc-view'
 
 type ViewMode = 'year' | 'month'
 
@@ -102,6 +102,20 @@ export default function CalendarPage() {
   // Daily reviews linked to calendar dates (ContentItems of type 'review').
   const [reviews, setReviews] = useState<Record<string, { id: string; title: string; updated_at: string }>>({})
   const [openDate, setOpenDate] = useState<{ date: string; reviewId: string | null } | null>(null)
+  const [openingReview, setOpeningReview] = useState(false)
+
+  // Pre-create the review (if needed) when opening a date so ReviewDocView
+  // always has a real id to render against.
+  const ensureReview = async (date: string): Promise<string | null> => {
+    try {
+      const r = await fetch('/api/calendar/reviews', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date }),
+      })
+      const d = r.ok ? await r.json() : null
+      return d?.id ?? null
+    } catch { return null }
+  }
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
 
   const loadReviews = useCallback((year: number) => {
@@ -114,6 +128,20 @@ export default function CalendarPage() {
   useEffect(() => { loadReviews(currentYear) }, [currentYear, loadReviews])
 
   const openDateCell = (date: string, reviewId: string | null) => setOpenDate({ date, reviewId })
+
+  // When openDate is set without a reviewId, lazily create one then promote.
+  useEffect(() => {
+    if (!openDate || openDate.reviewId) return
+    let cancelled = false
+    setOpeningReview(true)
+    ensureReview(openDate.date).then((id) => {
+      if (cancelled) return
+      if (id) setOpenDate({ date: openDate.date, reviewId: id })
+      else setOpenDate(null)
+      setOpeningReview(false)
+    })
+    return () => { cancelled = true }
+  }, [openDate])
 
   // Update current year when detected year changes (e.g., after trades load)
   // Only do this once on initial load, then respect user's manual changes
@@ -814,13 +842,25 @@ export default function CalendarPage() {
           )}
         </div>
       </div>
-      {openDate && (
-        <ReviewDrawer
-          date={openDate.date}
-          reviewId={openDate.reviewId}
-          onClose={() => setOpenDate(null)}
-          onChanged={() => loadReviews(currentYear)}
-        />
+      {openDate && openDate.reviewId && (
+        <div className="fixed inset-0 z-[9999] overflow-y-auto bg-black/70 backdrop-blur-sm">
+          <div className="min-h-full flex items-start justify-center p-4 py-8">
+            <div className="w-full max-w-4xl bg-[#0f0f0f] border border-[#1a1a1a] rounded-xl shadow-2xl">
+              <ReviewDocView
+                key={openDate.reviewId}
+                reviewId={openDate.reviewId}
+                onChanged={() => loadReviews(currentYear)}
+                onDeleted={() => { loadReviews(currentYear); setOpenDate(null) }}
+                onBack={() => setOpenDate(null)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+      {openingReview && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="text-sm studio-muted animate-pulse">Opening review…</div>
+        </div>
       )}
     </AppLayout>
   )

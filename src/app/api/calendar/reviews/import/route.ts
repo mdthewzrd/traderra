@@ -24,10 +24,17 @@ export async function POST(req: NextRequest) {
   // Load existing reviews once for idempotent upsert by date.
   const existing = await prisma.contentItem.findMany({ where: { userId, type: 'review' } })
   const byDate = new Map<string, string>()
+  // Dates that existed BEFORE this batch started. Reviews on these dates get
+  // REPLACED (clean re-import semantics) — never merged/doubled.
+  const preExistingDates = new Set<string>()
   for (const it of existing) {
     const d = (it.metadata as any)?.reviewDate
-    if (typeof d === 'string') byDate.set(d, it.id)
+    if (typeof d === 'string') { byDate.set(d, it.id); preExistingDates.add(d) }
   }
+  // Dates already processed in THIS batch. Used to detect within-batch
+  // duplicates (two .md files, same date) — those merge into the just-created
+  // review so neither is lost. Different from pre-existing (replace).
+  const seenInBatch = new Set<string>()
 
   const results: { date: string; status: 'created' | 'updated' | 'merged' | 'skipped'; id?: string; error?: string }[] = []
 
@@ -58,8 +65,6 @@ export async function POST(req: NextRequest) {
 
     try {
       // Weeklies: dedup by date+title (never merge into dailies).
-      // Dailies: MERGE on duplicate date (concatenate content w/ divider) so
-      // nothing is ever lost — calendar stays one-review-per-day.
       let existingId: string | undefined
       if (isWeekly) {
         const wk = await prisma.contentItem.findFirst({ where: { userId, type: 'review', metadata: { path: ['reviewDate'], equals: date }, tags: { has: 'weekly-review' } } })
@@ -68,23 +73,41 @@ export async function POST(req: NextRequest) {
         existingId = byDate.get(date)
       }
 
-      if (existingId) {
-        if (isWeekly) {
-          await prisma.contentItem.update({ where: { id: existingId }, data: { title, content: finalContent, tags } })
-          results.push({ date, status: 'updated', id: existingId })
+      const wasPreExisting = preExistingDates.has(date)
+      const isWithinBatchDup = !wasPreExisting && seenInBatch.has(date)
+
+      if (existingId && isWithinBatchDup && !isWeekly) {
+        // Two .md files in THIS batch share a date — merge so neither is lost.
+        // (Calendar stays one-review-per-day, both originals preserved in text.)
+        const cur = await prisma.contentItem.findUnique({ where: { id: existingId }, select: { title: true, content: true } })
+        const divider = `<hr /><p><em>— additional review ("${rawTitle || 'untitled'}"):</em></p>`
+        const mergedContent = `${cur?.content ?? ''}${divider}${finalContent}`
+        await prisma.contentItem.update({ where: { id: existingId }, data: { content: mergedContent } })
+        results.push({ date, status: 'merged', id: existingId })
+      } else if (existingId) {
+        // Pre-existing review on this date (from a PRIOR import) → REPLACE.
+        // Preserve any structured sections the user may have filled in: if the
+        // existing content is JSON {sections, legacyHtml}, only swap legacyHtml.
+        const cur = await prisma.contentItem.findUnique({ where: { id: existingId }, select: { content: true } })
+        let newContent: string
+        if (typeof cur?.content === 'string' && cur.content.trim().startsWith('{')) {
+          try {
+            const parsed = JSON.parse(cur.content)
+            if (parsed && typeof parsed === 'object' && parsed.sections) {
+              parsed.legacyHtml = finalContent
+              newContent = JSON.stringify(parsed)
+            } else { newContent = finalContent }
+          } catch { newContent = finalContent }
         } else {
-          const cur = await prisma.contentItem.findUnique({ where: { id: existingId }, select: { title: true, content: true } })
-          const mergedTitle = title
-          const divider = `<hr /><p><em>— additional review ("${rawTitle || 'untitled'}"):</em></p>`
-          const mergedContent = `${cur?.content ?? ''}${divider}${finalContent}`
-          await prisma.contentItem.update({ where: { id: existingId }, data: { title: mergedTitle, content: mergedContent, tags } })
-          results.push({ date, status: 'merged', id: existingId })
+          newContent = finalContent
         }
+        await prisma.contentItem.update({ where: { id: existingId }, data: { title, content: newContent, tags, metadata: { reviewDate: date, importedAt, kind } } })
+        results.push({ date, status: 'updated', id: existingId })
       } else {
         const created = await prisma.contentItem.create({
           data: { userId, type: 'review', title, content: finalContent, metadata: { reviewDate: date, importedAt, kind }, tags },
         })
-        if (!isWeekly && kind === 'daily') byDate.set(date, created.id)
+        if (!isWeekly && kind === 'daily') { byDate.set(date, created.id); seenInBatch.add(date) }
         results.push({ date, status: 'created', id: created.id })
       }
     } catch (e: any) {

@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useCallback, memo } from 'react'
 import dynamic from 'next/dynamic'
 import { cn } from '@/lib/utils'
 import { isWeekend, subDays, format, addHours } from 'date-fns'
+import { candidatesFor } from '@/lib/ticker-aliases'
 import { useChartStore } from '@/stores/charts/chartStore'
 
 // Dynamically import Plotly to avoid SSR issues
@@ -157,6 +158,7 @@ const TradingChartComponent = function TradingChart({ symbol, trade, className, 
   // E.g. 2:1 split since trade → adjPrice = rawPrice * 2. 1.0 = no adjustment.
   const [splitFactor, setSplitFactor] = useState(1)  // applied to prices
   const [splitLabel, setSplitLabel] = useState<string>('')  // shown in header, e.g. '(post 2:1 split)'
+  const [resolvedSymbol, setResolvedSymbol] = useState<string>('')  // symbol actually serving data (may differ from `symbol` after alias)
 
   // Timeframe configuration - memoized for performance
   const getTimeframeConfig = useCallback((timeframe: string) => {
@@ -338,29 +340,25 @@ const TradingChartComponent = function TradingChart({ symbol, trade, className, 
 
       // Try API first, fallback to mock data
       try {
-        // Polygon.io aggregates (bars) endpoint with dynamic timeframe
-        const url = `https://api.polygon.io/v2/aggs/ticker/${symbol}/range/${config.multiplier}/${config.timespan}/${from}/${to}?adjusted=true&sort=asc&limit=50000&apikey=${POLYGON_API_KEY}`
-        console.log(`📡 API URL: ${url}`)
-
-        const response = await fetch(url)
-
-        if (!response.ok) {
-          throw new Error(`API Error: ${response.status} ${response.statusText}`)
+        // Polygon.io aggregates (bars) endpoint with dynamic timeframe.
+        // Walk candidates: original symbol first, then any known alias (for
+        // renamed tickers like FFIE→FFAI). First symbol that returns bars wins.
+        const tries = candidatesFor(symbol)
+        let data: any = null
+        let usedSymbol = symbol
+        for (const sym of tries) {
+          const url = `https://api.polygon.io/v2/aggs/ticker/${sym}/range/${config.multiplier}/${config.timespan}/${from}/${to}?adjusted=true&sort=asc&limit=50000&apikey=${POLYGON_API_KEY}`
+          console.log(`📡 API URL (${sym}): ${url}`)
+          const response = await fetch(url)
+          if (!response.ok) { console.warn(`HTTP ${response.status} for ${sym}`); continue }
+          const d = await response.json()
+          console.log(`📊 API Response for ${sym} ${timeframe}:`, { status: d.status, resultsCount: d.results?.length || 0, queryCount: d.queryCount, firstBar: d.results?.[0], lastBar: d.results?.[d.results?.length - 1] })
+          if (d.status === 'OK' && Array.isArray(d.results) && d.results.length > 0) { data = d; usedSymbol = sym; break }
         }
-
-        const data = await response.json()
-        console.log(`📊 API Response for ${symbol} ${timeframe}:`, {
-          status: data.status,
-          resultsCount: data.results?.length || 0,
-          queryCount: data.queryCount,
-          request_id: data.request_id,
-          firstBar: data.results?.[0],
-          lastBar: data.results?.[data.results?.length - 1]
-        })
-
-        if (data.status !== 'OK' || !data.results || data.results.length === 0) {
-          throw new Error(data.error || 'No data available for this symbol/timeframe')
+        if (!data) {
+          throw new Error(tries.length > 1 ? `No data for ${symbol} (or alias ${tries.slice(1).join('/')})` : 'No data available for this symbol/timeframe')
         }
+        setResolvedSymbol(usedSymbol)
 
         // Process real API data
         const rawBars = data.results
@@ -499,10 +497,18 @@ const TradingChartComponent = function TradingChart({ symbol, trade, className, 
       if (!trade || !symbol) { setSplitFactor(1); setSplitLabel(''); return }
       try {
         const entryDate = new Date(trade.entryTime).toISOString().slice(0, 10)
-        const res = await fetch(`https://api.polygon.io/v3/reference/splits?ticker=${symbol}&order=desc&limit=50&sort=execution_date&apikey=${POLYGON_API_KEY}`)
-        if (!res.ok) return
-        const j = await res.json()
-        const splits = Array.isArray(j?.results) ? j.results : []
+        // Query EVERY candidate symbol for splits and union the results.
+        // Old + new tickers may each have a subset of the full split history
+        // (Polygon sometimes only carries one or the other).
+        const tries = candidatesFor(symbol)
+        const allSplits: any[] = []
+        for (const sym of tries) {
+          const res = await fetch(`https://api.polygon.io/v3/reference/splits?ticker=${sym}&order=desc&limit=50&sort=execution_date&apikey=${POLYGON_API_KEY}`)
+          if (!res.ok) continue
+          const j = await res.json()
+          if (Array.isArray(j?.results)) allSplits.push(...j.results)
+        }
+        const splits = allSplits
         let factor = 1
         const applied: string[] = []
         for (const s of splits) {
@@ -1105,6 +1111,12 @@ const TradingChartComponent = function TradingChart({ symbol, trade, className, 
       <div className="absolute top-2 left-4 z-10 bg-[#0a0a0a]/80 backdrop-blur-sm rounded px-2 py-1">
         <div className="flex items-center space-x-3 text-xs">
           <span className="font-semibold studio-text">{symbol}</span>
+          {resolvedSymbol && resolvedSymbol !== symbol && (
+            <span className="text-[10px] text-[#D4AF37] bg-[#D4AF37]/10 px-1.5 py-0.5 rounded border border-[#D4AF37]/30">via {resolvedSymbol}</span>
+          )}
+          {splitLabel && (
+            <span className="text-[10px] studio-muted">{splitLabel}</span>
+          )}
           <span className="studio-muted">{getTimeframeConfig(timeframe).label}</span>
           <span className="studio-muted">•</span>
           <span className="studio-muted">Pre/Post Market</span>

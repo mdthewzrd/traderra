@@ -510,12 +510,26 @@ const TradingChartComponent = function TradingChart({ symbol, trade, className, 
           const ex = typeof s.execution_date === 'string' ? s.execution_date.slice(0, 10) : null
           if (!ex) continue
           if (ex > entryDate) {
-            const ratio = typeof s.ratio === 'number' && s.ratio > 0 ? s.ratio : null
-            if (ratio) { factor *= ratio; applied.push(`${ratio}:1 (${ex})`) }
+            // Polygon returns split_from + split_to (e.g. from=1, to=10 for
+            // NVDA's 10-for-1 in 2024). Polygon's adjusted=true restates
+            // historical candles to TODAY's share count, so a raw pre-split
+            // fill projects onto the adjusted series as raw * (from/to).
+            // E.g. $120 raw * (1/10) = $12 adjusted. Multiple splits multiply.
+            const from = typeof s.split_from === 'number' && s.split_from > 0 ? s.split_from : null
+            const to = typeof s.split_to === 'number' && s.split_to > 0 ? s.split_to : null
+            // Backwards-compat: some older records use 'ratio' (always to/from).
+            const legacy = typeof s.ratio === 'number' && s.ratio > 0 ? (1 / s.ratio) : null
+            const adjFactor = (from && to) ? (from / to) : legacy
+            if (adjFactor) {
+              factor *= adjFactor
+              applied.push(`${to}:${from} (${ex})`)
+            }
           }
         }
         if (cancelled) return
         setSplitFactor(factor)
+        // Label uses the conventional 'N:1' notation (to:from) so the user
+        // sees '10:1' for a 10-for-1 split, matching how brokers describe it.
         setSplitLabel(applied.length ? ` · adj ${applied.join(', ')}` : '')
       } catch {
         if (!cancelled) { setSplitFactor(1); setSplitLabel('') }

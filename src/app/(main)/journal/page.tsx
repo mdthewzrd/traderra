@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react'
+import React, { useState, useCallback, useMemo, useEffect, Suspense, useRef } from 'react'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { AppLayout } from '@/components/layout/app-layout'
 import { useAuth } from '@/lib/auth-client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -45,6 +46,30 @@ function EnhancedJournalContent({
   // Selected folder is owned here so the sidebar (JournalLayout) and the
   // content list share ONE source of truth.
   const [selectedFolderId, setSelectedFolderId] = useState<string>()
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+
+  // Restore selection from URL on first mount (so refresh keeps the open doc).
+  const hydratedRef = useRef(false)
+  useEffect(() => {
+    if (hydratedRef.current) return
+    hydratedRef.current = true
+    const fromUrl = searchParams.get('s')
+    if (fromUrl) setSelectedFolderId(fromUrl)
+  }, [searchParams])
+
+  // Mirror selection into the URL whenever it changes (no history spam).
+  useEffect(() => {
+    if (!hydratedRef.current) return
+    const params = new URLSearchParams(searchParams.toString())
+    if (selectedFolderId) params.set('s', selectedFolderId)
+    else params.delete('s')
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }, [selectedFolderId, searchParams, router, pathname])
+
+  // Wrapper so existing setSelectedFolderId callers don't need to change.
 
   // Folder and content management
   const {
@@ -606,7 +631,9 @@ export default function EnhancedJournalPage() {
             <a href="/sign-in" className="mt-2 px-5 py-2 rounded-lg bg-amber-500 text-zinc-950 font-semibold hover:bg-amber-400 transition-colors">Sign in</a>
           </div>
         ) : (
-          <EnhancedJournalContent />
+          <Suspense fallback={<div className="flex items-center justify-center h-[60vh] text-zinc-500">Loading journal…</div>}>
+            <EnhancedJournalContent />
+          </Suspense>
         )}
       </AppLayout>
       <Toaster

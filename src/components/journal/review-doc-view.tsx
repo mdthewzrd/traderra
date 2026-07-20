@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ChevronLeft, Trash2, Loader2, LayoutTemplate, Paperclip } from 'lucide-react'
+import { ChevronLeft, Trash2, Loader2, LayoutTemplate, Paperclip, Plus, X } from 'lucide-react'
 import { TradingChart } from '@/components/charts/trading-chart'
 
 interface ReviewDocViewProps {
@@ -13,7 +13,8 @@ interface ReviewDocViewProps {
 
 // Structured review sections — mirrors the playbook section pattern
 // (gold uppercase label + muted hint + bordered textarea + chart thumbnails).
-type SectionData = { text: string; annots: { ref: string; caption?: string }[] }
+type TradeIdea = { id: string; ticker: string; thesis: string }
+type SectionData = { text: string; annots: { ref: string; caption?: string }[]; tradeIdeas?: TradeIdea[] }
 type ReviewContent = { sections: Record<string, SectionData>; legacyHtml?: string }
 
 const REVIEW_SECTIONS: { key: string; label: string; hint: string; prompt: string }[] = [
@@ -35,7 +36,7 @@ function parseContent(raw: unknown): ReviewContent {
         const sections: Record<string, SectionData> = {}
         for (const s of REVIEW_SECTIONS) {
           const ex = p.sections[s.key]
-          sections[s.key] = { text: typeof ex?.text === 'string' ? ex.text : '', annots: Array.isArray(ex?.annots) ? ex.annots : [] }
+          sections[s.key] = { text: typeof ex?.text === 'string' ? ex.text : '', annots: Array.isArray(ex?.annots) ? ex.annots : [], tradeIdeas: Array.isArray(ex?.tradeIdeas) ? ex.tradeIdeas : [] }
         }
         return { sections, legacyHtml: sanitizeLegacyHtml(typeof p.legacyHtml === 'string' ? p.legacyHtml : undefined) }
       }
@@ -74,16 +75,35 @@ function sanitizeLegacyHtml(html: string | undefined): string | undefined {
   return out
 }
 
-function SectionField({ label, hint, section, onChange, onImageClick }: {
+function SectionField({ label, hint, section, onChange, onImageClick, allowTradeIdeas }: {
   label: string; hint: string
   section: SectionData
   onChange: (s: SectionData) => void
   onImageClick: (ref: string) => void
+  allowTradeIdeas?: boolean
 }) {
   const [local, setLocal] = useState(section.text)
   const pushRef = useRef(section.text)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const taRef = useRef<HTMLTextAreaElement>(null)
+  // Trade idea mini-form (watchlist only)
+  const [showIdeaForm, setShowIdeaForm] = useState(false)
+  const [newTicker, setNewTicker] = useState('')
+  const [newThesis, setNewThesis] = useState('')
+  const tickerRef = useRef<HTMLInputElement>(null)
+
+  const ideas = section.tradeIdeas ?? []
+  const addIdea = () => {
+    const t = newTicker.trim().toUpperCase()
+    if (!t) { tickerRef.current?.focus(); return }
+    pushRef.current = local
+    onChange({ ...section, text: local, tradeIdeas: [...ideas, { id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now() + Math.random()), ticker: t, thesis: newThesis.trim() }] })
+    setNewTicker(''); setNewThesis(''); tickerRef.current?.focus()  // keep form open for rapid entry
+  }
+  const removeIdea = (id: string) => {
+    pushRef.current = local
+    onChange({ ...section, text: local, tradeIdeas: ideas.filter((x) => x.id !== id) })
+  }
 
   // Auto-grow: each field sizes to its own content so a one-liner is compact
   // and a long block expands to show everything (no internal scrolling).
@@ -110,13 +130,13 @@ function SectionField({ label, hint, section, onChange, onImageClick }: {
     const reads = await Promise.all(imgs.map((f) => new Promise<string>((res) => {
       const r = new FileReader(); r.onload = () => res(r.result as string); r.readAsDataURL(f)
     })))
-    onChange({ text: local, annots: [...section.annots, ...reads.map((ref) => ({ ref, caption: '' }))] })
+    onChange({ ...section, text: local, annots: [...section.annots, ...reads.map((ref) => ({ ref, caption: '' }))] })
     if (fileRef.current) fileRef.current.value = ''
   }
 
   const flush = () => {
     if (timer.current) { clearTimeout(timer.current); timer.current = null }
-    if (local !== pushRef.current) { pushRef.current = local; onChange({ text: local, annots: section.annots }) }
+    if (local !== pushRef.current) { pushRef.current = local; onChange({ ...section, text: local }) }
   }
   const onPaste = (e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items; if (!items) return
@@ -126,7 +146,7 @@ function SectionField({ label, hint, section, onChange, onImageClick }: {
         const reader = new FileReader()
         reader.onload = () => {
           pushRef.current = local
-          onChange({ text: local, annots: [...section.annots, { ref: reader.result as string, caption: '' }] })
+          onChange({ ...section, text: local, annots: [...section.annots, { ref: reader.result as string, caption: '' }] })
         }
         reader.readAsDataURL(file)
         e.preventDefault()
@@ -155,6 +175,31 @@ function SectionField({ label, hint, section, onChange, onImageClick }: {
         className="w-full border rounded-lg px-3 py-2 text-sm leading-relaxed overflow-hidden resize-none focus:outline-none min-h-[2.5rem]"
         style={{ background: C.SURFACE, borderColor: C.BORDER, color: C.TEXT }}
       />
+      {allowTradeIdeas && (
+        <div className="space-y-1.5">
+          {/* Trade idea list — gold ticker pills + thesis, stacked bullets */}
+          {ideas.map((idea) => (
+            <div key={idea.id} className="flex items-start gap-2 px-3 py-2 rounded-lg border group" style={{ background: '#0a0a0a', borderColor: C.BORDER }}>
+              <span className="shrink-0 px-1.5 py-0.5 rounded text-xs font-bold tracking-wide" style={{ background: 'rgba(212,175,55,0.12)', color: C.GOLD, border: '1px solid rgba(212,175,55,0.3)' }}>{idea.ticker}</span>
+              <span className="flex-1 text-sm leading-relaxed" style={{ color: C.TEXT }}>{idea.thesis || <span style={{ color: C.MUTED }}>—</span>}</span>
+              <button type="button" onClick={() => removeIdea(idea.id)} className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5" style={{ color: '#9ca3af' }} title="Remove"><X className="h-3.5 w-3.5" /></button>
+            </div>
+          ))}
+          {/* Inline add form */}
+          {showIdeaForm ? (
+            <div className="flex items-center gap-2">
+              <input ref={tickerRef} value={newTicker} onChange={(e) => setNewTicker(e.target.value.toUpperCase().slice(0, 8))} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addIdea() } if (e.key === 'Escape') { setShowIdeaForm(false); setNewTicker(''); setNewThesis('') } }} placeholder="TICKER" className="w-24 px-2 py-1.5 text-sm font-bold uppercase rounded-lg focus:outline-none" style={{ background: C.SURFACE, border: '1px solid rgba(212,175,55,0.4)', color: C.GOLD }} />
+              <input value={newThesis} onChange={(e) => setNewThesis(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newTicker.trim()) { e.preventDefault(); addIdea() } if (e.key === 'Escape') { setShowIdeaForm(false); setNewTicker(''); setNewThesis('') } }} placeholder="Thesis / level / trigger" className="flex-1 px-2 py-1.5 text-sm rounded-lg focus:outline-none" style={{ background: C.SURFACE, border: '1px solid ' + C.BORDER, color: C.TEXT }} />
+              <button type="button" onClick={addIdea} disabled={!newTicker.trim()} className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-40" style={{ background: C.GOLD, color: '#0a0a0a' }}>Add</button>
+              <button type="button" onClick={() => { setShowIdeaForm(false); setNewTicker(''); setNewThesis('') }} className="px-2 py-1.5 text-xs studio-muted hover:text-studio-text">Cancel</button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => { setShowIdeaForm(true); setTimeout(() => tickerRef.current?.focus(), 50) }} className="flex items-center gap-1 text-[11px] hover:text-[#D4AF37] transition-colors" style={{ color: C.MUTED }}>
+              <Plus className="h-3 w-3" /> {ideas.length > 0 ? 'add another trade idea' : 'add trade idea'}
+            </button>
+          )}
+        </div>
+      )}
       <div className="flex items-center gap-2">
         <button type="button" onClick={() => fileRef.current?.click()} className="flex items-center gap-1 text-[11px] studio-muted hover:text-[#D4AF37]">
           <Paperclip className="h-3 w-3" /> attach charts
@@ -169,7 +214,7 @@ function SectionField({ label, hint, section, onChange, onImageClick }: {
               <img src={a.ref} alt={a.caption ?? ''} onClick={() => onImageClick(a.ref)}
                 className="w-full h-auto rounded-lg border cursor-zoom-in" style={{ borderColor: C.BORDER }} />
               <button
-                onClick={() => { pushRef.current = local; onChange({ text: local, annots: section.annots.filter((_, idx) => idx !== i) }) }}
+                onClick={() => { pushRef.current = local; onChange({ ...section, text: local, annots: section.annots.filter((_, idx) => idx !== i) }) }}
                 className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full text-[10px] opacity-0 group-hover:opacity-100 flex items-center justify-center"
                 style={{ background: '#dc2626', color: '#fff' }}>✕</button>
             </div>
@@ -279,7 +324,7 @@ export function ReviewDocView({ reviewId, onChanged, onDeleted, onBack }: Review
 
   const allEmpty = REVIEW_SECTIONS.every((s) => {
     const v = doc.content.sections[s.key]
-    return (!v || (!v.text.trim() && v.annots.length === 0))
+    return (!v || (!v.text.trim() && v.annots.length === 0 && !(v.tradeIdeas && v.tradeIdeas.length)))
   }) && !doc.content.legacyHtml
 
   return (
@@ -325,6 +370,7 @@ export function ReviewDocView({ reviewId, onChanged, onDeleted, onBack }: Review
       <div className="mt-6 space-y-5">
         {REVIEW_SECTIONS.map((s) => (
           <SectionField key={s.key} label={s.label} hint={s.hint}
+            allowTradeIdeas={s.key === 'watchlist'}
             section={doc.content.sections[s.key] ?? { text: '', annots: [] }}
             onChange={(data) => setSection(s.key, data)}
             onImageClick={(ref) => setLightbox(ref)} />

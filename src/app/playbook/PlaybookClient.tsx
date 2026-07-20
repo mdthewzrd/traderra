@@ -148,6 +148,22 @@ export default function PlaybookClient() {
     }
   }, [])
 
+  // Deep-link: open the playbook specified by ?id= in the URL.
+  // Runs once the list has loaded. Skips if nothing selected yet.
+  const deepLinkedRef = useRef(false)
+  useEffect(() => {
+    if (deepLinkedRef.current || list.length === 0) return
+    try {
+      const u = new URL(window.location.href)
+      const id = u.searchParams.get('id')
+      if (id && list.some((p) => p.id === id)) {
+        deepLinkedRef.current = true
+        open(id)
+      }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list])
+
   const open = async (id: string) => {
     flushRef.current()  // persist the current playbook + trades before switching
     setOpening(true)

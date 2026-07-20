@@ -13,9 +13,17 @@ interface ReviewDocViewProps {
 
 // Structured review sections — mirrors the playbook section pattern
 // (gold uppercase label + muted hint + bordered textarea + chart thumbnails).
-type TradeIdea = { id: string; ticker: string; thesis: string }
+type Bias = 'Long' | 'Short' | 'Neutral'
+type TradeIdea = { id: string; ticker: string; thesis: string; setupId?: string; setupName?: string; bias?: Bias }
 type SectionData = { text: string; annots: { ref: string; caption?: string }[]; tradeIdeas?: TradeIdea[] }
 type ReviewContent = { sections: Record<string, SectionData>; legacyHtml?: string }
+
+type PlaybookOption = { id: string; name: string; setupType?: string | null }
+const BIAS_COLORS: Record<Bias, string> = {
+  Long: 'rgba(16,185,129,0.12)│#10b981│rgba(16,185,129,0.3)',
+  Short: 'rgba(239,68,68,0.12)│#ef4444│rgba(239,68,68,0.3)',
+  Neutral: 'rgba(156,163,175,0.12)│#9ca3af│rgba(156,163,175,0.3)',
+}
 
 const REVIEW_SECTIONS: { key: string; label: string; hint: string; prompt: string }[] = [
   { key: 'context', label: 'Market Context', hint: 'Indices, breadth, regime — what kind of day was it?', prompt: 'SPY/QQQ levels + trend:\nBreadth & volatility (VIX, adv/dec):\nSector strength:\nOverall bias (risk-on/off/mixed):' },
@@ -75,12 +83,13 @@ function sanitizeLegacyHtml(html: string | undefined): string | undefined {
   return out
 }
 
-function SectionField({ label, hint, section, onChange, onImageClick, allowTradeIdeas }: {
+function SectionField({ label, hint, section, onChange, onImageClick, allowTradeIdeas, playbooks }: {
   label: string; hint: string
   section: SectionData
   onChange: (s: SectionData) => void
   onImageClick: (ref: string) => void
   allowTradeIdeas?: boolean
+  playbooks?: PlaybookOption[]
 }) {
   const [local, setLocal] = useState(section.text)
   const pushRef = useRef(section.text)
@@ -90,15 +99,18 @@ function SectionField({ label, hint, section, onChange, onImageClick, allowTrade
   const [showIdeaForm, setShowIdeaForm] = useState(false)
   const [newTicker, setNewTicker] = useState('')
   const [newThesis, setNewThesis] = useState('')
+  const [newSetupId, setNewSetupId] = useState('')
+  const [newBias, setNewBias] = useState<Bias | ''>('')
   const tickerRef = useRef<HTMLInputElement>(null)
 
   const ideas = section.tradeIdeas ?? []
   const addIdea = () => {
     const t = newTicker.trim().toUpperCase()
     if (!t) { tickerRef.current?.focus(); return }
+    const setup = playbooks?.find((p) => p.id === newSetupId)
     pushRef.current = local
-    onChange({ ...section, text: local, tradeIdeas: [...ideas, { id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now() + Math.random()), ticker: t, thesis: newThesis.trim() }] })
-    setNewTicker(''); setNewThesis(''); tickerRef.current?.focus()  // keep form open for rapid entry
+    onChange({ ...section, text: local, tradeIdeas: [...ideas, { id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now() + Math.random()), ticker: t, thesis: newThesis.trim(), setupId: setup?.id, setupName: setup?.name, bias: (newBias || undefined) as Bias | undefined }] })
+    setNewTicker(''); setNewThesis(''); setNewSetupId(''); setNewBias(''); tickerRef.current?.focus()  // keep form open for rapid entry
   }
   const removeIdea = (id: string) => {
     pushRef.current = local
@@ -180,22 +192,46 @@ function SectionField({ label, hint, section, onChange, onImageClick, allowTrade
           {/* Trade idea list — gold ticker pills + thesis, stacked bullets */}
           {ideas.map((idea) => (
             <div key={idea.id} className="flex items-start gap-2 px-3 py-2 rounded-lg border group" style={{ background: '#0a0a0a', borderColor: C.BORDER }}>
-              <span className="shrink-0 px-1.5 py-0.5 rounded text-xs font-bold tracking-wide" style={{ background: 'rgba(212,175,55,0.12)', color: C.GOLD, border: '1px solid rgba(212,175,55,0.3)' }}>{idea.ticker}</span>
-              <span className="flex-1 text-sm leading-relaxed whitespace-pre-wrap" style={{ color: C.TEXT }}>{idea.thesis || <span style={{ color: C.MUTED }}>—</span>}</span>
+              <div className="flex flex-col gap-1 shrink-0">
+                <span className="px-1.5 py-0.5 rounded text-xs font-bold tracking-wide" style={{ background: 'rgba(212,175,55,0.12)', color: C.GOLD, border: '1px solid rgba(212,175,55,0.3)' }}>{idea.ticker}</span>
+                {idea.bias && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase text-center" style={{ background: BIAS_COLORS[idea.bias].split('│')[0], color: BIAS_COLORS[idea.bias].split('│')[1], border: '1px solid ' + BIAS_COLORS[idea.bias].split('│')[2] }}>{idea.bias}</span>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                {idea.setupName && (
+                  <a href={idea.setupId ? `/playbook?id=${idea.setupId}` : '/playbook'} className="inline-flex items-center gap-1 text-[11px] font-semibold mb-1 hover:underline" style={{ color: C.GOLD }}>
+                    {idea.setupName}
+                  </a>
+                )}
+                <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: C.TEXT }}>{idea.thesis || <span style={{ color: C.MUTED }}>—</span>}</div>
+              </div>
               <button type="button" onClick={() => removeIdea(idea.id)} className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 shrink-0" style={{ color: '#9ca3af' }} title="Remove"><X className="h-3.5 w-3.5" /></button>
             </div>
           ))}
           {/* Inline add form */}
           {showIdeaForm ? (
             <div className="flex flex-col gap-2 px-3 py-2 rounded-lg border" style={{ background: C.SURFACE, borderColor: C.BORDER }}>
-              <div className="flex items-center gap-2">
-                <input ref={tickerRef} value={newTicker} onChange={(e) => setNewTicker(e.target.value.toUpperCase().slice(0, 8))} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addIdea() } if (e.key === 'Escape') { setShowIdeaForm(false); setNewTicker(''); setNewThesis('') } }} placeholder="TICKER" className="w-24 px-2 py-1.5 text-sm font-bold uppercase rounded-lg focus:outline-none" style={{ background: '#0a0a0a', border: '1px solid rgba(212,175,55,0.4)', color: C.GOLD }} />
-                <span className="text-[11px] flex-1" style={{ color: C.MUTED }}>Thesis — <kbd className="px-1 rounded bg-[#1a1a1a] border border-[#2a2a2a]">Enter</kbd> to save · <kbd className="px-1 rounded bg-[#1a1a1a] border border-[#2a2a2a]">Shift+Enter</kbd> for newline</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <input ref={tickerRef} value={newTicker} onChange={(e) => setNewTicker(e.target.value.toUpperCase().slice(0, 8))} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addIdea() } if (e.key === 'Escape') { setShowIdeaForm(false); setNewTicker(''); setNewThesis(''); setNewSetupId(''); setNewBias('') } }} placeholder="TICKER" className="w-24 px-2 py-1.5 text-sm font-bold uppercase rounded-lg focus:outline-none" style={{ background: '#0a0a0a', border: '1px solid rgba(212,175,55,0.4)', color: C.GOLD }} />
+                <select value={newBias} onChange={(e) => setNewBias(e.target.value as Bias | '')} className="px-2 py-1.5 text-sm rounded-lg focus:outline-none" style={{ background: '#0a0a0a', border: '1px solid ' + C.BORDER, color: C.TEXT }}>
+                  <option value="">Bias…</option>
+                  <option value="Long">Long</option>
+                  <option value="Short">Short</option>
+                  <option value="Neutral">Neutral</option>
+                </select>
+                <select value={newSetupId} onChange={(e) => setNewSetupId(e.target.value)} className="flex-1 min-w-[160px] px-2 py-1.5 text-sm rounded-lg focus:outline-none" style={{ background: '#0a0a0a', border: '1px solid ' + C.BORDER, color: C.TEXT }}>
+                  <option value="">Setup (optional)…</option>
+                  {(playbooks ?? []).map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}{p.setupType ? ` · ${p.setupType}` : ''}</option>
+                  ))}
+                </select>
               </div>
-              <textarea value={newThesis} onChange={(e) => setNewThesis(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && newTicker.trim()) { e.preventDefault(); addIdea() } if (e.key === 'Escape') { setShowIdeaForm(false); setNewTicker(''); setNewThesis('') } }} placeholder="Thesis / level / trigger — multi-line OK" rows={3} className="w-full px-2 py-1.5 text-sm rounded-lg leading-relaxed resize-none focus:outline-none" style={{ background: '#0a0a0a', border: '1px solid ' + C.BORDER, color: C.TEXT, minHeight: '4rem' }} />
+              <div className="text-[11px]" style={{ color: C.MUTED }}>Thesis — <kbd className="px-1 rounded bg-[#1a1a1a] border border-[#2a2a2a]">Enter</kbd> to save · <kbd className="px-1 rounded bg-[#1a1a1a] border border-[#2a2a2a]">Shift+Enter</kbd> for newline</div>
+              <textarea value={newThesis} onChange={(e) => setNewThesis(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && newTicker.trim()) { e.preventDefault(); addIdea() } if (e.key === 'Escape') { setShowIdeaForm(false); setNewTicker(''); setNewThesis(''); setNewSetupId(''); setNewBias('') } }} placeholder="Thesis / level / trigger — multi-line OK" rows={3} className="w-full px-2 py-1.5 text-sm rounded-lg leading-relaxed resize-none focus:outline-none" style={{ background: '#0a0a0a', border: '1px solid ' + C.BORDER, color: C.TEXT, minHeight: '4rem' }} />
               <div className="flex items-center gap-2">
                 <button type="button" onClick={addIdea} disabled={!newTicker.trim()} className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-40" style={{ background: C.GOLD, color: '#0a0a0a' }}>Add idea</button>
-                <button type="button" onClick={() => { setShowIdeaForm(false); setNewTicker(''); setNewThesis('') }} className="px-2 py-1.5 text-xs studio-muted hover:text-studio-text">Cancel</button>
+                <button type="button" onClick={() => { setShowIdeaForm(false); setNewTicker(''); setNewThesis(''); setNewSetupId(''); setNewBias('') }} className="px-2 py-1.5 text-xs studio-muted hover:text-studio-text">Cancel</button>
               </div>
             </div>
           ) : (
@@ -238,6 +274,7 @@ export function ReviewDocView({ reviewId, onChanged, onDeleted, onBack }: Review
   const [savedFlash, setSavedFlash] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [dayTrades, setDayTrades] = useState<any[]>([])
+  const [playbooks, setPlaybooks] = useState<PlaybookOption[]>([])
   const [expandedTradeId, setExpandedTradeId] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -260,6 +297,14 @@ export function ReviewDocView({ reviewId, onChanged, onDeleted, onBack }: Review
       .catch(() => {})
     return () => { alive = false }
   }, [doc?.date])
+
+  // Load the user's playbook list once — powers the setup dropdown in trade ideas.
+  useEffect(() => {
+    fetch('/api/playbook', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (j?.playbooks) setPlaybooks(j.playbooks.map((p: any) => ({ id: p.id, name: p.name, setupType: p.setupType ?? null }))) })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     let alive = true
@@ -376,6 +421,7 @@ export function ReviewDocView({ reviewId, onChanged, onDeleted, onBack }: Review
         {REVIEW_SECTIONS.map((s) => (
           <SectionField key={s.key} label={s.label} hint={s.hint}
             allowTradeIdeas={s.key === 'watchlist'}
+            playbooks={s.key === 'watchlist' ? playbooks : undefined}
             section={doc.content.sections[s.key] ?? { text: '', annots: [] }}
             onChange={(data) => setSection(s.key, data)}
             onImageClick={(ref) => setLightbox(ref)} />

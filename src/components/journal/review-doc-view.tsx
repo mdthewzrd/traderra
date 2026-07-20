@@ -181,17 +181,22 @@ function SectionField({ label, hint, section, onChange, onImageClick, allowTrade
           {ideas.map((idea) => (
             <div key={idea.id} className="flex items-start gap-2 px-3 py-2 rounded-lg border group" style={{ background: '#0a0a0a', borderColor: C.BORDER }}>
               <span className="shrink-0 px-1.5 py-0.5 rounded text-xs font-bold tracking-wide" style={{ background: 'rgba(212,175,55,0.12)', color: C.GOLD, border: '1px solid rgba(212,175,55,0.3)' }}>{idea.ticker}</span>
-              <span className="flex-1 text-sm leading-relaxed" style={{ color: C.TEXT }}>{idea.thesis || <span style={{ color: C.MUTED }}>—</span>}</span>
-              <button type="button" onClick={() => removeIdea(idea.id)} className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5" style={{ color: '#9ca3af' }} title="Remove"><X className="h-3.5 w-3.5" /></button>
+              <span className="flex-1 text-sm leading-relaxed whitespace-pre-wrap" style={{ color: C.TEXT }}>{idea.thesis || <span style={{ color: C.MUTED }}>—</span>}</span>
+              <button type="button" onClick={() => removeIdea(idea.id)} className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 shrink-0" style={{ color: '#9ca3af' }} title="Remove"><X className="h-3.5 w-3.5" /></button>
             </div>
           ))}
           {/* Inline add form */}
           {showIdeaForm ? (
-            <div className="flex items-center gap-2">
-              <input ref={tickerRef} value={newTicker} onChange={(e) => setNewTicker(e.target.value.toUpperCase().slice(0, 8))} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addIdea() } if (e.key === 'Escape') { setShowIdeaForm(false); setNewTicker(''); setNewThesis('') } }} placeholder="TICKER" className="w-24 px-2 py-1.5 text-sm font-bold uppercase rounded-lg focus:outline-none" style={{ background: C.SURFACE, border: '1px solid rgba(212,175,55,0.4)', color: C.GOLD }} />
-              <input value={newThesis} onChange={(e) => setNewThesis(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && newTicker.trim()) { e.preventDefault(); addIdea() } if (e.key === 'Escape') { setShowIdeaForm(false); setNewTicker(''); setNewThesis('') } }} placeholder="Thesis / level / trigger" className="flex-1 px-2 py-1.5 text-sm rounded-lg focus:outline-none" style={{ background: C.SURFACE, border: '1px solid ' + C.BORDER, color: C.TEXT }} />
-              <button type="button" onClick={addIdea} disabled={!newTicker.trim()} className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-40" style={{ background: C.GOLD, color: '#0a0a0a' }}>Add</button>
-              <button type="button" onClick={() => { setShowIdeaForm(false); setNewTicker(''); setNewThesis('') }} className="px-2 py-1.5 text-xs studio-muted hover:text-studio-text">Cancel</button>
+            <div className="flex flex-col gap-2 px-3 py-2 rounded-lg border" style={{ background: C.SURFACE, borderColor: C.BORDER }}>
+              <div className="flex items-center gap-2">
+                <input ref={tickerRef} value={newTicker} onChange={(e) => setNewTicker(e.target.value.toUpperCase().slice(0, 8))} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addIdea() } if (e.key === 'Escape') { setShowIdeaForm(false); setNewTicker(''); setNewThesis('') } }} placeholder="TICKER" className="w-24 px-2 py-1.5 text-sm font-bold uppercase rounded-lg focus:outline-none" style={{ background: '#0a0a0a', border: '1px solid rgba(212,175,55,0.4)', color: C.GOLD }} />
+                <span className="text-[11px] flex-1" style={{ color: C.MUTED }}>Thesis — <kbd className="px-1 rounded bg-[#1a1a1a] border border-[#2a2a2a]">Enter</kbd> to save · <kbd className="px-1 rounded bg-[#1a1a1a] border border-[#2a2a2a]">Shift+Enter</kbd> for newline</span>
+              </div>
+              <textarea value={newThesis} onChange={(e) => setNewThesis(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && newTicker.trim()) { e.preventDefault(); addIdea() } if (e.key === 'Escape') { setShowIdeaForm(false); setNewTicker(''); setNewThesis('') } }} placeholder="Thesis / level / trigger — multi-line OK" rows={3} className="w-full px-2 py-1.5 text-sm rounded-lg leading-relaxed resize-none focus:outline-none" style={{ background: '#0a0a0a', border: '1px solid ' + C.BORDER, color: C.TEXT, minHeight: '4rem' }} />
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={addIdea} disabled={!newTicker.trim()} className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-40" style={{ background: C.GOLD, color: '#0a0a0a' }}>Add idea</button>
+                <button type="button" onClick={() => { setShowIdeaForm(false); setNewTicker(''); setNewThesis('') }} className="px-2 py-1.5 text-xs studio-muted hover:text-studio-text">Cancel</button>
+              </div>
             </div>
           ) : (
             <button type="button" onClick={() => { setShowIdeaForm(true); setTimeout(() => tickerRef.current?.focus(), 50) }} className="flex items-center gap-1 text-[11px] hover:text-[#D4AF37] transition-colors" style={{ color: C.MUTED }}>

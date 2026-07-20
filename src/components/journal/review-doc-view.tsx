@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ChevronLeft, Trash2, Loader2, LayoutTemplate, Paperclip, Plus, X } from 'lucide-react'
+import { ChevronLeft, Trash2, Loader2, LayoutTemplate, Paperclip, Plus, X, Search } from 'lucide-react'
 import { TradingChart } from '@/components/charts/trading-chart'
 
 interface ReviewDocViewProps {
@@ -18,7 +18,7 @@ type TradeIdea = { id: string; ticker: string; thesis: string; setupId?: string;
 type SectionData = { text: string; annots: { ref: string; caption?: string }[]; tradeIdeas?: TradeIdea[] }
 type ReviewContent = { sections: Record<string, SectionData>; legacyHtml?: string }
 
-type PlaybookOption = { id: string; name: string; setupType?: string | null }
+type PlaybookOption = { id: string; name: string; setupType?: string | null; category?: string | null }
 const BIAS_COLORS: Record<Bias, string> = {
   Long: 'rgba(16,185,129,0.12)│#10b981│rgba(16,185,129,0.3)',
   Short: 'rgba(239,68,68,0.12)│#ef4444│rgba(239,68,68,0.3)',
@@ -34,7 +34,112 @@ const REVIEW_SECTIONS: { key: string; label: string; hint: string; prompt: strin
 ]
 
 // Colors (mirrors playbook C.* constants)
-const C = { GOLD: '#D4AF37', MUTED: '#6b7280', SURFACE: '#0f0f0f', BORDER: '#222', TEXT: '#e5e5e5' }
+const C = { GOLD: '#D4AF37', MUTED: '#6b7280', SURFACE: '#0f0f0f', BORDER: '#222', TEXT: '#e5e5e5', SURFACE2: '#0a0a0a', SURFACE3: '#161616' }
+
+/**
+ * Searchable, category-grouped setup picker. Mirrors the /playbook tree:
+ * groups by category (Uncategorized last), all groups auto-expanded.
+ * Type to filter across name + setupType + category.
+ */
+function SetupPicker({ value, onChange, playbooks }: {
+  value: string
+  onChange: (id: string, name?: string) => void
+  playbooks: PlaybookOption[]
+}) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const selected = playbooks.find((p) => p.id === value) || null
+
+  useEffect(() => {
+    if (!open) return
+    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [open])
+
+  useEffect(() => { if (open) setTimeout(() => inputRef.current?.focus(), 20) }, [open])
+
+  // Filter + group (mirrors /playbook tree logic).
+  const ql = q.trim().toLowerCase()
+  const filtered = ql
+    ? playbooks.filter((p) =>
+        p.name.toLowerCase().includes(ql) ||
+        (p.setupType ?? '').toLowerCase().includes(ql) ||
+        (p.category ?? '').toLowerCase().includes(ql))
+    : playbooks
+  const UNC = '__uncategorized__'
+  const groups = new Map<string, PlaybookOption[]>()
+  for (const p of filtered) {
+    const k = (p.category && p.category.trim()) ? p.category.trim() : UNC
+    if (!groups.has(k)) groups.set(k, [])
+    groups.get(k)!.push(p)
+  }
+  const keys = [...groups.keys()].sort((a, b) => {
+    if (a === UNC) return 1
+    if (b === UNC) return -1
+    return a.localeCompare(b)
+  })
+
+  const trigger = (
+    <button type="button" onClick={() => setOpen((v) => !v)}
+      className="flex items-center gap-1.5 w-full min-w-[160px] px-2 py-1.5 text-sm rounded-lg text-left focus:outline-none"
+      style={{ background: C.SURFACE2, border: '1px solid ' + C.BORDER, color: selected ? C.TEXT : C.MUTED }}>
+      {selected ? (
+        <span className="flex-1 truncate">
+          {selected.name}{selected.setupType ? <span style={{ color: C.MUTED }}> · {selected.setupType}</span> : null}
+        </span>
+      ) : <span className="flex-1 italic">Setup (optional)…</span>}
+      {selected && (
+        <span role="button" tabIndex={0}
+          onClick={(e) => { e.stopPropagation(); onChange('') }}
+          className="p-0.5 hover:opacity-80" style={{ color: C.MUTED }}><X className="h-3 w-3" /></span>
+      )}
+      <Search className="h-3.5 w-3.5" style={{ color: C.MUTED }} />
+    </button>
+  )
+
+  return (
+    <div className="relative flex-1 min-w-[160px]" ref={ref}>
+      {trigger}
+      {open && (
+        <div className="absolute z-50 mt-1 w-full rounded-lg border shadow-2xl overflow-hidden" style={{ background: C.SURFACE, borderColor: C.BORDER }}>
+          <div className="flex items-center gap-1.5 px-2 py-1.5 border-b sticky top-0" style={{ borderColor: C.BORDER, background: C.SURFACE }}>
+            <Search className="h-3.5 w-3.5 shrink-0" style={{ color: C.MUTED }} />
+            <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter setups…"
+              className="flex-1 bg-transparent text-sm focus:outline-none" style={{ color: C.TEXT }}
+              onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false) }} />
+          </div>
+          <div className="max-h-[260px] overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="px-3 py-4 text-center text-xs" style={{ color: C.MUTED }}>No matches</div>
+            ) : keys.map((k) => {
+              const items = groups.get(k)!
+              const isUnc = k === UNC
+              return (
+                <div key={k}>
+                  <div className="px-3 py-1 text-[10px] uppercase tracking-wider font-bold sticky" style={{ color: isUnc ? C.MUTED : C.GOLD, background: C.SURFACE2 }}>
+                    {isUnc ? 'Uncategorized' : k} <span style={{ color: C.MUTED }}>{items.length}</span>
+                  </div>
+                  {items.map((p) => (
+                    <button key={p.id} type="button"
+                      onClick={() => { onChange(p.id, p.name); setOpen(false); setQ('') }}
+                      className="w-full text-left pl-5 pr-3 py-1.5 text-sm transition-colors hover:bg-[#1a1a1a]"
+                      style={{ background: p.id === value ? C.SURFACE3 : 'transparent', color: C.TEXT }}>
+                      <span className="block truncate">{p.name}</span>
+                      {p.setupType && <span className="block text-[10px] truncate" style={{ color: C.MUTED }}>{p.setupType}</span>}
+                    </button>
+                  ))}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function parseContent(raw: unknown): ReviewContent {
   if (typeof raw === 'string' && raw.trim().startsWith('{')) {
@@ -100,6 +205,7 @@ function SectionField({ label, hint, section, onChange, onImageClick, allowTrade
   const [newTicker, setNewTicker] = useState('')
   const [newThesis, setNewThesis] = useState('')
   const [newSetupId, setNewSetupId] = useState('')
+  const [newSetupName, setNewSetupName] = useState('')
   const [newBias, setNewBias] = useState<Bias | ''>('')
   const tickerRef = useRef<HTMLInputElement>(null)
 
@@ -110,7 +216,7 @@ function SectionField({ label, hint, section, onChange, onImageClick, allowTrade
     const setup = playbooks?.find((p) => p.id === newSetupId)
     pushRef.current = local
     onChange({ ...section, text: local, tradeIdeas: [...ideas, { id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now() + Math.random()), ticker: t, thesis: newThesis.trim(), setupId: setup?.id, setupName: setup?.name, bias: (newBias || undefined) as Bias | undefined }] })
-    setNewTicker(''); setNewThesis(''); setNewSetupId(''); setNewBias(''); tickerRef.current?.focus()  // keep form open for rapid entry
+    setNewTicker(''); setNewThesis(''); setNewSetupId(''); setNewSetupName(''); setNewBias(''); tickerRef.current?.focus()  // keep form open for rapid entry
   }
   const removeIdea = (id: string) => {
     pushRef.current = local
@@ -220,12 +326,11 @@ function SectionField({ label, hint, section, onChange, onImageClick, allowTrade
                   <option value="Short">Short</option>
                   <option value="Neutral">Neutral</option>
                 </select>
-                <select value={newSetupId} onChange={(e) => setNewSetupId(e.target.value)} className="flex-1 min-w-[160px] px-2 py-1.5 text-sm rounded-lg focus:outline-none" style={{ background: '#0a0a0a', border: '1px solid ' + C.BORDER, color: C.TEXT }}>
-                  <option value="">Setup (optional)…</option>
-                  {(playbooks ?? []).map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}{p.setupType ? ` · ${p.setupType}` : ''}</option>
-                  ))}
-                </select>
+                <SetupPicker
+                  value={newSetupId}
+                  onChange={(id, name) => { setNewSetupId(id); setNewSetupName(name || '') }}
+                  playbooks={playbooks ?? []}
+                />
               </div>
               <div className="text-[11px]" style={{ color: C.MUTED }}>Thesis — <kbd className="px-1 rounded bg-[#1a1a1a] border border-[#2a2a2a]">Enter</kbd> to save · <kbd className="px-1 rounded bg-[#1a1a1a] border border-[#2a2a2a]">Shift+Enter</kbd> for newline</div>
               <textarea value={newThesis} onChange={(e) => setNewThesis(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && newTicker.trim()) { e.preventDefault(); addIdea() } if (e.key === 'Escape') { setShowIdeaForm(false); setNewTicker(''); setNewThesis(''); setNewSetupId(''); setNewBias('') } }} placeholder="Thesis / level / trigger — multi-line OK" rows={3} className="w-full px-2 py-1.5 text-sm rounded-lg leading-relaxed resize-none focus:outline-none" style={{ background: '#0a0a0a', border: '1px solid ' + C.BORDER, color: C.TEXT, minHeight: '4rem' }} />
@@ -302,7 +407,7 @@ export function ReviewDocView({ reviewId, onChanged, onDeleted, onBack }: Review
   useEffect(() => {
     fetch('/api/playbook', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => { if (j?.playbooks) setPlaybooks(j.playbooks.map((p: any) => ({ id: p.id, name: p.name, setupType: p.setupType ?? null }))) })
+      .then((j) => { if (j?.playbooks) setPlaybooks(j.playbooks.map((p: any) => ({ id: p.id, name: p.name, setupType: p.setupType ?? null, category: p.category ?? null }))) })
       .catch(() => {})
   }, [])
 

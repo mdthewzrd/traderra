@@ -162,12 +162,12 @@ function SectionField({ label, hint, section, onChange, onImageClick }: {
         <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => onFiles(e.target.files)} />
       </div>
       {section.annots.length > 0 && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-2 mt-1">
           {section.annots.map((a, i) => (
             <div key={i} className="relative group">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={a.ref} alt={a.caption ?? ''} onClick={() => onImageClick(a.ref)}
-                className="w-56 h-36 object-cover rounded-lg border cursor-zoom-in" style={{ borderColor: C.BORDER }} />
+                className="w-full h-auto rounded-lg border cursor-zoom-in" style={{ borderColor: C.BORDER }} />
               <button
                 onClick={() => { pushRef.current = local; onChange({ text: local, annots: section.annots.filter((_, idx) => idx !== i) }) }}
                 className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full text-[10px] opacity-0 group-hover:opacity-100 flex items-center justify-center"

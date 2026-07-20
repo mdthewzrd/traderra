@@ -272,13 +272,15 @@ export function BlockNoteEditor({ value, onChange, placeholder, fullHeight }: Bl
       <style>{`
         [data-bn-editor] img {
           display: block;
+          width: 100%;
           max-width: 100%;
           height: auto;
           border-radius: 8px;
           border: 1px solid #1f2937;
-          margin: 8px 0;
+          margin: 10px 0;
           cursor: zoom-in;
           transition: opacity .15s;
+          object-fit: contain;
         }
         [data-bn-editor] img:hover { opacity: .92; }
         /* Playbook-style structured section labels for daily reviews */

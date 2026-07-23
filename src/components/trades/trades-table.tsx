@@ -1,10 +1,9 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, memo, Fragment } from 'react'
+import { useState, useEffect, useMemo, useCallback, memo } from 'react'
 import {
   ChevronDown,
   ChevronUp,
-  ChevronRight,
   Filter,
   Download,
   Search,
@@ -12,7 +11,11 @@ import {
   ArrowUpDown,
   Eye,
   Edit,
-  Trash2
+  Trash2,
+  Target,
+  DollarSign,
+  Percent,
+  X
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TradeDetailModal } from './trade-detail-modal'
@@ -240,33 +243,23 @@ interface TradeRowProps {
   onViewTrade: (trade: any, e: React.MouseEvent) => void
   onEditTrade: (trade: any, e: React.MouseEvent) => void
   onDeleteTrade: (trade: any, e: React.MouseEvent) => void
-  hasChildren?: boolean
-  isExpanded?: boolean
-  onToggleExpand?: () => void
-  childCount?: number
 }
 
-const TradeRow = memo(({ trade, compact, displayMode, mode, selectedTrades, onToggleSelection, onTradeClick, onViewTrade, onEditTrade, onDeleteTrade, hasChildren, isExpanded, onToggleExpand, childCount }: TradeRowProps) => {
+const TradeRow = memo(({ trade, compact, displayMode, mode, selectedTrades, onToggleSelection, onTradeClick, onViewTrade, onEditTrade, onDeleteTrade }: TradeRowProps) => {
   return (
     <tr
       key={trade.id}
-      className={cn('hover:bg-[#0f0f0f] transition-colors cursor-pointer', hasChildren && 'bg-[#0c0c0c]')}
+      className="hover:bg-[#0f0f0f] transition-colors cursor-pointer"
       onClick={() => onTradeClick(trade)}
     >
       {!compact && (
         <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-          {hasChildren ? (
-            <button onClick={(e) => { e.stopPropagation(); onToggleExpand?.() }} className="flex items-center justify-center w-5 h-5 hover:bg-[#222] rounded transition-colors">
-              {isExpanded ? <ChevronDown className="h-4 w-4 studio-muted" /> : <ChevronRight className="h-4 w-4 studio-muted" />}
-            </button>
-          ) : (
-            <input
-              type="checkbox"
-              className="rounded border-[#333] bg-[#111] text-primary focus:ring-primary"
-              checked={selectedTrades.has(trade.id)}
-              onChange={() => onToggleSelection(trade.id)}
-            />
-          )}
+          <input
+            type="checkbox"
+            className="rounded border-[#333] bg-[#111] text-primary focus:ring-primary"
+            checked={selectedTrades.has(trade.id)}
+            onChange={() => onToggleSelection(trade.id)}
+          />
         </td>
       )}
       <td className="px-4 py-3 text-sm studio-text">
@@ -274,9 +267,9 @@ const TradeRow = memo(({ trade, compact, displayMode, mode, selectedTrades, onTo
       </td>
       <td className="px-4 py-3">
         <span className="text-sm font-medium text-primary">{trade.symbol}</span>
-        {hasChildren && (
+        {trade.children?.length > 0 && (
           <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary border border-primary/20">
-            {childCount} RT
+            {trade.children.length} RT
           </span>
         )}
       </td>
@@ -384,6 +377,18 @@ export function TradesTable({ compact = false, importedTrades = [], isLoading = 
   const [filterStrategy, setFilterStrategy] = useState('all')
   const [selectedTrade, setSelectedTrade] = useState<typeof tradesData[0] | null>(null)
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
+  const [editMode, setEditMode] = useState(false)
+
+  // Bulk actions
+  const [showBulkMenu, setShowBulkMenu] = useState(false)
+  const [showRiskModal, setShowRiskModal] = useState(false)
+  const [bulkRiskAmount, setBulkRiskAmount] = useState('')
+  const [bulkRiskType, setBulkRiskType] = useState<'fixed' | 'percent'>('fixed')
+  const [bulkSaving, setBulkSaving] = useState(false)
+
+  const refreshTrades = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('refreshTrades'))
+  }, [])
 
   // Register filter state handlers with AG-UI registry for AI control
   useComponentRegistry('trades.filters.strategy', {
@@ -461,20 +466,59 @@ export function TradesTable({ compact = false, importedTrades = [], isLoading = 
     })
   }, [tradesData])
 
+  // Bulk-set initial risk on all selected trades.
+  // fixed: same $ amount per trade. percent: $ = cost * pct (cost = entryPrice * quantity).
+  const applyBulkRisk = useCallback(async () => {
+    const amt = parseFloat(bulkRiskAmount)
+    if (isNaN(amt) || amt <= 0) {
+      alert('Enter a valid amount')
+      return
+    }
+    setBulkSaving(true)
+    const ids = [...selectedTrades]
+    try {
+      const updates = ids.map(id => {
+        const t = tradesData.find(x => x.id === id)
+        if (!t) return null
+        const riskAmount = bulkRiskType === 'percent'
+          ? +(t.entryPrice * t.quantity * (amt / 100)).toFixed(2)
+          : amt
+        return fetch(`/api/trades/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ riskAmount }),
+        })
+      }).filter(Boolean)
+      await Promise.all(updates)
+      setShowRiskModal(false)
+      setBulkRiskAmount('')
+      setSelectedTrades(new Set())
+      refreshTrades()
+    } catch (e) {
+      alert('Failed to set risk: ' + (e instanceof Error ? e.message : 'unknown error'))
+    } finally {
+      setBulkSaving(false)
+    }
+  }, [bulkRiskAmount, bulkRiskType, selectedTrades, tradesData, refreshTrades])
+
   const handleTradeClick = useCallback((trade: typeof tradesData[0]) => {
     setSelectedTrade(trade)
+    setEditMode(false)
     setIsDetailModalOpen(true)
   }, [])
 
   const handleViewTrade = useCallback((trade: typeof tradesData[0], e: React.MouseEvent) => {
     e.stopPropagation()
-    handleTradeClick(trade)
-  }, [handleTradeClick])
+    setSelectedTrade(trade)
+    setEditMode(false)
+    setIsDetailModalOpen(true)
+  }, [])
 
   const handleEditTrade = useCallback((trade: typeof tradesData[0], e: React.MouseEvent) => {
     e.stopPropagation()
-    // TODO: Implement edit functionality
-    console.log('Edit trade:', trade.id)
+    setSelectedTrade(trade)
+    setEditMode(true)
+    setIsDetailModalOpen(true)
   }, [])
 
   const handleDeleteTrade = useCallback(async (trade: typeof tradesData[0], e: React.MouseEvent) => {
@@ -575,17 +619,6 @@ export function TradesTable({ compact = false, importedTrades = [], isLoading = 
     return { totalPnL, totalTrades, avgPnL, totalRMultiple, avgRMultiple }
   }, [filteredAndSortedTrades, mode])
 
-  // Expandable parent rows (trades with children)
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
-  const toggleRowExpand = (tradeId: string) => {
-    setExpandedRows(prev => {
-      const next = new Set(prev)
-      if (next.has(tradeId)) next.delete(tradeId)
-      else next.add(tradeId)
-      return next
-    })
-  }
-
   // Show loading state
   if (isLoading) {
     return (
@@ -632,6 +665,47 @@ export function TradesTable({ compact = false, importedTrades = [], isLoading = 
           </div>
 
           <div className="flex items-center space-x-2">
+            {selectedTrades.size > 0 && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowBulkMenu(v => !v)}
+                  className="btn-ghost flex items-center space-x-2"
+                  style={{ borderColor: 'var(--primary)', color: 'var(--primary)' }}
+                >
+                  <Target className="h-4 w-4" />
+                  <span>{selectedTrades.size} selected ▾</span>
+                </button>
+                {showBulkMenu && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowBulkMenu(false)} />
+                    <div className="absolute right-0 mt-1 w-56 rounded-lg border studio-surface shadow-2xl z-50 overflow-hidden">
+                      <button
+                        onClick={() => { setShowBulkMenu(false); setShowRiskModal(true); setBulkRiskType('fixed') }}
+                        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm studio-text hover:bg-[#1a1a1a] transition-colors text-left"
+                      >
+                        <DollarSign className="h-4 w-4 studio-muted" />
+                        Set Initial Risk ($)
+                      </button>
+                      <button
+                        onClick={() => { setShowBulkMenu(false); setShowRiskModal(true); setBulkRiskType('percent') }}
+                        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm studio-text hover:bg-[#1a1a1a] transition-colors text-left"
+                      >
+                        <Percent className="h-4 w-4 studio-muted" />
+                        Set Risk (% of size)
+                      </button>
+                      <div className="border-t studio-border" />
+                      <button
+                        onClick={() => { setShowBulkMenu(false); setSelectedTrades(new Set()) }}
+                        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm studio-muted hover:bg-[#1a1a1a] transition-colors text-left"
+                      >
+                        <X className="h-4 w-4" />
+                        Clear selection
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
             <button onClick={handleExport} className="btn-ghost flex items-center space-x-2">
               <Download className="h-4 w-4" />
               <span>Export</span>
@@ -747,59 +821,87 @@ export function TradesTable({ compact = false, importedTrades = [], isLoading = 
             </thead>
             <tbody className="divide-y divide-[#1a1a1a]">
               {filteredAndSortedTrades.map((trade) => (
-                <Fragment key={trade.id}>
-                  <TradeRow
-                    trade={trade}
-                    compact={compact}
-                    displayMode={displayMode}
-                    mode={mode}
-                    selectedTrades={selectedTrades}
-                    onToggleSelection={toggleTradeSelection}
-                    onTradeClick={handleTradeClick}
-                    onViewTrade={handleViewTrade}
-                    onEditTrade={handleEditTrade}
-                    onDeleteTrade={handleDeleteTrade}
-                    hasChildren={!!trade.children?.length}
-                    isExpanded={expandedRows.has(trade.id)}
-                    onToggleExpand={() => toggleRowExpand(trade.id)}
-                    childCount={trade.children?.length || 0}
-                  />
-                  {trade.children?.length > 0 && expandedRows.has(trade.id) && (
-                    trade.children.map((child: any) => (
-                      <tr key={child.id} className="bg-[#080808] hover:bg-[#0c0c0c] transition-colors cursor-pointer border-l-2 border-primary/30" onClick={() => handleTradeClick(child)}>
-                        {!compact && <td className="px-4 py-2"></td>}
-                        <td className="px-4 py-2 pl-8 text-xs studio-muted">↳ {child.entryTime?.split('T')[1]?.split('.')[0] || child.date}</td>
-                        <td className="px-4 py-2"><span className="text-xs studio-muted">{child.symbol}</span></td>
-                        <td className="px-4 py-2">
-                          <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium',
-                            child.side === 'Long' ? 'bg-green-900/40 text-green-400' : 'bg-red-900/40 text-red-400')}>{child.side}</span>
-                        </td>
-                        <td className="px-4 py-2 text-right text-xs studio-text">{child.quantity}</td>
-                        <td className="px-4 py-2 text-right text-xs studio-text">${child.entryPrice.toFixed(2)}</td>
-                        <td className="px-4 py-2 text-right text-xs studio-text">${child.exitPrice.toFixed(2)}</td>
-                        <td className={cn('px-4 py-2 text-right text-xs font-medium', getPnLValue(child, mode) >= 0 ? 'text-green-400' : 'text-red-400')}>
-                          {formatDisplayValue(getPnLValue(child, mode), displayMode, 'currency')}
-                        </td>
-                        <td className="px-4 py-2 text-right text-xs studio-muted">{child.pnlPercent?.toFixed(1)}%</td>
-                        {!compact && <><td className="px-4 py-2"></td><td></td><td className="px-4 py-2 text-xs studio-muted">{child.duration}</td><td></td></>}
-                      </tr>
-                    ))
-                  )}
-                </Fragment>
+                <TradeRow
+                  key={trade.id}
+                  trade={trade}
+                  compact={compact}
+                  displayMode={displayMode}
+                  mode={mode}
+                  selectedTrades={selectedTrades}
+                  onToggleSelection={toggleTradeSelection}
+                  onTradeClick={handleTradeClick}
+                  onViewTrade={handleViewTrade}
+                  onEditTrade={handleEditTrade}
+                  onDeleteTrade={handleDeleteTrade}
+                />
               ))}
             </tbody>
           </table>
         </div>
       </div>
 
+      {/* Bulk Set Risk Modal */}
+      {showRiskModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60" onClick={() => !bulkSaving && setShowRiskModal(false)}>
+          <div className="studio-surface rounded-xl border studio-border p-6 w-full max-w-sm mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold studio-text">
+                Set Initial Risk
+              </h3>
+              <button onClick={() => !bulkSaving && setShowRiskModal(false)} className="p-1 hover:bg-[#1a1a1a] rounded">
+                <X className="h-4 w-4 studio-muted" />
+              </button>
+            </div>
+            <p className="text-sm studio-muted mb-4">
+              Apply to <span className="text-primary font-medium">{selectedTrades.size}</span> selected trade{selectedTrades.size !== 1 ? 's' : ''}.
+              {bulkRiskType === 'percent'
+                ? ' Amount = entry price × quantity × %.'
+                : ' Same dollar amount per trade.'}
+            </p>
+            <label className="block text-xs studio-muted mb-1.5 uppercase tracking-wide">
+              {bulkRiskType === 'fixed' ? 'Risk Amount ($)' : 'Risk Percent (%)'}
+            </label>
+            <input
+              type="number"
+              step={bulkRiskType === 'fixed' ? '1' : '0.1'}
+              autoFocus
+              value={bulkRiskAmount}
+              onChange={(e) => setBulkRiskAmount(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !bulkSaving) applyBulkRisk() }}
+              placeholder={bulkRiskType === 'fixed' ? 'e.g. 50' : 'e.g. 1.0'}
+              className="w-full px-3 py-2 studio-surface studio-border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary studio-text"
+            />
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={applyBulkRisk}
+                disabled={bulkSaving || !bulkRiskAmount}
+                className="flex-1 px-4 py-2 rounded-lg bg-primary text-black font-medium text-sm hover:opacity-90 disabled:opacity-50 transition-opacity"
+              >
+                {bulkSaving ? 'Saving…' : `Apply to ${selectedTrades.size}`}
+              </button>
+              <button
+                onClick={() => setShowRiskModal(false)}
+                disabled={bulkSaving}
+                className="px-4 py-2 rounded-lg studio-surface studio-border studio-text text-sm hover:opacity-80 disabled:opacity-50 transition-opacity"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Trade Detail Modal */}
       {selectedTrade && (
         <TradeDetailModal
           trade={selectedTrade}
           isOpen={isDetailModalOpen}
+          initialEditMode={editMode}
+          onSaved={refreshTrades}
           onClose={() => {
             setIsDetailModalOpen(false)
             setSelectedTrade(null)
+            setEditMode(false)
           }}
         />
       )}

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { X, Calendar, Clock, DollarSign, TrendingUp, TrendingDown, Target, BarChart3, FileText, Star, Tag } from 'lucide-react'
+import { X, Calendar, Clock, DollarSign, TrendingUp, TrendingDown, Target, BarChart3, FileText, Star, Tag, Pencil, Save } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TradingChart } from '@/components/charts/trading-chart'
 import { useChatContext } from '@/contexts/TraderraContext'
@@ -30,19 +30,22 @@ interface TradeDetailModalProps {
   }
   isOpen: boolean
   onClose: () => void
+  initialEditMode?: boolean
+  onSaved?: () => void
 }
 
-export function TradeDetailModal({ trade, isOpen, onClose }: TradeDetailModalProps) {
+export function TradeDetailModal({ trade, isOpen, onClose, initialEditMode, onSaved }: TradeDetailModalProps) {
   const { isSidebarOpen: aiSidebarOpen } = useChatContext()
   const [isEditMode, setIsEditMode] = useState(false)
   const [editedTrade, setEditedTrade] = useState(trade)
+  const [isSaving, setIsSaving] = useState(false)
 
   // Reset edit mode and edited trade when modal opens with new trade.
   // MUST be before the early return — hooks can't be conditional.
   React.useEffect(() => {
-    setIsEditMode(false)
+    setIsEditMode(!!initialEditMode)
     setEditedTrade(trade)
-  }, [trade.id])
+  }, [trade.id, initialEditMode])
 
   if (!isOpen) return null
 
@@ -54,12 +57,41 @@ export function TradeDetailModal({ trade, isOpen, onClose }: TradeDetailModalPro
     setIsEditMode(!isEditMode)
   }
 
-  const handleSaveChanges = () => {
-    // TODO: Implement save logic (API call, state update, etc.)
-    console.log('Saving trade changes:', editedTrade)
-    // For now, just exit edit mode
-    setIsEditMode(false)
-    // In a real app, you'd update the parent component's state or make an API call
+  const handleSaveChanges = async () => {
+    setIsSaving(true)
+    try {
+      // Send only editable fields to avoid overwriting system fields (id, createdAt, etc.)
+      const payload = {
+        entryPrice: editedTrade.entryPrice,
+        exitPrice: editedTrade.exitPrice,
+        quantity: editedTrade.quantity,
+        pnl: editedTrade.pnl,
+        pnlPercent: editedTrade.pnlPercent,
+        commission: editedTrade.commission,
+        riskAmount: editedTrade.riskAmount ?? null,
+        riskPercent: editedTrade.riskPercent ?? null,
+        stopLoss: editedTrade.stopLoss ?? null,
+        strategy: editedTrade.strategy,
+        notes: editedTrade.notes,
+        entryTime: editedTrade.entryTime,
+        exitTime: editedTrade.exitTime,
+      }
+      const res = await fetch(`/api/trades/${trade.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `Save failed (${res.status})`)
+      }
+      setIsEditMode(false)
+      onSaved?.()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to save trade')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleFieldChange = (field: string, value: any) => {
@@ -167,6 +199,33 @@ export function TradeDetailModal({ trade, isOpen, onClose }: TradeDetailModalPro
               {currentTrade.side}
             </div>
           </div>
+          {isEditMode ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleSaveChanges}
+                disabled={isSaving}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-black text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+              >
+                <Save className="h-4 w-4" />
+                {isSaving ? 'Saving…' : 'Save'}
+              </button>
+              <button
+                onClick={handleEditToggle}
+                disabled={isSaving}
+                className="px-3 py-1.5 rounded-lg studio-surface studio-border text-sm studio-text hover:opacity-80 disabled:opacity-50 transition-opacity"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={handleEditToggle}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg studio-surface studio-border text-sm studio-text hover:opacity-80 transition-opacity"
+            >
+              <Pencil className="h-4 w-4" />
+              Edit
+            </button>
+          )}
           <button
             onClick={onClose}
             className="p-2 hover:bg-[#1a1a1a] rounded-lg transition-colors"
@@ -670,6 +729,50 @@ export function TradeDetailModal({ trade, isOpen, onClose }: TradeDetailModalPro
                 </div>
               </div>
             </div>
+
+            {/* Round-trip breakdown for grouped (parent) trades */}
+            {!isEditMode && (currentTrade as any).children?.length > 0 && (
+              <div className="mt-6">
+                <h3 className="text-sm font-semibold studio-text mb-3">
+                  Round Trips ({(currentTrade as any).children.length})
+                </h3>
+                <div className="rounded-lg border border-[#1a1a1a] overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-[#0a0a0a]">
+                      <tr className="text-left studio-muted">
+                        <th className="px-3 py-2 text-xs font-medium">Side</th>
+                        <th className="px-3 py-2 text-xs font-medium text-right">Qty</th>
+                        <th className="px-3 py-2 text-xs font-medium text-right">Entry</th>
+                        <th className="px-3 py-2 text-xs font-medium text-right">Exit</th>
+                        <th className="px-3 py-2 text-xs font-medium text-right">P&L</th>
+                        <th className="px-3 py-2 text-xs font-medium text-right">Dur</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#141414]">
+                      {(currentTrade as any).children.map((c: any) => {
+                        const t = c.entryTime?.split('T')[1]?.slice(0, 5) || ''
+                        return (
+                          <tr key={c.id} className="hover:bg-[#0f0f0f]">
+                            <td className="px-3 py-2">
+                              <span className={cn('inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-medium',
+                                c.side === 'Long' ? 'bg-green-900/40 text-green-400' : 'bg-red-900/40 text-red-400')}>{c.side}</span>
+                              {t && <span className="ml-1.5 text-[10px] studio-muted">{t}</span>}
+                            </td>
+                            <td className="px-3 py-2 text-right studio-text">{c.quantity}</td>
+                            <td className="px-3 py-2 text-right studio-text">${c.entryPrice.toFixed(2)}</td>
+                            <td className="px-3 py-2 text-right studio-text">${c.exitPrice.toFixed(2)}</td>
+                            <td className={cn('px-3 py-2 text-right font-medium', c.pnl >= 0 ? 'text-green-400' : 'text-red-400')}>
+                              {c.pnl >= 0 ? '+' : ''}${c.pnl.toFixed(2)}
+                            </td>
+                            <td className="px-3 py-2 text-right studio-muted text-xs">{c.duration || '—'}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

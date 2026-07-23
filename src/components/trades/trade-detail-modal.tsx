@@ -166,7 +166,7 @@ export function TradeDetailModal({ trade, isOpen, onClose, initialEditMode, onSa
     side: currentTrade.side
   } : undefined
 
-  const modalContent = (
+  return (
     <>
       {/* Backdrop */}
       <div

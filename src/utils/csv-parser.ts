@@ -91,7 +91,22 @@ export function detectBrokerFormat(headers: string[]): BrokerFormat {
   return 'generic'
 }
 
-function parseCSVLine(line: string): string[] {
+function detectDelimiter(line: string): string {
+  const tabs = (line.match(/\t/g) || []).length
+  const commas = (line.match(/,/g) || []).length
+  if (tabs > commas) return '\t'
+  if (commas > 0) return ','
+  // Fallback: 2+ consecutive spaces (some DAS blotters paste space-separated)
+  if (/ {2,}/.test(line)) return 'multi-space'
+  return ','
+}
+
+function parseCSVLine(line: string, delimiter?: string): string[] {
+  const delim = delimiter || detectDelimiter(line)
+  // Multi-space: split on 2+ spaces
+  if (delim === 'multi-space') {
+    return line.trim().split(/ {2,}/).map(s => s.trim())
+  }
   const result: string[] = []
   let current = ''
   let inQuotes = false
@@ -109,7 +124,7 @@ function parseCSVLine(line: string): string[] {
       } else {
         inQuotes = !inQuotes
       }
-    } else if (char === ',' && !inQuotes) {
+    } else if (char === delim && !inQuotes) {
       result.push(current.trim())
       current = ''
     } else {
@@ -163,81 +178,157 @@ export function parseDASCSV(csvText: string): DASTrade[] {
 }
 
 /**
- * Convert DAS trades to Traderra format
+ * Convert DAS fills to Traderra round-trip trades using FIFO matching.
+ *
+ * DAS exports individual EXECUTIONS (fills), not paired trades. We match
+ * buys against sells in FIFO order per symbol to produce round-trip trades
+ * with real P&L. If you buy first then sell → Long; sell short first then
+ * buy to cover → Short. Partial fills and multiple lots are handled.
  */
 export function convertDASToTraderra(dasTrades: DASTrade[], broker: string = 'DAS'): TraderraTrade[] {
-  const timestamp = Date.now()
+  const ts = Date.now()
+  let tradeIdx = 0
 
-  return dasTrades.map((trade, index) => {
-    // Parse date and time
-    const dateStr = trade['Date'] || ''
-    const timeStr = trade['Time'] || ''
+  const safeFloat = (v: string): number => {
+    if (!v) return 0
+    const c = v.trim().replace(/[$,%]/g, '')
+    if (c === '' || c === 'N/A') return 0
+    return parseFloat(c) || 0
+  }
 
-    // Create datetime from DAS format (M/D/YYYY H:MM:SS)
-    const parseDateTime = (date: string, time: string): Date => {
-      try {
-        const dateTimeStr = `${date} ${time}`
-        let parsed = new Date(dateTimeStr)
-
-        if (isNaN(parsed.getTime())) {
-          const parts = dateTimeStr.split(' ')
-          if (parts.length === 2) {
-            const isoString = `${parts[0]}T${parts[1]}`
-            parsed = new Date(isoString)
-          }
+  const parseDateTime = (date: string, time: string): Date => {
+    try {
+      // DAS format: M/D/YYYY H:MM:SS (may also be M/D/YY)
+      const s = `${date.trim()} ${time.trim()}`
+      let d = new Date(s)
+      if (isNaN(d.getTime())) {
+        // Try normalizing: split date parts, pad month/day
+        const m = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s+(\d{1,2}):(\d{2}):(\d{2})/)
+        if (m) {
+          const yr = m[3].length === 2 ? `20${m[3]}` : m[3]
+          d = new Date(`${yr}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}T${m[4].padStart(2,'0')}:${m[5]}:${m[6]}`)
         }
+      }
+      return isNaN(d.getTime()) ? new Date('2020-01-01T00:00:00.000Z') : d
+    } catch {
+      return new Date('2020-01-01T00:00:00.000Z')
+    }
+  }
 
-        return parsed
-      } catch (error) {
-        return new Date('2020-01-01T00:00:00.000Z')
+  const formatDuration = (entry: Date, exit: Date): string => {
+    const ms = Math.max(0, exit.getTime() - entry.getTime())
+    const s = Math.floor(ms / 1000)
+    const h = Math.floor(s / 3600)
+    const m = Math.floor((s % 3600) / 60)
+    const sec = s % 60
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
+  }
+
+  // Normalize DAS side codes to buy/sell.
+  // B/BUY = buy, S/SELL = sell, SS/SSH = short sell, BC/C/COVER = buy to cover.
+  const isBuySide = (side: string): boolean => {
+    const s = side.toUpperCase().trim()
+    return s === 'B' || s === 'BUY' || s === 'BC' || s === 'C' || s === 'COVER'
+  }
+
+  // Group fills by symbol
+  const bySymbol = new Map<string, { time: Date; side: string; qty: number; price: number; comm: number }[]>()
+  for (const f of dasTrades) {
+    const sym = (f['Symbol'] || '').trim()
+    if (!sym) continue
+    const qty = parseInt(f['Quantity']) || 0
+    if (qty <= 0) continue
+    if (!bySymbol.has(sym)) bySymbol.set(sym, [])
+    bySymbol.get(sym)!.push({
+      time: parseDateTime(f['Date'], f['Time']),
+      side: f['Side'] || '',
+      qty,
+      price: safeFloat(f['Price']),
+      comm: safeFloat(f['Commission']) + safeFloat(f['ECNFee']),
+    })
+  }
+
+  const out: TraderraTrade[] = []
+
+  for (const [symbol, fills] of bySymbol) {
+    // Sort oldest-first for FIFO
+    fills.sort((a, b) => a.time.getTime() - b.time.getTime())
+
+    // Open lots waiting to be matched. isLong=true = bought (waiting to sell);
+    // isLong=false = shorted (waiting to cover).
+    let openLots: { qty: number; price: number; time: Date; comm: number; isLong: boolean }[] = []
+
+    const emit = (dir: 'Long' | 'Short', qty: number, entryPrice: number, exitPrice: number, entryTime: Date, exitTime: Date, comm: number) => {
+      const gross = dir === 'Long'
+        ? (exitPrice - entryPrice) * qty
+        : (entryPrice - exitPrice) * qty
+      const pnl = gross - comm
+      const cost = entryPrice * qty
+      const pnlPercent = cost > 0 ? (pnl / cost) * 100 : 0
+      out.push({
+        id: `das_${ts}_${++tradeIdx}`,
+        date: entryTime.toISOString().split('T')[0],
+        symbol,
+        side: dir,
+        quantity: qty,
+        entryPrice,
+        exitPrice,
+        pnl,
+        grossPnl: gross,
+        pnlPercent,
+        commission: comm,
+        duration: formatDuration(entryTime, exitTime),
+        strategy: broker,
+        notes: `Imported from ${broker} (${fills.length} fills, FIFO matched)`,
+        entryTime: entryTime.toISOString(),
+        exitTime: exitTime.toISOString(),
+        rMultiple: 0,
+        broker,
+        brokerFormat: 'das',
+      })
+    }
+
+    for (const fill of fills) {
+      const buy = isBuySide(fill.side)
+      let remaining = fill.qty
+      const fillComm = fill.comm
+
+      if (buy) {
+        // Cover shorts first (if any), then open/add longs
+        while (remaining > 0) {
+          const shortLot = openLots.find(l => !l.isLong && l.qty > 0.5)
+          if (!shortLot) break
+          const matched = Math.min(remaining, shortLot.qty)
+          const proratedComm = shortLot.comm * (matched / shortLot.qty) + fillComm * (matched / fill.qty)
+          emit('Short', matched, shortLot.price, fill.price, shortLot.time, fill.time, proratedComm)
+          shortLot.qty -= matched
+          remaining -= matched
+        }
+        openLots = openLots.filter(l => l.qty > 0.5)
+        if (remaining > 0) {
+          openLots.push({ qty: remaining, price: fill.price, time: fill.time, comm: fillComm * (remaining / fill.qty), isLong: true })
+        }
+      } else {
+        // Close longs first (if any), then open/add shorts
+        while (remaining > 0) {
+          const longLot = openLots.find(l => l.isLong && l.qty > 0.5)
+          if (!longLot) break
+          const matched = Math.min(remaining, longLot.qty)
+          const proratedComm = longLot.comm * (matched / longLot.qty) + fillComm * (matched / fill.qty)
+          emit('Long', matched, longLot.price, fill.price, longLot.time, fill.time, proratedComm)
+          longLot.qty -= matched
+          remaining -= matched
+        }
+        openLots = openLots.filter(l => l.qty > 0.5)
+        if (remaining > 0) {
+          openLots.push({ qty: remaining, price: fill.price, time: fill.time, comm: fillComm * (remaining / fill.qty), isLong: false })
+        }
       }
     }
+    // Remaining open lots = unclosed position at EOD. Skip (no exit yet).
+  }
 
-    const entryDateTime = parseDateTime(dateStr, timeStr)
-
-    // For single-entry trades, set close time to same day end of day
-    const closeDateTime = new Date(entryDateTime)
-    closeDateTime.setHours(23, 59, 59, 999)
-
-    // Parse values
-    const safeParseFloat = (value: string): number => {
-      if (!value) return 0
-      const cleanValue = value.trim()
-      if (cleanValue === '' || cleanValue === 'N/A') return 0
-      return parseFloat(cleanValue.replace(/[$,%]/g, '')) || 0
-    }
-
-    const quantity = parseInt(trade['Quantity']) || 0
-    const price = safeParseFloat(trade['Price'])
-    const commission = safeParseFloat(trade['Commission'])
-    const ecnFee = safeParseFloat(trade['ECNFee'])
-    const totalCommission = commission + ecnFee
-
-    // Convert side: B -> Long, S -> Short
-    const side = trade['Side']?.toUpperCase() === 'B' ? 'Long' : 'Short'
-
-    return {
-      id: `das_${timestamp}_${index + 1}`,
-      date: entryDateTime.toISOString().split('T')[0],
-      symbol: trade['Symbol'] || '',
-      side,
-      quantity,
-      entryPrice: price,
-      exitPrice: price,
-      pnl: 0, // Single entry, no P&L yet
-      grossPnl: 0,
-      pnlPercent: 0,
-      commission: totalCommission,
-      duration: '00:00:00',
-      strategy: broker || 'DAS',
-      notes: `Imported from ${broker}`,
-      entryTime: entryDateTime.toISOString(),
-      exitTime: closeDateTime.toISOString(),
-      rMultiple: 0,
-      broker: broker,
-      brokerFormat: 'das'
-    }
-  })
+  return out
 }
 
 /**

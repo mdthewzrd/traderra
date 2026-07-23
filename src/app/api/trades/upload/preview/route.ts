@@ -28,8 +28,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'CSV file is empty or has no data rows' }, { status: 400 })
     }
 
-    // Detect broker format from headers
-    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''))
+    // Detect broker format from headers (DAS is tab-separated, not comma)
+    const headerDelimiter = (lines[0].match(/\t/g) || []).length > (lines[0].match(/,/g) || []).length ? '\t' : ','
+    const headers = lines[0].split(headerDelimiter).map(h => h.trim().replace(/"/g, ''))
     const detectedFormat = detectBrokerFormat(headers)
     const format = brokerFormat === 'auto' ? detectedFormat : brokerFormat
 

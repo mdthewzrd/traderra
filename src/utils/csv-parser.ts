@@ -178,12 +178,14 @@ export function parseDASCSV(csvText: string): DASTrade[] {
 }
 
 /**
- * Convert DAS fills to Traderra round-trip trades using FIFO matching.
+ * Convert DAS fills to Traderra round-trip trades using POSITION-FLAT matching.
  *
- * DAS exports individual EXECUTIONS (fills), not paired trades. We match
- * buys against sells in FIFO order per symbol to produce round-trip trades
- * with real P&L. If you buy first then sell → Long; sell short first then
- * buy to cover → Short. Partial fills and multiple lots are handled.
+ * DAS exports individual EXECUTIONS (fills), not paired trades. We walk fills
+ * chronologically per symbol, tracking the running signed position. ONE trade
+ * = one full cycle from open → flat (position returns to 0). Entry/exit use
+ * weighted-average prices across all fills in the cycle. If position flips
+ * sign (e.g. long → short on a single big sell), the crossover closes the
+ * long cycle and opens a fresh short cycle at the flip price.
  */
 export function convertDASToTraderra(dasTrades: DASTrade[], broker: string = 'DAS'): TraderraTrade[] {
   const ts = Date.now()
@@ -198,11 +200,9 @@ export function convertDASToTraderra(dasTrades: DASTrade[], broker: string = 'DA
 
   const parseDateTime = (date: string, time: string): Date => {
     try {
-      // DAS format: M/D/YYYY H:MM:SS (may also be M/D/YY)
       const s = `${date.trim()} ${time.trim()}`
       let d = new Date(s)
       if (isNaN(d.getTime())) {
-        // Try normalizing: split date parts, pad month/day
         const m = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s+(\d{1,2}):(\d{2}):(\d{2})/)
         if (m) {
           const yr = m[3].length === 2 ? `20${m[3]}` : m[3]
@@ -224,8 +224,8 @@ export function convertDASToTraderra(dasTrades: DASTrade[], broker: string = 'DA
     return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
   }
 
-  // Normalize DAS side codes to buy/sell.
-  // B/BUY = buy, S/SELL = sell, SS/SSH = short sell, BC/C/COVER = buy to cover.
+  // DAS side codes: B/BUY/BC/C/COVER = buy (add long or cover short),
+  // S/SELL/SS/SSH = sell (close long or open short).
   const isBuySide = (side: string): boolean => {
     const s = side.toUpperCase().trim()
     return s === 'B' || s === 'BUY' || s === 'BC' || s === 'C' || s === 'COVER'
@@ -251,37 +251,52 @@ export function convertDASToTraderra(dasTrades: DASTrade[], broker: string = 'DA
   const out: TraderraTrade[] = []
 
   for (const [symbol, fills] of bySymbol) {
-    // Sort oldest-first for FIFO
     fills.sort((a, b) => a.time.getTime() - b.time.getTime())
 
-    // Open lots waiting to be matched. isLong=true = bought (waiting to sell);
-    // isLong=false = shorted (waiting to cover).
-    let openLots: { qty: number; price: number; time: Date; comm: number; isLong: boolean }[] = []
+    // Current cycle accumulators. A cycle = open → flat.
+    let pos = 0          // signed position: + long, - short
+    let dir: 'Long' | 'Short' | null = null
+    let entryCost = 0    // money spent acquiring this cycle (price*qty, unsigned)
+    let entryQty = 0     // shares acquired (unsigned)
+    let entryTime: Date | null = null
+    let exitProceeds = 0 // money received closing this cycle
+    let exitQty = 0      // shares closed (unsigned)
+    let exitTime: Date | null = null
+    let commTotal = 0
+    let fillCount = 0
 
-    const emit = (dir: 'Long' | 'Short', qty: number, entryPrice: number, exitPrice: number, entryTime: Date, exitTime: Date, comm: number) => {
+    const reset = () => {
+      pos = 0; dir = null; entryCost = 0; entryQty = 0; entryTime = null
+      exitProceeds = 0; exitQty = 0; exitTime = null; commTotal = 0; fillCount = 0
+    }
+
+    const emit = () => {
+      if (dir === null || entryQty <= 0 || exitQty <= 0) return
+      const avgEntry = entryCost / entryQty
+      const avgExit = exitProceeds / exitQty
       const gross = dir === 'Long'
-        ? (exitPrice - entryPrice) * qty
-        : (entryPrice - exitPrice) * qty
-      const pnl = gross - comm
-      const cost = entryPrice * qty
+        ? (avgExit - avgEntry) * exitQty
+        : (avgEntry - avgExit) * exitQty
+      const pnl = gross - commTotal
+      const cost = avgEntry * exitQty
       const pnlPercent = cost > 0 ? (pnl / cost) * 100 : 0
       out.push({
         id: `das_${ts}_${++tradeIdx}`,
-        date: entryTime.toISOString().split('T')[0],
+        date: (entryTime!).toISOString().split('T')[0],
         symbol,
         side: dir,
-        quantity: qty,
-        entryPrice,
-        exitPrice,
+        quantity: exitQty,
+        entryPrice: avgEntry,
+        exitPrice: avgExit,
         pnl,
         grossPnl: gross,
         pnlPercent,
-        commission: comm,
-        duration: formatDuration(entryTime, exitTime),
+        commission: commTotal,
+        duration: formatDuration(entryTime!, exitTime!),
         strategy: broker,
-        notes: `Imported from ${broker} (${fills.length} fills, FIFO matched)`,
-        entryTime: entryTime.toISOString(),
-        exitTime: exitTime.toISOString(),
+        notes: `Imported from ${broker} (${fillCount} fills, position-flat matched)`,
+        entryTime: entryTime!.toISOString(),
+        exitTime: exitTime!.toISOString(),
         rMultiple: 0,
         broker,
         brokerFormat: 'das',
@@ -290,42 +305,54 @@ export function convertDASToTraderra(dasTrades: DASTrade[], broker: string = 'DA
 
     for (const fill of fills) {
       const buy = isBuySide(fill.side)
-      let remaining = fill.qty
-      const fillComm = fill.comm
+      const signed = buy ? fill.qty : -fill.qty
+      commTotal += fill.comm
+      fillCount++
 
-      if (buy) {
-        // Cover shorts first (if any), then open/add longs
-        while (remaining > 0) {
-          const shortLot = openLots.find(l => !l.isLong && l.qty > 0.5)
-          if (!shortLot) break
-          const matched = Math.min(remaining, shortLot.qty)
-          const proratedComm = shortLot.comm * (matched / shortLot.qty) + fillComm * (matched / fill.qty)
-          emit('Short', matched, shortLot.price, fill.price, shortLot.time, fill.time, proratedComm)
-          shortLot.qty -= matched
-          remaining -= matched
-        }
-        openLots = openLots.filter(l => l.qty > 0.5)
-        if (remaining > 0) {
-          openLots.push({ qty: remaining, price: fill.price, time: fill.time, comm: fillComm * (remaining / fill.qty), isLong: true })
-        }
+      if (pos === 0) {
+        // Open a new cycle
+        dir = buy ? 'Long' : 'Short'
+        pos = signed
+        entryCost = fill.qty * fill.price
+        entryQty = fill.qty
+        entryTime = fill.time
       } else {
-        // Close longs first (if any), then open/add shorts
-        while (remaining > 0) {
-          const longLot = openLots.find(l => l.isLong && l.qty > 0.5)
-          if (!longLot) break
-          const matched = Math.min(remaining, longLot.qty)
-          const proratedComm = longLot.comm * (matched / longLot.qty) + fillComm * (matched / fill.qty)
-          emit('Long', matched, longLot.price, fill.price, longLot.time, fill.time, proratedComm)
-          longLot.qty -= matched
-          remaining -= matched
-        }
-        openLots = openLots.filter(l => l.qty > 0.5)
-        if (remaining > 0) {
-          openLots.push({ qty: remaining, price: fill.price, time: fill.time, comm: fillComm * (remaining / fill.qty), isLong: false })
+        const adding = (pos > 0 && signed > 0) || (pos < 0 && signed < 0)
+        if (adding) {
+          pos += signed
+          entryCost += fill.qty * fill.price
+          entryQty += fill.qty
+        } else {
+          // Reducing / closing / flipping
+          let remaining = fill.qty
+          while (remaining > 0 && pos !== 0) {
+            const closeable = Math.min(remaining, Math.abs(pos))
+            exitProceeds += closeable * fill.price
+            exitQty += closeable
+            exitTime = fill.time
+            pos += pos > 0 ? -closeable : closeable
+            remaining -= closeable
+            if (pos === 0) {
+              // Cycle flat → emit, then maybe flip
+              emit()
+              if (remaining > 0) {
+                // Flip: open opposite cycle at this price/time
+                dir = buy ? 'Long' : 'Short'
+                pos = buy ? remaining : -remaining
+                entryCost = remaining * fill.price
+                entryQty = remaining
+                entryTime = fill.time
+                exitProceeds = 0
+                exitQty = 0
+              } else {
+                reset()
+              }
+            }
+          }
         }
       }
     }
-    // Remaining open lots = unclosed position at EOD. Skip (no exit yet).
+    // Leftover open position at EOD → not emitted (no exit/flat).
   }
 
   return out

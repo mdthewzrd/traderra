@@ -1,3 +1,5 @@
+import { randomUUID } from 'crypto'
+
 export interface TraderVueTrade {
   'Open Datetime': string
   'Close Datetime': string
@@ -359,8 +361,114 @@ export function convertDASToTraderra(dasTrades: DASTrade[], broker: string = 'DA
 }
 
 /**
- * Parse CSV (auto-detects format)
+ * Group flat round-trip trades into per-ticker-per-day parent summaries + child exec trades.
+ *
+ * - Single-day trades for the same symbol+date are folded under ONE parent summary.
+ * - Multi-day trades (entry date ≠ exit date) stay standalone — not grouped.
+ * - Single trades per symbol+date stay standalone too.
+ * Returns a flat array of storage rows. Parents have parentId=null, children have
+ * parentId set to their parent's generated ID. Feed directly to prisma.trade.createMany.
  */
+export function groupTradesForStorage(trades: TraderraTrade[]): (TraderraTrade & { parentId?: string | null })[] {
+  const rows: (TraderraTrade & { parentId?: string | null })[] = []
+
+  // Separate single-day vs multi-day trades
+  const singleDay: TraderraTrade[] = []
+  const multiDay: TraderraTrade[] = []
+  for (const t of trades) {
+    const entryDate = (t.entryTime || '').split('T')[0]
+    const exitDate = (t.exitTime || '').split('T')[0]
+    if (entryDate && exitDate && entryDate !== exitDate) {
+      multiDay.push(t)
+    } else {
+      singleDay.push(t)
+    }
+  }
+
+  // Multi-day trades → standalone, no grouping
+  for (const t of multiDay) {
+    rows.push({ ...t, parentId: null })
+  }
+
+  // Group single-day trades by symbol + entry date
+  const groups = new Map<string, TraderraTrade[]>()
+  for (const t of singleDay) {
+    const date = (t.entryTime || t.date || '').split('T')[0]
+    const key = `${t.symbol}|${date}`
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(t)
+  }
+
+  for (const [, group] of groups) {
+    if (group.length <= 1) {
+      // Single trade → standalone
+      rows.push({ ...group[0], parentId: null })
+      continue
+    }
+
+    // Build parent summary
+    const parentId = randomUUID()
+    const first = group[0]
+    const last = group[group.length - 1]
+
+    const totalPnl = group.reduce((s, t) => s + (t.pnl || 0), 0)
+    const totalGross = group.reduce((s, t) => s + (t.grossPnl || 0), 0)
+    const totalComm = group.reduce((s, t) => s + (t.commission || 0), 0)
+    const totalQty = group.reduce((s, t) => s + (t.quantity || 0), 0)
+    const totalCost = group.reduce((s, t) => s + (t.entryPrice || 0) * (t.quantity || 0), 0) // entry money
+    const totalProceeds = group.reduce((s, t) => s + (t.exitPrice || 0) * (t.quantity || 0), 0) // exit money
+
+    // Dominant side
+    const longCount = group.filter(t => t.side === 'Long').length
+    const side = longCount >= group.length / 2 ? 'Long' : 'Short'
+
+    const avgEntry = totalQty > 0 ? totalCost / totalQty : 0
+    const avgExit = totalQty > 0 ? totalProceeds / totalQty : 0
+    const pnlPercent = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0
+
+    // Duration: first entry → last exit
+    const entryTime = first.entryTime
+    const exitTime = last.exitTime
+    let duration = ''
+    try {
+      const ms = Math.max(0, new Date(exitTime).getTime() - new Date(entryTime).getTime())
+      const s = Math.floor(ms / 1000)
+      const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60
+      duration = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
+    } catch { duration = '' }
+
+    const parent: TraderraTrade & { parentId?: string | null } = {
+      id: parentId,
+      date: first.date,
+      symbol: first.symbol,
+      side,
+      quantity: totalQty,
+      entryPrice: avgEntry,
+      exitPrice: avgExit,
+      pnl: totalPnl,
+      grossPnl: totalGross,
+      pnlPercent,
+      commission: totalComm,
+      duration,
+      strategy: first.strategy || '',
+      notes: `${group.length} round trips`,
+      entryTime,
+      exitTime,
+      rMultiple: 0,
+      broker: first.broker,
+      brokerFormat: first.brokerFormat,
+      parentId: null,
+    }
+    rows.push(parent)
+
+    // Children = original round-trips, linked to parent
+    for (const t of group) {
+      rows.push({ ...t, id: randomUUID(), parentId })
+    }
+  }
+
+  return rows
+}
 export function parseCSV(csvText: string, brokerFormat?: BrokerFormat): TraderVueTrade[] | DASTrade[] {
   const lines = csvText.trim().split('\n')
   if (lines.length === 0) return []

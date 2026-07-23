@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-import { detectBrokerFormat, parseCSV, convertTraderVueToTraderra, parseDASCSV, convertDASToTraderra, type TraderraTrade } from '@/utils/csv-parser'
+import { detectBrokerFormat, parseCSV, convertTraderVueToTraderra, parseDASCSV, convertDASToTraderra, groupTradesForStorage, type TraderraTrade } from '@/utils/csv-parser'
 
 /**
  * POST /api/trades/upload/preview
@@ -67,55 +67,60 @@ export async function POST(request: NextRequest) {
       return isNaN(parsed) || !isFinite(parsed) ? 0 : parsed
     }
 
-    // Check for duplicates against database
+    // GROUP into per-ticker-per-day parent summaries + child exec trades
+    const storageRows = groupTradesForStorage(traderraTrades)
+    const parents = storageRows.filter(r => !r.parentId)
+    const childrenByParent = new Map<string, typeof storageRows>()
+    for (const r of storageRows) {
+      if (r.parentId) {
+        if (!childrenByParent.has(r.parentId)) childrenByParent.set(r.parentId, [])
+        childrenByParent.get(r.parentId)!.push(r)
+      }
+    }
+
+    // Check for existing parent summaries (symbol+date) to detect duplicates
+    const existingParents = await prisma.trade.findMany({
+      where: { userId, parentId: null },
+      select: { symbol: true, date: true }
+    })
+    const existingParentKeys = new Set(existingParents.map(t => `${t.symbol}|${t.date}`))
+
+    // Build preview from parents (with nested children for expandable view)
     const preview = []
     let duplicates = 0
     let new_trades = 0
 
-    for (const trade of traderraTrades.slice(0, 10)) {
-      // Use just the date portion for duplicate checking (not full ISO datetime)
-      const lookupDate = trade.date // This is already just the date portion
-      const entryPrice = safeParseFloat(trade.entryPrice)
-
-      // Check if trade exists
-      let existing = await prisma.trade.findFirst({
-        where: {
-          userId,
-          symbol: trade.symbol,
-          date: lookupDate,
-          entryPrice,
-          side: trade.side
-        }
-      })
-
-      // If not found with current userId, check across all users
-      if (!existing) {
-        existing = await prisma.trade.findFirst({
-          where: {
-            symbol: trade.symbol,
-            date: lookupDate,
-            entryPrice,
-            side: trade.side
-          }
-        })
-      }
-
-      const isDuplicate = !!existing
+    for (const parent of parents.slice(0, 20)) {
+      const isDuplicate = existingParentKeys.has(`${parent.symbol}|${parent.date}`)
       if (isDuplicate) duplicates++
       else new_trades++
 
+      const kids = childrenByParent.get(parent.id) || []
       preview.push({
-        symbol: trade.symbol,
-        side: trade.side,
-        entry_date: lookupDate,
-        entry_price: entryPrice,
-        pnl: safeParseFloat(trade.pnl || 0),
+        symbol: parent.symbol,
+        side: parent.side,
+        entry_date: parent.date,
+        entry_price: safeParseFloat(parent.entryPrice),
+        exit_price: safeParseFloat(parent.exitPrice),
+        pnl: safeParseFloat(parent.pnl || 0),
+        quantity: parent.quantity,
+        round_trips: kids.length,
+        children: kids.map(k => ({
+          side: k.side,
+          entry_price: safeParseFloat(k.entryPrice),
+          exit_price: safeParseFloat(k.exitPrice),
+          pnl: safeParseFloat(k.pnl || 0),
+          quantity: k.quantity,
+          duration: k.duration,
+        })),
         is_duplicate: isDuplicate
       })
     }
 
     return NextResponse.json({
       total_trades: traderraTrades.length,
+      total_tickers: parents.length,
+      total_exec: storageRows.filter(r => r.parentId).length,
       duplicates,
       new_trades,
       preview,

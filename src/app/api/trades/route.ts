@@ -171,13 +171,14 @@ export async function GET(request: Request) {
     // Get trades for the user with pagination
     const [trades, total] = await Promise.all([
       prisma.trade.findMany({
-        where: { userId: queryUserId },
+        where: { userId: queryUserId, parentId: null },
         orderBy: { date: 'desc' },
         take: limit,
-        skip: offset
+        skip: offset,
+        include: { children: { orderBy: { entryTime: 'asc' } } }
       }),
       prisma.trade.count({
-        where: { userId: queryUserId }
+        where: { userId: queryUserId, parentId: null }
       })
     ])
 

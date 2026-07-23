@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, memo } from 'react'
+import { useState, useEffect, useMemo, useCallback, memo, Fragment } from 'react'
 import {
   ChevronDown,
   ChevronUp,
+  ChevronRight,
   Filter,
   Download,
   Search,
@@ -239,23 +240,33 @@ interface TradeRowProps {
   onViewTrade: (trade: any, e: React.MouseEvent) => void
   onEditTrade: (trade: any, e: React.MouseEvent) => void
   onDeleteTrade: (trade: any, e: React.MouseEvent) => void
+  hasChildren?: boolean
+  isExpanded?: boolean
+  onToggleExpand?: () => void
+  childCount?: number
 }
 
-const TradeRow = memo(({ trade, compact, displayMode, mode, selectedTrades, onToggleSelection, onTradeClick, onViewTrade, onEditTrade, onDeleteTrade }: TradeRowProps) => {
+const TradeRow = memo(({ trade, compact, displayMode, mode, selectedTrades, onToggleSelection, onTradeClick, onViewTrade, onEditTrade, onDeleteTrade, hasChildren, isExpanded, onToggleExpand, childCount }: TradeRowProps) => {
   return (
     <tr
       key={trade.id}
-      className="hover:bg-[#0f0f0f] transition-colors cursor-pointer"
+      className={cn('hover:bg-[#0f0f0f] transition-colors cursor-pointer', hasChildren && 'bg-[#0c0c0c]')}
       onClick={() => onTradeClick(trade)}
     >
       {!compact && (
         <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-          <input
-            type="checkbox"
-            className="rounded border-[#333] bg-[#111] text-primary focus:ring-primary"
-            checked={selectedTrades.has(trade.id)}
-            onChange={() => onToggleSelection(trade.id)}
-          />
+          {hasChildren ? (
+            <button onClick={(e) => { e.stopPropagation(); onToggleExpand?.() }} className="flex items-center justify-center w-5 h-5 hover:bg-[#222] rounded transition-colors">
+              {isExpanded ? <ChevronDown className="h-4 w-4 studio-muted" /> : <ChevronRight className="h-4 w-4 studio-muted" />}
+            </button>
+          ) : (
+            <input
+              type="checkbox"
+              className="rounded border-[#333] bg-[#111] text-primary focus:ring-primary"
+              checked={selectedTrades.has(trade.id)}
+              onChange={() => onToggleSelection(trade.id)}
+            />
+          )}
         </td>
       )}
       <td className="px-4 py-3 text-sm studio-text">
@@ -263,6 +274,11 @@ const TradeRow = memo(({ trade, compact, displayMode, mode, selectedTrades, onTo
       </td>
       <td className="px-4 py-3">
         <span className="text-sm font-medium text-primary">{trade.symbol}</span>
+        {hasChildren && (
+          <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary border border-primary/20">
+            {childCount} RT
+          </span>
+        )}
       </td>
       <td className="px-4 py-3">
         <span className={cn(
@@ -559,6 +575,17 @@ export function TradesTable({ compact = false, importedTrades = [], isLoading = 
     return { totalPnL, totalTrades, avgPnL, totalRMultiple, avgRMultiple }
   }, [filteredAndSortedTrades, mode])
 
+  // Expandable parent rows (trades with children)
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
+  const toggleRowExpand = (tradeId: string) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev)
+      if (next.has(tradeId)) next.delete(tradeId)
+      else next.add(tradeId)
+      return next
+    })
+  }
+
   // Show loading state
   if (isLoading) {
     return (
@@ -720,19 +747,45 @@ export function TradesTable({ compact = false, importedTrades = [], isLoading = 
             </thead>
             <tbody className="divide-y divide-[#1a1a1a]">
               {filteredAndSortedTrades.map((trade) => (
-                <TradeRow
-                  key={trade.id}
-                  trade={trade}
-                  compact={compact}
-                  displayMode={displayMode}
-                  mode={mode}
-                  selectedTrades={selectedTrades}
-                  onToggleSelection={toggleTradeSelection}
-                  onTradeClick={handleTradeClick}
-                  onViewTrade={handleViewTrade}
-                  onEditTrade={handleEditTrade}
-                  onDeleteTrade={handleDeleteTrade}
-                />
+                <Fragment key={trade.id}>
+                  <TradeRow
+                    trade={trade}
+                    compact={compact}
+                    displayMode={displayMode}
+                    mode={mode}
+                    selectedTrades={selectedTrades}
+                    onToggleSelection={toggleTradeSelection}
+                    onTradeClick={handleTradeClick}
+                    onViewTrade={handleViewTrade}
+                    onEditTrade={handleEditTrade}
+                    onDeleteTrade={handleDeleteTrade}
+                    hasChildren={!!trade.children?.length}
+                    isExpanded={expandedRows.has(trade.id)}
+                    onToggleExpand={() => toggleRowExpand(trade.id)}
+                    childCount={trade.children?.length || 0}
+                  />
+                  {trade.children?.length > 0 && expandedRows.has(trade.id) && (
+                    trade.children.map((child: any) => (
+                      <tr key={child.id} className="bg-[#080808] hover:bg-[#0c0c0c] transition-colors cursor-pointer border-l-2 border-primary/30" onClick={() => handleTradeClick(child)}>
+                        {!compact && <td className="px-4 py-2"></td>}
+                        <td className="px-4 py-2 pl-8 text-xs studio-muted">↳ {child.entryTime?.split('T')[1]?.split('.')[0] || child.date}</td>
+                        <td className="px-4 py-2"><span className="text-xs studio-muted">{child.symbol}</span></td>
+                        <td className="px-4 py-2">
+                          <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium',
+                            child.side === 'Long' ? 'bg-green-900/40 text-green-400' : 'bg-red-900/40 text-red-400')}>{child.side}</span>
+                        </td>
+                        <td className="px-4 py-2 text-right text-xs studio-text">{child.quantity}</td>
+                        <td className="px-4 py-2 text-right text-xs studio-text">${child.entryPrice.toFixed(2)}</td>
+                        <td className="px-4 py-2 text-right text-xs studio-text">${child.exitPrice.toFixed(2)}</td>
+                        <td className={cn('px-4 py-2 text-right text-xs font-medium', getPnLValue(child, mode) >= 0 ? 'text-green-400' : 'text-red-400')}>
+                          {formatDisplayValue(getPnLValue(child, mode), displayMode, 'currency')}
+                        </td>
+                        <td className="px-4 py-2 text-right text-xs studio-muted">{child.pnlPercent?.toFixed(1)}%</td>
+                        {!compact && <><td className="px-4 py-2"></td><td></td><td className="px-4 py-2 text-xs studio-muted">{child.duration}</td><td></td></>}
+                      </tr>
+                    ))
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>

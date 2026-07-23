@@ -289,6 +289,11 @@ model Trade {
   mfe          Float?
   mae          Float?
 
+  // Parent/child grouping: per-ticker-per-day summary (parent) + round-trip exec trades (children)
+  parentId     String?
+  parent       Trade?   @relation("TradeChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children     Trade[]  @relation("TradeChildren")
+
   // Metadata
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -296,6 +301,7 @@ model Trade {
   @@index([userId])
   @@index([symbol])
   @@index([date])
+  @@index([parentId])
 }
 
 // ─────────────────────────────────────────────────────────────

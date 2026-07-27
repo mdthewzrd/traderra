@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
+import { getAuthUserId } from '@/lib/auth-helpers'
 import { prisma } from '../../../../../lib/prisma'
 
 // Learning feedback API for user corrections and improvements

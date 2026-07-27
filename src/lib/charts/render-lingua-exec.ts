@@ -385,7 +385,7 @@ export function renderLinguaExec(rc: RenderContext) {
       drawWedge(rc.ctx, x, y, xSize, 'down', col)      // apex at price, base above → sell tag
       rc.ctx.save()
       rc.ctx.fillStyle = col; rc.ctx.font = '700 8px JetBrains Mono, monospace'; rc.ctx.textBaseline = 'bottom'
-      rc.ctx.fillText(ex.kind === 2 ? '9/20' : ex.kind === 3 ? '39/61' : ex.kind === 4 ? 'RC' : 'BRK', x + xSize + 2, y - xSize - 2)
+      rc.ctx.fillText(ex.kind === 2 ? '9/20' : (ex.kind as number) === 3 ? '39/61' : (ex.kind as number) === 4 ? 'RC' : 'BRK', x + xSize + 2, y - xSize - 2)
       rc.ctx.restore()
     }
   }

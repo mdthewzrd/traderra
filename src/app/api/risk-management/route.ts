@@ -19,7 +19,7 @@ interface RiskMetrics {
 interface RiskAlert {
   id: string
   type: 'warning' | 'critical' | 'info'
-  category: 'exposure' | 'correlation' | 'liquidity' | 'leverage' | 'drawdown'
+  category: 'exposure' | 'correlation' | 'liquidity' | 'leverage' | 'drawdown' | 'concentration'
   title: string
   message: string
   value: number

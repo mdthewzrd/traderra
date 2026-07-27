@@ -963,5 +963,4 @@ class SecurityAuditor {
 }
 
 // Export for use
-export { ProductionCapabilitiesDemo }
 export default ProductionCapabilitiesDemo

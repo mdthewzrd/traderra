@@ -361,7 +361,7 @@ async function pickOperatingEntries(facts: FinancialsPayload['facts']): Promise<
 // A single quarter's stub is noisy (DCOY Q1 ran 2.4× the TTM rate → we showed
 // 7mo vs Nexus 15). TTM smooths that. Falls back to latest-FY/12, then to
 // stub-normalized (old behavior) only when nothing better exists.
-function ttmMonthlyBurn(entries: FactEntry[]): { monthly: number; end: string } | null {
+function ttmMonthlyBurn(entries: FactEntry[]): { monthly: number; end: string; accelerating?: boolean } | null {
   if (!entries.length) return null;
   const span = (e: FactEntry) =>
     e.start ? (new Date(e.end).getTime() - new Date(e.start).getTime()) / MS_PER_DAY : 0;

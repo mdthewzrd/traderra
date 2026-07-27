@@ -7,6 +7,7 @@
 'use client'
 
 import { z } from 'zod'
+import { useRouter } from 'next/navigation'
 import type { FrontendTool, ToolResult } from './types'
 import { snapshotStore, createSnapshotFromContext } from './snapshot-store'
 import { compareSnapshots, getSignificantDifferences } from './comparison-engine'
@@ -907,3 +908,5 @@ export function createFrontendTools(options: FrontendToolsOptions) {
     deleteSnapshot,
   }
 }
+
+export type FrontendToolsRegistry = ReturnType<typeof createFrontendTools>

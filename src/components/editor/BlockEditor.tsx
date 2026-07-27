@@ -22,7 +22,8 @@ import TextAlign from '@tiptap/extension-text-align'
 import Typography from '@tiptap/extension-typography'
 import Dropcursor from '@tiptap/extension-dropcursor'
 import Gapcursor from '@tiptap/extension-gapcursor'
-import { lowlight } from 'lowlight'
+import { createLowlight, common } from 'lowlight'
+const lowlight = createLowlight(common)
 import { cn } from '@/lib/utils'
 
 // Import custom extensions
@@ -364,7 +365,7 @@ export function BlockEditor({
         break
       case 'image':
         // Handle image upload
-        const input = document.createElement('input')
+        const input = window.document.createElement('input')
         input.type = 'file'
         input.accept = 'image/*'
         input.onchange = (e) => {
@@ -426,8 +427,8 @@ export function BlockEditor({
       }
     }
 
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
+    window.document.addEventListener('keydown', handleKeyDown)
+    return () => window.document.removeEventListener('keydown', handleKeyDown)
   }, [handleSave])
 
   if (!editor) {

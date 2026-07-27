@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
       processing: {
         fileDetected: !!(body.attachedFile && body.attachedFile.name && body.attachedFile.content),
         wouldProcess: !!(body.attachedFile?.name && body.attachedFile?.content)
-      }
+      } as any
     }
 
     // Simulate file processing

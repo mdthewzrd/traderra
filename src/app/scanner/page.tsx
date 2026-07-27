@@ -172,6 +172,9 @@ interface ScanDef {
   group?: string
   filters?: string[]  // available filter toggles for this scan (e.g. 'am-push')
   runs?: ScanRun[]
+  strategy?: string
+  params?: any
+  dateRange?: any
 }
 
 interface ScanRun {
@@ -334,7 +337,7 @@ function BacktestStatsPanel({ signals, bt, dark }: { signals: Signal[]; bt: Back
             </div>
             <div style={{ background: C.SURFACE2, border: `1px solid ${C.BORDER}`, borderRadius: 4, padding: '8px 10px' }}>
               <div style={{ color: C.GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>Monthly Returns</div>
-              {bt.monthlyStats.map((m, i) => {
+              {(bt.monthlyStats as any).map((m, i) => {
                 const col = m.pnl >= 0 ? C.TEAL : C.RED
                 const barW = Math.min(Math.abs(m.pnl) * 3, 100)
                 return (
@@ -431,7 +434,6 @@ export interface ChartSettings {
   showDevBands72_89Tight: boolean
   showAnchoredLight: boolean
   showAnchoredMain: boolean
-  showVwap: boolean
   showVwap: boolean
   showPrevClose: boolean
   showAhPmShade: boolean
@@ -1745,7 +1747,7 @@ export default function ScanDashboardPage() {
           if (job.status === 'done' || job.status === 'error') continue  // drop card — refreshScans() loaded the real run
           const lines = (job.log || '').match(/Scanning\s+([\d-]+)\s+\((\d+)\/(\d+)\)/g)
           const last = lines && lines.length ? lines[lines.length - 1].match(/Scanning\s+([\d-]+)\s+\((\d+)\/(\d+)\)/) : null
-          next.push(last ? { ...p, progress: { currentDay: last[1], currentIndex: parseInt(last[2]), totalDays: parseInt(last[3]), signalsSoFar: job.signalCount || 0 } } : p)
+          next.push(last ? { ...p, progress: { currentDay: last[1], currentIndex: parseInt(last[2]), totalDays: parseInt(last[3]), signalsSoFar: job.signalCount || 0, status: job.status } } : p)
         }
         return next
       })
@@ -1925,7 +1927,7 @@ export default function ScanDashboardPage() {
         setDbScansByStrategy(byStrategy)
 
         // Build deduplicated scan list: built-ins (enriched with DB totals) + any DB-only scans
-        const enrichedBuiltins = BUILTIN_SCANS.map(b => {
+        const enrichedBuiltins: any[] = BUILTIN_SCANS.map(b => {
           const strat = BUILTIN_SPEC_MAP[b.id] || b.name.toLowerCase()
           const dbMatches = byStrategy[strat] || []
           const totalSig = dbMatches.reduce((sum, d) => sum + (d.resultCount || 0), 0)
@@ -3030,7 +3032,7 @@ export default function ScanDashboardPage() {
                         ] as [keyof KeyLevelsParams, string, number, number, number][]).map(([key, label, min, max, step]) => (
                           <label key={key} className="flex items-center justify-between" style={{ padding: '2px 0' }}>
                             <span style={{ color: T.TEXT2, fontSize: 10 }}>{label}</span>
-                            <input type="number" value={klParams[key]} min={min} max={max} step={step}
+                            <input type="number" value={klParams[key] as any} min={min} max={max} step={step}
                               onChange={e => setKlParams(p => ({ ...p, [key]: parseFloat(e.target.value) || min }))}
                               style={{
                                 width: 48, textAlign: 'center', fontSize: 10, padding: '2px 4px',

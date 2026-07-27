@@ -19,6 +19,7 @@ interface LearningRule {
   confidence: number
   timesApplied: number
   isActive: boolean
+  patterns?: string
 }
 
 interface LearningFeedback {
@@ -48,7 +49,7 @@ export function useLearningSystem() {
 
   // Load learning metrics when user is available
   const loadLearningMetrics = useCallback(async () => {
-    if (!user?.id || !isLoaded) return
+    if (!userId || !isLoaded) return
 
     try {
       setIsLoading(true)
@@ -80,11 +81,11 @@ export function useLearningSystem() {
     } finally {
       setIsLoading(false)
     }
-  }, [user?.id, isLoaded])
+  }, [userId, isLoaded])
 
   // Load active learning rules
   const loadLearningRules = useCallback(async () => {
-    if (!user?.id || !isLoaded) return
+    if (!userId || !isLoaded) return
 
     try {
       const response = await fetch(`/api/ai/learning/correction?limit=50`)
@@ -96,11 +97,11 @@ export function useLearningSystem() {
     } catch (err) {
       console.error('Learning rules load error:', err)
     }
-  }, [user?.id, isLoaded])
+  }, [userId, isLoaded])
 
   // Submit learning feedback
   const submitFeedback = useCallback(async (feedback: LearningFeedback) => {
-    if (!user?.id) return false
+    if (!userId) return false
 
     try {
       setError(null)
@@ -125,7 +126,7 @@ export function useLearningSystem() {
       setError(err instanceof Error ? err.message : 'Failed to submit feedback')
       return false
     }
-  }, [user?.id, loadLearningMetrics])
+  }, [userId, loadLearningMetrics])
 
   // Create learning rule from correction
   const createLearningRule = useCallback(async (
@@ -134,7 +135,7 @@ export function useLearningSystem() {
     ruleDescription: string,
     ruleType = 'correction'
   ) => {
-    if (!user?.id) return false
+    if (!userId) return false
 
     try {
       setError(null)
@@ -166,7 +167,7 @@ export function useLearningSystem() {
       setError(err instanceof Error ? err.message : 'Failed to create learning rule')
       return false
     }
-  }, [user?.id, loadLearningMetrics, loadLearningRules])
+  }, [userId, loadLearningMetrics, loadLearningRules])
 
   // Apply learning rules to a message
   const applyLearningRules = useCallback((message: string): {
@@ -270,11 +271,11 @@ export function useLearningSystem() {
 
   // Initialize learning system when user is loaded
   useEffect(() => {
-    if (isLoaded && user?.id) {
+    if (isLoaded && userId) {
       loadLearningMetrics()
       loadLearningRules()
     }
-  }, [isLoaded, user?.id, loadLearningMetrics, loadLearningRules])
+  }, [isLoaded, userId, loadLearningMetrics, loadLearningRules])
 
   return {
     // State
@@ -292,7 +293,7 @@ export function useLearningSystem() {
     refreshRules: loadLearningRules,
 
     // Computed
-    isLearningActive: metrics.learning_active && isLoaded && !!user?.id,
+    isLearningActive: metrics.learning_active && isLoaded && !!userId,
     learningAccuracy: Math.round(metrics.understanding_accuracy * 100),
     totalCorrections: metrics.total_corrections
   }

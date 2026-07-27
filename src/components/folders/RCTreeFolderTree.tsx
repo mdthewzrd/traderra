@@ -2,7 +2,8 @@
 
 import React, { useMemo, useCallback } from 'react'
 import Tree from 'rc-tree'
-import type { TreeProps, DataNode } from 'rc-tree/lib/interface'
+import type { TreeProps } from 'rc-tree'
+import type { DataNode } from 'rc-tree/lib/interface'
 import {
   ChevronRight,
   ChevronDown,

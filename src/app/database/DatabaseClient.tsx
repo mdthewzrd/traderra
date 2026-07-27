@@ -104,6 +104,7 @@ interface CorpusTrade {
   sections: { text: string; annots: { ref: string; caption?: string }[] } | null
   notes: string | null
   date: string | null
+  setup?: string | null
 }
 
 type FieldType = 'text' | 'number' | 'select' | 'multiselect' | 'boolean' | 'date' | 'grade'

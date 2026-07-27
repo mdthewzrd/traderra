@@ -295,6 +295,3 @@ export function getSessionManager(): SessionManager {
 export function resetSessionManager(): void {
   defaultManager = null
 }
-
-// Export types
-export type { SessionMessage, ConversationSession, SessionSummary }

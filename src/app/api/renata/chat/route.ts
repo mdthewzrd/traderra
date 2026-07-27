@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
         // Decode base64 content to analyze the CSV
         const base64Content = attachedFile.content
         const csvBytes = Buffer.from(base64Content, 'base64')
-        const csvText = csvBytes.toString('utf-8-sig')
+        const csvText = csvBytes.toString('utf8')
 
         // Parse CSV to get basic info
         const lines = csvText.split('\n').filter(line => line.trim())
@@ -256,7 +256,7 @@ ${error instanceof Error ? error.message : 'Failed to process file'}`
         navigationCommands: aiResponse.ui_action ? [aiResponse.ui_action] : [],
         nlpAnalysis: {
           dateRange: null,
-          intents: [aiResponse.intent] || [],
+          intents: aiResponse.intent ? [aiResponse.intent] : [],
           advancedParams: aiResponse.ui_action?.parameters || {}
         }
       })

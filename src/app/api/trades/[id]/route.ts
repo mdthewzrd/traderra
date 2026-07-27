@@ -1,10 +1,11 @@
 import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
+import { getAuthUserId } from '@/lib/auth-helpers'
 // DELETE /api/trades/[id] - Delete a specific trade
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const userId = await getAuthUserId(request)
@@ -13,7 +14,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const tradeId = params.id
+    const tradeId = (await params).id
 
     // Verify the trade belongs to the user
     const trade = await prisma.trade.findFirst({
@@ -45,7 +46,7 @@ export async function DELETE(
 // PATCH /api/trades/[id] - Update a specific trade
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const userId = await getAuthUserId(request)
@@ -54,7 +55,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const tradeId = params.id
+    const tradeId = (await params).id
     const body = await request.json()
 
     // Verify the trade belongs to the user

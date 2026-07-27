@@ -103,7 +103,7 @@ export function parseMultiCommand(userInput: string): ParsedCommand {
         result.detectedActions.push(`Set date range to ${parsedDate.label}`)
 
         // Add calendar interaction for complex expressions
-        if (parsedDate.type === 'trading' || parsedDate.type === 'quarters') {
+        if ((parsedDate.type as string) === 'trading' || (parsedDate.type as string) === 'quarters') {
           result.calendarInteraction = {
             type: 'trading_pattern',
             value: parsedDate.label,

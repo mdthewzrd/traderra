@@ -53,7 +53,7 @@ export function ContextMenu() {
 
   if (!pos) return null
 
-  const ann = annotations.find(a => a.id === pos.annId)
+  const ann = annotations.find(a => a.id === (pos.annId as any))
   if (!ann) return null
 
   const action = (fn: () => void) => { fn(); close() }

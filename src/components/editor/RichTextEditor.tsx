@@ -22,7 +22,8 @@ import TextAlign from '@tiptap/extension-text-align'
 import Typography from '@tiptap/extension-typography'
 import Dropcursor from '@tiptap/extension-dropcursor'
 import Gapcursor from '@tiptap/extension-gapcursor'
-import { lowlight } from 'lowlight'
+import { createLowlight, common } from 'lowlight'
+const lowlight = createLowlight(common)
 import { cn } from '@/lib/utils'
 import { EditorToolbar } from './EditorToolbar'
 import { BlockSelector } from './BlockSelector'
@@ -355,8 +356,8 @@ Content goes here...
       }
     }
 
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
+    window.document.addEventListener('keydown', handleKeyDown)
+    return () => window.document.removeEventListener('keydown', handleKeyDown)
   }, [handleSave])
 
   if (!editor) {

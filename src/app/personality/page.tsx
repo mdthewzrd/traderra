@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useChartStore } from '@/stores/charts/chartStore'
 import { useTickerStore } from '@/stores/tickerStore'
 import { TickerSearchBar } from '@/components/TickerSearchBar'
+import { GapStatsPanel } from '@/components/panels/GapStatsPanel'
 
 /**
  * /personality — Mean-Reversion Personality terminal.
@@ -594,6 +595,11 @@ export default function PersonalityPage() {
   useEffect(() => { if (ticker) run(ticker, win) }, [ticker, win]) // eslint-disable-line react-hooks/exhaustive-deps
   // Resume the last ticker on first load (recent list is hydrated by <TickerSearchBar/>).
   useEffect(() => { if (!ticker && history.length) selectTicker(history[0]) }, [history, ticker, selectTicker])
+  // Deep-link the active tab via ?tab= (enables /gap-stats & /dilution redirects).
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('tab')
+    if (t === 'gap-stats' || t === 'dilution') setTab(t)
+  }, [])
 
   const a = data?.aggregates
   const med = a?.medians
@@ -694,7 +700,7 @@ export default function PersonalityPage() {
       <div className="px-6 py-4 border-b border-[#1a1a1a]">
         <div className="max-w-[1500px] mx-auto flex items-center gap-3 flex-wrap">
           <TickerSearchBar />
-          {tab === 'personality' && (
+          {(tab === 'personality' || tab === 'gap-stats') && (
             <div className="flex items-center gap-1 ml-2">
               <span className="text-xs text-[#666] mr-2">Window</span>
               {WIN_OPTS.map(w => (
@@ -709,12 +715,7 @@ export default function PersonalityPage() {
       </div>
 
       {/* ── TAB: gap-stats / dilution (wired in Phase 2/3) ── */}
-      {tab === 'gap-stats' && (
-        <div className="max-w-[1500px] mx-auto px-6 py-32 text-center text-[#555]">
-          <div className="text-4xl mb-3">🔌</div>
-          <p className="text-lg text-[#9ca3af]">Gap Stats panel — wiring in the next step</p>
-        </div>
-      )}
+      {tab === 'gap-stats' && <GapStatsPanel win={win} />}
       {tab === 'dilution' && (
         <div className="max-w-[1500px] mx-auto px-6 py-32 text-center text-[#555]">
           <div className="text-4xl mb-3">🔌</div>

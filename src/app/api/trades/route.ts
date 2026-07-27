@@ -259,7 +259,7 @@ export async function POST(request: Request) {
 }
 
 // DELETE /api/trades - Delete all trades for the authenticated user
-export async function DELETE() {
+export async function DELETE(request: Request) {
   try {
     console.log('🗑️ DELETE /api/trades called')
     const userId = await getAuthUserId(request)

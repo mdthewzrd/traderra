@@ -4,7 +4,7 @@ interface Workflow {
   id: string
   name: string
   description: string
-  status: 'draft' | 'active' | 'paused' | 'completed' | 'error'
+  status: 'draft' | 'active' | 'paused' | 'completed' | 'error' | 'running'
   triggers: string[]
   steps: WorkflowStep[]
   schedule?: string

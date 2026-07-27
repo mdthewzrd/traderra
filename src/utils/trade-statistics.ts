@@ -923,7 +923,9 @@ export interface WinLossDayComparison {
     averagePnL: number
     averageTrades: number
     averageVolume: number
+    averageRiskAmount?: number
     bestDay: number
+    bestDayRMultiple?: number
     bestStreak: number
     averageHoldTime: number
   }
@@ -933,7 +935,9 @@ export interface WinLossDayComparison {
     averagePnL: number
     averageTrades: number
     averageVolume: number
+    averageRiskAmount?: number
     worstDay: number
+    worstDayRMultiple?: number
     worstStreak: number
     averageHoldTime: number
   }

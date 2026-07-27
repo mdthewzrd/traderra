@@ -44,6 +44,7 @@ export interface ChatMessage {
   content: string
   timestamp: Date
   mode?: 'renata' | 'analyst' | 'coach' | 'mentor'
+  attachedFile?: { name: string; content?: string } | null
   metadata?: {
     stage?: 'planning' | 'execution' | 'completion'
     plan?: any

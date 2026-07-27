@@ -1,7 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
-export async function DELETE() {
+import { getAuthUserId } from '@/lib/auth-helpers'
+export async function DELETE(request: Request) {
   try {
     const userId = await getAuthUserId(request)
 

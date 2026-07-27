@@ -1,21 +1,22 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
+import { getAuthUserId } from '@/lib/auth-helpers'
 import { prisma } from '../../../../../../lib/prisma'
 
 // Learning effectiveness API for tracking user-specific learning metrics
 export async function GET(
   request: Request,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const { userId: authUserId } = getAuthUserId(request)
+    const authUserId = await getAuthUserId(request)
 
     if (!authUserId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     // Users can only access their own learning metrics
-    const requestedUserId = params.userId
+    const requestedUserId = (await params).userId
     if (authUserId !== requestedUserId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -93,16 +94,16 @@ export async function GET(
 // PATCH endpoint to update learning metrics
 export async function PATCH(
   request: Request,
-  { params }: { params: { userId: string } }
+  { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const { userId: authUserId } = getAuthUserId(request)
+    const authUserId = await getAuthUserId(request)
 
     if (!authUserId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const requestedUserId = params.userId
+    const requestedUserId = (await params).userId
     if (authUserId !== requestedUserId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }

@@ -113,8 +113,6 @@ export interface FrontendToolsRegistry {
   clearStatisticsFilters: FrontendTool<{}, void>
 
   // Legacy tools (for backwards compatibility)
-  setDateRange?: FrontendTool<{ range: DateRange }, void>
-  setDisplayMode?: FrontendTool<{ mode: DisplayMode }, void>
   setPnLMode?: FrontendTool<{ mode: PnLMode }, void>
   setChartType?: FrontendTool<{ type: ChartType }, void>
   setAccountSize?: FrontendTool<{ size: number }, void>

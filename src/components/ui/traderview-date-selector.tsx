@@ -343,7 +343,7 @@ export function TraderViewDateSelector({ className = '' }: TraderViewDateSelecto
 
   const handleQuickRange = useCallback((range: DateRangeOption) => {
     // Handle G (previous) and N (next) navigation
-    if (range === 'prev') {
+    if ((range as string) === 'prev') {
       const currentStart = currentDateRange.start
       const currentEnd = currentDateRange.end
       const diff = currentEnd.getTime() - currentStart.getTime()
@@ -355,7 +355,7 @@ export function TraderViewDateSelector({ className = '' }: TraderViewDateSelecto
       return
     }
 
-    if (range === 'next') {
+    if ((range as string) === 'next') {
       const currentStart = currentDateRange.start
       const currentEnd = currentDateRange.end
       const diff = currentEnd.getTime() - currentStart.getTime()

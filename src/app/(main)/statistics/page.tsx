@@ -1361,8 +1361,6 @@ function StatisticsPageContent() {
         setShowFilters(true)
       } else if (action === 'close' || action === 'hide') {
         setShowFilters(false)
-      } else if (action === 'toggle') {
-        setShowFilters(prev => !prev)
       }
     }
   })

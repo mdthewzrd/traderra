@@ -556,7 +556,7 @@ function computeCachedClassification(panelIdx: number, flat: number, flatH: numb
 // independent of the MTF/HTF classification caches above. Per-panelIdx so charts with
 // different emaMid/emaSlow params don't share one displayed-TF slot.
 let _dcSig: Record<number, string> = {}
-let _dc: Record<number, { e9: number[]; e20: number[]; eMid: number[]; eSlow: number[]; eTrend: number[]; pitch: number[]; atr: number[]; atrMid: number[]; atrSlow: number[]; mean: number[] }> = {}
+let _dc: Record<number, { e9: number[]; e20: number[]; eMid: number[]; eSlow: number[]; eTrend: number[]; pitch: number[]; atr: number[]; atrMid: number[]; atrSlow: number[]; mean: number[]; eCloudF?: number[]; eCloudS?: number[] }> = {}
 // Last computed displayed-TF pitch per panel — consumed by renderLinguaPitchOverlay,
 // which runs AFTER the crosshair (called from ReactChartPanel) so the crosshair's dashed
 // lines don't slash through / overwrite the pitch readout.

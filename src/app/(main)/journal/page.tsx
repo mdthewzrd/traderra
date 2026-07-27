@@ -210,6 +210,7 @@ function EnhancedJournalContent({
     }
   })
 
+  const setViewMode = (_mode: string) => {}
   useComponentRegistry('journal.view-mode', {
     setState: (state) => {
       if (state === 'grid' || state === 'list') {

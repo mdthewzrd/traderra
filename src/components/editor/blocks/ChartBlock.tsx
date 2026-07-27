@@ -9,7 +9,7 @@ import {
   RefreshCw,
   Calendar,
   BarChart3,
-  Candlestick,
+  CandlestickChart,
   Activity,
   Edit3,
   Trash2,
@@ -120,7 +120,7 @@ export function ChartBlock({
   const getChartTypeIcon = () => {
     switch (chartType) {
       case 'candlestick':
-        return Candlestick
+        return CandlestickChart
       case 'line':
         return Activity
       case 'area':
@@ -128,7 +128,7 @@ export function ChartBlock({
       case 'bar':
         return BarChart3
       default:
-        return Candlestick
+        return CandlestickChart
     }
   }
 

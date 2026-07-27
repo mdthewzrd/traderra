@@ -76,8 +76,8 @@ function walkConditions(
   })
 }
 
-export async function GET(req: NextRequest, ctx: { params: { name: string } }) {
-  const name = ctx.params.name
+export async function GET(req: NextRequest, ctx: { params: Promise<{ name: string }> }) {
+  const name = (await ctx.params).name
   const specPath = join(homedir(), '.wzrd-pi-dev', 'projects', 'edge-dev', 'assets', 'specs', `${name}.yaml`)
 
   let doc: any
@@ -192,8 +192,8 @@ function decodeParamId(id: string): { kind: 'filter' | 'scalar' | 'condition' | 
  * RHS of the matched condition/filter line. The file stays the single source of truth
  * (git gives history). Returns { ok, applied, skipped }.
  */
-export async function PATCH(req: NextRequest, ctx: { params: { name: string } }) {
-  const name = ctx.params.name
+export async function PATCH(req: NextRequest, ctx: { params: Promise<{ name: string }> }) {
+  const name = (await ctx.params).name
   const specPath = join(homedir(), '.wzrd-pi-dev', 'projects', 'edge-dev', 'assets', 'specs', `${name}.yaml`)
 
   let text: string

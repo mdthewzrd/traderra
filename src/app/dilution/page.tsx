@@ -40,6 +40,8 @@ type Snapshot = {
     projectedCash: number | null;
     cashRemainingMonths: number | null;
     projectedAsOf: string | null;
+    acceleratingBurn?: any;
+    postReportRaises?: any;
   };
   filings: Filing[];
   tagSummary: Record<string, number>;
@@ -68,6 +70,15 @@ type Snapshot = {
   authorizedShares: { authorized: number; outstanding: number; available: number; asOf: string } | null;
   reverseSplits: { ratio: string; executionDate: string | null; announcementDate: string; accessionNo: string; url: string }[];
   publicFloat: { value: number; shares: number | null; asOf: string } | null;
+  overhang?: any;
+  warrants?: any[];
+  convertibles?: any[];
+  compliance?: any;
+  draws?: any[];
+  programs?: any[];
+  warrantNotes?: any;
+  computedFloat?: any;
+  news?: any;
 };
 
 const TAG_STYLES: Record<string, string> = {

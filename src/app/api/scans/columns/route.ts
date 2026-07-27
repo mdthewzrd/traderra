@@ -27,8 +27,9 @@ export async function GET(request: NextRequest) {
 
 // POST /api/scans/columns — create a custom column
 export async function POST(request: NextRequest) {
+  let body: any
   try {
-    const body = await request.json()
+    body = await request.json()
     const { scanId, name, key, formula, format, colorExpr, order, isDefault } = body
 
     if (!scanId || !name || !key || !formula) {

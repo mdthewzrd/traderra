@@ -36,16 +36,16 @@ export interface DateParseResult {
 // Common typos and corrections dictionary
 const TYPO_CORRECTIONS: Record<string, string> = {
   // Month typos
-  'januray': 'january', 'januray': 'january', 'january': 'january',
+  'januray': 'january', 'january': 'january',
   'feburary': 'february', 'febuary': 'february', 'februray': 'february',
   'march': 'march', 'marhc': 'march',
   'april': 'april', 'aprill': 'april',
   'may': 'may', 'mayy': 'may',
-  'june': 'june', 'june': 'june',
+  'june': 'june',
   'july': 'july', 'julY': 'july',
   'august': 'august', 'augst': 'august', 'augut': 'august',
   'september': 'september', 'septemebr': 'september', 'septemer': 'september',
-  'october': 'october', 'october': 'october', 'octoer': 'october',
+  'october': 'october', 'octoer': 'october',
   'november': 'november', 'novmber': 'november', 'novemebr': 'november',
   'december': 'december', 'decembe': 'december', 'decmeber': 'december',
 
@@ -72,7 +72,7 @@ const TYPO_CORRECTIONS: Record<string, string> = {
   'daY': 'day', 'dya': 'day',
 
   // Prepositions and connectors (be conservative)
-  'ot': 'to', 'too': 'to',
+  'too': 'to',
   'form': 'from',
   'thru': 'through', 'thrugh': 'through',
   'till': 'until', 'til': 'until',

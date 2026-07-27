@@ -469,7 +469,7 @@ export function groupTradesForStorage(trades: TraderraTrade[]): (TraderraTrade &
 
   return rows
 }
-export function parseCSV(csvText: string, brokerFormat?: BrokerFormat): TraderVueTrade[] | DASTrade[] {
+export function parseCSV(csvText: string, brokerFormat?: BrokerFormat): TraderVueTrade[] {
   const lines = csvText.trim().split('\n')
   if (lines.length === 0) return []
 
@@ -486,7 +486,7 @@ export function parseCSV(csvText: string, brokerFormat?: BrokerFormat): TraderVu
 
   if (detectedFormat === 'das') {
     console.log('[CSV Parser] Detected DAS broker format')
-    return parseDASCSV(csvText)
+    return parseDASCSV(csvText) as unknown as TraderVueTrade[]
   }
 
   console.log('[CSV Parser] Using Tradervue format')

@@ -215,7 +215,7 @@ function InlineEditor({ project, phaseId, onSave, onCancel }: {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
-    if (entryType === 'idea') setTitle('Idea')
+    if ((entryType as string) === 'idea') setTitle('Idea')
     else if (entryType === 'note') setTitle('Note')
     else setTitle('')
   }, [entryType])
@@ -234,7 +234,7 @@ function InlineEditor({ project, phaseId, onSave, onCancel }: {
     onSave({ type: entryType, title: title || 'Note', content: content.trim(), imageData })
   }
 
-  const accent = entryType === 'idea' ? '#fbbf24' : '#8aa0c0'
+  const accent = (entryType as string) === 'idea' ? '#fbbf24' : '#8aa0c0'
 
   return (
     <div style={{ padding: 10, background: '#0a0c12', border: `1px solid ${accent}33`, borderRadius: 4, marginBottom: 8 }}>
@@ -253,7 +253,7 @@ function InlineEditor({ project, phaseId, onSave, onCancel }: {
       </div>
 
       <textarea ref={textareaRef} value={content} onChange={e => setContent(e.target.value)}
-        placeholder={entryType === 'idea' ? 'Quick idea...' : 'Write your note...'}
+        placeholder={(entryType as string) === 'idea' ? 'Quick idea...' : 'Write your note...'}
         rows={3}
         onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) save() }}
         style={{ width: '100%', background: 'transparent', border: 'none', color: accent, fontSize: 11, lineHeight: 1.5, outline: 'none', resize: 'vertical', minHeight: 60 }}

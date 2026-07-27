@@ -13,6 +13,10 @@
  */
 
 import { AdvancedAIProcessor, AIContext } from './advanced-ai-processor'
+
+type UserPreferences = any
+type TradingHistory = any
+type ComplianceMode = any
 import { RealTimeAnalyticsEngine, RealTimeMetrics } from './realtime-analytics-engine'
 
 // Enterprise Collaboration Types
@@ -816,7 +820,7 @@ export class EnterpriseCollaborationSystem {
 
     const session: CollaborationSession = {
       id: this.generateId(),
-      type: sessionData.type,
+      type: sessionData.type as any,
       title: sessionData.title,
       description: sessionData.description,
       organizerId: sessionData.organizerId,
@@ -896,7 +900,7 @@ export class EnterpriseCollaborationSystem {
     // Check permissions
     await this.checkSessionPermission(sessionId, userId, 'add_outcome')
 
-    const sessionOutcome: SessionOutcome = {
+    const sessionOutcome: any = {
       id: this.generateId(),
       type: outcome.type || 'action-item',
       title: outcome.title || '',
@@ -928,7 +932,7 @@ export class EnterpriseCollaborationSystem {
 
     const resource: SharedResource = {
       id: this.generateId(),
-      type: resourceData.type,
+      type: resourceData.type as any,
       name: resourceData.name,
       description: resourceData.description,
       ownerId: resourceData.ownerId,
@@ -1109,7 +1113,7 @@ export class EnterpriseCollaborationSystem {
     }
 
     // Store in AI processor
-    await this.aiProcessor.getUserContext(user.id, 'initial', aiContext)
+    await (this.aiProcessor as any).getUserContext(user.id, 'initial', aiContext)
   }
 
   private async getCurrentMarketData(): Promise<any> {

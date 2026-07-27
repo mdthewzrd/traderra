@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
+import { getAuthUserId } from '@/lib/auth-helpers'
 import { createHash } from 'crypto'
 /**
  * Generate a hash from trade data for duplicate detection
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
     let userId
     try {
       const authData = await getAuthUserId(request)
-      userId = authData?.userId
+      userId = authData
     } catch {
       // Auth failed, will use userId from request body
     }

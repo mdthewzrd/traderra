@@ -12,7 +12,7 @@ import { useEffect } from 'react'
 /**
  * Component handler types
  */
-export type ComponentAction = 'click' | 'expand' | 'collapse' | 'open' | 'close' | 'select' | 'activate' | 'toggle'
+export type ComponentAction = 'click' | 'expand' | 'collapse' | 'open' | 'close' | 'select' | 'activate' | 'toggle' | 'show' | 'hide' | 'clear' | 'reset' | 'export'
 export type ScrollBehavior = 'smooth' | 'instant' | 'auto'
 
 export interface ComponentHandler {

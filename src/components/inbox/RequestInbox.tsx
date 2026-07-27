@@ -39,6 +39,8 @@ export function RequestInbox() {
   const [sending, setSending] = useState(false)
   const [reqs, setReqs] = useState<Req[]>([])
   const [sent, setSent] = useState<string | null>(null)
+  const [jobs, setJobs] = useState<{ id: string; title: string }[]>([])
+  const [jobId, setJobId] = useState('')
   const taRef = useRef<HTMLTextAreaElement>(null)
   const { setIsSidebarOpen } = useChatContext()
 
@@ -51,13 +53,20 @@ export function RequestInbox() {
     } catch { /* bridge may be down — badge stays quiet */ }
   }, [])
 
+  const loadJobs = useCallback(async () => {
+    try {
+      const r = await fetch('/api/jobs', { cache: 'no-store' })
+      if (r.ok) setJobs(await r.json())
+    } catch { /* bridge down */ }
+  }, [])
+
   useEffect(() => {
-    if (open) { loadReqs(); return }
+    if (open) { loadReqs(); loadJobs(); return }
     // Light badge poll when closed: once on mount + every 90s
     loadReqs()
     const t = setInterval(loadReqs, 90000)
     return () => clearInterval(t)
-  }, [open, loadReqs])
+  }, [open, loadReqs, loadJobs])
 
   // Paste a screenshot straight into the message box.
   const onPaste = useCallback(async (e: React.ClipboardEvent) => {
@@ -118,8 +127,18 @@ export function RequestInbox() {
       })
       if (r.ok) {
         const created = await r.json()
+        // Attach the selected job. Bridge POST create omits job_id, so PATCH it.
+        if (created?.id && jobId) {
+          try {
+            await fetch(`/api/requests/${created.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ job_id: jobId }),
+            })
+          } catch { /* job link is best-effort */ }
+        }
         setSent(created?.id ?? 'REQ')
-        setTitle(''); setMessage('')
+        setTitle(''); setMessage(''); setJobId('')
         imgs.forEach((i) => URL.revokeObjectURL(i.preview))
         setImgs([])
         await loadReqs()
@@ -197,6 +216,18 @@ export function RequestInbox() {
                     className="w-full rounded-md border studio-border bg-[#0a0a0a] px-3 py-2 text-sm studio-text placeholder:text-[#555] outline-none focus:border-primary/60"
                     autoFocus
                   />
+                  {jobs.length > 0 && (
+                    <select
+                      value={jobId}
+                      onChange={(e) => setJobId(e.target.value)}
+                      className="w-full rounded-md border studio-border bg-[#0a0a0a] px-3 py-2 text-sm studio-text outline-none focus:border-primary/60"
+                    >
+                      <option value="">No job — unassigned</option>
+                      {jobs.map((j) => (
+                        <option key={j.id} value={j.id}>{j.id} · {j.title}</option>
+                      ))}
+                    </select>
+                  )}
                   <textarea
                     ref={taRef}
                     value={message}

@@ -6,6 +6,7 @@ import { useChartStore } from '@/stores/charts/chartStore'
 import { useTickerStore } from '@/stores/tickerStore'
 import { TickerSearchBar } from '@/components/TickerSearchBar'
 import { GapStatsPanel } from '@/components/panels/GapStatsPanel'
+import { DilutionPanel } from '@/components/panels/DilutionPanel'
 
 /**
  * /personality — Mean-Reversion Personality terminal.
@@ -716,12 +717,7 @@ export default function PersonalityPage() {
 
       {/* ── TAB: gap-stats / dilution (wired in Phase 2/3) ── */}
       {tab === 'gap-stats' && <GapStatsPanel win={win} />}
-      {tab === 'dilution' && (
-        <div className="max-w-[1500px] mx-auto px-6 py-32 text-center text-[#555]">
-          <div className="text-4xl mb-3">🔌</div>
-          <p className="text-lg text-[#9ca3af]">Dilution panel — wiring in the next step</p>
-        </div>
-      )}
+      {tab === 'dilution' && <DilutionPanel />}
 
       {/* ── TAB: MR Personality (hidden when another tab is active) ── */}
       <div className={tab === 'personality' ? '' : 'hidden'}>

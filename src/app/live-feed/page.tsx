@@ -226,7 +226,7 @@ function ScanChartPanel({ ticker, date, onClose }: { ticker: string | null; date
           ...navBtn, background: showSettings ? GOLD + '18' : 'transparent', color: showSettings ? GOLD : '#777777',
         }}>⚙</button>
 
-        <a href={`/charts-terminal.html?symbol=${ticker}`} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: '#666666', textDecoration: 'none' }}>↗ full</a>
+        <a href={`/charts?symbol=${ticker}`} target="_blank" rel="noreferrer" style={{ fontSize: 10, color: '#666666', textDecoration: 'none' }}>↗ full</a>
         <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#666666', fontSize: 14, cursor: 'pointer', padding: '0 4px', marginLeft: 'auto' }}>✕</button>
       </div>
 

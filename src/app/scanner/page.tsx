@@ -3069,7 +3069,7 @@ export default function ScanDashboardPage() {
               </div>
             )}
 
-            <a href={`/charts-terminal.html?symbol=${sig.ticker}`} target="_blank" rel="noreferrer" style={{ color: GOLD, fontSize: 10, display: 'flex', alignItems: 'center', gap: 3, marginLeft: 'auto' }} className="hover:underline">
+            <a href={`/charts?symbol=${sig.ticker}`} target="_blank" rel="noreferrer" style={{ color: GOLD, fontSize: 10, display: 'flex', alignItems: 'center', gap: 3, marginLeft: 'auto' }} className="hover:underline">
               Charts <ExternalLink className="h-3 w-3" />
             </a>
           </div>
@@ -3137,7 +3137,7 @@ export default function ScanDashboardPage() {
           {activeScan && <span style={{ color: T.MUTED, fontSize: 11 }}>· {activeScan.name}</span>}
         </div>
         <div className="flex items-center gap-1">
-          <a href="/charts-terminal.html" target="_blank" rel="noreferrer" title="Open Charts" style={{
+          <a href="/charts" target="_blank" rel="noreferrer" title="Open Charts" style={{
             display: 'flex', alignItems: 'center', gap: 4,
             padding: '4px 10px', borderRadius: 3, fontSize: 10, fontWeight: 600,
             background: T.SURFACE2, color: GOLD, border: `1px solid ${T.GOLD_BORDER}`, cursor: 'pointer',

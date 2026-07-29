@@ -21,7 +21,7 @@ const tools = [
   },
   {
     name: 'Charts',
-    href: '/charts-terminal.html',
+    href: '/charts',
     icon: LineChart,
     description: 'ProChart Terminal — multi-timeframe, drawing tools, backtest replay',
     status: 'LIVE',

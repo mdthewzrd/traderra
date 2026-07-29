@@ -5,5 +5,5 @@ import { redirect } from 'next/navigation'
  * Kept as fallback in case the React version has issues.
  */
 export default function LegacyChartsPage() {
-  redirect('/charts-terminal.html')
+  redirect('/charts')
 }

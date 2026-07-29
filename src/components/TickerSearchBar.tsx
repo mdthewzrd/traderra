@@ -16,11 +16,8 @@ import { useTickerStore } from '@/stores/tickerStore'
  */
 export function TickerSearchBar() {
   const input = useTickerStore((s) => s.input)
-  const ticker = useTickerStore((s) => s.ticker)
-  const history = useTickerStore((s) => s.history)
   const setInput = useTickerStore((s) => s.setInput)
   const search = useTickerStore((s) => s.search)
-  const select = useTickerStore((s) => s.select)
   const hydrate = useTickerStore((s) => s.hydrate)
 
   // Load persisted recent list once, client-side (avoids SSR hydration mismatch).
@@ -50,25 +47,6 @@ export function TickerSearchBar() {
           Analyze
         </button>
       </form>
-
-      {history.length > 0 && (
-        <div className="flex items-center gap-1 ml-1 overflow-x-auto">
-          <span className="text-xs text-[#666] mr-1 shrink-0">Recent</span>
-          {history.slice(0, 12).map((t) => (
-            <button
-              key={t}
-              onClick={() => select(t)}
-              className={`px-2.5 py-1.5 rounded-lg text-sm transition-colors shrink-0 border ${
-                t === ticker
-                  ? 'bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30'
-                  : 'text-[#9ca3af] hover:bg-[#141c2b] hover:text-[#e0e0e0] border-transparent'
-              }`}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   )
 }

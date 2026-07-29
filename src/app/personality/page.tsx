@@ -7,6 +7,7 @@ import { useTickerStore } from '@/stores/tickerStore'
 import { TickerSearchBar } from '@/components/TickerSearchBar'
 import { GapStatsPanel } from '@/components/panels/GapStatsPanel'
 import { DilutionPanel } from '@/components/panels/DilutionPanel'
+import { RecentSidebar } from '@/components/RecentSidebar'
 
 /**
  * /personality — Mean-Reversion Personality terminal.
@@ -715,7 +716,10 @@ export default function PersonalityPage() {
         </div>
       </div>
 
-      {/* ── TAB: gap-stats / dilution (wired in Phase 2/3) ── */}
+      {/* ── CONTENT ROW: shared recent sidebar + active panel ── */}
+      <div className="max-w-[1500px] mx-auto px-6 flex gap-6 items-start">
+        <RecentSidebar />
+        <main className="flex-1 min-w-0">
       {tab === 'gap-stats' && <GapStatsPanel win={win} />}
       {tab === 'dilution' && <DilutionPanel />}
 
@@ -1094,6 +1098,8 @@ export default function PersonalityPage() {
             </div>
           )}
         </div>
+      </div>
+        </main>
       </div>
     </div>
   )

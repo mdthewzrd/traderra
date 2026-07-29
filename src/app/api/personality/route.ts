@@ -30,6 +30,9 @@ const CFG = {
   pmCutoffET: 9.5,     // 09:30 ET
   gapHighCutoff: 10.5, // 10:30 ET
   fadeWindowDays: 3,
+  fadeNoonET: 12,        // noon ET split for the time-cap
+  fadeCapAmHours: 12,    // peak before noon → 12h fade search
+  fadeCapPmHours: 20,    // peak at/after noon → 20h fade search
 }
 
 // ── durable cache (outside .next, survives builds/restarts) ──────────────────
@@ -126,16 +129,42 @@ interface PushEvent {
   flipLagMin: number | null; flipCount: number; declineVolRatio: number   // 5m 9/20 bearish-flip timing + fade conviction
   // fade signals: 4h 72/89 cloud break, 15m 89-reclaim, trough time-of-day
   cloudBreak4h: boolean; reclaim89: boolean; troughHour: number
+  // 1H VWAP reclaim (Ask 2) + 89-tag short-payoff geometry (peak→89 latency & R-target)
+  reclaimVwap: boolean; tag89LagMin: number | null; rPeakTo89: number | null
+}
+
+// 1H session VWAP — resets at 09:30 ET RTH open (modeled on gap-stats/route.ts sessionVWAP).
+// NaN for pre-market / after-hours bars; VWAP is only meaningful inside the RTH session.
+function sessionVWAPHourly(h1: Bar[]): number[] {
+  const n = h1.length, out = new Array(n).fill(NaN)
+  let cumVP = 0, cumV = 0, curDay: string | null = null
+  for (let i = 0; i < n; i++) {
+    const b = h1[i]
+    const etH = etHour(b.time * 1000)
+    if (etH >= 9.5 && etH < 16) {                          // RTH 09:30–16:00 ET
+      const dk = dateStr(b.time)
+      if (dk !== curDay) { cumVP = 0; cumV = 0; curDay = dk }  // reset at first RTH bar of each day
+      const typical = (b.high + b.low + b.close) / 3
+      cumVP += typical * b.volume
+      cumV += b.volume
+      out[i] = cumV > 0 ? cumVP / cumV : b.close
+    }   // else leave NaN (non-RTH)
+  }
+  return out
 }
 
 async function computeInventory(symbol: string, from: string, to: string) {
-  const [daily, h4, m5, m15] = await Promise.all([
+  const [daily, h4, h1, m5, m15] = await Promise.all([
     fetchAggs(symbol, 1, 'day', from, to),
     fetchAggs(symbol, 4, 'hour', from, to),
+    fetchAggs(symbol, 1, 'hour', from, to),
     fetchAggs(symbol, 5, 'minute', from, to),
     fetchAggs(symbol, 15, 'minute', from, to),
   ])
   if (!daily.length || !h4.length) return { error: `No history for ${symbol}` }
+
+  // 1H session VWAP (Ask 2 reclaim target).
+  const vwap1 = sessionVWAPHourly(h1)
 
   const c4 = h4.map(b => b.close), H4 = h4.map(b => b.high), L4 = h4.map(b => b.low)
   const e89_4 = ema(c4, 89), atr89_4 = wilderAtr(H4, L4, c4, 89), e72_4 = ema(c4, 72)
@@ -176,18 +205,26 @@ async function computeInventory(symbol: string, from: string, to: string) {
     const barsPerDay = 90
     const peakSearchEnd = Math.min(m5.length - 1, runStart + ev.length * barsPerDay)
     let peakIdx = runStart; for (let i = runStart; i <= peakSearchEnd; i++) if (m5[i].high > m5[peakIdx].high) peakIdx = i
-    // fade window = fadeWindowDays (3) past the peak, in 5m bars → trough + reclaim
-    const fadeEnd = Math.min(m5.length - 1, peakIdx + CFG.fadeWindowDays * barsPerDay)
+    const peakTime = m5[peakIdx].time
+    const peakET = etHour(peakTime * 1000)
+    // fade window = MIN(fadeWindowDays, time-of-day cap). Cap shrinks the search so only
+    // genuine same-session fade-overs count (AM peak → 12h, PM peak → 20h, per REQ-278).
+    const fadeCapSec = (peakET < CFG.fadeNoonET ? CFG.fadeCapAmHours : CFG.fadeCapPmHours) * 3600
+    const fadeEndBars = Math.min(m5.length - 1, peakIdx + CFG.fadeWindowDays * barsPerDay)
+    const fadeEndCap  = Math.min(m5.length - 1, lowerBound(m5, peakTime + fadeCapSec, peakIdx))
+    const fadeEnd = Math.min(fadeEndBars, fadeEndCap)
     let troughIdx = peakIdx; for (let i = peakIdx + 1; i <= fadeEnd; i++) if (m5[i].low < m5[troughIdx].low) troughIdx = i
     const reclaim = m5.slice(peakIdx + 1, fadeEnd + 1).some(b => b.high > m5[peakIdx].high)
     const tTroughH = (m5[troughIdx].time - m5[peakIdx].time) / 3600
     const fadeDepth = (m5[peakIdx].high - m5[troughIdx].low) / m5[peakIdx].high
     // 15m 89-EMA FADE TAG: after the push high, did price come back and touch the 15m 89-EMA?
     // (the fade gate). push-min (troughIdx/fadeDepth) still recorded for depth/overshoot.
-    const peakTime = m5[peakIdx].time
     const p15 = lowerBound(m15, peakTime)                                    // first 15m bar at/after the peak
-    const f15 = Math.min(m15.length - 1, lowerBound(m15, peakTime + CFG.fadeWindowDays * 86400, p15))
+    const f15Bars = Math.min(m15.length - 1, lowerBound(m15, peakTime + CFG.fadeWindowDays * 86400, p15))
+    const f15Cap  = Math.min(m15.length - 1, lowerBound(m15, peakTime + fadeCapSec, p15))
+    const f15 = Math.min(f15Bars, f15Cap)
     let tag89 = false, tagBar15 = -1, overshoot89 = 0, reclaim89 = false
+    let tag89LagMin: number | null = null, rPeakTo89: number | null = null
     if (p15 < m15.length) {
       const emaAtPeak = e89_15[p15]
       if (!isNaN(emaAtPeak) && m5[peakIdx].high > emaAtPeak) {               // only if push peaked ABOVE the 89
@@ -197,6 +234,28 @@ async function computeInventory(symbol: string, from: string, to: string) {
         if (!isNaN(et) && et > 0) overshoot89 = (et - m15[t15].low) / et       // +ve = trough below the 89
         // did a later 15m bar CLOSE back above the 89 after the tag? (V-reclaim vs lower-low drift)
         if (tagBar15 >= 0) for (let i = tagBar15 + 1; i <= f15; i++) if (m15[i].close > e89_15[i]) { reclaim89 = true; break }
+        // short-payoff geometry: peak→89-tag latency (min) and peak→89 R-target (ATR multiples)
+        if (tag89 && tagBar15 >= 0) {
+          tag89LagMin = (tagBar15 - p15) * 15
+          const emaAtTag = e89_15[tagBar15]
+          rPeakTo89 = (!isNaN(emaAtTag) && atrRef > 0) ? (m5[peakIdx].high - emaAtTag) / atrRef : null
+        }
+      }
+    }
+    // 1H VWAP reclaim (Ask 2): within peak → +5d, price must first fade to/below VWAP (hit the target),
+    // then post TWO consecutive 1H closes above VWAP (bounced high and held — not a wick that fails).
+    let reclaimVwap = false
+    const reclaimWindowDays = 5
+    if (h1.length) {
+      const h1Start = lowerBound(h1, peakTime)
+      const h1End = Math.min(h1.length - 1, lowerBound(h1, peakTime + reclaimWindowDays * 86400, h1Start))
+      let brokeBelow = false, prevAbove = false
+      for (let i = h1Start; i <= h1End; i++) {
+        if (isNaN(vwap1[i])) { prevAbove = false; continue }
+        const above = h1[i].close > vwap1[i]
+        if (!above) { brokeBelow = true; prevAbove = false }
+        else if (brokeBelow && prevAbove) { reclaimVwap = true; break }       // 2 consec holds after a fade
+        else prevAbove = true
       }
     }
     // 5m 9/20 momentum flips during the fade: first bearish-flip lag (peak→roll-over) + count (choppiness)
@@ -218,7 +277,6 @@ async function computeInventory(symbol: string, from: string, to: string) {
     for (let i = runStart; i < peakIdx; i++) { pushLegVol += m5[i].volume; pushN++ }
     for (let i = peakIdx + 1; i <= troughIdx; i++) { declineVol += m5[i].volume; declineN++ }
     const declineVolRatio = (pushN && declineN) ? (declineVol / declineN) / (pushLegVol / pushN) : 0
-    const peakET = etHour(m5[peakIdx].time * 1000)
     const troughHour = etHour(m5[troughIdx].time * 1000)
     // 4h 72/89 EMA cloud at the trough — did the fade break back down through it?
     const h4idx = Math.min(h4.length - 1, lowerBound(h4, m5[troughIdx].time))
@@ -244,6 +302,7 @@ async function computeInventory(symbol: string, from: string, to: string) {
       tag89, overshoot89: +overshoot89.toFixed(3),
       flipLagMin: flipLagMin === null ? null : +flipLagMin.toFixed(0), flipCount, declineVolRatio: +declineVolRatio.toFixed(1),
       cloudBreak4h, reclaim89, troughHour: +troughHour.toFixed(2),
+      reclaimVwap, tag89LagMin: tag89LagMin === null ? null : +tag89LagMin.toFixed(0), rPeakTo89: rPeakTo89 === null ? null : +rPeakTo89.toFixed(2),
     })
   }
 
@@ -263,18 +322,28 @@ async function computeInventory(symbol: string, from: string, to: string) {
     fc: median(out.map(e => e.flipCount)),
     dv: median(out.map(e => e.declineVolRatio)),
     th: median(out.map(e => e.troughHour)),               // median trough hour-of-day (ET)
+    tl89: median(out.filter(e => e.tag89LagMin !== null).map(e => e.tag89LagMin as number)),   // median peak→89-tag latency (min)
+    r89: median(out.filter(e => e.rPeakTo89 !== null).map(e => e.rPeakTo89 as number)),       // median peak→89 R-target (ATR)
   }
 
-  // ── VERDICT: fade-rate × reclaim% (name-character, not trend) ──
-  // NOTE: verdict still uses the validated ≥10%-depth fadeRate. fadeRate89 (15m 89-EMA tag)
-  //       is returned alongside — re-baseline the verdict on it once the split is confirmed.
+  // ── VERDICT: fade-rate (15m 89-EMA tag) × reclaim% (1H VWAP hold) ──
+  // fadeRate baseline = pushes that TAGGED the 15m 89-EMA post-peak (the MR fade gate).
+  // reclaimVwapRate = pushes that faded to VWAP then posted 2 consec 1H closes above it (held).
+  // fadeRateDepth (legacy ≥10% peak→trough) retained for reference.
   const total = out.length
-  const fadeRate = total ? faded.length / total : 0
-  const fadeRate89 = total ? faded89.length / total : 0
+  const fadeRate = total ? faded89.length / total : 0          // baseline: 89-EMA tag
+  const fadeRate89 = fadeRate                                  // alias (backward compat)
+  const fadeRateDepth = total ? faded.length / total : 0       // legacy depth-based
   const reclaimRate = total ? out.filter(e => e.reclaim).length / total : 0
+  const reclaimVwapRate = total ? out.filter(e => e.reclaimVwap).length / total : 0
+  // short-payoff aggregates: cleanShort = tagged 89 and NOT reclaimed; failedFade = tagged 89 but reclaimed.
+  const cleanShortN = out.filter(e => e.tag89 && !e.reclaimVwap).length
+  const failedFadeN = out.filter(e => e.tag89 && e.reclaimVwap).length
+  const cleanShortRate = total ? cleanShortN / total : 0
+  const failedFadeRate = total ? failedFadeN / total : 0
   let verdict: 'Fader' | 'Trender' | 'Range' = 'Range'
-  if (fadeRate >= 0.5 && reclaimRate <= 0.6) verdict = 'Fader'
-  else if (fadeRate <= 0.15 && reclaimRate >= 0.7) verdict = 'Trender'
+  if (fadeRate >= 0.5 && reclaimVwapRate <= 0.6) verdict = 'Fader'
+  else if (fadeRate <= 0.15 && reclaimVwapRate >= 0.7) verdict = 'Trender'
 
   // regime from 4h EMA72 vs EMA89 (e72_4 declared alongside e89_4 at top of fn — reused in per-push 4h cloud break)
   const regimeFinal = e72_4[last] > e89_4[last] ? 'BULL' : 'BEAR'
@@ -289,18 +358,21 @@ async function computeInventory(symbol: string, from: string, to: string) {
   }
 
   return {
-    symbol, regime: regimeFinal, verdict, fadeRate, fadeRate89, reclaimRate,
+    symbol, regime: regimeFinal, verdict, fadeRate, fadeRate89, fadeRateDepth, reclaimRate, reclaimVwapRate,
     dailyATR: +dailyATR.toFixed(3), atrPctOfPrice: daily[dlast].close > 0 ? +(dailyATR / daily[dlast].close).toFixed(3) : 0,
     generatedAt: new Date().toISOString(), range: { from: dateStr(daily[0].time), to: dateStr(daily[dlast].time) },
-    bars: { daily: daily.length, h4: h4.length, m5: m5.length, m15: m15.length },
+    bars: { daily: daily.length, h4: h4.length, h1: h1.length, m5: m5.length, m15: m15.length },
     close: +daily[dlast].close.toFixed(2),
     trajectory: traj,
     aggregates: {
       byCat, count: total, sensitivity: sens, medians: med,
       fadedN: faded.length, faded89N: faded89.length, reclaim89N: out.filter(e => e.reclaim89).length,
+      reclaimVwapN: out.filter(e => e.reclaimVwap).length,
+      cleanShortN, failedFadeN, cleanShortRate, failedFadeRate,
       cloudBreak4hN: out.filter(e => e.cloudBreak4h).length, euphoricN: euph.length,
       cadencePerMonth: total / (Object.keys(months).length || 1),
     },
+    vwap: vwap1,   // debug: full 1H session-VWAP series
     inventory: out,
   }
 }

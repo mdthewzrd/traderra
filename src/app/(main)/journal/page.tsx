@@ -92,7 +92,10 @@ function EnhancedJournalContent({
     fetch(`/api/calendar/reviews?from=${y - 1}-01-01&to=${y}-12-31`, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        const map = (d?.reviews || {}) as Record<string, { id: string; title: string; updated_at: string }>
+        // Never wipe the list on a failed/empty fetch — an open review would
+        // otherwise unmount mid-edit and lose unsaved content (REQ-300).
+        if (!d || !d.reviews) return
+        const map = d.reviews as Record<string, { id: string; title: string; updated_at: string }>
         setReviews(
           Object.entries(map)
             .map(([date, r]) => ({ ...r, _date: date }))

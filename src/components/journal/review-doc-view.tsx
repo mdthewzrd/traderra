@@ -196,9 +196,9 @@ function SectionField({ label, hint, section, onChange, onImageClick, allowTrade
   allowTradeIdeas?: boolean
   playbooks?: PlaybookOption[]
 }) {
-  const [local, setLocal] = useState(section.text)
-  const pushRef = useRef(section.text)
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Controlled by the parent — no local buffer. Every keystroke flows straight
+  // into the parent doc state so nothing can be stranded in a per-field debounce
+  // window (REQ-300). The parent debounces the network save.
   const taRef = useRef<HTMLTextAreaElement>(null)
   // Trade idea mini-form (watchlist only)
   const [showIdeaForm, setShowIdeaForm] = useState(false)
@@ -214,13 +214,11 @@ function SectionField({ label, hint, section, onChange, onImageClick, allowTrade
     const t = newTicker.trim().toUpperCase()
     if (!t) { tickerRef.current?.focus(); return }
     const setup = playbooks?.find((p) => p.id === newSetupId)
-    pushRef.current = local
-    onChange({ ...section, text: local, tradeIdeas: [...ideas, { id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now() + Math.random()), ticker: t, thesis: newThesis.trim(), setupId: setup?.id, setupName: setup?.name, bias: (newBias || undefined) as Bias | undefined }] })
+    onChange({ ...section, tradeIdeas: [...ideas, { id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now() + Math.random()), ticker: t, thesis: newThesis.trim(), setupId: setup?.id, setupName: setup?.name, bias: (newBias || undefined) as Bias | undefined }] })
     setNewTicker(''); setNewThesis(''); setNewSetupId(''); setNewSetupName(''); setNewBias(''); tickerRef.current?.focus()  // keep form open for rapid entry
   }
   const removeIdea = (id: string) => {
-    pushRef.current = local
-    onChange({ ...section, text: local, tradeIdeas: ideas.filter((x) => x.id !== id) })
+    onChange({ ...section, tradeIdeas: ideas.filter((x) => x.id !== id) })
   }
 
   // Auto-grow: each field sizes to its own content so a one-liner is compact
@@ -231,14 +229,9 @@ function SectionField({ label, hint, section, onChange, onImageClick, allowTrade
     el.style.height = 'auto'
     el.style.height = `${el.scrollHeight}px`
   }, [])
-  useEffect(() => { autoSize() }, [local, autoSize])
+  useEffect(() => { autoSize() }, [section.text, autoSize])
 
-  useEffect(() => {
-    if (section.text !== pushRef.current && section.text !== local) {
-      setLocal(section.text); pushRef.current = section.text
-    }
-    // eslint-disable-next-line react-hooks-exhaustive-deps
-  }, [section.text])
+
 
   const fileRef = useRef<HTMLInputElement>(null)
   const onFiles = async (files: FileList | null) => {
@@ -248,14 +241,10 @@ function SectionField({ label, hint, section, onChange, onImageClick, allowTrade
     const reads = await Promise.all(imgs.map((f) => new Promise<string>((res) => {
       const r = new FileReader(); r.onload = () => res(r.result as string); r.readAsDataURL(f)
     })))
-    onChange({ ...section, text: local, annots: [...section.annots, ...reads.map((ref) => ({ ref, caption: '' }))] })
+    onChange({ ...section, annots: [...section.annots, ...reads.map((ref) => ({ ref, caption: '' }))] })
     if (fileRef.current) fileRef.current.value = ''
   }
 
-  const flush = () => {
-    if (timer.current) { clearTimeout(timer.current); timer.current = null }
-    if (local !== pushRef.current) { pushRef.current = local; onChange({ ...section, text: local }) }
-  }
   const onPaste = (e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items; if (!items) return
     for (let i = 0; i < items.length; i++) {
@@ -263,8 +252,7 @@ function SectionField({ label, hint, section, onChange, onImageClick, allowTrade
         const file = items[i].getAsFile(); if (!file) continue
         const reader = new FileReader()
         reader.onload = () => {
-          pushRef.current = local
-          onChange({ ...section, text: local, annots: [...section.annots, { ref: reader.result as string, caption: '' }] })
+          onChange({ ...section, annots: [...section.annots, { ref: reader.result as string, caption: '' }] })
         }
         reader.readAsDataURL(file)
         e.preventDefault()
@@ -280,13 +268,8 @@ function SectionField({ label, hint, section, onChange, onImageClick, allowTrade
         <p className="text-[10px] mt-0.5" style={{ color: C.MUTED }}>{hint}</p>
       </div>
       <textarea
-        value={local}
-        onChange={(e) => {
-          setLocal(e.target.value)
-          if (timer.current) clearTimeout(timer.current)
-          timer.current = setTimeout(flush, 500)
-        }}
-        onBlur={flush}
+        value={section.text}
+        onChange={(e) => onChange({ ...section, text: e.target.value })}
         onPaste={onPaste}
         ref={taRef}
         placeholder="Write here… (paste screenshots straight in)"
@@ -360,7 +343,7 @@ function SectionField({ label, hint, section, onChange, onImageClick, allowTrade
               <img src={a.ref} alt={a.caption ?? ''} onClick={() => onImageClick(a.ref)}
                 className="w-full h-auto rounded-lg border cursor-zoom-in" style={{ borderColor: C.BORDER }} />
               <button
-                onClick={() => { pushRef.current = local; onChange({ ...section, text: local, annots: section.annots.filter((_, idx) => idx !== i) }) }}
+                onClick={() => onChange({ ...section, annots: section.annots.filter((_, idx) => idx !== i) })}
                 className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full text-[10px] opacity-0 group-hover:opacity-100 flex items-center justify-center"
                 style={{ background: '#dc2626', color: '#fff' }}>✕</button>
             </div>
@@ -377,12 +360,21 @@ export function ReviewDocView({ reviewId, onChanged, onDeleted, onBack }: Review
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
+  const [saveError, setSaveError] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [dayTrades, setDayTrades] = useState<any[]>([])
   const [playbooks, setPlaybooks] = useState<PlaybookOption[]>([])
   const [expandedTradeId, setExpandedTradeId] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Latest pending edit — flushed on unmount so navigation/close never drops the
+  // last batch of typing (REQ-300).
+  const pendingRef = useRef<{ title: string; content: ReviewContent } | null>(null)
+  // Only refetch the sidebar when the title (all it shows) actually changes;
+  // debounced so we don't hit the API on every keystroke.
+  const lastNotifiedTitle = useRef<string>('')
+  const notifiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const retryCount = useRef(0)
 
   // Auto-populated trades for this review's date (read-only computed view).
   useEffect(() => {
@@ -419,30 +411,67 @@ export function ReviewDocView({ reviewId, onChanged, onDeleted, onBack }: Review
       .then((d) => {
         if (alive && d) {
           setDoc({ id: d.id, title: d.title || '', date: d.metadata?.reviewDate || '', content: parseContent(d.content) })
+          lastNotifiedTitle.current = d.title || ''
         }
       })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
   }, [reviewId])
 
-  const save = useCallback(async (title: string, content: ReviewContent) => {
-    setSaving(true)
-    try {
-      const r = await fetch(`/api/calendar/review/${reviewId}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, content: JSON.stringify(content) }),
-      })
-      if (r.ok) { setDirty(false); setSavedFlash(true); setTimeout(() => setSavedFlash(false), 1200); onChanged?.() }
-    } finally { setSaving(false) }
+  const save = useCallback(async (title: string, content: ReviewContent, opts?: { keepalive?: boolean }) => {
+    setSaveError(false)
+    const payload = JSON.stringify({ title, content: JSON.stringify(content) })
+    const attempt = async (isFirst: boolean) => {
+      if (isFirst) setSaving(true)
+      try {
+        const r = await fetch(`/api/calendar/review/${reviewId}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: payload,
+          keepalive: !!opts?.keepalive,
+        })
+        if (r.ok) {
+          retryCount.current = 0
+          pendingRef.current = null
+          setDirty(false); setSavedFlash(true); setTimeout(() => setSavedFlash(false), 1200)
+          // Refresh the sidebar only when its visible field (title) changes.
+          if (title !== lastNotifiedTitle.current) {
+            lastNotifiedTitle.current = title
+            if (notifiedTimer.current) clearTimeout(notifiedTimer.current)
+            notifiedTimer.current = setTimeout(() => onChanged?.(), 1500)
+          }
+          return
+        }
+      } catch { /* fall through to retry */ }
+      setSaveError(true)
+      // Bounded auto-retry so a transient blip doesn't silently lose content
+      // (REQ-300). Skipped for the keepalive unload flush.
+      if (!opts?.keepalive && retryCount.current < 3) {
+        retryCount.current += 1
+        if (debounceRef.current) clearTimeout(debounceRef.current)
+        debounceRef.current = setTimeout(() => attempt(false), 2000 * retryCount.current)
+      }
+    }
+    await attempt(true)
+    setSaving(false)
   }, [reviewId, onChanged])
 
   const scheduleSave = useCallback((title: string, content: ReviewContent) => {
-    setDirty(true)
+    setDirty(true); setSaveError(false); retryCount.current = 0
+    pendingRef.current = { title, content }
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => save(title, content), 900)
   }, [save])
 
-  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current) }, [])
+  // Flush pending edits on unmount — the single most important fix for REQ-300.
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null }
+      if (notifiedTimer.current) clearTimeout(notifiedTimer.current)
+      const pending = pendingRef.current
+      if (pending) save(pending.title, pending.content, { keepalive: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewId])
 
   const setSection = (key: string, s: SectionData) => {
     if (!doc) return
@@ -501,6 +530,8 @@ export function ReviewDocView({ reviewId, onChanged, onDeleted, onBack }: Review
         <div className="flex items-center gap-3 shrink-0 pt-1">
           {saving ? (
             <span className="text-[11px] flex items-center gap-1 studio-muted"><Loader2 className="h-3 w-3 animate-spin" />saving</span>
+          ) : saveError ? (
+            <span className="text-[11px] text-red-400" title="Couldn't reach the server — retrying">save failed — retrying…</span>
           ) : dirty ? (
             <span className="text-[11px] studio-muted">unsaved</span>
           ) : (

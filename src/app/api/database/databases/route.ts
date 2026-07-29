@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthUserId } from '@/lib/auth-helpers'
 import { ensureDatabases } from '@/lib/db-id'
+import { seedDefaultFields } from '@/lib/default-fields'
 
 // /api/database/databases — CorpusDatabase (workspace) CRUD.
 // A workspace = an isolated collection of classified CorpusRows.
-// Enums/Fields/Views stay shared (your vocabulary), only rows + their
-// trades are partitioned per database.
+// Enums/Views stay shared (your vocabulary); Rows, Trades AND Fields are
+// partitioned per database. New databases are seeded with default columns.
 
 // GET — list all databases for the user with row counts (auto-provisions Main).
 export async function GET(request: NextRequest) {
@@ -68,6 +69,22 @@ export async function POST(request: NextRequest) {
         await prisma.corpusTrade.create({ data: { ...trest, setupRowId: newRow.id } })
       }
     }
+
+    // duplicate the source database's custom columns into the new database
+    const srcFields = await prisma.corpusField.findMany({
+      where: { databaseId: sourceId },
+      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+    })
+    let fOrder = 0
+    for (const f of srcFields) {
+      const { id: _fid, userId: _u, databaseId: _fd, createdAt: _fca, updatedAt: _fua, ...frest } = f
+      await prisma.corpusField.create({
+        data: { ...frest, userId, databaseId: newDb.id, order: fOrder++ },
+      })
+    }
+  } else {
+    // brand-new empty database -> seed the default columns
+    await seedDefaultFields(userId, newDb.id)
   }
 
   return NextResponse.json({ database: newDb })

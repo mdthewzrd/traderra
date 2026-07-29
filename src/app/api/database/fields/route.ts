@@ -1,24 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthUserId } from '@/lib/auth-helpers'
+import { getDatabaseId } from '@/lib/db-id'
+import { seedDefaultFields } from '@/lib/default-fields'
 
 const VALID_TYPES = ['text', 'number', 'select', 'multiselect', 'boolean', 'date', 'grade']
 
-// GET — list this user's custom field definitions, ordered
+// Custom columns (CorpusField) are scoped per-database-per-user: each database
+// owns its own editable column set. The active database is resolved from the
+// `x-db-id` header / `db` param via getDatabaseId. On first access of a
+// field-less database we lazily seed the default columns.
+
+// GET — list this database's custom field definitions, ordered (seeds defaults if empty)
 export async function GET(request: NextRequest) {
   const userId = await getAuthUserId(request)
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const databaseId = await getDatabaseId(request, userId)
+
+  // Lazy-seed sensible defaults the first time a database is opened.
+  await seedDefaultFields(userId, databaseId)
+
   const fields = await prisma.corpusField.findMany({
-    where: { userId },
+    where: { userId, databaseId },
     orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
   })
   return NextResponse.json({ fields })
 }
 
-// POST — create a new custom column
+// POST — create a new custom column in the active database
 export async function POST(request: NextRequest) {
   const userId = await getAuthUserId(request)
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const databaseId = await getDatabaseId(request, userId)
 
   const body = await request.json()
   const { name, type, options, colors } = body
@@ -34,11 +47,12 @@ export async function POST(request: NextRequest) {
   const colorMap = colors && typeof colors === 'object' ? colors : null
 
   const maxOrder = await prisma.corpusField.aggregate({
-    where: { userId }, _max: { order: true },
+    where: { userId, databaseId }, _max: { order: true },
   })
   const field = await prisma.corpusField.create({
     data: {
       userId,
+      databaseId,
       name: name.trim(),
       type,
       options: opts,
@@ -49,10 +63,11 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ field })
 }
 
-// PATCH — rename, change options, reorder
+// PATCH — rename, change options, reorder (scoped to the active database)
 export async function PATCH(request: NextRequest) {
   const userId = await getAuthUserId(request)
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const databaseId = await getDatabaseId(request, userId)
 
   const body = await request.json()
   const { id, name, options, colors } = body
@@ -63,23 +78,25 @@ export async function PATCH(request: NextRequest) {
   if (Array.isArray(options)) data.options = options.map(String).filter(Boolean)
   if (colors && typeof colors === 'object') data.colors = colors
 
-  const field = await prisma.corpusField.updateMany({ where: { id, userId }, data })
+  const field = await prisma.corpusField.updateMany({ where: { id, userId, databaseId }, data })
   if (field.count === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }
 
-// DELETE — remove a field definition. Also scrubs its value from every row's customValues.
+// DELETE — remove a field definition from the active database. Also scrubs its
+// value from that database's rows' customValues.
 export async function DELETE(request: NextRequest) {
   const userId = await getAuthUserId(request)
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const databaseId = await getDatabaseId(request, userId)
 
   const { searchParams } = new URL(request.url)
   const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
-  // scrub the field's value from all customValues JSON blobs
+  // scrub the field's value from customValues JSON blobs of rows in this database
   const rows = await prisma.corpusRow.findMany({
-    where: { userId },
+    where: { userId, databaseId },
     select: { id: true, customValues: true },
   })
   for (const r of rows) {
@@ -90,6 +107,6 @@ export async function DELETE(request: NextRequest) {
     }
   }
 
-  await prisma.corpusField.deleteMany({ where: { id, userId } })
+  await prisma.corpusField.deleteMany({ where: { id, userId, databaseId } })
   return NextResponse.json({ ok: true })
 }

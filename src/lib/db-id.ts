@@ -51,6 +51,11 @@ export async function ensureDatabases(userId: string) {
       where: { userId, databaseId: null },
       data: { databaseId: main.id },
     })
+    // Adopt any pre-workspace CorpusFields (databaseId null) into Main.
+    await prisma.corpusField.updateMany({
+      where: { userId, databaseId: null },
+      data: { databaseId: main.id },
+    })
     return [main]
   }
   // Self-heal: adopt orphans into the first db (covers edge cases).
@@ -59,6 +64,17 @@ export async function ensureDatabases(userId: string) {
   })
   if (orphanCount > 0) {
     await prisma.corpusRow.updateMany({
+      where: { userId, databaseId: null },
+      data: { databaseId: existing[0].id },
+    })
+  }
+  // One-time backfill: assign any legacy per-user CorpusFields to the
+  // earliest database so they're preserved (not lost) under the per-db model.
+  const orphanFields = await prisma.corpusField.count({
+    where: { userId, databaseId: null },
+  })
+  if (orphanFields > 0) {
+    await prisma.corpusField.updateMany({
       where: { userId, databaseId: null },
       data: { databaseId: existing[0].id },
     })

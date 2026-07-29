@@ -15,47 +15,40 @@ export function BlockNoteEditor({ value, onChange, placeholder, fullHeight }: Bl
   const [lightbox, setLightbox] = useState<string | null>(null)
   const editorRef = useRef<HTMLDivElement>(null)
   const isUpdatingFromProp = useRef(false)
+  // Tracks the last HTML the editor itself pushed up to the parent. The parent
+  // echoes our value back as a prop; without remembering what WE emitted we
+  // can't distinguish a user keystroke (echo) from an external change (template
+  // load / entry switch) and would overwrite the contentEditable on every
+  // keystroke — destroying the cursor and the typed text (the "daily review
+  // loses my typing" bug).
+  const lastEmitted = useRef<string>('')
 
   // Initialize editor content only once
   useEffect(() => {
     if (!isInitialized && editorRef.current) {
       editorRef.current.innerHTML = value || ''
+      lastEmitted.current = value || ''
       setIsInitialized(true)
     }
   }, [value, isInitialized])
 
-  // Only update from props when the component is being reset (like when switching entries)
+  // Sync from props ONLY on external changes (template load, entry switch).
+  // Compare `value` to lastEmitted (the string WE pushed up), NOT to the live
+  // DOM: innerHTML does not round-trip cleanly (attribute/entity/whitespace
+  // normalization), so comparing to editorRef.innerHTML makes currentContent
+  // !== value true on every keystroke and would overwrite the contentEditable —
+  // resetting the cursor and dropping what the user just typed.
   useEffect(() => {
-    if (isInitialized && editorRef.current && !isUpdatingFromProp.current) {
-      const currentContent = editorRef.current.innerHTML
-      if (currentContent !== value && value !== undefined) {
-        // Save cursor position
-        const selection = window.getSelection()
-        const range = selection?.rangeCount ? selection.getRangeAt(0) : null
-
-        isUpdatingFromProp.current = true
-        editorRef.current.innerHTML = value || ''
-
-        // Restore cursor position if possible
-        if (range && selection) {
-          try {
-            selection.removeAllRanges()
-            selection.addRange(range)
-          } catch (e) {
-            // Ignore errors if range is no longer valid
-          }
-        }
-
-        setTimeout(() => {
-          isUpdatingFromProp.current = false
-        }, 0)
-      }
-    }
+    if (!isInitialized || !editorRef.current) return
+    if (value === lastEmitted.current) return
+    editorRef.current.innerHTML = value || ''
+    lastEmitted.current = value || ''
   }, [value, isInitialized])
 
   const handleInput = useCallback(() => {
     if (editorRef.current && !isUpdatingFromProp.current) {
       const newContent = editorRef.current.innerHTML
+      lastEmitted.current = newContent
       onChange(newContent)
     }
   }, [onChange])

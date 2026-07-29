@@ -84,6 +84,8 @@ const BUILTIN_SCANS: ScanDef[] = [
   { id: 'builtin-d1-gap', name: 'D1 Gap', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['d1-gap', 'parabolic', 'micro-cap'], group: 'mikes-scans/parabolic' },
   { id: 'builtin-d1-gap-wide', name: 'D1 Gap Wide', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['d1-gap-wide', 'parabolic', 'micro-cap'], group: 'mikes-scans/parabolic' },
   { id: 'builtin-real-d1-gap', name: 'Real D1 Gap', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['real-d1-gap'], group: 'real-d1-gap' },
+  { id: 'builtin-t30', name: 'T30', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['t30'], group: 't30' },
+  { id: 'builtin-real-d1-pm-gc', name: 'Real D1 PM G/C', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['real-d1-pm-gc'], group: 'real-d1-pm-gc' },
 ]
 
 // Tree structure: project folders with subfolder groups
@@ -95,6 +97,8 @@ const SCAN_TREE: { id: string; label: string; order: number; subfolders?: { id: 
   { id: 'og-scans', label: 'OG Scans', order: 1 },
   { id: 'standalone', label: 'Standalone', order: 2 },
   { id: 'real-d1-gap', label: 'Real D1 Gap', order: 3 },
+  { id: 't30', label: 'T30', order: 4 },
+  { id: 'real-d1-pm-gc', label: 'Real D1 PM G/C', order: 5 },
   { id: 'mikes-scans', label: "Mike's Scans", order: -1, subfolders: [
     { id: 'mean-reversion', label: 'Mean Reversion' },
     { id: 'parabolic', label: 'Parabolic' },
@@ -142,6 +146,8 @@ const BUILTIN_SPEC_MAP: Record<string, string> = {
   'builtin-d1-gap': 'd1-gap',
   'builtin-d1-gap-wide': 'd1-gap-wide',
   'builtin-real-d1-gap': 'real-d1-gap',
+  'builtin-t30': 't30',
+  'builtin-real-d1-pm-gc': 'real-d1-pm-gc',
 }
 
 // Scanners WITHOUT a YAML spec — these use the legacy SCAN_SCRIPTS param system (old ⚙ Edit panel).

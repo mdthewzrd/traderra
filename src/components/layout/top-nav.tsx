@@ -182,6 +182,11 @@ function NavInner() {
   const [mounted, setMounted] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   useEffect(() => setMounted(true), [])
+  const [activeGroup, setActiveGroup] = useState<string | null>(null)
+  useEffect(() => {
+    const g = NAV_GROUPS.find((grp) => grp.items.some((i) => isActive(pathname, i.href)))
+    if (g) setActiveGroup(g.name)
+  }, [pathname])
   if (!mounted) return null
   if (
     pathname === '/' ||
@@ -204,16 +209,21 @@ function NavInner() {
             <span className="text-lg font-bold text-primary">Traderra</span>
           </a>
 
-          {/* Desktop grouped nav: Traderra · Edge Dev · Charts(standalone) · Live */}
+          {/* Desktop main tabs: Traderra · Edge Dev · Charts(standalone) · Live.
+              A group tab sets activeGroup (no navigation); Charts clicks through. */}
           <div className="hidden md:flex items-center gap-0.5">
-            <NavGroupMenu group={NAV_GROUPS[0]} />
-            <NavGroupMenu group={NAV_GROUPS[1]} />
+            {NAV_GROUPS.map((group) => (
+              <button key={group.name} type="button" onClick={() => setActiveGroup(group.name)}
+                className={cn('flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap border',
+                  activeGroup === group.name ? 'bg-primary/20 text-primary border-primary/40' : 'text-[#888] hover:text-primary hover:bg-[#161616] border-transparent')}>
+                {group.name}
+              </button>
+            ))}
             <a href={CHARTS_ITEM.href}
               className={cn('flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap border',
                 isActive(pathname, CHARTS_ITEM.href) ? 'bg-primary/20 text-primary border-primary/40' : 'text-[#888] hover:text-primary hover:bg-[#161616] border-transparent')}>
               <CHARTS_ITEM.icon className="h-3.5 w-3.5" />{CHARTS_ITEM.name}
             </a>
-            <NavGroupMenu group={NAV_GROUPS[2]} />
           </div>
         </div>
 
@@ -246,6 +256,25 @@ function NavInner() {
           </button>
         </div>
       </nav>
+      {/* Row 2: persistent sub-nav bar — the active group's children. */}
+      {(() => {
+        const ag = NAV_GROUPS.find((g) => g.name === activeGroup)
+        if (!ag) return null
+        return (
+          <div className="hidden md:flex items-center gap-1 px-4 h-10 bg-[#0d0d0d] border-b border-[#1a1a1a] overflow-x-auto sticky top-14 z-30">
+            {ag.items.map((item) => {
+              const a = isActive(pathname, item.href)
+              return (
+                <a key={item.href} href={item.href}
+                  className={cn('flex items-center gap-1.5 px-3 py-1 rounded-md text-sm whitespace-nowrap transition-colors',
+                    a ? 'text-primary bg-primary/10' : 'text-[#999] hover:text-primary hover:bg-[#161616]')}>
+                  <item.icon className="h-3.5 w-3.5" />{item.name}
+                </a>
+              )
+            })}
+          </div>
+        )
+      })()}
       <MobileNav open={mobileOpen} onClose={() => setMobileOpen(false)} />
     </>
   )

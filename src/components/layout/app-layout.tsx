@@ -1,9 +1,6 @@
 'use client'
 
 import React from 'react'
-import { TopNavigation } from './top-nav'
-import { TraderraSubNav } from './traderra-sub-nav'
-import { useChatContext } from '@/contexts/TraderraContext'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -12,32 +9,22 @@ interface AppLayoutProps {
   pageClassName?: string
 }
 
+/**
+ * Main content shell for (main) pages.
+ *
+ * The unified grouped TopNav is mounted ONCE in the root layout (src/app/layout.tsx)
+ * and now shows on every non-landing/auth page, so AppLayout no longer renders its
+ * own nav bar or the legacy Traderra sub-nav. Content flows beneath the global nav.
+ */
 export function AppLayout({
   children,
   showPageHeader = false,
   pageHeaderContent,
   pageClassName = "min-h-screen"
 }: AppLayoutProps) {
-  const { isSidebarOpen: aiSidebarOpen, setIsSidebarOpen: setAiSidebarOpen } = useChatContext()
-
   return (
     <div className={`${pageClassName} studio-bg`} style={{ direction: 'ltr' }}>
-      {/* Top Navigation - Always extends to right edge, above Renata */}
-      <div className="fixed top-0 left-0 right-0 z-50 transition-all duration-300" style={{ direction: 'ltr' }}>
-        <div className="w-full">
-          <TopNavigation onAiToggle={() => setAiSidebarOpen(!aiSidebarOpen)} aiOpen={aiSidebarOpen} />
-        </div>
-      </div>
-
-      {/* Traderra Sub-Nav — always shown on every (main) page */}
-      <div className="fixed top-16 left-0 right-0 z-40 studio-surface border-b border-[#1a1a1a]" style={{ direction: 'ltr' }}>
-        <div className="w-full overflow-x-auto">
-          <TraderraSubNav />
-        </div>
-      </div>
-
-      {/* Main content (pageHeaderContent renders in-flow so it never overlaps the fixed bars) */}
-      <div className="flex w-full pt-36" style={{ direction: 'ltr' }}>
+      <div className="flex w-full pt-4" style={{ direction: 'ltr' }}>
         <main
           className="flex-1 overflow-x-hidden"
           style={{ direction: 'ltr' }}

@@ -9,26 +9,25 @@ export const DEFAULT_FIELDS = [
 ] as const
 
 // Seed DEFAULT_FIELDS for a (userId, databaseId) only if none exist yet.
-// Idempotent — returns the current field set afterwards. Used by the fields
-// GET route (lazy seed) and the databases POST route (seed on create).
+// Idempotent — no-ops if the database already has fields, never overwrites a
+// user's customized set. Used by the fields GET route (lazy seed) and the
+// databases POST route (seed on create). Note: the count-check + createMany is
+// not atomic, so concurrent first-opens could double-seed; this mirrors the
+// existing orphan-adoption race in ensureDatabases and is acceptable for a
+// single-user local-first app.
 export async function seedDefaultFields(userId: string, databaseId: string) {
   const existing = await prisma.corpusField.count({ where: { userId, databaseId } })
   if (existing > 0) return // never overwrite a user's customized set
 
-  const maxOrder = await prisma.corpusField.aggregate({
-    where: { userId, databaseId },
-    _max: { order: true },
-  })
-  let order = (maxOrder._max.order ?? -1) + 1
   await prisma.corpusField.createMany({
-    data: DEFAULT_FIELDS.map((f) => ({
+    data: DEFAULT_FIELDS.map((f, i) => ({
       userId,
       databaseId,
       name: f.name,
       type: f.type,
       options: f.options,
       colors: f.colors,
-      order: order++,
+      order: i,
     })),
   })
 }

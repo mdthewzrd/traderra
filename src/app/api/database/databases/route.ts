@@ -83,9 +83,12 @@ export async function POST(request: NextRequest) {
       })
     }
   } else {
-    // brand-new empty database -> seed the default columns
-    await seedDefaultFields(userId, newDb.id)
+    // brand-new empty database -> no source to copy; fields seeded below
   }
+
+  // Every new database gets default columns. No-op when fields were duplicated
+  // above (or the source already had them); seeds Personality + Notes otherwise.
+  await seedDefaultFields(userId, newDb.id)
 
   return NextResponse.json({ database: newDb })
 }

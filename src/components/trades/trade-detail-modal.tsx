@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { X, Calendar, Clock, DollarSign, TrendingUp, TrendingDown, Target, BarChart3, FileText, Star, Tag, Pencil, Save } from 'lucide-react'
+import { X, Calendar, Clock, DollarSign, TrendingUp, TrendingDown, Target, BarChart3, FileText, Star, Tag, Pencil, Save, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TradingChart } from '@/components/charts/trading-chart'
 import { useChatContext } from '@/contexts/TraderraContext'
@@ -26,6 +26,7 @@ interface TradeDetailModalProps {
     riskAmount?: number
     riskPercent?: number
     stopLoss?: number
+    tags?: string[]
     dailyReviewId?: string
   }
   isOpen: boolean
@@ -39,12 +40,17 @@ export function TradeDetailModal({ trade, isOpen, onClose, initialEditMode, onSa
   const [isEditMode, setIsEditMode] = useState(false)
   const [editedTrade, setEditedTrade] = useState(trade)
   const [isSaving, setIsSaving] = useState(false)
+  const [tags, setTags] = useState<string[]>(trade.tags ?? [])
+  const [tagInput, setTagInput] = useState('')
+  const [isSavingTags, setIsSavingTags] = useState(false)
 
   // Reset edit mode and edited trade when modal opens with new trade.
   // MUST be before the early return — hooks can't be conditional.
   React.useEffect(() => {
     setIsEditMode(!!initialEditMode)
     setEditedTrade(trade)
+    setTags(trade.tags ?? [])
+    setTagInput('')
   }, [trade.id, initialEditMode])
 
   if (!isOpen) return null
@@ -75,6 +81,7 @@ export function TradeDetailModal({ trade, isOpen, onClose, initialEditMode, onSa
         notes: editedTrade.notes,
         entryTime: editedTrade.entryTime,
         exitTime: editedTrade.exitTime,
+        tags,
       }
       const res = await fetch(`/api/trades/${trade.id}`, {
         method: 'PATCH',
@@ -92,6 +99,47 @@ export function TradeDetailModal({ trade, isOpen, onClose, initialEditMode, onSa
     } finally {
       setIsSaving(false)
     }
+  }
+
+  // Persist user tags immediately via a targeted PATCH (works in view + edit mode).
+  const persistTags = async (nextTags: string[]) => {
+    setIsSavingTags(true)
+    try {
+      const res = await fetch(`/api/trades/${trade.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tags: nextTags }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `Save failed (${res.status})`)
+      }
+      onSaved?.()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to save tags')
+      // Revert to last known good on failure.
+      setTags(trade.tags ?? [])
+    } finally {
+      setIsSavingTags(false)
+    }
+  }
+
+  const handleAddTag = () => {
+    const value = tagInput.trim()
+    if (!value || tags.includes(value)) {
+      setTagInput('')
+      return
+    }
+    const nextTags = [...tags, value]
+    setTags(nextTags)
+    setTagInput('')
+    persistTags(nextTags)
+  }
+
+  const handleRemoveTag = (tag: string) => {
+    const nextTags = tags.filter(t => t !== tag)
+    setTags(nextTags)
+    persistTags(nextTags)
   }
 
   const handleFieldChange = (field: string, value: any) => {
@@ -688,12 +736,49 @@ export function TradeDetailModal({ trade, isOpen, onClose, initialEditMode, onSa
                         <Tag className="h-3 w-3 mr-1" />
                         {netPnL >= 0 ? 'Winner' : 'Loser'}
                       </span>
+                      {tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-[#1a1a1a] studio-text border studio-border"
+                        >
+                          <Tag className="h-3 w-3 mr-1" />
+                          {tag}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveTag(tag)}
+                            disabled={isSavingTags}
+                            className="ml-1 hover:text-red-400 disabled:opacity-50"
+                            aria-label={`Remove tag ${tag}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
                     </div>
-                    <input
-                      type="text"
-                      placeholder="Add new tag..."
-                      className="w-full p-2 bg-[#0a0a0a] studio-border rounded focus:ring-2 focus:ring-primary focus:border-primary text-sm"
-                    />
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={tagInput}
+                        onChange={(e) => setTagInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            handleAddTag()
+                          }
+                        }}
+                        placeholder="Add new tag..."
+                        className="flex-1 p-2 bg-[#0a0a0a] studio-border rounded focus:ring-2 focus:ring-primary focus:border-primary text-sm studio-text"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddTag}
+                        disabled={isSavingTags || !tagInput.trim()}
+                        className="inline-flex items-center gap-1 px-3 py-2 rounded bg-primary text-black text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity flex-shrink-0"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Create
+                      </button>
+                    </div>
                   </div>
                 </div>
 

@@ -241,7 +241,8 @@ export async function POST(request: Request) {
       stopLoss: trade.stopLoss,
       rMultiple: trade.rMultiple,
       mfe: trade.mfe,
-      mae: trade.mae
+      mae: trade.mae,
+      tags: trade.tags ?? []
     }))
 
     await prisma.trade.createMany({

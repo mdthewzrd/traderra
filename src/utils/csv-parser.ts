@@ -68,6 +68,7 @@ export interface TraderraTrade {
   mae?: number
   broker?: string
   brokerFormat?: string
+  tags?: string[]
 }
 
 // Broker format types

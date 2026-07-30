@@ -293,6 +293,9 @@ model Trade {
   mfe          Float?
   mae          Float?
 
+  // User-applied tags (journal categorization)
+  tags         String[] @default([])
+
   // Parent/child grouping: per-ticker-per-day summary (parent) + round-trip exec trades (children)
   parentId     String?
   parent       Trade?   @relation("TradeChildren", fields: [parentId], references: [id], onDelete: Cascade)

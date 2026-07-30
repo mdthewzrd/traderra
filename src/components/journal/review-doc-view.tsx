@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ChevronLeft, Trash2, Loader2, LayoutTemplate, Paperclip, Plus, X, Search } from 'lucide-react'
+import { ChevronLeft, Trash2, Loader2, LayoutTemplate, Paperclip, Plus, X, Search, Pencil } from 'lucide-react'
 import { TradingChart } from '@/components/charts/trading-chart'
 
 interface ReviewDocViewProps {
@@ -208,6 +208,13 @@ function SectionField({ label, hint, section, onChange, onImageClick, allowTrade
   const [newSetupName, setNewSetupName] = useState('')
   const [newBias, setNewBias] = useState<Bias | ''>('')
   const tickerRef = useRef<HTMLInputElement>(null)
+  // Edit-in-place state (mirrors the add-form field set, one idea at a time)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [edTicker, setEdTicker] = useState('')
+  const [edThesis, setEdThesis] = useState('')
+  const [edSetupId, setEdSetupId] = useState('')
+  const [edSetupName, setEdSetupName] = useState('')
+  const [edBias, setEdBias] = useState<Bias | ''>('')
 
   const ideas = section.tradeIdeas ?? []
   const addIdea = () => {
@@ -220,6 +227,20 @@ function SectionField({ label, hint, section, onChange, onImageClick, allowTrade
   const removeIdea = (id: string) => {
     onChange({ ...section, tradeIdeas: ideas.filter((x) => x.id !== id) })
   }
+  const resetEditDraft = () => {
+    setEditingId(null); setEdTicker(''); setEdThesis(''); setEdSetupId(''); setEdSetupName(''); setEdBias('')
+  }
+  const startEdit = (idea: TradeIdea) => {
+    setEditingId(idea.id); setEdTicker(idea.ticker); setEdThesis(idea.thesis); setEdSetupId(idea.setupId ?? ''); setEdSetupName(idea.setupName ?? ''); setEdBias(idea.bias ?? '')
+  }
+  const saveEdit = () => {
+    const t = edTicker.trim().toUpperCase()
+    if (!t) { resetEditDraft(); return }
+    const setup = playbooks?.find((p) => p.id === edSetupId)
+    onChange({ ...section, tradeIdeas: ideas.map((x) => x.id === editingId ? { ...x, ticker: t, thesis: edThesis.trim(), setupId: edSetupId || undefined, setupName: setup?.name ?? edSetupName ?? undefined, bias: (edBias || undefined) as Bias | undefined } : x) })
+    resetEditDraft()
+  }
+  const cancelEdit = () => resetEditDraft()
 
   // Auto-grow: each field sizes to its own content so a one-liner is compact
   // and a long block expands to show everything (no internal scrolling).
@@ -280,6 +301,30 @@ function SectionField({ label, hint, section, onChange, onImageClick, allowTrade
         <div className="space-y-1.5">
           {/* Trade idea list — gold ticker pills + thesis, stacked bullets */}
           {ideas.map((idea) => (
+            idea.id === editingId ? (
+              <div key={idea.id} className="flex flex-col gap-2 px-3 py-2 rounded-lg border" style={{ background: C.SURFACE, borderColor: C.GOLD }}>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <input autoFocus value={edTicker} onChange={(e) => setEdTicker(e.target.value.toUpperCase().slice(0, 8))} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && edTicker.trim()) { e.preventDefault(); saveEdit() } if (e.key === 'Escape') cancelEdit() }} placeholder="TICKER" className="w-24 px-2 py-1.5 text-sm font-bold uppercase rounded-lg focus:outline-none" style={{ background: '#0a0a0a', border: '1px solid rgba(212,175,55,0.4)', color: C.GOLD }} />
+                  <select value={edBias} onChange={(e) => setEdBias(e.target.value as Bias | '')} className="px-2 py-1.5 text-sm rounded-lg focus:outline-none" style={{ background: '#0a0a0a', border: '1px solid ' + C.BORDER, color: C.TEXT }}>
+                    <option value="">Bias…</option>
+                    <option value="Long">Long</option>
+                    <option value="Short">Short</option>
+                    <option value="Neutral">Neutral</option>
+                  </select>
+                  <SetupPicker
+                    value={edSetupId}
+                    onChange={(id, name) => { setEdSetupId(id); setEdSetupName(name || '') }}
+                    playbooks={playbooks ?? []}
+                  />
+                </div>
+                <textarea value={edThesis} onChange={(e) => setEdThesis(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && edTicker.trim()) { e.preventDefault(); saveEdit() } if (e.key === 'Escape') cancelEdit() }} placeholder="Thesis / level / trigger — multi-line OK" rows={3} className="w-full px-2 py-1.5 text-sm rounded-lg leading-relaxed resize-none focus:outline-none" style={{ background: '#0a0a0a', border: '1px solid ' + C.BORDER, color: C.TEXT, minHeight: '4rem' }} />
+                <div className="text-[11px]" style={{ color: C.MUTED }}>Edit — <kbd className="px-1 rounded bg-[#1a1a1a] border border-[#2a2a2a]">Enter</kbd> to save · <kbd className="px-1 rounded bg-[#1a1a1a] border border-[#2a2a2a]">Esc</kbd> to cancel</div>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={saveEdit} disabled={!edTicker.trim()} className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-40" style={{ background: C.GOLD, color: '#0a0a0a' }}>Save</button>
+                  <button type="button" onClick={cancelEdit} className="px-2 py-1.5 text-xs studio-muted hover:text-studio-text">Cancel</button>
+                </div>
+              </div>
+            ) : (
             <div key={idea.id} className="flex items-start gap-2 px-3 py-2 rounded-lg border group" style={{ background: '#0a0a0a', borderColor: C.BORDER }}>
               <div className="flex flex-col gap-1 shrink-0">
                 <span className="px-1.5 py-0.5 rounded text-xs font-bold tracking-wide" style={{ background: 'rgba(212,175,55,0.12)', color: C.GOLD, border: '1px solid rgba(212,175,55,0.3)' }}>{idea.ticker}</span>
@@ -295,8 +340,12 @@ function SectionField({ label, hint, section, onChange, onImageClick, allowTrade
                 )}
                 <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: C.TEXT }}>{idea.thesis || <span style={{ color: C.MUTED }}>—</span>}</div>
               </div>
-              <button type="button" onClick={() => removeIdea(idea.id)} className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 shrink-0" style={{ color: '#9ca3af' }} title="Remove"><X className="h-3.5 w-3.5" /></button>
+              <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button type="button" onClick={() => startEdit(idea)} className="p-0.5" style={{ color: '#9ca3af' }} title="Edit"><Pencil className="h-3.5 w-3.5" /></button>
+                <button type="button" onClick={() => removeIdea(idea.id)} className="p-0.5" style={{ color: '#9ca3af' }} title="Remove"><X className="h-3.5 w-3.5" /></button>
+              </div>
             </div>
+            )
           ))}
           {/* Inline add form */}
           {showIdeaForm ? (

@@ -450,5 +450,41 @@
       }
     },
     "createdAt": "2026-07-13T14:26:48.317Z"
+  },
+  {
+    "id": "gc-gap-entry",
+    "name": "G&C Gap Entry · Dilution Fade Short · Intraday",
+    "engine": "gc-gap-entry",
+    "meta": {
+      "symbol": "Dilution Universe",
+      "tf": "5",
+      "from": "2025-08-08",
+      "to": "2026-07-24"
+    },
+    "summary": {
+      "trades": 54,
+      "wins": 23,
+      "winRate": 42.6,
+      "totR": 86.96,
+      "profitFactor": 3.871,
+      "longs": 0,
+      "shorts": 54,
+      "avgR": 1.61,
+      "greenDays": 23,
+      "greenPct": 48.9,
+      "tradingDays": 47,
+      "perDay": 1.15,
+      "maxDD": 5.1,
+      "avgDayR": 1.85,
+      "bestDay": {
+        "date": "2025-10-03",
+        "r": 14.65
+      },
+      "worstDay": {
+        "date": "2026-03-06",
+        "r": -2
+      }
+    },
+    "createdAt": "2026-07-30T22:23:43.944Z"
   }
 ]

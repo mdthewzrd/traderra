@@ -1,0 +1,232 @@
+{
+  "id": "gc-johnny-pure-real",
+  "file": "",
+  "name": "G&C · Pure Johnny · Dilution 20-SMA × Exec-Pop Short · REALISTIC FILLS · Intraday",
+  "engine": "gc-johnny-pure-real",
+  "meta": {
+    "intraday": true,
+    "symbol": "Johnny Dilution Universe (rs-offering-master)",
+    "tf": "2",
+    "from": "2025-01-30",
+    "to": "2026-03-13",
+    "strategy": "Johnny G&C (video oPWLBAB-L6w): dilution gap-up + failed-gap history + daily SMA(20) extension → 20-SMA backside breakdown (1m/5m, deviation-branched) → SHORT the pop [2m high ≥ EMA9+ATR9×0.5, bar-break low[i]<low[i-1] → short @ low[i]] → risk=prev-high/HOD, target=5m 200-EMA or EOD. 8-EMA DROPPED (misattribution). REQ-326 realism: entry @ next-bar open, stop+slippage, min-risk 0.5×ATR9.",
+    "universe": "rs-offering-master dilution names + gap≥5%&gap_atr≥0.5 + daily SMA(20) extension (D-1 close−SMA20)/ATR≥1.5 + ≥1 failed gap in 20d + D-1 no ≥15% move (close-to-close AND daily range).. Faithful to oPWLBAB-L6w.",
+    "params": {
+      "gap_min_pct": 5,
+      "gap_min_atr": 0.5,
+      "sma20_ext_min_atr": 1.5,
+      "failed_gap_lookback": 20,
+      "failed_gap_min": 1,
+      "devThresh_atr": 0.5,
+      "popBandMult": 0.5,
+      "popTimeoutBars": 20,
+      "sizeFactor5m": 0.5,
+      "minRisk": "0.5×ATR9 [REQ-326 realism]",
+      "riskPerTrade": 100,
+      "realism": true,
+      "slippagePct": 0.0025,
+      "d1_move_max": 0.15
+    },
+    "note": "EXPLORATORY (not playbook). REQ-326 REALISM re-run of gc-johnny-pure: entry @ next-bar open (not the lookahead low[i]); stop fill = risk×1.0025 slippage (or bar open on a gap-through); min-risk floor = 0.5×ATR9 (replaces the $0.05 fake-R floor). The daily scan ALSO drops candidates whose D-1 already moved ≥15% close-to-close or range (D0 must be the FIRST day of movement). Honest de-inflated R. See gc-scan-backtest-findings.md §9."
+  },
+  "summary": {
+    "trades": 9,
+    "wins": 5,
+    "winRate": 55.6,
+    "totR": 5.18,
+    "profitFactor": 2.159,
+    "longs": 0,
+    "shorts": 9,
+    "avgR": 0.58,
+    "greenDays": 5,
+    "greenPct": 55.6,
+    "tradingDays": 9,
+    "perDay": 1.0,
+    "maxDD": 1.36,
+    "avgDayR": 0.58,
+    "bestDay": {
+      "date": "2026-01-29",
+      "r": 6.32
+    },
+    "worstDay": {
+      "date": "2026-03-13",
+      "r": -1.26
+    }
+  },
+  "byDay": {
+    "2025-01-30": {
+      "r": -1.04,
+      "trades": 1,
+      "pnl": -103.62
+    },
+    "2025-08-08": {
+      "r": 0.79,
+      "trades": 1,
+      "pnl": 79.05
+    },
+    "2025-09-02": {
+      "r": -1.11,
+      "trades": 1,
+      "pnl": -110.74
+    },
+    "2025-09-19": {
+      "r": 1.25,
+      "trades": 1,
+      "pnl": 124.89
+    },
+    "2026-01-14": {
+      "r": 1.07,
+      "trades": 1,
+      "pnl": 107.37
+    },
+    "2026-01-27": {
+      "r": -1.06,
+      "trades": 1,
+      "pnl": -106.09
+    },
+    "2026-01-29": {
+      "r": 6.32,
+      "trades": 1,
+      "pnl": 631.8
+    },
+    "2026-03-03": {
+      "r": 0.22,
+      "trades": 1,
+      "pnl": 22.35
+    },
+    "2026-03-13": {
+      "r": -1.26,
+      "trades": 1,
+      "pnl": -125.87
+    }
+  },
+  "trades": [
+    {
+      "id": "short-CELZ-20250130",
+      "side": "short",
+      "ticker": "CELZ",
+      "rsDate": "2025-01-30",
+      "openDate": "2025-01-30 09:56",
+      "exitDate": "2025-01-30 10:54",
+      "entry": 3.12,
+      "stop": 3.3515,
+      "exit": 3.3599,
+      "exitLabel": "STOP",
+      "r": -1.04,
+      "pnl": -103.62
+    },
+    {
+      "id": "short-CELZ-20250808",
+      "side": "short",
+      "ticker": "CELZ",
+      "rsDate": "2025-08-08",
+      "openDate": "2025-08-08 10:20",
+      "exitDate": "2025-08-08 11:02",
+      "entry": 3.55,
+      "stop": 3.77,
+      "exit": 3.3761,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 0.79,
+      "pnl": 79.05
+    },
+    {
+      "id": "short-MOBX-20250902",
+      "side": "short",
+      "ticker": "MOBX",
+      "rsDate": "2025-09-02",
+      "openDate": "2025-09-02 09:56",
+      "exitDate": "2025-09-02 12:54",
+      "entry": 13.674,
+      "stop": 14.0,
+      "exit": 14.035,
+      "exitLabel": "STOP",
+      "r": -1.11,
+      "pnl": -110.74
+    },
+    {
+      "id": "short-PAPL-20250919",
+      "side": "short",
+      "ticker": "PAPL",
+      "rsDate": "2025-09-19",
+      "openDate": "2025-09-19 09:46",
+      "exitDate": "2025-09-19 10:44",
+      "entry": 6.6068,
+      "stop": 6.86,
+      "exit": 6.2906,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 1.25,
+      "pnl": 124.89
+    },
+    {
+      "id": "short-BNAI-20260114",
+      "side": "short",
+      "ticker": "BNAI",
+      "rsDate": "2026-01-14",
+      "openDate": "2026-01-14 10:36",
+      "exitDate": "2026-01-14 15:58",
+      "entry": 6.0703,
+      "stop": 6.35,
+      "exit": 5.77,
+      "exitLabel": "EOD",
+      "r": 1.07,
+      "pnl": 107.37
+    },
+    {
+      "id": "short-PHGE-20260127",
+      "side": "short",
+      "ticker": "PHGE",
+      "rsDate": "2026-01-27",
+      "openDate": "2026-01-27 10:04",
+      "exitDate": "2026-01-27 10:54",
+      "entry": 7.0001,
+      "stop": 7.3,
+      "exit": 7.3182,
+      "exitLabel": "STOP",
+      "r": -1.06,
+      "pnl": -106.09
+    },
+    {
+      "id": "short-AGIG-20260129",
+      "side": "short",
+      "ticker": "AGIG",
+      "rsDate": "2026-01-29",
+      "openDate": "2026-01-29 09:58",
+      "exitDate": "2026-01-29 10:26",
+      "entry": 3.78,
+      "stop": 3.85,
+      "exit": 3.3377,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 6.32,
+      "pnl": 631.8
+    },
+    {
+      "id": "short-LRMR-20260303",
+      "side": "short",
+      "ticker": "LRMR",
+      "rsDate": "2026-03-03",
+      "openDate": "2026-03-03 10:00",
+      "exitDate": "2026-03-03 10:02",
+      "entry": 5.2882,
+      "stop": 5.385,
+      "exit": 5.2666,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 0.22,
+      "pnl": 22.35
+    },
+    {
+      "id": "short-AIFF-20260313",
+      "side": "short",
+      "ticker": "AIFF",
+      "rsDate": "2026-03-13",
+      "openDate": "2026-03-13 10:08",
+      "exitDate": "2026-03-13 10:14",
+      "entry": 2.05,
+      "stop": 2.07,
+      "exit": 2.0752,
+      "exitLabel": "STOP",
+      "r": -1.26,
+      "pnl": -125.87
+    }
+  ],
+  "createdAt": "2026-07-31T11:39:02.000Z"
+}

@@ -1978,7 +1978,7 @@ export default function BacktestPage() {
   const [grades, setGrades] = useState<Record<string, string>>({})
   const [gradeFilter, setGradeFilter] = useState<string>('')  // '', 'A+', 'A', 'B', 'C'
   // ── Tag filter (organization across the scan's annotated signals) ──
-  const [tagFilter, setTagFilter] = useState<string>('')
+  const [tagFilters, setTagFilters] = useState<Set<string>>(new Set())
   const [scanAnnotations, setScanAnnotations] = useState<{ ticker: string; signalDate: string; tags: string[] }[]>([])
   const refreshAnnotations = useCallback(() => {
     if (!selectedScan) return
@@ -1995,12 +1995,13 @@ export default function BacktestPage() {
     return m
   }, [scanAnnotations])
   // set of ticker|date keys that carry the active tag
+  // multi-select OR: a signal matches if ANY of its tags is selected
   const tagMatchKeys = useMemo(() => {
-    if (!tagFilter) return null
+    if (tagFilters.size === 0) return null
     const s = new Set<string>()
-    for (const a of scanAnnotations) if (a.tags.includes(tagFilter)) s.add(`${a.ticker}|${a.signalDate}`)
+    for (const a of scanAnnotations) if (a.tags.some(t => tagFilters.has(t))) s.add(`${a.ticker}|${a.signalDate}`)
     return s
-  }, [tagFilter, scanAnnotations])
+  }, [tagFilters, scanAnnotations])
   const toggleGrade = (key: string) => {
     setGrades(prev => {
       const current = prev[key] || ''
@@ -2774,16 +2775,16 @@ export default function BacktestPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', padding: '5px 8px', borderBottom: `1px solid ${T.BORDER}`, background: dark ? 'rgba(212,175,55,0.03)' : 'rgba(212,175,55,0.05)' }}>
             <span style={{ color: T.GOLD, fontSize: 8, fontWeight: 800, letterSpacing: 0.5, marginRight: 2 }}>TAGS</span>
             {Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).map(([t, n]) => {
-              const active = tagFilter === t
+              const active = tagFilters.has(t)
               const tc = /HELD|LONG/i.test(t) ? T.TEAL : /CRAP|FAIL|SHORT/i.test(t) ? T.RED : /WATCH/i.test(t) ? T.GOLD : T.TEXT2
-              return <button key={t} onClick={() => setTagFilter(active ? '' : t)} title={`filter signals tagged ${t}`}
+              return <button key={t} onClick={() => setTagFilters(prev => { const next = new Set(prev); next.has(t) ? next.delete(t) : next.add(t); return next })} title={`filter: ${t} (multi-select — click several)`}
                 style={{ fontSize: 8, fontWeight: 700, padding: '2px 6px', borderRadius: 3, cursor: 'pointer',
                   border: `1px solid ${active ? tc : T.BORDER}`, background: active ? tc : 'transparent',
                   color: active ? '#000' : tc, opacity: active ? 1 : 0.7 }}>
                 {t} <span style={{ opacity: 0.7 }}>{n}</span>
               </button>
             })}
-            {tagFilter && <button onClick={() => setTagFilter('')} style={{ fontSize: 8, color: T.MUTED, background: 'none', border: 'none', cursor: 'pointer', marginLeft: 2 }}>✕ clear</button>}
+            {tagFilters.size > 0 && <button onClick={() => setTagFilters(new Set())} style={{ fontSize: 8, color: T.MUTED, background: 'none', border: 'none', cursor: 'pointer', marginLeft: 2 }}>✕ clear ({tagFilters.size})</button>}
           </div>
         )}
         {/* ── Signal Header + Filter Button ── */}

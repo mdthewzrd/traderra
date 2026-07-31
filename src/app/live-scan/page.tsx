@@ -50,7 +50,7 @@ interface Hit {
 
 interface ScanDef { spec: string; label: string; color: string }
 interface GroupDef {
-  key: 'day1s' | 'backside' | 'frontside' | 'gc'
+  key: 'day1s' | 'backside' | 'frontside' | 'gc' | 'rs'
   label: string
   accent: string
   scans: ScanDef[]
@@ -86,6 +86,12 @@ const GROUPS: GroupDef[] = [
     key: 'gc', label: 'D1 PM G&C', accent: '#ef4444',
     scans: [
       { spec: 'real-d1-pm-gc', label: 'G&C', color: '#ef4444' },
+    ],
+  },
+  {
+    key: 'rs', label: 'R/S Long', accent: '#10b981',
+    scans: [
+      { spec: 'rs-long', label: 'R/S Long', color: '#10b981' },
     ],
   },
 ]
@@ -306,6 +312,7 @@ export default function LiveScanPage() {
   // so the G&C Potentials tab is never blank on cold load. day1s/backside/
   // frontside keep the shared eodDate (their live merge keys on date >= today).
   const [gcEodDate, setGcEodDate] = useState<string>(todayStr())
+  const [rsEodDate, setRsEodDate] = useState<string>(todayStr())
   const [validDate, setValidDate] = useState<string>(todayStr())
   const [recentFrom, setRecentFrom] = useState<string>(shiftDays(todayStr(), -14))
   const [recentTo, setRecentTo] = useState<string>(todayStr())
@@ -534,6 +541,20 @@ export default function LiveScanPage() {
     const maxDate = [...dates].filter(d => d <= today).sort().pop()
     if (maxDate && maxDate !== gcEodDate) setGcEodDate(maxDate)
   }, [resultsVersion, liveVersion, eodHitsFor, specResults, gcEodDate])
+
+  // Never-empty: land the R/S Long Potentials tab on the most recent rs-long
+  // date (DB base-spec results) so the panel is never blank on load.
+  useEffect(() => {
+    if (eodHitsFor('rs', todayStr()).length > 0) return
+    const dates = new Set<string>()
+    for (const x of (specResults.get('rs-long') || [])) {
+      const d = x.date ? String(x.date).slice(0, 10) : ''
+      if (d) dates.add(d)
+    }
+    const today = todayStr()
+    const maxDate = [...dates].filter(d => d <= today).sort().pop()
+    if (maxDate && maxDate !== rsEodDate) setRsEodDate(maxDate)
+  }, [resultsVersion, eodHitsFor, specResults, rsEodDate])
 
   const validHitsFor = useCallback((groupKey: string, date: string) => {
     const today = todayStr()
@@ -769,7 +790,7 @@ export default function LiveScanPage() {
     const isExp = expanded.has(group.key)
     const toggle = () => setExpanded(prev => { const n = new Set(prev); n.has(group.key) ? n.delete(group.key) : n.add(group.key); return n })
 
-    const activeTab = tab[group.key] || 'valid'
+    const activeTab = tab[group.key] || (group.key === 'gc' || group.key === 'rs' ? 'eod' : 'valid')
     let hits: Hit[] = []
     let showValid = false
     let showDate = false
@@ -780,6 +801,7 @@ export default function LiveScanPage() {
     // = spec_name), so source the list from eodHitsFor (not potentialHitsFor,
     // which reads -potential variants no poller pushes for this scan).
     if (group.key === 'gc') hits = eodHitsFor('gc', gcEodDate)
+    else if (group.key === 'rs') hits = eodHitsFor('rs', rsEodDate)
     else if (activeTab === 'eod') hits = potentialHitsFor(group.key, eodDate)
     else if (activeTab === 'valid') {
       hits = group.key === 'day1s' ? validHitsFor(group.key, validDate) : validRadarHitsFor(group.key, validDate)
@@ -798,7 +820,7 @@ export default function LiveScanPage() {
               // day1s potentials box shows -potential + confirmed-valid (base spec).
               // backside/frontside potentials box shows only -potential (valids are on
               // the Valid tab).
-              const wantSpecs = group.key === 'gc' ? new Set([s.spec])
+              const wantSpecs = (group.key === 'gc' || group.key === 'rs') ? new Set([s.spec])
                 : isPotentialView
                 ? (group.key === 'day1s' ? new Set([s.spec + '-potential', s.spec]) : new Set([s.spec + '-potential']))
                 : new Set([s.spec])
@@ -827,8 +849,8 @@ export default function LiveScanPage() {
         <CardHeader title={group.label} accent={group.accent} count={hits.length} onExpand={toggle} expanded={isExp} />
         {/* tab bar */}
         <div style={{ display: 'flex', borderBottom: '1px solid #1f2937' }}>
-          {((group.key === 'gc' ? ['eod'] : ['eod', 'valid', 'recent']) as Array<'eod' | 'valid' | 'recent'>).map(t => {
-            const label = t === 'eod' ? (group.key === 'day1s' || group.key === 'gc' ? 'Potentials' : 'EOD') : t === 'valid' ? 'Valid' : 'Recent'
+          {(((group.key === 'gc' || group.key === 'rs') ? ['eod'] : ['eod', 'valid', 'recent']) as Array<'eod' | 'valid' | 'recent'>).map(t => {
+            const label = t === 'eod' ? (group.key === 'day1s' || group.key === 'gc' || group.key === 'rs' ? 'Potentials' : 'EOD') : t === 'valid' ? 'Valid' : 'Recent'
             const live = t === 'valid' && isLive
             return (
               <button key={t} onClick={() => setTab(p => ({ ...p, [group.key]: t }))}
@@ -841,7 +863,7 @@ export default function LiveScanPage() {
         </div>
         {/* date nav per tab */}
         <div style={{ padding: '4px 12px', borderBottom: '1px solid #1f2937', display: 'flex', justifyContent: 'flex-end', minHeight: 30, alignItems: 'center' }}>
-          {activeTab === 'eod' && <DateNav date={group.key === 'gc' ? gcEodDate : eodDate} setDate={group.key === 'gc' ? setGcEodDate : setEodDate} />}
+          {activeTab === 'eod' && <DateNav date={group.key === 'gc' ? gcEodDate : group.key === 'rs' ? rsEodDate : eodDate} setDate={group.key === 'gc' ? setGcEodDate : group.key === 'rs' ? setRsEodDate : setEodDate} />}
           {activeTab === 'valid' && <DateNav date={validDate} setDate={setValidDate} />}
           {activeTab === 'recent' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#9ca3af' }}>

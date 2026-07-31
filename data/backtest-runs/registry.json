@@ -561,5 +561,42 @@
       }
     },
     "createdAt": "2026-07-31T00:57:31.000Z"
+  },
+  {
+    "id": "gc-johnny-pure-real",
+    "name": "G&C · Pure Johnny · Dilution 20-SMA × Exec-Pop Short · REALISTIC FILLS · Intraday",
+    "engine": "gc-johnny-pure-real",
+    "meta": {
+      "intraday": true,
+      "symbol": "Johnny Dilution Universe (rs-offering-master)",
+      "tf": "2",
+      "from": "2025-01-30",
+      "to": "2026-03-13"
+    },
+    "summary": {
+      "trades": 9,
+      "wins": 5,
+      "winRate": 55.6,
+      "totR": 5.18,
+      "profitFactor": 2.159,
+      "longs": 0,
+      "shorts": 9,
+      "avgR": 0.58,
+      "greenDays": 5,
+      "greenPct": 55.6,
+      "tradingDays": 9,
+      "perDay": 1.0,
+      "maxDD": 1.36,
+      "avgDayR": 0.58,
+      "bestDay": {
+        "date": "2026-01-29",
+        "r": 6.32
+      },
+      "worstDay": {
+        "date": "2026-03-13",
+        "r": -1.26
+      }
+    },
+    "createdAt": "2026-07-31T11:39:02.000Z"
   }
 ]

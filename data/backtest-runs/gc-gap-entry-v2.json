@@ -9,8 +9,8 @@
     "tf": "2",
     "from": "2025-01-06",
     "to": "2026-07-30",
-    "strategy": "D1-Gap parabolic universe → calcExecSignals pop-short (bear-cross→pop→bar-break SHORT@low[i]; cover 30% @2m EMA20-ATR20*2; cover-all @5m EMA20-ATR20*2; stop=swingHigh(10))",
-    "universe": "D1-Gap criteria (gap+pm_high ≥+50%, open≥prev_high+30%, pm_vol≥5M, prev_close≥$0.75, no 15% D-1/D-2 close-to-close move, EMA200≤0.80) + SMA(20) extension enrichment",
+    "strategy": "D1-Gap parabolic universe → calcExecSignals pop-short (bear-cross→pop→bar-break; cover 30% @2m EMA20-ATR20*2, cover-all @5m EMA20-ATR20*2; stop=swingHigh(10))",
+    "universe": "D1-Gap criteria (gap+pm_high ≥+50%, open≥prev_high+30%, pm_vol≥5M, prev_close≥$0.75, no 15% D-1/D-2 move, EMA200≤0.80) + SMA(20) extension",
     "params": {
       "pm_high_min": 0.5,
       "gap_min": 0.5,
@@ -19,36 +19,36 @@
       "prev_close_min": 0.75,
       "multiday_move_max": 0.15,
       "ema_beaten_ratio": 0.8,
-      "minRisk": "$0.02 [ASSUMPTION — TUNING TARGET]",
+      "minRisk": "0.02 [ASSUMPTION]",
       "riskPerTrade": 100,
       "recycleQty": 0.3,
       "swingLookback": 10,
       "popTimeoutBars": 20
     },
-    "note": "EXPLORATORY (not playbook). Entry = traderra/src/lib/charts/exec-signals.ts calcExecSignals replicated verbatim as a backtest. ⚠ R-MAGNITUDE INFLATED BY TIGHT STOPS: raw avgR 2.91/PF 6.611 dominated by sub-1% stops (best R=111, TSVT 0.4% stop). WIN RATE IS THE TRUSTWORTHY METRIC — it holds 62-66% across every stop-floor cut (1/2/3/5%). Honest adjusted view (stop≥2% of price): n=164, win 65.9%, avgR 1.87, PF 6.55. Gap-skip slippage NOT modeled (fill-at-stop = best case). Tuning target: replace $0.02 minRisk with an ATR-fraction floor. See edge-dev/docs/research/gc-scan-backtest-findings.md."
+    "note": "EXPLORATORY (not playbook). Entry = traderra/src/lib/charts/exec-signals.ts calcExecSignals replicated as a backtest. R-magnitude inflated by tight swingHigh(10) stops on microcaps; gap-skip slippage NOT modeled (fill-at-stop = best case). Scale-out R = 30% recycle + 70% cover/stop. See edge-dev/docs/research/gc-scan-backtest-findings.md."
   },
   "summary": {
     "trades": 255,
     "wins": 175,
     "winRate": 68.6,
-    "totR": 741.27,
-    "profitFactor": 6.611,
+    "totR": 711.01,
+    "profitFactor": 6.702,
     "longs": 0,
     "shorts": 255,
-    "avgR": 2.91,
+    "avgR": 2.79,
     "greenDays": 136,
     "greenPct": 70.8,
     "tradingDays": 192,
     "perDay": 1.33,
-    "maxDD": 28.13,
-    "avgDayR": 3.86,
+    "maxDD": 20.63,
+    "avgDayR": 3.7,
     "bestDay": {
       "date": "2025-03-11",
-      "r": 111
+      "r": 77.63
     },
     "worstDay": {
       "date": "2026-06-08",
-      "r": -24.5
+      "r": -17
     }
   },
   "byDay": {
@@ -93,9 +93,9 @@
       "pnl": -67.8
     },
     "2025-02-05": {
-      "r": 3.5,
+      "r": 3.65,
       "trades": 1,
-      "pnl": 350
+      "pnl": 365
     },
     "2025-02-06": {
       "r": -1.84,
@@ -143,9 +143,9 @@
       "pnl": 1146.7
     },
     "2025-03-11": {
-      "r": 111,
+      "r": 77.625,
       "trades": 1,
-      "pnl": 11100
+      "pnl": 7762.5
     },
     "2025-03-20": {
       "r": -0.131,
@@ -158,9 +158,9 @@
       "pnl": 165.2
     },
     "2025-03-25": {
-      "r": 2.511,
+      "r": 1.911,
       "trades": 2,
-      "pnl": 251.1
+      "pnl": 191.1
     },
     "2025-03-26": {
       "r": -0.126,
@@ -168,9 +168,9 @@
       "pnl": -12.6
     },
     "2025-03-27": {
-      "r": 3.4,
+      "r": 2.65,
       "trades": 1,
-      "pnl": 340
+      "pnl": 265
     },
     "2025-04-07": {
       "r": 0.6,
@@ -283,9 +283,9 @@
       "pnl": 121.3
     },
     "2025-06-03": {
-      "r": -0.51,
+      "r": -0.647,
       "trades": 1,
-      "pnl": -51
+      "pnl": -64.65
     },
     "2025-06-04": {
       "r": 0.076,
@@ -378,9 +378,9 @@
       "pnl": -889
     },
     "2025-07-17": {
-      "r": 9.769,
+      "r": 9.037,
       "trades": 2,
-      "pnl": 976.9
+      "pnl": 903.7
     },
     "2025-07-18": {
       "r": 6.89,
@@ -393,9 +393,9 @@
       "pnl": 1191
     },
     "2025-07-22": {
-      "r": 3.485,
+      "r": 2.822,
       "trades": 1,
-      "pnl": 348.5
+      "pnl": 282.2
     },
     "2025-07-31": {
       "r": -3.134,
@@ -478,9 +478,9 @@
       "pnl": 490.9
     },
     "2025-09-15": {
-      "r": 6.921,
+      "r": 6.982,
       "trades": 2,
-      "pnl": 692.1
+      "pnl": 698.25
     },
     "2025-09-16": {
       "r": 1.127,
@@ -518,9 +518,9 @@
       "pnl": 66.1
     },
     "2025-10-07": {
-      "r": 4.054,
+      "r": 3.079,
       "trades": 2,
-      "pnl": 405.4
+      "pnl": 307.9
     },
     "2025-10-08": {
       "r": 0.812,
@@ -588,9 +588,9 @@
       "pnl": 721.8
     },
     "2025-11-19": {
-      "r": 0.75,
+      "r": 0.825,
       "trades": 1,
-      "pnl": 75
+      "pnl": 82.5
     },
     "2025-11-20": {
       "r": 9.85,
@@ -708,9 +708,9 @@
       "pnl": 388.1
     },
     "2026-02-17": {
-      "r": 0.745,
+      "r": 1.197,
       "trades": 1,
-      "pnl": 74.5
+      "pnl": 119.65
     },
     "2026-03-04": {
       "r": 1.206,
@@ -848,9 +848,9 @@
       "pnl": 2093.2
     },
     "2026-05-21": {
-      "r": 3.665,
+      "r": 2.465,
       "trades": 1,
-      "pnl": 366.5
+      "pnl": 246.5
     },
     "2026-05-26": {
       "r": -0.775,
@@ -888,9 +888,9 @@
       "pnl": 479.7
     },
     "2026-06-08": {
-      "r": -24.5,
+      "r": -17,
       "trades": 1,
-      "pnl": -2450
+      "pnl": -1700
     },
     "2026-06-09": {
       "r": -3.633,
@@ -943,9 +943,9 @@
       "pnl": -103.3
     },
     "2026-07-01": {
-      "r": 9.53,
+      "r": 9.928,
       "trades": 1,
-      "pnl": 953
+      "pnl": 992.75
     },
     "2026-07-06": {
       "r": 10.17,
@@ -973,9 +973,9 @@
       "pnl": -7.1
     },
     "2026-07-15": {
-      "r": 2.045,
+      "r": 1.581,
       "trades": 1,
-      "pnl": 204.5
+      "pnl": 158.15
     },
     "2026-07-16": {
       "r": 1.9,
@@ -1137,8 +1137,8 @@
       "stop": 1.935,
       "exit": 1.85,
       "exitLabel": "RECYCLE+COVER-ALL:5mBand",
-      "r": 3.5,
-      "pnl": 350
+      "r": 3.65,
+      "pnl": 365
     },
     {
       "id": "short-LIPO-20250206",
@@ -1291,8 +1291,8 @@
       "stop": 4.96,
       "exit": 2.73,
       "exitLabel": "RECYCLE+COVER-ALL:5mBand",
-      "r": 111,
-      "pnl": 11100
+      "r": 77.625,
+      "pnl": 7762.5
     },
     {
       "id": "short-WINT-20250320",
@@ -1347,8 +1347,8 @@
       "stop": 4.89,
       "exit": 4.83,
       "exitLabel": "RECYCLE+COVER-ALL:5mBand",
-      "r": 2.5,
-      "pnl": 250
+      "r": 1.9,
+      "pnl": 190
     },
     {
       "id": "short-SURG-20250326",
@@ -1375,8 +1375,8 @@
       "stop": 1.78,
       "exit": 1.7,
       "exitLabel": "RECYCLE+COVER-ALL:5mBand",
-      "r": 3.4,
-      "pnl": 340
+      "r": 2.65,
+      "pnl": 265
     },
     {
       "id": "short-BJDX-20250407",
@@ -1767,8 +1767,8 @@
       "stop": 1.53,
       "exit": 1.5303,
       "exitLabel": "RECYCLE+COVER-ALL:5mBand",
-      "r": -0.51,
-      "pnl": -51
+      "r": -0.647,
+      "pnl": -64.65
     },
     {
       "id": "short-STSS-20250604",
@@ -2089,8 +2089,8 @@
       "stop": 1.18,
       "exit": 1.1012,
       "exitLabel": "RECYCLE+COVER-ALL:5mBand",
-      "r": 3.44,
-      "pnl": 344
+      "r": 2.708,
+      "pnl": 270.8
     },
     {
       "id": "short-BSLK-20250717",
@@ -2159,8 +2159,8 @@
       "stop": 4.77,
       "exit": 4.6953,
       "exitLabel": "RECYCLE+COVER-ALL:5mBand",
-      "r": 3.485,
-      "pnl": 348.5
+      "r": 2.822,
+      "pnl": 282.2
     },
     {
       "id": "short-SNGX-20250731",
@@ -2551,8 +2551,8 @@
       "stop": 0.72,
       "exit": 0.719,
       "exitLabel": "RECYCLE+COVER-ALL:5mBand",
-      "r": -0.65,
-      "pnl": -65
+      "r": -0.589,
+      "pnl": -58.85
     },
     {
       "id": "short-BGI-20250916",
@@ -2691,8 +2691,8 @@
       "stop": 0.96,
       "exit": 0.8892,
       "exitLabel": "RECYCLE+COVER-ALL:5mBand",
-      "r": 2.545,
-      "pnl": 254.5
+      "r": 1.57,
+      "pnl": 157
     },
     {
       "id": "short-RNAZ-20251008",
@@ -2943,8 +2943,8 @@
       "stop": 11.8,
       "exit": 11.775,
       "exitLabel": "RECYCLE+COVER-ALL:5mBand",
-      "r": 0.75,
-      "pnl": 75
+      "r": 0.825,
+      "pnl": 82.5
     },
     {
       "id": "short-MNDR-20251120",
@@ -3377,8 +3377,8 @@
       "stop": 1.22,
       "exit": 1.1901,
       "exitLabel": "RECYCLE+COVER-ALL:5mBand",
-      "r": 0.745,
-      "pnl": 74.5
+      "r": 1.197,
+      "pnl": 119.65
     },
     {
       "id": "short-CANF-20260304",
@@ -3881,8 +3881,8 @@
       "stop": 2.83,
       "exit": 2.74,
       "exitLabel": "RECYCLE+COVER-ALL:5mBand",
-      "r": 3.665,
-      "pnl": 366.5
+      "r": 2.465,
+      "pnl": 246.5
     },
     {
       "id": "short-ARTL-20260526",
@@ -4077,8 +4077,8 @@
       "stop": 2.68,
       "exit": 3.16,
       "exitLabel": "RECYCLE+COVER-ALL:5mBand",
-      "r": -24.5,
-      "pnl": -2450
+      "r": -17,
+      "pnl": -1700
     },
     {
       "id": "short-ELPW-20260609",
@@ -4343,8 +4343,8 @@
       "stop": 3.87,
       "exit": 3.6693,
       "exitLabel": "RECYCLE+COVER-ALL:5mBand",
-      "r": 9.53,
-      "pnl": 953
+      "r": 9.928,
+      "pnl": 992.75
     },
     {
       "id": "short-ZCMD-20260706",
@@ -4455,8 +4455,8 @@
       "stop": 0.593,
       "exit": 0.5391,
       "exitLabel": "RECYCLE+COVER-ALL:5mBand",
-      "r": 2.045,
-      "pnl": 204.5
+      "r": 1.581,
+      "pnl": 158.15
     },
     {
       "id": "short-RUBI-20260716",

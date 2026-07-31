@@ -58,6 +58,7 @@ interface FilterDef {
   label: string
   type: FilterType
   options?: readonly string[]
+  multi?: boolean  // enum rendered as multi-select (OR within column)
 }
 
 // Reuse the scanner's mini chart. Default layout = Mike's Bands (matches /scanner & /live-feed).
@@ -642,13 +643,13 @@ function ColumnMenu({ fields, onCreate, onEdit, onDelete }: {
 // ─── Unified filter popup (filters by ANY column) ──
 function FilterPopup({ filterDefs, values, onChange }: {
   filterDefs: FilterDef[]
-  values: Record<string, string>
-  onChange: (v: Record<string, string>) => void
+  values: Record<string, string | string[]>
+  onChange: (v: Record<string, string | string[]>) => void
 }) {
   const C = useTheme()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
-  const activeCount = Object.values(values).filter((v) => v !== '' && v != null).length
+  const activeCount = Object.values(values).filter((v) => v !== '' && v != null && !(Array.isArray(v) && v.length === 0)).length
   useEffect(() => {
     if (!open) return
     const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
@@ -674,11 +675,27 @@ function FilterPopup({ filterDefs, values, onChange }: {
               <div key={def.id} className="space-y-0.5">
                 <label className="text-[9px] uppercase tracking-wider block" style={{ color: C.MUTED }}>{def.label}</label>
                 {def.type === 'enum' ? (
-                  <select value={values[def.id] ?? ''} onChange={(e) => onChange({ ...values, [def.id]: e.target.value })}
-                    className={inputCls} style={inputSt}>
-                    <option value="">All</option>
-                    {(def.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
-                  </select>
+                  def.multi ? (
+                    <div className="max-h-28 overflow-y-auto border rounded p-1 space-y-0.5" style={inputSt}>
+                      {(def.options ?? []).length === 0 && <span className="text-[10px]" style={{ color: C.MUTED }}>— none —</span>}
+                      {(def.options ?? []).map((o) => {
+                        const sel = (values[def.id] as string[] | undefined) ?? []
+                        const on = sel.includes(o)
+                        return (
+                          <label key={o} className="flex items-center gap-1 text-[11px] cursor-pointer capitalize" style={{ color: on ? C.GOLD : C.TEXT2 }}>
+                            <input type="checkbox" checked={on} onChange={() => onChange({ ...values, [def.id]: on ? sel.filter((x) => x !== o) : [...sel, o] })} className="w-2.5 h-2.5" />
+                            <span className="truncate">{o}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <select value={values[def.id] ?? ''} onChange={(e) => onChange({ ...values, [def.id]: e.target.value })}
+                      className={inputCls} style={inputSt}>
+                      <option value="">All</option>
+                      {(def.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  )
                 ) : def.type === 'boolean' ? (
                   <select value={values[def.id] ?? ''} onChange={(e) => onChange({ ...values, [def.id]: e.target.value })}
                     className={inputCls} style={inputSt}>
@@ -845,7 +862,7 @@ export default function DatabasePage() {
   const [importing, setImporting] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({})
+  const [columnFilters, setColumnFilters] = useState<Record<string, string | string[]>>({})
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [openTradeId, setOpenTradeId] = useState<string | null>(null)
   const [status, setStatus] = useState<{ kind: 'ok' | 'warn' | 'err'; msg: string } | null>(null)
@@ -954,17 +971,17 @@ export default function DatabasePage() {
     const builtIn: FilterDef[] = [
       { id: 'symbol', label: 'Symbol', type: 'text' },
       { id: 'signalDate', label: 'Signal Date', type: 'date' },
-      { id: 'scanSources', label: 'Scan', type: 'enum', options: loadedScanNames },
-      { id: 'setupType', label: 'Setup Type', type: 'enum', options: enumOpts('setupType') },
-      { id: 'setup', label: 'Setup', type: 'enum', options: enumOpts('setup') },
-      { id: 'grade', label: 'Grade', type: 'enum', options: enumOpts('grade') },
-      { id: 'move', label: 'Move', type: 'enum', options: enumOpts('move') },
+      { id: 'scanSources', label: 'Scan', type: 'enum', options: loadedScanNames, multi: true },
+      { id: 'setupType', label: 'Setup Type', type: 'enum', options: enumOpts('setupType'), multi: true },
+      { id: 'setup', label: 'Setup', type: 'enum', options: enumOpts('setup'), multi: true },
+      { id: 'grade', label: 'Grade', type: 'enum', options: enumOpts('grade'), multi: true },
+      { id: 'move', label: 'Move', type: 'enum', options: enumOpts('move'), multi: true },
       { id: 'tags', label: 'Tags', type: 'text' },
     ]
     const custom: FilterDef[] = fields.map((f) => {
       const base = { id: `custom__${f.id}`, label: f.name }
       if (f.type === 'grade' || f.type === 'select' || f.type === 'multiselect')
-        return { ...base, type: 'enum' as const, options: f.type === 'grade' ? GRADES : f.options }
+        return { ...base, type: 'enum' as const, options: f.type === 'grade' ? GRADES : f.options, multi: f.type === 'multiselect' }
       if (f.type === 'boolean') return { ...base, type: 'boolean' as const }
       if (f.type === 'number') return { ...base, type: 'number' as const }
       if (f.type === 'date') return { ...base, type: 'date' as const }
@@ -1397,9 +1414,20 @@ export default function DatabasePage() {
 
   // Unified client-side filter — works on ANY column
   const tableData = useMemo(() => {
-    const active = Object.entries(columnFilters).filter(([, v]) => v !== '' && v != null)
+    const active = Object.entries(columnFilters).filter(([, v]) => v !== '' && v != null && !(Array.isArray(v) && v.length === 0))
     if (active.length === 0) return rows
     return rows.filter((r) => active.every(([key, want]) => {
+      if (Array.isArray(want)) {
+        // multi-select: OR within column (exact for scalars, any-of for arrays)
+        if (key.startsWith('custom__')) {
+          const fid = key.slice(8)
+          const rv0 = (r.customValues ?? {})[fid]
+          return Array.isArray(rv0) ? want.some((w) => rv0.includes(w)) : want.includes(rv0)
+        }
+        const rv0 = (r as any)[key]
+        if (key === 'scanSources' || key === 'tags') return Array.isArray(rv0) && rv0.some((x: string) => want.includes(x))
+        return want.includes(rv0)
+      }
       if (key.startsWith('custom__')) {
         const fid = key.slice(8)
         const rv = (r.customValues ?? {})[fid]

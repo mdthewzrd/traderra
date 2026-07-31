@@ -100,6 +100,13 @@ export function parseProspectusHtml(html: string, filingDate?: Date): ParsedOffe
     text.match(/gross proceeds[^$]{0,40}?\$([\d,.]+\s*(?:million|billion|thousand)?)/i) ||
     text.match(/gross proceeds[^.]{0,60}?of\s+\$?([\d,.]+\s*(?:million|billion|thousand)?)/i);
   if (gp) proceeds = scaleNum(gp[1]);
+  // Plausibility guard (REQ: Nexus-parity validation found RKTO 2025-02-07 424B5
+  // grossProceeds = $2.7 TRILLION — scaleNum grabbed a registered aggregate /
+  // shelf capacity figure near 'gross proceeds'). No real single offering in
+  // this micro-cap dilution domain exceeds ~$10B (largest IPO ever $25.6B), so
+  // anything over $50B is a parse error. Also reject sub-$1k noise. Nulled
+  // values simply fall out of the post-report-raise sum (safe).
+  if (proceeds != null && (proceeds > 50e9 || proceeds < 1000)) proceeds = null;
 
   // offering type
   let offeringType = 'unknown';

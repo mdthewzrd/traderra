@@ -122,7 +122,7 @@ export function parseClause(
   filingDate: string,
   items: string[],
 ): ProgramDetail | null {
-  const programType = detectType(sect);
+  let programType = detectType(sect);
   if (!programType) return null; // not a modeled dilution facility
 
   // Counterparty — usually "with X (the "Lender"/"Purchaser"/"Agent")".
@@ -157,6 +157,23 @@ export function parseClause(
       const v = parseFloat(fix[1].replace(/,/g, ''));
       if (v >= 0.01 && v <= 1000) pricing = `fixed $${v} per share`;
     }
+  }
+
+  // Precision gate (Nexus-parity, Gap 2/3): a standing equity-line / SEPA
+  // ALWAYS prices off a continuous market reference (VWAP, discount-to-market,
+  // lowest-of) — that continuous-draw pricing IS the defining feature of a
+  // standing facility. A FIXED per-share price means a one-time offering
+  // (PIPE / registered-direct / warrant exercise) — the opposite of a draw
+  // facility. detectType runs on the raw 6000-char section BEFORE pricing is
+  // extracted, so it can misfire when an EFTS recall window for a PIPE exhibit
+  // contains a stray SEPA keyword elsewhere in the section. Correct the type
+  // here, once the pricing is known. (RKTO Dec-2022 SPA: 'fixed $5 per share'
+  // + 140,000 shares + pre-funded warrants = PIPE, not a SEPA — was surfacing
+  // as a phantom equity-line.) Safe: only downgrades equity-line→warrant-
+  // offering when the pricing contradicts the type; real SEPAs (VWAP / null
+  // pricing) are untouched.
+  if (programType === 'equity-line' && pricing && /^fixed \$/.test(pricing)) {
+    programType = 'warrant-offering';
   }
 
   // Ownership cap (9.99% classic in SEPA/converts).
@@ -323,8 +340,18 @@ export async function getPrograms(cik: string): Promise<CompanyProgram[]> {
       // per-share strike. Catches SOUN-style '$71.7/$41.9 per share'.
       if (pricing && /book value|tangible|net asset/i.test(d.description)) pricing = null;
     }
+    // Read-time type correction (Nexus-parity, Gap 2/3): a standing equity-line
+    // / SEPA prices off a continuous market reference (VWAP/discount), never a
+    // fixed per-share price. A fixed price = a one-time PIPE / warrant-offering.
+    // Stored rows from older EFTS recall runs (pre the parseClause gate above)
+    // can still carry equity-line + fixed pricing — correct here so live data
+    // is fixed without a re-sync. (RKTO Dec-2022 SPA: fixed $5/share PIPE.)
+    let programType = d.programType;
+    if (programType === 'equity-line' && pricing && /^fixed \$/.test(pricing)) {
+      programType = 'warrant-offering';
+    }
     all.push({
-      programType: d.programType,
+      programType,
       filingDate: d.filingDate,
       counterparty: d.counterparty,
       maxCommitment: d.maxCommitment,

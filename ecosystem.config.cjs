@@ -134,5 +134,28 @@ module.exports = {
         SCANNER_URL: 'http://127.0.0.1:6565/api/scans',
       },
     },
+    // ── Live D1 PM G&C premarket poller (run_real_d1_pm_gc_live.py) ─────────
+    // Mirrors d1-gap-live: snapshot gainers → per-ticker 1-min PM bars → G&C
+    // trigger (pm_high/prev_close>=+50%, pm_high/prev_high>=+20%, pm_vol>=1M,
+    // prev_close>=$0.75, D-1 move<=±20%). Sticky seen-dict (keep any name that
+    // pings). push_full_state → SSE + one type:'live' SavedScan (upsert/strategy).
+    // Active 7:00–10:00 ET, 30s poll. REQ-289.
+    {
+      name: 'real-d1-pm-gc-live',
+      script: 'run_real_d1_pm_gc_live.py',
+      interpreter: '/home/mdwzrd/edge.dev/.venv/bin/python',
+      cwd: '/home/mdwzrd/.wzrd-pi-dev/projects/edge-dev/uploads',
+      exec_mode: 'fork',
+      instances: 1,
+      autorestart: true,
+      max_restarts: 100,
+      restart_delay: 3000,
+      watch: false,
+      env: {
+        PUSH_URL: 'http://127.0.0.1:6565/api/scans/push',
+        SCANNER_URL: 'http://127.0.0.1:6565/api/scans',
+      },
+    },
+
   ],
 }

@@ -301,6 +301,11 @@ export default function LiveScanPage() {
   const [connected, setConnected] = useState(false)
 
   const [eodDate, setEodDate] = useState<string>(todayStr())
+  // G&C-scoped EOD date (dedicated — NOT the shared eodDate). Defaults to today;
+  // a one-shot effect lands it on the most-recent gc date when today is empty,
+  // so the G&C Potentials tab is never blank on cold load. day1s/backside/
+  // frontside keep the shared eodDate (their live merge keys on date >= today).
+  const [gcEodDate, setGcEodDate] = useState<string>(todayStr())
   const [validDate, setValidDate] = useState<string>(todayStr())
   const [recentFrom, setRecentFrom] = useState<string>(shiftDays(todayStr(), -14))
   const [recentTo, setRecentTo] = useState<string>(todayStr())
@@ -499,8 +504,36 @@ export default function LiveScanPage() {
         }
       }
     }
+    // G&C: merge live SSE pings for today so a fresh premarket ping shows on the
+    // panel instantly (within the poll) instead of waiting up to 60s for the DB
+    // type:'live' row to flow into specResults. Live wins (overrides) per ticker;
+    // DB remains the floor for date < today.
+    if (groupKey === 'gc' && date >= todayStr()) {
+      const byTk = new Map(out.map(h => [h.ticker, h]))
+      for (const [, h] of liveSeenRef.current) {
+        if (SPEC_GROUP[h.strategy] === 'gc' && h.date === date) byTk.set(h.ticker, h)
+      }
+      return [...byTk.values()]
+    }
     return out
-  }, [specResults, resultToHit])
+  }, [specResults, resultToHit, liveVersion])
+
+  // Never-empty: if today has no G&C data, land the G&C Potentials tab on the most
+  // recent gc date (DB results ∪ live SSE), so the panel is never blank on load.
+  useEffect(() => {
+    if (eodHitsFor('gc', todayStr()).length > 0) return
+    const dates = new Set<string>()
+    for (const x of (specResults.get('real-d1-pm-gc') || [])) {
+      const d = x.date ? String(x.date).slice(0, 10) : ''
+      if (d) dates.add(d)
+    }
+    for (const [, h] of liveSeenRef.current) {
+      if (SPEC_GROUP[h.strategy] === 'gc' && h.date) dates.add(h.date)
+    }
+    const today = todayStr()
+    const maxDate = [...dates].filter(d => d <= today).sort().pop()
+    if (maxDate && maxDate !== gcEodDate) setGcEodDate(maxDate)
+  }, [resultsVersion, liveVersion, eodHitsFor, specResults, gcEodDate])
 
   const validHitsFor = useCallback((groupKey: string, date: string) => {
     const today = todayStr()
@@ -746,7 +779,7 @@ export default function LiveScanPage() {
     // base-spec rows stamped per date (traderra_scan.py _push_results → strategy
     // = spec_name), so source the list from eodHitsFor (not potentialHitsFor,
     // which reads -potential variants no poller pushes for this scan).
-    if (group.key === 'gc') hits = eodHitsFor('gc', eodDate)
+    if (group.key === 'gc') hits = eodHitsFor('gc', gcEodDate)
     else if (activeTab === 'eod') hits = potentialHitsFor(group.key, eodDate)
     else if (activeTab === 'valid') {
       hits = group.key === 'day1s' ? validHitsFor(group.key, validDate) : validRadarHitsFor(group.key, validDate)
@@ -808,7 +841,7 @@ export default function LiveScanPage() {
         </div>
         {/* date nav per tab */}
         <div style={{ padding: '4px 12px', borderBottom: '1px solid #1f2937', display: 'flex', justifyContent: 'flex-end', minHeight: 30, alignItems: 'center' }}>
-          {activeTab === 'eod' && <DateNav date={eodDate} setDate={setEodDate} />}
+          {activeTab === 'eod' && <DateNav date={group.key === 'gc' ? gcEodDate : eodDate} setDate={group.key === 'gc' ? setGcEodDate : setEodDate} />}
           {activeTab === 'valid' && <DateNav date={validDate} setDate={setValidDate} />}
           {activeTab === 'recent' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#9ca3af' }}>

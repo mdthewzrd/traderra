@@ -1439,7 +1439,8 @@ export default function DatabasePage() {
 
   return (
     <ThemeContext.Provider value={C}>
-    <div className="h-[calc(100vh-56px)] flex flex-col overflow-hidden font-mono" style={{ background: C.BG, color: C.TEXT }}>
+    {/* Shell height is responsive to the two-row TopNav: main nav h-14 (56px) always, plus a sticky sub-nav h-10 (40px) that only renders on md+ (top-nav.tsx). So subtract 56px on mobile, 96px on desktop — otherwise the pagination footer (last flex child) is clipped ~40px below the fold. (REQ-332) */}
+    <div className="h-[calc(100vh-56px)] md:h-[calc(100vh-96px)] flex flex-col overflow-hidden font-mono" style={{ background: C.BG, color: C.TEXT }}>
       {/* Header */}
       <header className="flex items-center justify-between px-5 py-3 border-b shrink-0" style={{ borderColor: C.BORDER }}>
         <div className="flex items-center gap-3">

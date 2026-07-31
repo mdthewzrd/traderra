@@ -456,6 +456,7 @@
     "name": "G&C Gap Entry · Dilution Fade Short · Intraday",
     "engine": "gc-gap-entry",
     "meta": {
+      "intraday": true,
       "symbol": "Dilution Universe",
       "tf": "5",
       "from": "2025-08-08",
@@ -486,5 +487,42 @@
       }
     },
     "createdAt": "2026-07-30T22:23:43.944Z"
+  },
+  {
+    "id": "gc-gap-entry-v2",
+    "name": "G&C Gap Entry v2 · D1-Gap × 2m Exec-Signal Pop-Short · Intraday",
+    "engine": "gc-gap-entry-v2",
+    "meta": {
+      "intraday": true,
+      "symbol": "D1-Gap Universe (grouped-daily)",
+      "tf": "2",
+      "from": "2025-01-06",
+      "to": "2026-07-30"
+    },
+    "summary": {
+      "trades": 255,
+      "wins": 175,
+      "winRate": 68.6,
+      "totR": 741.27,
+      "profitFactor": 6.611,
+      "longs": 0,
+      "shorts": 255,
+      "avgR": 2.91,
+      "greenDays": 136,
+      "greenPct": 70.8,
+      "tradingDays": 192,
+      "perDay": 1.33,
+      "maxDD": 28.13,
+      "avgDayR": 3.86,
+      "bestDay": {
+        "date": "2025-03-11",
+        "r": 111
+      },
+      "worstDay": {
+        "date": "2026-06-08",
+        "r": -24.5
+      }
+    },
+    "createdAt": "2026-07-31T00:08:40.283632Z"
   }
 ]

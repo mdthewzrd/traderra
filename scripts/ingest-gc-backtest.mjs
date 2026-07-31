@@ -55,15 +55,19 @@ if (traded.length !== 54) {
 // --- normalize trades (mirror rs-pump-long-v3.json trade shape) ---
 const trades = traded.map((r) => {
   const ticker = r.ticker;
-  const d0 = r.d0_date; // YYYY-MM-DD
+  const d0 = r.d0_date; // YYYY-MM-DD (date-only: chart signal date + D0 right-edge anchor)
   const dateCompact = d0.replace(/-/g, '');
+  // Embed ET wall-clock time so MiniChart's etWallToUnix() resolves a real intraday
+  // bar and the entry/exit wedges render. Date-only strings parse to NaN → no wedges.
+  const entryT = r.entryT || '09:30';
+  const exitT = r.exitT || '16:00';
   return {
     id: `short-${ticker}-${dateCompact}`,
     side: 'short',
     ticker,
-    rsDate: d0, // gap day doubles as signal date (no R/S in this strategy)
-    openDate: d0,
-    exitDate: d0,
+    rsDate: d0,
+    openDate: `${d0} ${entryT}`,
+    exitDate: `${d0} ${exitT}`,
     entry: parseFloat(r.entry),
     stop: parseFloat(r.risk), // col 9 = STOP PRICE
     exit: parseFloat(r.exit),
@@ -78,11 +82,12 @@ const trades = traded.map((r) => {
 // curve, and monthly breakdown. Omitting it makes those sections render empty.
 const byDayAgg = new Map(); // date → { r, trades, pnl }
 for (const t of trades) {
-  const d = byDayAgg.get(t.openDate) ?? { r: 0, trades: 0, pnl: 0 };
+  const dayKey = t.openDate.slice(0, 10); // openDate now carries time; key calendar by date-only
+  const d = byDayAgg.get(dayKey) ?? { r: 0, trades: 0, pnl: 0 };
   d.r = round(d.r + t.r, 3);
   d.trades += 1;
   d.pnl = round(d.pnl + t.pnl, 2);
-  byDayAgg.set(t.openDate, d);
+  byDayAgg.set(dayKey, d);
 }
 const days = [...byDayAgg.entries()]
   .map(([date, d]) => ({ date, r: d.r }))
@@ -130,6 +135,7 @@ const summary = {
 };
 
 const meta = {
+  intraday: true, // signals MiniChart: D0 is the trade day — no multi-week forward window
   symbol: 'Dilution Universe',
   tf: '5',
   from: days[0].date,
@@ -161,7 +167,7 @@ writeFileSync(RUN_FILE, JSON.stringify(run, null, 2) + '\n');
 
 // --- registry upsert (slim shape: id/name/engine/meta{symbol,tf,from,to}/summary/createdAt) ---
 const reg = JSON.parse(readFileSync(REGISTRY, 'utf8'));
-const slimMeta = { symbol: meta.symbol, tf: meta.tf, from: meta.from, to: meta.to };
+const slimMeta = { intraday: meta.intraday, symbol: meta.symbol, tf: meta.tf, from: meta.from, to: meta.to };
 const idx = reg.findIndex((e) => e.id === RUN_ID);
 const slimEntry = {
   id: RUN_ID,

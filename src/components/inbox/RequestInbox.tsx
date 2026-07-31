@@ -202,7 +202,7 @@ export function RequestInbox() {
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6 9 17l-5-5" /></svg>
                 </div>
                 <p className="text-sm studio-text">Sent — <span className="font-mono text-emerald-300">{sent}</span></p>
-                <p className="mt-1 text-xs studio-muted">Renata will pick it up in the edge-dev project.</p>
+                <p className="mt-1 text-xs studio-muted">Renata will pick it up in the edge project.</p>
                 <button onClick={reset} className="mt-4 rounded-md bg-[#1a1a1a] px-3 py-1.5 text-xs studio-text hover:bg-[#222]">New request</button>
               </div>
             ) : (

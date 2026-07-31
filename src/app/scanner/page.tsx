@@ -57,6 +57,7 @@ const BUILTIN_SCANS: ScanDef[] = [
   { id: 'builtin-short-fbo-2', name: 'Short FBO 2', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['short-fbo-2'], group: 'standalone' },
   { id: 'builtin-half-a', name: 'Half A', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['half-a'], group: 'standalone' },
   { id: 'builtin-half-a-other', name: 'Other Half A', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['half-a-other'], group: 'standalone' },
+  { id: 'builtin-rs-long', name: 'R/S Long', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['rs-long'], group: 'standalone' },
   // ── OG Scans ──
   { id: 'builtin-og-scans-master', name: 'Master', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-scans-master', 'lc', 'mean-reversion'], group: 'og-scans' },
   { id: 'builtin-og-lc-fbo', name: 'LC FBO', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['og-lc-fbo', 'lc', 'fbo'], group: 'og-scans' },
@@ -83,9 +84,9 @@ const BUILTIN_SCANS: ScanDef[] = [
   { id: 'builtin-frd-gap-lc', name: 'FRD Gap LC', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['frd-gap-lc', 'mean-reversion'], group: 'mikes-scans/mean-reversion' },
   { id: 'builtin-d1-gap', name: 'D1 Gap', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['d1-gap', 'parabolic', 'micro-cap'], group: 'mikes-scans/parabolic' },
   { id: 'builtin-d1-gap-wide', name: 'D1 Gap Wide', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['d1-gap-wide', 'parabolic', 'micro-cap'], group: 'mikes-scans/parabolic' },
-  { id: 'builtin-real-d1-gap', name: 'Real D1 Gap', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['real-d1-gap'], group: 'real-d1-gap' },
+  { id: 'builtin-real-d1-gap', name: 'Real D1 Gap', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['real-d1-gap'], group: 'mikes-playbook' },
   { id: 'builtin-t30', name: 'T30', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['t30'], group: 't30' },
-  { id: 'builtin-real-d1-pm-gc', name: 'Real D1 PM G/C', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['real-d1-pm-gc'], group: 'real-d1-pm-gc' },
+  { id: 'builtin-real-d1-pm-gc', name: 'Real D1 PM Push', type: 'builtin', resultCount: 0, createdAt: new Date().toISOString(), tags: ['real-d1-pm-gc'], group: 'mikes-playbook' },
 ]
 
 // Tree structure: project folders with subfolder groups
@@ -96,9 +97,8 @@ const SCAN_TREE: { id: string; label: string; order: number; subfolders?: { id: 
   ]},
   { id: 'og-scans', label: 'OG Scans', order: 1 },
   { id: 'standalone', label: 'Standalone', order: 2 },
-  { id: 'real-d1-gap', label: 'Real D1 Gap', order: 3 },
+  { id: 'mikes-playbook', label: "Mike's Playbook", order: 3 },
   { id: 't30', label: 'T30', order: 4 },
-  { id: 'real-d1-pm-gc', label: 'Real D1 PM G/C', order: 5 },
   { id: 'mikes-scans', label: "Mike's Scans", order: -1, subfolders: [
     { id: 'mean-reversion', label: 'Mean Reversion' },
     { id: 'parabolic', label: 'Parabolic' },
@@ -120,6 +120,7 @@ const BUILTIN_SPEC_MAP: Record<string, string> = {
   'builtin-short-fbo-2': 'short-fbo-2',
   'builtin-half-a': 'half-a',
   'builtin-half-a-other': 'half-a-other',
+  'builtin-rs-long': 'rs-long',
   'builtin-og-scans-master': 'og-scans-master',
   'builtin-og-lc-fbo': 'og-lc-fbo',
   'builtin-og-lc-frontside-d2': 'og-lc-frontside-d2',
@@ -659,6 +660,9 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
         backDays = Math.max(backDays, Math.ceil(zoomDays.before * 1.5) + 10)
         fwdDays = Math.max(fwdDays, Math.ceil(zoomDays.after * 1.5) + 10)
       }
+      // 5m mini chart: cap forward data at ~D+1. Beyond the day after focal is noise on a 5m,
+      // and zoom-out was exposing 10+ days forward via the zoomDays widening above.
+      if (tf === '5') fwdDays = Math.min(fwdDays, 2)
       toDate.setDate(toDate.getDate() + fwdDays)
       fromDate.setDate(fromDate.getDate() - backDays)
     }
@@ -690,6 +694,41 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
   const visibleBars = useMemo(() => {
     if (!allBars.length) return []
     if (manualZoom) return allBars.slice(manualZoom.start, manualZoom.end)
+
+    // 5m mini chart default window: D-1 after-hours (16:00 ET) -> D0 close (16:00 ET).
+    // Time-based (not bars-count) because 5m carries AH/PM bars that break the RTH-only bpd
+    // math, and it carries far more candles than other intraday TFs, so it gets its own window.
+    // Excludes BT (centerOnDate) and live-feed (chartDays), which have their own purposes.
+    if (tf === '5' && !chartDays && !centerOnDate) {
+      const focal = d0Date || date
+      if (focal) {
+        let d0First = -1
+        for (let i = 0; i < allBars.length; i++) {
+          if (barETDate(allBars[i]) === focal) { d0First = i; break }
+        }
+        if (d0First >= 0) {
+          // D-1 = ET date of the last bar before focal's first bar that isn't focal
+          let dMinus1 = ''
+          for (let i = d0First - 1; i >= 0; i--) {
+            const d = barETDate(allBars[i])
+            if (d !== focal) { dMinus1 = d; break }
+          }
+          const win: any[] = []
+          for (const b of allBars) {
+            const bd = barETDate(b)
+            if (bd === dMinus1) {
+              const mins = barETMinutes(b)
+              if (mins != null && mins >= 960) win.push(b)   // D-1 after-hours (16:00 ET = 960 min)
+            } else if (bd === focal) {
+              const mins = barETMinutes(b)
+              if (mins != null && mins < 960) win.push(b)    // D0 pre-market + RTH (through 15:55)
+            }
+          }
+          if (win.length) return win
+        }
+      }
+      // (fallback to the general logic below if focal / D-1 not found)
+    }
 
     // zoomDays override: N days before D0 + M after (scan-mode default zoom)
     if (zoomDays && d0Date) {

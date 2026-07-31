@@ -50,7 +50,7 @@ interface Hit {
 
 interface ScanDef { spec: string; label: string; color: string }
 interface GroupDef {
-  key: 'day1s' | 'backside' | 'frontside'
+  key: 'day1s' | 'backside' | 'frontside' | 'gc'
   label: string
   accent: string
   scans: ScanDef[]
@@ -80,6 +80,12 @@ const GROUPS: GroupDef[] = [
       { spec: 'mdr-swing', label: 'MDR Swing', color: '#84cc16' },
       { spec: 'short-fbo', label: 'Short FBO', color: '#fb923c' },
       { spec: 'short-fbo-2', label: 'Short FBO 2', color: '#f97316' },
+    ],
+  },
+  {
+    key: 'gc', label: 'D1 PM G&C', accent: '#ef4444',
+    scans: [
+      { spec: 'real-d1-pm-gc', label: 'G&C', color: '#ef4444' },
     ],
   },
 ]
@@ -301,7 +307,7 @@ export default function LiveScanPage() {
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [tab, setTab] = useState<Record<string, 'eod' | 'valid' | 'recent'>>({
-    day1s: 'valid', backside: 'eod', frontside: 'eod',
+    day1s: 'valid', backside: 'eod', frontside: 'eod', gc: 'eod',
   })
 
   // chart (in-flow resizable block)
@@ -310,7 +316,7 @@ export default function LiveScanPage() {
   const [chartTf, setChartTf] = useState<Timeframe>('D')
   const [chartOpen, setChartOpen] = useState(true)
   const [selectedId, setSelectedId] = useState<string>('')
-  const visibleHitsRef = useRef<Record<string, Hit[]>>({ day1s: [], backside: [], frontside: [] })
+  const visibleHitsRef = useRef<Record<string, Hit[]>>({ day1s: [], backside: [], frontside: [], gc: [] })
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const [showInd, setShowInd] = useState(false)
   const [settings, setSettings] = useState<ChartSettings>(() => ({
@@ -736,7 +742,12 @@ export default function LiveScanPage() {
     let showDate = false
     // EOD/Potentials tab: potentials for the selected date (day1s same-day;
     // backside/frontside = D-1 radar). Valid tab + Recent use their own readers.
-    if (activeTab === 'eod') hits = potentialHitsFor(group.key, eodDate)
+    // gc (D1 PM G&C): potentials-only panel (no valids). Real D1 PM G&C pushes
+    // base-spec rows stamped per date (traderra_scan.py _push_results → strategy
+    // = spec_name), so source the list from eodHitsFor (not potentialHitsFor,
+    // which reads -potential variants no poller pushes for this scan).
+    if (group.key === 'gc') hits = eodHitsFor('gc', eodDate)
+    else if (activeTab === 'eod') hits = potentialHitsFor(group.key, eodDate)
     else if (activeTab === 'valid') {
       hits = group.key === 'day1s' ? validHitsFor(group.key, validDate) : validRadarHitsFor(group.key, validDate)
       showValid = true
@@ -754,7 +765,8 @@ export default function LiveScanPage() {
               // day1s potentials box shows -potential + confirmed-valid (base spec).
               // backside/frontside potentials box shows only -potential (valids are on
               // the Valid tab).
-              const wantSpecs = isPotentialView
+              const wantSpecs = group.key === 'gc' ? new Set([s.spec])
+                : isPotentialView
                 ? (group.key === 'day1s' ? new Set([s.spec + '-potential', s.spec]) : new Set([s.spec + '-potential']))
                 : new Set([s.spec])
               const sh: Hit[] = hits.filter(h => wantSpecs.has(h.strategy))
@@ -782,8 +794,8 @@ export default function LiveScanPage() {
         <CardHeader title={group.label} accent={group.accent} count={hits.length} onExpand={toggle} expanded={isExp} />
         {/* tab bar */}
         <div style={{ display: 'flex', borderBottom: '1px solid #1f2937' }}>
-          {(['eod', 'valid', 'recent'] as const).map(t => {
-            const label = t === 'eod' ? (group.key === 'day1s' ? 'Potentials' : 'EOD') : t === 'valid' ? 'Valid' : 'Recent'
+          {((group.key === 'gc' ? ['eod'] : ['eod', 'valid', 'recent']) as Array<'eod' | 'valid' | 'recent'>).map(t => {
+            const label = t === 'eod' ? (group.key === 'day1s' || group.key === 'gc' ? 'Potentials' : 'EOD') : t === 'valid' ? 'Valid' : 'Recent'
             const live = t === 'valid' && isLive
             return (
               <button key={t} onClick={() => setTab(p => ({ ...p, [group.key]: t }))}

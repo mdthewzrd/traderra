@@ -221,7 +221,7 @@ interface BacktestResults {
   tradeReturns: number[]
   cumPnlSeries: number[]
   drawdownSeries: number[]
-  dayStats: { day: string; pnl: number; count: number }[]
+  dayStats: { date: string; day: string; r: number; pnl: number; count: number; wins: number }[]
   monthlyStats: { month: string; pnl: number; count: number }[]
 }
 
@@ -505,7 +505,16 @@ function etWallToUnix(s: string): number {
   const m = s.match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/)
   if (!m) return NaN
   const Y = +m[1], Mo = +m[2], D = +m[3], H = +m[4], Mi = +m[5]
-  return Math.floor(Date.UTC(Y, Mo - 1, D, H, Mi) / 1000)
+  // Convert ET wall-clock → UTC. Chart bars are true-UTC seconds, so we must add the
+  // ET offset (US DST: 2nd Sun of Mar 02:00 → 1st Sun of Nov 02:00). EDT=UTC-4, EST=UTC-5.
+  let dst = false
+  if (Mo > 3 && Mo < 11) dst = true
+  else if (Mo === 3 || Mo === 11) {
+    const w = new Date(Date.UTC(Y, Mo - 1, 1)).getUTCDay()
+    const sun = 1 + ((7 - w) % 7) + (Mo === 3 ? 7 : 0) // 2nd Sun (Mar) / 1st Sun (Nov)
+    dst = Mo === 3 ? (D * 100 + H >= sun * 100 + 2) : (D * 100 + H < sun * 100 + 2)
+  }
+  return Math.floor(Date.UTC(Y, Mo - 1, D, H, Mi) / 1000) + (dst ? 4 : 5) * 3600
 }
 
 function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset = 0, btMarkers }: {
@@ -1328,10 +1337,166 @@ function MiniChart({ symbol, tf, date, height = 580, settings, dark, dayOffset =
   )
 }
 
+// ── Notional capital model for backtest stats (REQ-321) ─────────────────────
+// Mike's backtest RUN trades carry an R-multiple (trades[].r) AND a realized
+// dollar P&L (trades[].pnl = r × run.meta.params.riskPerTrade). Earlier code
+// conflated the two: totalReturnPct was the R-sum mislabeled "%", CAGR was
+// stubbed to that same R-sum, and Total P&L multiplied the sum by a 1000 fudge.
+// This helper maps every run onto ONE fixed notional account so $, % and CAGR
+// stay internally consistent while R remains the primary performance lens:
+//   NOTIONAL     = $10,000 baseline account
+//   riskPerTrade = run.meta.params.riskPerTrade (default $100 ⇒ 1% risk/trade)
+//   Total P&L $  = Σ trades[].pnl            (real dollars — NO fudge factor)
+//   Total Return = Total P&L / NOTIONAL        (linear on the fixed notional)
+//   CAGR         = (1+TotalReturn)^(1/years)−1, years = (meta.to−meta.from)/365.25
+//   Sharpe/Sortino annualize by trades-per-year (intraday), NOT √252
+//   Calmar       = CAGR / maxDD   (both fractional), NOT totalReturn/maxDD
+const BT_NOTIONAL = 10000
+
+function btNotionalStats(o: { pnlDollars: number[]; years: number; notional?: number }) {
+  const notional = o.notional ?? BT_NOTIONAL
+  const N = o.pnlDollars.length
+  const totalPnl = o.pnlDollars.reduce((a, b) => a + b, 0)          // real $
+  const totalReturnFrac = totalPnl / notional
+  const totalReturnPct = totalReturnFrac * 100
+  const years = o.years > 0 ? o.years : 1
+  const cagrFrac = Math.pow(1 + totalReturnFrac, 1 / years) - 1
+  const cagr = cagrFrac * 100
+  const tradesPerYear = N / years
+  const sqrtTpy = Math.sqrt(tradesPerYear)
+  // per-trade fractional returns on the notional account
+  const fr = o.pnlDollars.map(p => p / notional)
+  const mean = N ? fr.reduce((a, b) => a + b, 0) / N : 0
+  const stdFrac = N ? Math.sqrt(fr.reduce((a, b) => a + (b - mean) ** 2, 0) / N) : 0
+  const ddevFrac = N ? Math.sqrt(fr.reduce((a, b) => a + Math.min(0, b) ** 2, 0) / N) : 0
+  const sharpe = stdFrac > 0 ? (mean / stdFrac) * sqrtTpy : 0
+  const sortino = ddevFrac > 0 ? (mean / ddevFrac) * sqrtTpy : 0
+  // $ equity curve + drawdown (fraction of peak)
+  let eq = notional, peak = notional, maxDdFrac = 0, maxDd$ = 0
+  const cumPnlSeries: number[] = [], drawdownSeries: number[] = []
+  o.pnlDollars.forEach(p => {
+    eq += p
+    cumPnlSeries.push(eq - notional)                              // cumulative $ P&L from 0
+    peak = Math.max(peak, eq)
+    const dd$ = peak - eq
+    drawdownSeries.push(dd$)
+    const ddFrac = peak > 0 ? dd$ / peak : 0
+    if (ddFrac > maxDdFrac) { maxDdFrac = ddFrac; maxDd$ = dd$ }
+  })
+  const maxDrawdown = maxDdFrac * 100
+  const calmar = maxDdFrac > 0 ? cagrFrac / maxDdFrac : 0
+  const recoveryFactor = maxDd$ > 0 ? totalPnl / maxDd$ : 0
+  return { totalPnl, totalReturnPct, cagr, sharpe, sortino, calmar, maxDrawdown,
+    recoveryFactor, stdDevReturns: stdFrac * 100, downsideDev: ddevFrac * 100,
+    cumPnlSeries, drawdownSeries }
+}
+
+// Roll a sorted-by-date day series up to ISO calendar weeks (for >40-day runs).
+function groupDaysToWeeks(days: { date: string; day: string; r: number; pnl: number; count: number; wins: number }[]) {
+  const keyOf = (iso: string) => {
+    const d = new Date(iso + 'T12:00:00Z')
+    const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
+    const dn = t.getUTCDay() || 7
+    t.setUTCDate(t.getUTCDate() + 4 - dn)
+    const yStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1))
+    const wk = Math.ceil((((t.getTime() - yStart.getTime()) / 86400000) + 1) / 7)
+    return `${t.getUTCFullYear()}-W${String(wk).padStart(2, '0')}`
+  }
+  const m = new Map<string, { date: string; day: string; r: number; pnl: number; count: number; wins: number }>()
+  for (const d of days) {
+    const k = keyOf(d.date)
+    const e = m.get(k) || { date: d.date, day: k.slice(5), r: 0, pnl: 0, count: 0, wins: 0 }
+    e.r += d.r; e.pnl += d.pnl; e.count += d.count; e.wins += d.wins
+    m.set(k, e)
+  }
+  return Array.from(m.values())
+}
+
+// Per-day (or per-week) breakdown with R / $ / g(green%) / N(count) segmented
+// toggle (mirrors the journal dashboard). >40 periods defaults to weekly rollup.
+type DayMetric = 'R' | '$' | 'g' | 'N'
+function DailyBreakdown({ days, dark, isRun }: { days: { date: string; day: string; r: number; pnl: number; count: number; wins: number }[]; dark: boolean; isRun: boolean }) {
+  const C = dark
+    ? { BG, SURFACE, SURFACE2, SURFACE3, BORDER, TEXT, TEXT2, MUTED, WHITE, RED, TEAL, GOLD, VOL_UP, VOL_DN, GOLD_DIM, GOLD_BORDER }
+    : { ...LIGHT, GOLD, GOLD_DIM: LIGHT.GOLD_DIM, GOLD_BORDER: LIGHT.GOLD_BORDER }
+  const [metric, setMetric] = useState<DayMetric>('R')
+  const weeklyDefault = days.length > 40
+  const [rollup, setRollup] = useState<'day' | 'week'>(weeklyDefault ? 'week' : 'day')
+  const rows = useMemo(() => (rollup === 'week' ? groupDaysToWeeks(days) : days), [days, rollup])
+  if (!rows.length) return null
+  const valOf = (d: { r: number; pnl: number; count: number; wins: number }) => {
+    if (metric === 'R') return { v: d.r, s: `${d.r >= 0 ? '+' : ''}${d.r.toFixed(1)}R`, col: d.r >= 0 ? C.TEAL : C.RED }
+    if (metric === '$') return { v: d.pnl, s: `${d.pnl >= 0 ? '+' : ''}$${Math.round(d.pnl)}`, col: d.pnl >= 0 ? C.TEAL : C.RED }
+    if (metric === 'g') { const g = d.count ? (d.wins / d.count) * 100 : 0; return { v: g, s: `${g.toFixed(0)}%`, col: g >= 50 ? C.TEAL : C.RED } }
+    return { v: d.count, s: `${d.count}`, col: C.GOLD }
+  }
+  const vals = rows.map(valOf)
+  const maxAbs = Math.max(...vals.map(x => Math.abs(x.v)), 1)
+  const segs: { key: DayMetric; title: string }[] = [
+    { key: 'R', title: 'R-multiple per period' },
+    { key: '$', title: 'Dollar P&L per period' },
+    { key: 'g', title: 'Green % (win rate) per period' },
+    { key: 'N', title: 'Trade count per period' },
+  ]
+  return (
+    <div style={{ background: C.SURFACE, border: `1px solid ${C.BORDER}`, borderRadius: 4, padding: '6px 10px' }}>
+      <div className="flex items-center gap-2" style={{ marginBottom: 6, flexWrap: 'wrap' }}>
+        <Clock className="h-3 w-3" style={{ color: C.GOLD }} />
+        <span style={{ color: C.GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>{rollup === 'week' ? 'Weekly' : 'Daily'} Breakdown</span>
+        <div className="flex items-center" style={{ marginLeft: 4, background: C.SURFACE2, borderRadius: 3, padding: 1 }}>
+          {segs.map(s => (
+            <button key={s.key} onClick={() => setMetric(s.key)} title={s.title} style={{
+              padding: '2px 8px', fontSize: 10, fontWeight: metric === s.key ? 800 : 500,
+              color: metric === s.key ? '#000' : C.MUTED, background: metric === s.key ? C.TEAL : 'transparent',
+              border: 'none', borderRadius: 2, cursor: 'pointer',
+            }}>{s.key}</button>
+          ))}
+        </div>
+        {weeklyDefault && (
+          <div className="flex items-center" style={{ marginLeft: 'auto', background: C.SURFACE2, borderRadius: 3, padding: 1 }}>
+            {(['week', 'day'] as const).map(r => (
+              <button key={r} onClick={() => setRollup(r)} style={{
+                padding: '2px 8px', fontSize: 9, fontWeight: rollup === r ? 800 : 500,
+                color: rollup === r ? '#000' : C.MUTED, background: rollup === r ? C.GOLD : 'transparent',
+                border: 'none', borderRadius: 2, cursor: 'pointer', textTransform: 'capitalize',
+              }}>{r}</button>
+            ))}
+          </div>
+        )}
+      </div>
+      {/* bar chart overlay (selected metric) */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 1, height: 44, padding: '2px 0 4px' }}>
+        {vals.map((x, i) => (
+          <div key={i} title={`${rows[i].day || rows[i].date}: ${x.s}`} style={{
+            flex: 1, minWidth: 2, height: `${Math.max((Math.abs(x.v) / maxAbs) * 100, 4)}%`,
+            background: x.col, borderRadius: '1px 1px 0 0', opacity: 0.85,
+          }} />
+        ))}
+      </div>
+      {/* per-period list */}
+      <div style={{ display: 'flex', gap: 3, overflowX: 'auto', paddingBottom: 2 }}>
+        {rows.map((d, i) => {
+          const x = vals[i]
+          return (
+            <div key={i} style={{ minWidth: 46, padding: '3px 5px', background: C.SURFACE2, borderRadius: 3, textAlign: 'center' }}>
+              <div style={{ color: C.MUTED, fontSize: 7, fontWeight: 600 }}>{d.day || d.date}</div>
+              <div style={{ color: x.col, fontSize: 11, fontWeight: 700 }}>{x.s}</div>
+              <div style={{ color: C.MUTED, fontSize: 6 }}>{d.count}t</div>
+            </div>
+          )
+        })}
+      </div>
+      {!isRun && metric === '$' && (
+        <div style={{ color: C.MUTED, fontSize: 7, marginTop: 4 }}>$ = R × $100 risk on the $10k notional model (baseline D0 has no native $ P&L)</div>
+      )}
+    </div>
+  )
+}
+
 // ─── Backtest Stats Panel — Multi-Tab ────────────────
 type StatsTab = 'overview' | 'performance' | 'pnl' | 'robustness'
 
-function BacktestStatsPanel({ signals, backtestResults, dark }: { signals: Signal[]; backtestResults: BacktestResults | null; dark: boolean }) {
+function BacktestStatsPanel({ signals, backtestResults, dark, isBacktestRun }: { signals: Signal[]; backtestResults: BacktestResults | null; dark: boolean; isBacktestRun?: boolean }) {
   const C = dark
     ? { BG, SURFACE, SURFACE2, SURFACE3, BORDER, TEXT, TEXT2, MUTED, WHITE, RED, TEAL, GOLD, VOL_UP, VOL_DN, GOLD_DIM, GOLD_BORDER }
     : { ...LIGHT, GOLD, GOLD_DIM: LIGHT.GOLD_DIM, GOLD_BORDER: LIGHT.GOLD_BORDER }
@@ -1358,7 +1523,9 @@ function BacktestStatsPanel({ signals, backtestResults, dark }: { signals: Signa
     return { dates, tickers, avgD0Chg, redPct, avgClosePos, avgGap: gaps.reduce((a, b) => a + b, 0) / gaps.length, avgAbs: abses.reduce((a, b) => a + b, 0) / abses.length, avgVol, minClose, maxClose, topTickers }
   }, [signals])
 
-  if (!sigStats) return null
+  // During a backtest RUN there are no scan "signals" — don't let a null sigStats
+  // hide the whole panel (the run's stats live in backtestResults).
+  if (!sigStats && !backtestResults) return null
   const bt = backtestResults
   const tabs: { key: StatsTab; label: string; icon: React.ReactNode }[] = [
     { key: 'overview', label: 'Overview', icon: <Zap className="h-3 w-3" /> },
@@ -1369,7 +1536,9 @@ function BacktestStatsPanel({ signals, backtestResults, dark }: { signals: Signa
 
   return (
     <div className="space-y-2">
-      {/* ── Signal Overview Row (always visible) ── */}
+      {/* ── Signal Overview Row — HIDDEN during a backtest RUN (no scan signals;
+          kills the zero-leak from Avg Gap%/ABS/D0 Chg/%Red/Close Pos). ── */}
+      {sigStats && !isBacktestRun && (
       <div className="grid grid-cols-4 lg:grid-cols-8 gap-1.5">
         <StatBox label="Signals" value={signals.length.toString()} icon={<Zap className="h-3 w-3" />} />
         <StatBox label="Days" value={sigStats.dates.toString()} icon={<Calendar className="h-3 w-3" />} />
@@ -1380,6 +1549,7 @@ function BacktestStatsPanel({ signals, backtestResults, dark }: { signals: Signa
         <StatBox label="% Red" value={`${sigStats.redPct.toFixed(0)}%`} icon={<Minus className="h-3 w-3" />} color={C.RED} />
         <StatBox label="Close Pos" value={sigStats.avgClosePos.toFixed(2)} icon={<Target className="h-3 w-3" />} color={sigStats.avgClosePos < 0.5 ? C.RED : C.TEAL} />
       </div>
+      )}
 
       {/* ── Tab Bar ── */}
       <div className="flex items-center gap-1" style={{ background: C.SURFACE, border: `1px solid ${C.BORDER}`, borderRadius: 4, padding: '4px 8px' }}>
@@ -1405,6 +1575,11 @@ function BacktestStatsPanel({ signals, backtestResults, dark }: { signals: Signa
         <>
           {/* ── OVERVIEW TAB: Key metrics grid ── */}
           <div style={{ background: C.SURFACE, border: `1px solid ${C.TEAL}40`, borderRadius: 4, padding: '12px 14px' }}>
+            <div style={{ color: C.MUTED, fontSize: 8, marginBottom: 6, letterSpacing: 0.3, lineHeight: 1.4 }}>
+              {isBacktestRun
+                ? 'Notional $10,000 · 1% risk/trade · $ P&L = Σ trades[].pnl · CAGR over (to−from) · Sharpe/Sortino annualized ×√(trades/yr)'
+                : 'Baseline D0 open→close · R = (close−open)/(open−low) · $ mapped at $100 risk/trade on $10k notional'}
+            </div>
             <div className="grid grid-cols-3 lg:grid-cols-6 gap-x-6 gap-y-2">
               <MetricRow label="Total Return" value={`${bt.totalReturnPct > 0 ? '+' : ''}${bt.totalReturnPct.toFixed(1)}%`} color={bt.totalReturnPct >= 0 ? C.TEAL : C.RED} />
               <MetricRow label="CAGR" value={`${bt.cagr > 0 ? '+' : ''}${bt.cagr.toFixed(1)}%`} color={bt.cagr >= 0 ? C.TEAL : C.RED} />
@@ -1424,8 +1599,8 @@ function BacktestStatsPanel({ signals, backtestResults, dark }: { signals: Signa
               <MetricRow label="Avg Win" value={`+${bt.avgWinPct.toFixed(2)}%`} color={C.TEAL} />
               <MetricRow label="Avg Loss" value={`${bt.avgLossPct.toFixed(2)}%`} color={C.RED} />
               <MetricRow label="Win/Loss Ratio" value={`${bt.wlRatio.toFixed(2)}x`} />
-              <MetricRow label="Best Trade" value={`+${bt.bestTrade.toFixed(2)}%`} color={C.TEAL} />
-              <MetricRow label="Worst Trade" value={`${bt.worstTrade.toFixed(2)}%`} color={C.RED} />
+              <MetricRow label="Best Trade" value={isBacktestRun ? `+${bt.bestTrade.toFixed(2)}R` : `+${bt.bestTrade.toFixed(2)}%`} color={C.TEAL} />
+              <MetricRow label="Worst Trade" value={isBacktestRun ? `${bt.worstTrade.toFixed(2)}R` : `${bt.worstTrade.toFixed(2)}%`} color={C.RED} />
               <MetricRow label="Std Dev Returns" value={`${bt.stdDevReturns.toFixed(2)}%`} />
               <MetricRow label="Max Consec Wins" value={bt.maxConsecWins.toString()} color={C.TEAL} />
               <MetricRow label="Max Consec Loss" value={bt.maxConsecLosses.toString()} color={C.RED} />
@@ -1434,26 +1609,9 @@ function BacktestStatsPanel({ signals, backtestResults, dark }: { signals: Signa
             </div>
           </div>
 
-          {/* Day-by-day */}
+          {/* Day-by-day — R / $ / g(green%) / N(count) toggle + weekly rollup */}
           {bt.dayStats.length > 0 && (
-            <div style={{ background: C.SURFACE, border: `1px solid ${C.BORDER}`, borderRadius: 4, padding: '6px 10px' }}>
-              <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
-                <Clock className="h-3 w-3" style={{ color: C.GOLD }} />
-                <span style={{ color: C.GOLD, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Daily Breakdown</span>
-              </div>
-              <div style={{ display: 'flex', gap: 4, overflowX: 'auto', paddingBottom: 4 }}>
-                {bt.dayStats.map((d, i) => {
-                  const col = d.pnl >= 0 ? C.TEAL : C.RED
-                  return (
-                    <div key={i} style={{ minWidth: 54, padding: '4px 6px', background: C.SURFACE2, borderRadius: 3, textAlign: 'center' }}>
-                      <div style={{ color: C.MUTED, fontSize: 8, fontWeight: 600 }}>{d.day}</div>
-                      <div style={{ color: col, fontSize: 12, fontWeight: 700 }}>{d.pnl >= 0 ? '+' : ''}{d.pnl.toFixed(1)}%</div>
-                      <div style={{ color: C.MUTED, fontSize: 7 }}>{d.count}t</div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
+            <DailyBreakdown days={bt.dayStats} dark={dark} isRun={!!isBacktestRun} />
           )}
         </>
       ) : activeTab === 'performance' ? (
@@ -2151,7 +2309,6 @@ export default function BacktestPage() {
     const returns = trades.map(t => t.pnlPct)
     const wins = trades.filter(t => t.win)
     const losses = trades.filter(t => !t.win)
-    const totalPnl = returns.reduce((a, r) => a + r, 0)
     const grossWin = wins.reduce((a, t) => a + t.pnlPct, 0)
     const grossLoss = Math.abs(losses.reduce((a, t) => a + t.pnlPct, 0))
     const winRate = (wins.length / trades.length) * 100
@@ -2166,38 +2323,15 @@ export default function BacktestPage() {
     const expectancyPct = (winRate / 100) * avgWinPct + ((100 - winRate) / 100) * avgLossPct
     const wlRatio = losses.length > 0 && avgLossPct !== 0 ? Math.abs(avgWinPct / avgLossPct) : 0
 
-    // Cumulative P&L series
-    let cumPnl = 0
-    const cumPnlSeries: number[] = []
-    const drawdownSeries: number[] = []
-    let peak = 0, maxDd = 0, ddStart = 0, maxDDDuration = 0
-    returns.forEach((r, i) => {
-      cumPnl += r; cumPnlSeries.push(cumPnl)
-      peak = Math.max(peak, cumPnl)
-      const dd = peak - cumPnl
-      drawdownSeries.push(dd)
-      if (dd > 0 && ddStart === 0) ddStart = i
-      maxDd = Math.max(maxDd, dd)
-      if (dd === 0 && ddStart > 0) { maxDDDuration = Math.max(maxDDDuration, i - ddStart); ddStart = 0 }
-    })
-    if (ddStart > 0) maxDDDuration = Math.max(maxDDDuration, returns.length - ddStart)
-
-    // Sharpe ratio (annualized, assume ~252 trading days)
-    const meanReturn = returns.reduce((a, r) => a + r, 0) / returns.length
-    const stdDev = Math.sqrt(returns.reduce((a, r) => a + (r - meanReturn) ** 2, 0) / returns.length)
-    const sharpe = stdDev > 0 ? (meanReturn / stdDev) * Math.sqrt(252) : 0
-
-    // Sortino (downside deviation only)
-    const downsideReturns = returns.filter(r => r < 0)
-    const downsideDev = downsideReturns.length > 0 ? Math.sqrt(downsideReturns.reduce((a, r) => a + r ** 2, 0) / downsideReturns.length) : 0
-    const sortino = downsideDev > 0 ? (meanReturn / downsideDev) * Math.sqrt(252) : 0
-
-    // Calmar = CAGR / MaxDD
-    const totalReturnPct = totalPnl
+    // ── Notional capital model (REQ-321): map each baseline signal onto a
+    //    $100-risk trade on a $10k account. R = (close−open)/(open−low); the
+    //    raw % move stays as `returns` for the return-distribution visuals. ──
     const tradingDays = new Set(source.map(s => s.date)).size
-    const yearsInSample = tradingDays / 252
-    const cagr = yearsInSample > 0 ? (Math.pow(1 + totalReturnPct / 100, 1 / yearsInSample) - 1) * 100 : totalReturnPct
-    const calmar = maxDd > 0 ? Math.abs(totalReturnPct / maxDd) : 0
+    const years = tradingDays / 252
+    const pnlDollars = trades.map(t => t.rMultiple * 100)   // $100 risk per signal
+    const nm = btNotionalStats({ pnlDollars, years })
+    let curDdDur = 0, maxDdDur = 0
+    nm.drawdownSeries.forEach(dd => { if (dd > 0) { curDdDur++; maxDdDur = Math.max(maxDdDur, curDdDur) } else curDdDur = 0 })
 
     // Consecutive wins/losses
     let cWins = 0, cLosses = 0, maxCWins = 0, maxCLosses = 0
@@ -2208,17 +2342,15 @@ export default function BacktestPage() {
 
     const bestTrade = Math.max(...returns)
     const worstTrade = Math.min(...returns)
-    const recoveryFactor = maxDd > 0 ? totalPnl / maxDd : 0
 
-    // Day-by-day breakdown
-    const byDate: Record<string, { pnls: number[] }> = {}
+    // Day-by-day breakdown (R / $ / g / N ready; full date key)
+    const byDate: Record<string, { r: number; pnl: number; count: number; wins: number }> = {}
     source.forEach((s, i) => {
-      if (!byDate[s.date]) byDate[s.date] = { pnls: [] }
-      byDate[s.date].pnls.push(trades[i].pnlPct)
+      const e = byDate[s.date] || (byDate[s.date] = { r: 0, pnl: 0, count: 0, wins: 0 })
+      e.r += trades[i].rMultiple; e.pnl += trades[i].rMultiple * 100; e.count++
+      if (trades[i].rMultiple > 0) e.wins++
     })
-    const dayStats = Object.entries(byDate).map(([date, d]) => ({
-      day: date.slice(5), pnl: d.pnls.reduce((a, b) => a + b, 0), count: d.pnls.length,
-    }))
+    const dayStats = Object.entries(byDate).sort(([a], [b]) => a < b ? -1 : 1).map(([date, e]) => ({ date, day: date.slice(5), r: e.r, pnl: e.pnl, count: e.count, wins: e.wins }))
 
     // Monthly breakdown
     const byMonth: Record<string, { pnls: number[] }> = {}
@@ -2233,14 +2365,14 @@ export default function BacktestPage() {
 
     setBacktestResults({
       entryType: 'D0 Open', exitType: 'D0 Close', totalTrades: trades.length,
-      winRate, pctProfitable, profitFactor, sharpe, sortino, calmar,
-      maxDrawdown: maxDd, maxDDDuration, avgRMultiple, medianR,
+      winRate, pctProfitable, profitFactor, sharpe: nm.sharpe, sortino: nm.sortino, calmar: nm.calmar,
+      maxDrawdown: nm.maxDrawdown, maxDDDuration: maxDdDur, avgRMultiple, medianR,
       avgWinPct, avgLossPct, expectancy: expectancyPct, expectancyPct,
-      wlRatio, totalPnl: totalPnl * 1000, totalReturnPct, cagr,
+      wlRatio, totalPnl: nm.totalPnl, totalReturnPct: nm.totalReturnPct, cagr: nm.cagr,
       avgTradeDuration: '1 day', maxConsecWins: maxCWins, maxConsecLosses: maxCLosses,
-      bestTrade, worstTrade, stdDevReturns: stdDev, downsideDev, recoveryFactor,
+      bestTrade, worstTrade, stdDevReturns: nm.stdDevReturns, downsideDev: nm.downsideDev, recoveryFactor: nm.recoveryFactor,
       grossWin, grossLoss,
-      tradeReturns: returns, cumPnlSeries, drawdownSeries,
+      tradeReturns: returns, cumPnlSeries: nm.cumPnlSeries, drawdownSeries: nm.drawdownSeries,
       dayStats, monthlyStats,
     })
   }, [signals])
@@ -2276,6 +2408,7 @@ export default function BacktestPage() {
       // populate the SAME BacktestResults shape from the run's trades
       const trades = (d.trades || []) as { r: number; pnl: number; side: string; exitLabel: string }[]
       const returns = trades.map((t: any) => t.r)
+      const pnlDollars = (d.trades || []).map((t: any) => Number(t.pnl) || 0)   // real $ P&L per trade
       const wins = trades.filter((t: any) => t.r > 0), losses = trades.filter((t: any) => t.r < 0)
       const totR = returns.reduce((a: number, b: number) => a + b, 0)
       const grossWin = wins.reduce((a: number, t: any) => a + t.r, 0)
@@ -2285,34 +2418,42 @@ export default function BacktestPage() {
       const avgR = returns.length ? totR / returns.length : 0
       const avgWinR = wins.length ? wins.reduce((a: number, t: any) => a + t.r, 0) / wins.length : 0
       const avgLossR = losses.length ? losses.reduce((a: number, t: any) => a + t.r, 0) / losses.length : 0
-      let cumPnl = 0, peak = 0, maxDd = 0; const cumPnlSeries: number[] = [], drawdownSeries: number[] = []
-      returns.forEach((rv: number) => { cumPnl += rv; cumPnlSeries.push(cumPnl); peak = Math.max(peak, cumPnl); drawdownSeries.push(peak - cumPnl); maxDd = Math.max(maxDd, peak - cumPnl) })
-      const mean = returns.length ? returns.reduce((a: number, b: number) => a + b, 0) / returns.length : 0
-      const std = returns.length ? Math.sqrt(returns.reduce((a: number, r: number) => a + (r - mean) ** 2, 0) / returns.length) : 0
-      const down = returns.filter((r: number) => r < 0)
-      const ddev = down.length ? Math.sqrt(down.reduce((a: number, r: number) => a + r ** 2, 0) / down.length) : 0
       const sortedR = [...returns].sort((a: number, b: number) => a - b)
       const medianR = sortedR.length ? (sortedR.length % 2 ? sortedR[(sortedR.length - 1) / 2] : (sortedR[sortedR.length / 2 - 1] + sortedR[sortedR.length / 2]) / 2) : 0
-      // previously stubbed — now computed from the run's trades
+      // ── Notional capital model (REQ-321): $ / % / CAGR from real $ pnl ──
+      const meta = d.meta || {}
+      const fromMs = meta.from ? new Date(meta.from + 'T12:00:00Z').getTime() : NaN
+      const toMs = meta.to ? new Date(meta.to + 'T12:00:00Z').getTime() : NaN
+      const years = (fromMs && toMs && toMs > fromMs)
+        ? (toMs - fromMs) / (365.25 * 24 * 3600 * 1000)
+        : (new Set((d.trades || []).map((t: any) => (t.openDate || t.rsDate || '').slice(0, 10))).size || 1) / 252
+      const nm = btNotionalStats({ pnlDollars, years })
+      // DD duration (in trades) on the $ drawdown series
       let curDdDur = 0, maxDdDur = 0
-      drawdownSeries.forEach(dd => { if (dd > 0) { curDdDur++; maxDdDur = Math.max(maxDdDur, curDdDur) } else curDdDur = 0 })
+      nm.drawdownSeries.forEach(dd => { if (dd > 0) { curDdDur++; maxDdDur = Math.max(maxDdDur, curDdDur) } else curDdDur = 0 })
+      // win/loss streaks
       let cw = 0, cl = 0, maxCW = 0, maxCL = 0
       returns.forEach(rv => { if (rv > 0) { cw++; cl = 0; maxCW = Math.max(maxCW, cw) } else { cl++; cw = 0; maxCL = Math.max(maxCL, cl) } })
-      const trsDate = (d.trades || []) as { r: number; openDate: string }[]
-      const byDate: Record<string, number[]> = {}, byMonth: Record<string, number[]> = {}
-      trsDate.forEach((t, i) => { const d0 = t.openDate || ''; const k = d0.slice(5, 10), mo = d0.slice(0, 7); (byDate[k] = byDate[k] || []).push(returns[i]); (byMonth[mo] = byMonth[mo] || []).push(returns[i]) })
-      const dayStats = Object.entries(byDate).map(([day, rs]) => ({ day, pnl: rs.reduce((a, b) => a + b, 0), count: rs.length }))
-      const monthlyStats = Object.entries(byMonth).map(([month, rs]) => ({ month, pnl: rs.reduce((a, b) => a + b, 0), count: rs.length }))
+      // per-day series — FULL date key (fixes the old MM-DD year collision on multi-year runs)
+      const byDate: Record<string, { r: number; pnl: number; count: number; wins: number }> = {}
+      const byMonth: Record<string, number[]> = {}
+      ;(d.trades || []).forEach((t: any, i: number) => {
+        const full = (t.openDate || t.rsDate || '').slice(0, 10)
+        if (full) { const e = byDate[full] || (byDate[full] = { r: 0, pnl: 0, count: 0, wins: 0 }); e.r += returns[i]; e.pnl += pnlDollars[i]; e.count++; if (returns[i] > 0) e.wins++ }
+        const mo = full.slice(0, 7); if (mo) (byMonth[mo] = byMonth[mo] || []).push(returns[i])
+      })
+      const dayStats = Object.entries(byDate).sort(([a], [b]) => a < b ? -1 : 1).map(([date, e]) => ({ date, day: date.slice(5), r: e.r, pnl: e.pnl, count: e.count, wins: e.wins }))
+      const monthlyStats = Object.entries(byMonth).sort(([a], [b]) => a < b ? -1 : 1).map(([month, rs]) => ({ month, pnl: rs.reduce((a, b) => a + b, 0), count: rs.length }))
       setBacktestResults({
         entryType: d.meta ? `${d.meta.engine || 'engine'}` : 'engine', exitType: 'see trade reason',
         totalTrades: trades.length, winRate, pctProfitable: winRate, profitFactor,
-        sharpe: std ? (mean / std) * Math.sqrt(252) : 0, sortino: ddev ? (mean / ddev) * Math.sqrt(252) : 0, calmar: maxDd ? Math.abs(totR / maxDd) : 0,
-        maxDrawdown: maxDd, maxDDDuration: maxDdDur, avgRMultiple: avgR, medianR, avgWinPct: avgWinR, avgLossPct: avgLossR,
+        sharpe: nm.sharpe, sortino: nm.sortino, calmar: nm.calmar,
+        maxDrawdown: nm.maxDrawdown, maxDDDuration: maxDdDur, avgRMultiple: avgR, medianR, avgWinPct: avgWinR, avgLossPct: avgLossR,
         expectancy: avgR, expectancyPct: avgR, wlRatio: avgLossR ? Math.abs(avgWinR / avgLossR) : 0,
-        totalPnl: totR, totalReturnPct: totR, cagr: totR, avgTradeDuration: '—',
+        totalPnl: nm.totalPnl, totalReturnPct: nm.totalReturnPct, cagr: nm.cagr, avgTradeDuration: '—',
         maxConsecWins: maxCW, maxConsecLosses: maxCL, bestTrade: returns.length ? Math.max(...returns) : 0,
-        worstTrade: returns.length ? Math.min(...returns) : 0, stdDevReturns: std, downsideDev: ddev,
-        recoveryFactor: maxDd ? totR / maxDd : 0, grossWin, grossLoss, tradeReturns: returns, cumPnlSeries, drawdownSeries,
+        worstTrade: returns.length ? Math.min(...returns) : 0, stdDevReturns: nm.stdDevReturns, downsideDev: nm.downsideDev,
+        recoveryFactor: nm.recoveryFactor, grossWin, grossLoss, tradeReturns: returns, cumPnlSeries: nm.cumPnlSeries, drawdownSeries: nm.drawdownSeries,
         dayStats, monthlyStats,
       })
     } catch {}
@@ -2367,7 +2508,9 @@ export default function BacktestPage() {
   const selectedBtRunObj = selectedBtRun ? btRuns.find(r => r.id === selectedBtRun) : null
   const chartSymbol = (selectedBtRun && btTrades[selectedTradeIdx]?.ticker) || (selectedBtRunObj?.meta?.symbol as string) || sig?.ticker || 'SPY'
   const chartTf = tf
-  const chartDate = selectedBtRunObj ? (btTrades[selectedTradeIdx]?.rsDate || btTrades[selectedTradeIdx]?.openDate?.slice(0, 10) || btTrades[0]?.openDate?.slice(0, 10) || (selectedBtRunObj.meta?.from as string)) : sig?.date
+  const chartDate = selectedBtRunObj ? (selectedBtRunObj.meta?.intraday
+    ? (btTrades[selectedTradeIdx]?.openDate?.slice(0, 10) || btTrades[selectedTradeIdx]?.rsDate || btTrades[0]?.openDate?.slice(0, 10) || (selectedBtRunObj.meta?.from as string))
+    : (btTrades[selectedTradeIdx]?.rsDate || btTrades[selectedTradeIdx]?.openDate?.slice(0, 10) || btTrades[0]?.openDate?.slice(0, 10) || (selectedBtRunObj.meta?.from as string))) : sig?.date
   // Entry + exit wedges for the selected backtest run.
   // Convention: green ▲ = BUY action (long entry / short cover); red ▼ = SELL action (short entry / long exit).
   const btMarkers = useMemo(() => {
@@ -2413,8 +2556,12 @@ export default function BacktestPage() {
     const maxExit = tickerTrades.reduce((mx: string, tr: any) => (tr.exitDate > mx ? tr.exitDate : mx), '')
     const splitMs = new Date(t.rsDate + 'T12:00:00').getTime()
     const exitDays = maxExit ? Math.ceil((new Date(maxExit.slice(0, 10) + 'T12:00:00').getTime() - splitMs) / 86400000) : 0
+    // Intraday runs (e.g. G&C gap-entry): D0 IS the trade day — keep it at the right
+    // edge, no 60-day forward window (that floor is for R/S-pump swing runs where the
+    // pump can land weeks after the split).
+    if (selectedBtRunObj?.meta?.intraday) return Math.max(0, exitDays)
     return Math.max(60, exitDays + 5)
-  }, [selectedBtRun, btTrades, selectedTradeIdx])
+  }, [selectedBtRun, btTrades, selectedTradeIdx, selectedBtRunObj])
 
  // Reset day offset when signal changes
  // (also done inline in every setSelectedIdx call)
@@ -2785,8 +2932,8 @@ export default function BacktestPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10, fontFamily: 'monospace' }}>
               <thead>
                 <tr style={{ background: T.SURFACE2, position: 'sticky', top: 0, zIndex: 2 }}>
-                  {['OPEN', 'S', 'TKR', 'R/S', 'ENTRY', 'STOP', 'EXIT', 'R', '$PNL', 'REASON'].map(h => (
-                    <th key={h} style={{ padding: '4px 6px', textAlign: (h === 'OPEN' || h === 'TKR' || h === 'R/S') ? 'left' : 'right', color: T.GOLD, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', borderLeft: `1px solid ${T.BORDER}` }}>{h}</th>
+                  {['OPEN', 'S', 'TKR', selectedBtRunObj?.meta?.intraday ? 'D0' : 'R/S', 'ENTRY', 'STOP', 'EXIT', 'R', '$PNL', 'REASON'].map(h => (
+                    <th key={h} style={{ padding: '4px 6px', textAlign: (h === 'OPEN' || h === 'TKR' || h === 'D0' || h === 'R/S') ? 'left' : 'right', color: T.GOLD, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', borderLeft: `1px solid ${T.BORDER}` }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -2986,13 +3133,13 @@ export default function BacktestPage() {
       </div>
       {viewMode === 'stat' ? (
         <>
-          <BacktestStatsPanel signals={filteredSignals} backtestResults={backtestResults} dark={dark} />
+          <BacktestStatsPanel signals={filteredSignals} backtestResults={backtestResults} dark={dark} isBacktestRun={!!selectedBtRun} />
           {renderChartSection()}
         </>
       ) : (
         <>
           {renderChartSection()}
-          <BacktestStatsPanel signals={filteredSignals} backtestResults={backtestResults} dark={dark} />
+          <BacktestStatsPanel signals={filteredSignals} backtestResults={backtestResults} dark={dark} isBacktestRun={!!selectedBtRun} />
         </>
       )}
     </div>

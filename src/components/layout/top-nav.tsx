@@ -23,7 +23,7 @@ interface NavGroupDef { name: string; items: NavItem[] }
 // A group stays open when you're on one of its pages (active-open persistence).
 const NAV_GROUPS: NavGroupDef[] = [
   {
-    name: 'Traderra',
+    name: 'Journal',
     items: [
       { name: 'Journal', href: '/journal', icon: NotebookPen },
       { name: 'Trades', href: '/trades', icon: BarChart3 },
@@ -33,13 +33,13 @@ const NAV_GROUPS: NavGroupDef[] = [
     ],
   },
   {
-    name: 'Edge Dev',
+    name: 'Edge',
     items: [
-      { name: 'Scanner', href: '/scanner', icon: Search },
-      { name: 'Database', href: '/database', icon: Database },
       { name: 'Playbook', href: '/playbook', icon: BookOpen },
-      { name: 'Lab', href: '/lab', icon: TestTube },
+      { name: 'Scanner', href: '/scanner', icon: Search },
       { name: 'Backtest', href: '/backtest', icon: FlaskConical },
+      { name: 'Database', href: '/database', icon: Database },
+      { name: 'Lab', href: '/lab', icon: TestTube },
     ],
   },
   {

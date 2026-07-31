@@ -1,9 +1,12 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { Maximize2, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useChartStore } from '@/stores/charts/chartStore'
 import { useTickerStore } from '@/stores/tickerStore'
+import { ScanMiniChart, type ChartSettings, type Timeframe, IND_TEMPLATES, TEMPLATE_IND_KEYS } from '@/app/scanner/page'
 import { TickerSearchBar } from '@/components/TickerSearchBar'
 import { GapStatsPanel } from '@/components/panels/GapStatsPanel'
 import { DilutionPanel } from '@/components/panels/DilutionPanel'
@@ -556,6 +559,27 @@ function CompanyPortrait({ snap, pers }: { snap: any; pers: any }) {
   )
 }
 
+// Default mini-chart settings for the inline Push Chart (Mike's Bands, matches /scanner + /database).
+// Effective Mike's Bands preset, inlined as a complete type-safe ChartSettings literal
+// (IndTemplate.settings marks showAnchored* optional, which breaks a ChartSettings-typed const).
+const VIEWER_SETTINGS: ChartSettings = {
+  showEma9_20: true, showEma72_89: true,
+  showDevBands9_20: true, showDevBands72_89: true, showDevBands72_89Tight: true,
+  showAnchoredLight: true, showAnchoredMain: true,
+  showKeyLevels: true, showVwap: true, showPrevClose: false, showAhPmShade: true,
+  showVolume: true, showCrosshair: true, showLegend: false,
+}
+// Per-TF defaults: chartDays = total window width; fwd = dayOffset (days forward past D0).
+const VIEWER_TF_CONFIG: Record<Timeframe, { lbl: string; chartDays: number; fwd: number }> = {
+  '5':   { lbl: '5m',  chartDays: 2,  fwd: 1 },   // d-1 → d+1
+  '15':  { lbl: '15m', chartDays: 6,  fwd: 1 },   // 5 back + 1 fwd
+  '60':  { lbl: '1H',  chartDays: 12, fwd: 2 },   // 10 back + 2 fwd
+  '120': { lbl: '2H',  chartDays: 17, fwd: 2 },   // 15 back + 2 fwd
+  '240': { lbl: '4H',  chartDays: 23, fwd: 3 },   // 20 back + 3 fwd
+  'D':   { lbl: '1D',  chartDays: 45, fwd: 5 },   // 40 back + 5 fwd
+}
+const VIEWER_TFS: Timeframe[] = ['5', '15', '60', '240', 'D']
+
 export default function PersonalityPage() {
   const router = useRouter()
   // Active ticker + recent list come from the shared store (the host owns the search bar).
@@ -574,6 +598,16 @@ export default function PersonalityPage() {
   const [filterSize, setFilterSize] = useState<Set<string>>(() => new Set())
   const [filterFaded, setFilterFaded] = useState(false)
   const [filterReclaimed, setFilterReclaimed] = useState(false)
+
+  // Inline push-chart state (ports playbook's A+ Chart Viewer — embed ScanMiniChart on the page
+  // instead of routing away to /charts). Only the DATE varies per push; symbol is always `ticker`.
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [tf, setTf] = useState<Timeframe>('15')
+  const [dayOffset, setDayOffset] = useState(1)
+  const [settings, setSettings] = useState<ChartSettings>(() => ({ ...VIEWER_SETTINGS }))
+  const [showInd, setShowInd] = useState(false)
+  const [fullscreen, setFullscreen] = useState(false)
+  const chartRef = useRef<HTMLDivElement>(null)
 
   // Pure fetch — ticker + recent list are owned by the shared store (host search bar).
   const run = async (t: string, w: string) => {
@@ -656,9 +690,27 @@ export default function PersonalityPage() {
   }, [inv, snap, dilDates])
 
   // #4 chart deep-link: set the chart symbol + focus date and route to /charts.
+  // Reserved for the header "Open chart ↗" escape hatch only — row clicks use selectPush (inline embed).
   const openChart = (date?: string) => {
     useChartStore.getState().scanNavigate(ticker.toUpperCase(), date ?? null)
     router.push('/charts')
+  }
+
+  // Inline push chart — selecting a date embeds a ScanMiniChart on the page (no navigation).
+  const selectPush = (date: string) => {
+    setSelectedDate(date)
+    setDayOffset(VIEWER_TF_CONFIG[tf].fwd)
+    setTimeout(() => chartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60)
+  }
+  const clearChart = () => setSelectedDate(null)
+  const changeTf = (newTf: Timeframe) => {
+    setTf(newTf)
+    setDayOffset(VIEWER_TF_CONFIG[newTf].fwd)   // reset forward offset to that TF's default
+  }
+  const toggle = (key: keyof ChartSettings) => setSettings((s) => ({ ...s, [key]: !s[key] }))
+  const applyTemplate = (id: string) => {
+    const t = IND_TEMPLATES.find((x) => x.id === id)
+    if (t) setSettings((s) => ({ ...s, ...t.settings }))
   }
 
   // §A #4 filtered push inventory (matrices above stay on full data).
@@ -766,7 +818,7 @@ export default function PersonalityPage() {
                         {archetype.cap && <DimChip key="cap" tone="muted">{archetype.cap.label} Float</DimChip>}
                       </div>
                     </div>
-                    <button type="button" onClick={() => openChart()} title={`Open ${ticker} on the chart`}
+                    <button type="button" onClick={() => openChart()} title={`Open full chart terminal for ${ticker}`}
                       className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold border border-[#D4AF37]/40 bg-[#D4AF37]/10 text-[#D4AF37] hover:bg-[#D4AF37]/20 transition-colors">
                       Open chart ↗
                     </button>
@@ -963,7 +1015,7 @@ export default function PersonalityPage() {
                       {[...filteredInv].sort((x, y) => y.excursion - x.excursion).map((e, i) => (
                         <tr key={i} className={`border-b border-[#1f2937]/50 hover:bg-[#141c2b] ${e.devSigma >= 6.9 ? 'bg-[#D4AF37]/[0.05]' : ''}`}>
                           <td className="px-2.5 py-1.5 text-right whitespace-nowrap">
-                            <button type="button" onClick={() => openChart(e.date)} title={`Open chart at ${e.date}`}
+                            <button type="button" onClick={() => selectPush(e.date)} title={`Open chart at ${e.date}`}
                               className="inline-flex items-center gap-1 text-[#e0e0e0] hover:text-[#D4AF37] underline-offset-2 hover:underline">
                               <span>{e.date}</span>
                               {nearDilFlag(e.date) && <span className="text-[#fbbf24]" title="Within ±10d of a dilution event (offering / registration / reverse split)">⚠</span>}
@@ -1006,6 +1058,25 @@ export default function PersonalityPage() {
                 )}
               </Panel>
 
+              {/* Inline push chart — embeds a ScanMiniChart on the page when a row is clicked. */}
+              <PushChartPanel
+                ticker={ticker.toUpperCase()}
+                selectedDate={selectedDate}
+                tf={tf}
+                dayOffset={dayOffset}
+                settings={settings}
+                showInd={showInd}
+                fullscreen={fullscreen}
+                chartRef={chartRef}
+                changeTf={changeTf}
+                setDayOffset={setDayOffset}
+                toggle={toggle}
+                applyTemplate={applyTemplate}
+                setShowInd={setShowInd}
+                setFullscreen={setFullscreen}
+                onClose={clearChart}
+              />
+
               {/* #3 Dilution ↔ Move pairs — every push within ±10d of a dilution event, paired with the closest event */}
               <Panel title="Dilution ↔ Move Correlation" subtitle={snap ? `${nearDilPairs.length} push${nearDilPairs.length === 1 ? '' : 'es'} within ±10 calendar days of a dilution event — click any date to open the chart` : 'No dilution data for this ticker'}>
                 {!snap ? (
@@ -1031,7 +1102,7 @@ export default function PersonalityPage() {
                         {nearDilPairs.map(({ push: e, event }, i) => (
                           <tr key={i} className="border-b border-[#1f2937]/50 hover:bg-[#141c2b]">
                             <td className="px-3 py-1.5 text-left whitespace-nowrap">
-                              <button type="button" onClick={() => openChart(e.date)} title={`Open chart at ${e.date}`}
+                              <button type="button" onClick={() => selectPush(e.date)} title={`Open chart at ${e.date}`}
                                 className="inline-flex items-center gap-1 text-[#e0e0e0] hover:text-[#D4AF37] hover:underline">
                                 <span>{e.date}</span><span className="text-[#D4AF37]">↗</span>
                               </button>
@@ -1239,5 +1310,107 @@ function FilterBar(props: {
         {active > 0 && <button type="button" onClick={clear} className="text-xs text-[#f87171] hover:underline">Clear ({active})</button>}
       </div>
     </div>
+  )
+}
+
+// Inline push chart — embeds a ScanMiniChart on the page (ports playbook's A+ Chart Viewer).
+// Renders only when a push date is selected; click any date in Push Inventory / Dilution↔Move tables.
+function PushChartPanel(props: {
+  ticker: string
+  selectedDate: string | null
+  tf: Timeframe
+  dayOffset: number
+  settings: ChartSettings
+  showInd: boolean
+  fullscreen: boolean
+  chartRef: React.RefObject<HTMLDivElement>
+  changeTf: (t: Timeframe) => void
+  setDayOffset: React.Dispatch<React.SetStateAction<number>>
+  toggle: (key: keyof ChartSettings) => void
+  applyTemplate: (id: string) => void
+  setShowInd: React.Dispatch<React.SetStateAction<boolean>>
+  setFullscreen: React.Dispatch<React.SetStateAction<boolean>>
+  onClose: () => void
+}) {
+  const { ticker, selectedDate, tf, dayOffset, settings, showInd, fullscreen, chartRef,
+    changeTf, setDayOffset, toggle, applyTemplate, setShowInd, setFullscreen, onClose } = props
+  const cfg = VIEWER_TF_CONFIG[tf]
+  if (!selectedDate) return null
+
+  // Shared toolbar JSX: TF buttons + nav + fullscreen + indicators (used inline AND in fullscreen).
+  // Rendered as a FUNCTION (not a component) so toggling showInd doesn't remount the chart canvas.
+  const renderToolbar = (compactNav = false) => (
+    <div className="flex items-center gap-1 flex-wrap">
+      <span className="text-[10px] uppercase tracking-wider font-bold mr-1 text-[#D4AF37]">{ticker}</span>
+      <span className="text-[10px] font-mono mr-2 text-[#6b7280]">{selectedDate}</span>
+      {VIEWER_TFS.map((t) => (
+        <button key={t} onClick={() => changeTf(t)}
+          className="text-[10px] px-2 py-0.5 rounded font-mono transition-colors"
+          style={tf === t ? { color: '#0a0a0a', background: '#D4AF37' } : { color: '#9ca3af', background: '#141c2b', border: '1px solid #1f2937' }}>
+          {VIEWER_TF_CONFIG[t].lbl}
+        </button>
+      ))}
+      {!compactNav && (<>
+        <span className="w-px h-3 mx-1" style={{ background: '#1f2937' }} />
+        <button onClick={() => setDayOffset((p) => p - 1)} title="Pan back 1 day" className="text-[11px] px-1.5 py-0.5 rounded font-mono" style={{ color: '#9ca3af', background: '#141c2b', border: '1px solid #1f2937' }}>◀</button>
+        <button onClick={() => setDayOffset(cfg.fwd)} title="Reset to default D0 window" className="text-[10px] px-1.5 py-0.5 rounded font-mono font-bold" style={{ color: '#0a0a0a', background: '#D4AF37' }}>D0</button>
+        <button onClick={() => setDayOffset((p) => p + 1)} title="Pan forward 1 day" className="text-[11px] px-1.5 py-0.5 rounded font-mono" style={{ color: '#9ca3af', background: '#141c2b', border: '1px solid #1f2937' }}>▶</button>
+        <button onClick={() => setDayOffset((p) => p + 3)} title="Forward 3 days" className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ color: '#9ca3af', background: '#141c2b', border: '1px solid #1f2937' }}>+3d</button>
+        <button onClick={() => setDayOffset((p) => p + 7)} title="Forward 7 days" className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ color: '#9ca3af', background: '#141c2b', border: '1px solid #1f2937' }}>+7d</button>
+        <button onClick={() => setDayOffset((p) => p + 14)} title="Forward 14 days" className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ color: '#9ca3af', background: '#141c2b', border: '1px solid #1f2937' }}>+14d</button>
+      </>)}
+      <button onClick={() => setFullscreen((f) => !f)} title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+        className="ml-1 p-0.5 rounded flex items-center justify-center transition-colors hover:opacity-100"
+        style={{ color: '#9ca3af', background: fullscreen ? 'rgba(212,175,55,0.10)' : '#141c2b', border: `1px solid ${fullscreen ? 'rgba(212,175,55,0.30)' : '#1f2937'}`, opacity: 0.85 }}>
+        <Maximize2 className="w-3 h-3" />
+      </button>
+      <button onClick={() => setShowInd((s) => !s)} title="Indicator toggles"
+        className="text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1"
+        style={showInd ? { color: '#D4AF37', background: 'rgba(212,175,55,0.10)', border: '1px solid rgba(212,175,55,0.30)' } : { color: '#9ca3af', background: 'transparent', border: '1px solid #1f2937' }}>⚙ Ind</button>
+      {showInd && (
+        <div className="flex flex-wrap gap-0.5 w-full mt-1">
+          {IND_TEMPLATES.map((tpl) => (
+            <button key={tpl.id} onClick={() => applyTemplate(tpl.id)}
+              className="text-[10px] px-1.5 py-0.5 rounded font-mono"
+              style={{ color: '#9ca3af', background: 'transparent', border: '1px solid #1f2937' }}>{tpl.name}</button>
+          ))}
+          {TEMPLATE_IND_KEYS.map(([key, label]) => (
+            <button key={key} onClick={() => toggle(key)}
+              className="text-[10px] px-1.5 py-0.5 rounded font-mono transition-colors"
+              style={settings[key] ? { color: '#D4AF37', background: 'rgba(212,175,55,0.10)', border: '1px solid rgba(212,175,55,0.30)' } : { color: '#9ca3af', background: 'transparent', border: '1px solid #1f2937' }}>{label}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
+  const chart = (height: number) => (
+    <ScanMiniChart symbol={ticker} tf={tf} date={selectedDate} height={height} settings={settings} dark dayOffset={dayOffset} chartDays={cfg.chartDays} compact />
+  )
+
+  return (
+    <>
+      <div ref={chartRef} className="bg-[#0f1623] border border-[#1f2937] rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-[#1f2937] flex items-center justify-between">
+          <div>
+            <div className="text-sm font-bold text-[#e0e0e0]">Push Chart</div>
+            <div className="text-xs text-[#666] mt-0.5">{ticker} · {selectedDate} · click another date to recenter</div>
+          </div>
+          <button type="button" onClick={onClose} title="Close chart" className="p-1 text-[#9ca3af] hover:text-[#f87171]"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-3">
+          {renderToolbar()}
+          <div className="mt-2">{chart(420)}</div>
+        </div>
+      </div>
+      {fullscreen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 flex flex-col" style={{ background: '#0a0a0a' }}>
+          <div className="flex items-center justify-between px-4 py-2 border-b" style={{ borderColor: '#1f2937' }}>
+            {renderToolbar(true)}
+            <button onClick={() => setFullscreen(false)} className="p-1 text-[#9ca3af] hover:text-[#f87171]"><X className="w-5 h-5" /></button>
+          </div>
+          <div className="flex-1 min-h-0 p-3">{chart(Math.max(400, typeof window !== 'undefined' ? window.innerHeight - 100 : 700))}</div>
+        </div>, document.body)}
+    </>
   )
 }

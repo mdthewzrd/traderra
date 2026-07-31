@@ -340,9 +340,9 @@ function SectionField({ label, hint, section, onChange, onImageClick, allowTrade
                 )}
                 <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: C.TEXT }}>{idea.thesis || <span style={{ color: C.MUTED }}>—</span>}</div>
               </div>
-              <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button type="button" onClick={() => startEdit(idea)} className="p-0.5" style={{ color: '#9ca3af' }} title="Edit"><Pencil className="h-3.5 w-3.5" /></button>
-                <button type="button" onClick={() => removeIdea(idea.id)} className="p-0.5" style={{ color: '#9ca3af' }} title="Remove"><X className="h-3.5 w-3.5" /></button>
+              <div className="flex items-center gap-1 shrink-0">
+                <button type="button" onClick={() => startEdit(idea)} className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold transition-colors hover:bg-[rgba(212,175,55,0.12)]" style={{ color: C.GOLD, border: '1px solid rgba(212,175,55,0.3)' }} title="Edit this idea"><Pencil className="h-3 w-3" /> Edit</button>
+                <button type="button" onClick={() => removeIdea(idea.id)} className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5" style={{ color: '#9ca3af' }} title="Remove"><X className="h-3.5 w-3.5" /></button>
               </div>
             </div>
             )

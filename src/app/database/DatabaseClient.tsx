@@ -72,6 +72,15 @@ const DEFAULT_SETTINGS: ChartSettings = {
 const TF_OPTIONS: Timeframe[] = ['D', '240', '120', '60', '15', '5']
 const TF_LABELS: Record<Timeframe, string> = { D: '1D', '240': '4H', '120': '2H', '60': '1H', '15': '15m', '5': '5m' }
 
+function loadJSON<T>(key: string, fallback: T): T {
+  if (typeof window === 'undefined') return fallback
+  try { const v = localStorage.getItem(key); return v ? { ...(fallback as any), ...JSON.parse(v) } : fallback } catch { return fallback }
+}
+function loadVal<T>(key: string, fallback: T): T {
+  if (typeof window === 'undefined') return fallback
+  try { const v = localStorage.getItem(key); return (v ?? (fallback as any)) as T } catch { return fallback }
+}
+
 interface CorpusRow {
   id: string
   scanSources: string[]
@@ -235,6 +244,115 @@ function ThemedSelect({
   )
 }
 
+// ─── Multi-value creatable combobox (mirrors ThemedSelect, multi-select) ──
+function ThemedMultiSelect({
+  value, options, colors, onChange, placeholder = '—', allowCreate, onCreate,
+}: {
+  value: string[]
+  options: readonly string[]
+  colors?: Record<string, string>
+  onChange: (v: string[]) => void
+  placeholder?: string
+  allowCreate?: boolean
+  onCreate?: (label: string) => void
+}) {
+  const C = useTheme()
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const [rect, setRect] = useState<DOMRect | null>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const menuId = useRef('tms-menu-' + Math.random().toString(36).slice(2)).current
+
+  useEffect(() => {
+    if (!open) return
+    const close = () => { setOpen(false); setQ('') }
+    const onDoc = (e: MouseEvent) => {
+      const menu = document.getElementById(menuId)
+      if (btnRef.current?.contains(e.target as Node)) return
+      if (menu?.contains(e.target as Node)) return
+      close()
+    }
+    const onScroll = () => close()
+    document.addEventListener('mousedown', onDoc)
+    window.addEventListener('scroll', onScroll, true)
+    return () => { document.removeEventListener('mousedown', onDoc); window.removeEventListener('scroll', onScroll, true) }
+  }, [open, menuId])
+
+  const toggle = () => {
+    if (open) { setOpen(false); setQ(''); return }
+    if (btnRef.current) setRect(btnRef.current.getBoundingClientRect())
+    setOpen(true)
+  }
+  const filtered = q ? options.filter((o) => o.toLowerCase().includes(q.toLowerCase())) : options
+  const canCreate = allowCreate && onCreate && q.trim() && !options.some((o) => o.toLowerCase() === q.trim().toLowerCase()) && !value.some((v) => v.toLowerCase() === q.trim().toLowerCase())
+  const spaceBelow = rect ? Math.max(0, window.innerHeight - rect.bottom) : 400
+  const spaceAbove = rect ? Math.max(0, rect.top) : 400
+  const openUp = rect ? (spaceBelow < 120 && spaceAbove > spaceBelow) : false
+  const availH = openUp ? spaceAbove - 12 : Math.max(120, spaceBelow - 12)
+  const menuH = Math.min(300, availH)
+  const menuTop = !rect ? 0 : openUp ? (rect.top - menuH - 4) : (rect.bottom + 2)
+
+  // toggle an option (add/remove); keep menu open so multiple can be picked
+  const toggleOpt = (o: string) => onChange(value.includes(o) ? value.filter((v) => v !== o) : [...value, o])
+  const create = () => { const label = q.trim(); if (!label) return; onCreate!(label); onChange([...value, label]); setQ('') }
+
+  return (
+    <>
+      <button ref={btnRef} onClick={toggle}
+        className="border rounded px-1.5 py-0.5 text-xs font-semibold cursor-pointer flex items-center gap-1 transition-colors w-full"
+        style={{ borderColor: C.BORDER, background: C.SURFACE }}>
+        <span className="flex-1 text-left flex flex-wrap gap-0.5 min-w-0">
+          {value.length === 0
+            ? <span style={{ color: C.MUTED }}>{placeholder}</span>
+            : value.map((t) => {
+                const tc = colors?.[t]
+                return <span key={t} className="text-[9px] px-1 rounded shrink-0" style={{ color: tc ?? C.GOLD, background: tc ? `${tc}1a` : C.GOLD_DIM }}>{t}</span>
+              })}
+        </span>
+        <span style={{ color: C.MUTED, fontSize: 8 }}>▼</span>
+      </button>
+      {open && rect && typeof document !== 'undefined' && createPortal(
+        <div id={menuId} className="rounded-md border shadow-2xl py-1 flex flex-col"
+          style={{ position: 'fixed', top: menuTop, left: rect.left, zIndex: 200,
+            background: C.SURFACE, borderColor: C.BORDER, minWidth: Math.max(rect.width, 150), maxWidth: 230 }}>
+          <div className="px-1.5 pb-1 shrink-0">
+            <input autoFocus value={q} onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && canCreate) { e.preventDefault(); create() } }}
+              placeholder="Search or type to create…"
+              className="w-full border rounded px-1.5 py-1 text-xs focus:outline-none" style={{ background: C.SURFACE2, borderColor: C.BORDER, color: C.TEXT }} />
+          </div>
+          <div className="overflow-y-auto" style={{ maxHeight: menuH - 38 }}>
+            {filtered.map((o) => {
+              const oc = colors?.[o]
+              const sel = value.includes(o)
+              return (
+                <button key={o} onClick={() => toggleOpt(o)}
+                  className="w-full flex items-center gap-1.5 px-2 py-1 text-xs text-left transition-colors"
+                  style={{ color: sel ? C.GOLD : C.TEXT, background: sel ? C.GOLD_DIM : 'transparent' }}>
+                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: oc ?? 'transparent', border: oc ? 'none' : `1px solid ${C.BORDER}` }} />
+                  <span className="flex-1 truncate">{o}</span>
+                  {sel && <span style={{ color: C.GOLD }}>✓</span>}
+                </button>
+              )
+            })}
+            {filtered.length === 0 && !canCreate && (
+              <div className="px-2 py-1.5 text-xs" style={{ color: C.MUTED }}>No matches</div>
+            )}
+            {canCreate && (
+              <button onClick={create}
+                className="w-full flex items-center gap-1.5 px-2 py-1 text-xs text-left"
+                style={{ color: C.GOLD, borderTop: `1px solid ${C.BORDER}` }}>
+                <Plus className="w-3 h-3" /> Create “{q.trim()}”
+              </button>
+            )}
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
+  )
+}
+
 // Grade hex map (full, for the colored popover)
 const GRADE_HEX: Record<string, string> = {
   'A+': '#34d399', 'A': '#D4AF37', 'B': '#f59e0b',
@@ -258,12 +376,13 @@ function ClassifySelect({
 }
 
 // ─── Custom column inline cell editor (forward testing) ──
-function CustomCell({ field, value, onSave, colors, onAddOption }: {
+function CustomCell({ field, value, onSave, colors, onAddOption, onCreateOption }: {
   field: CorpusField
   value: any
   onSave: (v: any) => void
   colors?: Record<string, string> | null
   onAddOption?: (label: string) => void
+  onCreateOption?: (label: string) => void   // add field option only (no value clobber) — for multiselect create
 }) {
   const C = useTheme()
   const base = "border rounded px-1.5 py-0.5 text-xs transition-colors w-full"
@@ -286,18 +405,8 @@ function CustomCell({ field, value, onSave, colors, onAddOption }: {
   }
   if (field.type === 'multiselect') {
     const cur: string[] = Array.isArray(value) ? value : []
-    const cycle = () => {
-      // click cycles through options + clear, for compact inline editing
-      const idx = field.options.findIndex((o) => !cur.includes(o))
-      if (idx === -1) onSave([])
-      else onSave([...cur, field.options[idx]])
-    }
-    if (!cur.length) return <button onClick={cycle} className="text-xs" style={{ color: C.BORDER }}>—</button>
-    return (
-      <button onClick={cycle} className="flex flex-wrap gap-0.5 max-w-[140px]">
-        {cur.map((t) => <span key={t} className="text-[9px] px-1 rounded" style={{ color: C.GOLD, background: C.GOLD_DIM }}>{t}</span>)}
-      </button>
-    )
+    return <ThemedMultiSelect value={cur} options={field.options} colors={colors ?? undefined}
+      onChange={(v) => onSave(v)} allowCreate onCreate={onCreateOption} />
   }
   if (field.type === 'date') {
     return <input type="date" value={value ?? ''} onChange={(e) => onSave(e.target.value || null)} className={base} style={st} />
@@ -839,6 +948,7 @@ export default function DatabasePage() {
   const [sorting, setSorting] = useState<SortingState>([])
   const [dark, setDark] = useState(true)
   const C = dark ? DARK : LIGHT_THEME
+  const [viewMode, setViewMode] = useState<'database' | 'review'>('database')
   // Unified filter defs — every column is filterable
   const filterDefs = useMemo<FilterDef[]>(() => {
     const builtIn: FilterDef[] = [
@@ -1262,7 +1372,7 @@ export default function DatabasePage() {
         cell: (i) => {
           const rid = i.row.original.id
           const val = (i.row.original.customValues ?? {})[f.id]
-          return <CustomCell field={f} value={val} colors={f.colors} onSave={(v) => saveCustomValue(rid, f.id, v)} onAddOption={(label) => { addFieldOption(f.id, label); saveCustomValue(rid, f.id, label) }} />
+          return <CustomCell field={f} value={val} colors={f.colors} onSave={(v) => saveCustomValue(rid, f.id, v)} onAddOption={(label) => { addFieldOption(f.id, label); saveCustomValue(rid, f.id, label) }} onCreateOption={(label) => addFieldOption(f.id, label)} />
         },
       })),
       ch.display({
@@ -1329,7 +1439,7 @@ export default function DatabasePage() {
 
   return (
     <ThemeContext.Provider value={C}>
-    <div className="h-screen flex flex-col overflow-hidden font-mono" style={{ background: C.BG, color: C.TEXT }}>
+    <div className="h-[calc(100vh-56px)] flex flex-col overflow-hidden font-mono" style={{ background: C.BG, color: C.TEXT }}>
       {/* Header */}
       <header className="flex items-center justify-between px-5 py-3 border-b shrink-0" style={{ borderColor: C.BORDER }}>
         <div className="flex items-center gap-3">
@@ -1370,6 +1480,17 @@ export default function DatabasePage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0.5 rounded p-0.5" style={{ background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>
+            {(['database', 'review'] as const).map((m) => (
+              <button key={m} onClick={() => setViewMode(m)}
+                className="text-[10px] px-2 py-0.5 rounded font-mono transition-colors"
+                style={viewMode === m
+                  ? { color: C.BG, background: C.GOLD }
+                  : { color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>
+                {m === 'database' ? 'Database' : 'Review'}
+              </button>
+            ))}
+          </div>
           <FilterPopup
             filterDefs={filterDefs}
             values={columnFilters}
@@ -1460,19 +1581,44 @@ export default function DatabasePage() {
         </div>
       )}
 
-      {/* Table */}
-      <div className="flex-1 min-h-0 overflow-auto">
+      {/* Table — database mode: single scroll area; review mode: split (chart | table) */}
+      <div className={viewMode === 'review' ? 'flex flex-1 min-h-0' : 'flex-1 min-h-0 overflow-auto'}>
+        {viewMode === 'review' && (
+          <div className="w-[55%] border-r flex flex-col min-h-0 p-2" style={{ borderColor: C.BORDER }}>
+            <ReviewPane symbol={selected?.symbol} date={selected?.signalDate} dark={dark} C={C} />
+          </div>
+        )}
+        <div className={viewMode === 'review' ? 'flex-1 min-h-0 overflow-auto' : 'contents'}>
         {loading ? (
           <div className="flex items-center justify-center h-full" style={{ color: C.MUTED }}>
             <Loader2 className="w-5 h-5 animate-spin" />
           </div>
         ) : rows.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-2" style={{ color: C.MUTED }}>
+          <div className="flex flex-col items-center justify-center h-full gap-3 py-8" style={{ color: C.MUTED }}>
             <Inbox className="w-10 h-10 opacity-40" />
-            <p className="text-sm">No rows in the corpus yet.</p>
-            <button onClick={() => setLoaderOpen(true)} className="text-xs mt-1 px-3 py-1.5 rounded flex items-center gap-1.5" style={{ background: C.GOLD, color: C.BG }}>
-              <Layers className="w-3.5 h-3.5" /> Load scans to populate
-            </button>
+            <p className="text-sm">No rows in this database yet.</p>
+            <div className="flex items-center gap-2 flex-wrap justify-center">
+              <button onClick={() => setLoaderOpen(true)} className="text-xs px-3 py-1.5 rounded flex items-center gap-1.5" style={{ background: C.GOLD, color: C.BG }}>
+                <Layers className="w-3.5 h-3.5" /> Load scans to populate
+              </button>
+              <button onClick={() => setFieldModal({ open: true })} title="Create a custom column" className="text-xs px-3 py-1.5 rounded flex items-center gap-1.5 font-semibold" style={{ background: C.SURFACE2, color: C.GOLD, border: `1px solid ${C.GOLD_BORDER}` }}>
+                <Plus className="w-3.5 h-3.5" /> New column
+              </button>
+            </div>
+            {fields.length > 0 && (
+              <div className="mt-3 flex flex-col items-center gap-1.5 w-full max-w-lg">
+                <p className="text-[10px] uppercase tracking-wider opacity-70">Columns ({fields.length})</p>
+                <div className="flex flex-wrap gap-1.5 justify-center">
+                  {fields.map((f) => (
+                    <span key={f.id} className="text-[11px] px-2 py-0.5 rounded flex items-center gap-1.5" style={{ background: C.SURFACE2, color: C.TEXT2, border: `1px solid ${C.BORDER}` }}>
+                      {f.name}
+                      <button onClick={() => setFieldModal({ open: true, edit: f })} title="Edit column" className="opacity-60 hover:opacity-100" style={{ color: C.MUTED }}>✎</button>
+                      <button onClick={() => deleteField(f.id, f.name)} title="Delete column" className="opacity-60 hover:opacity-100" style={{ color: C.RED }}>✕</button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <table className="text-sm" style={{ tableLayout: 'fixed', width: table.getTotalSize() }}>
@@ -1536,6 +1682,7 @@ export default function DatabasePage() {
             </tbody>
           </table>
         )}
+        </div>
       </div>
 
       {/* Pagination — caps DOM rows so typing/re-render stays fast with hundreds of rows */}
@@ -1562,7 +1709,7 @@ export default function DatabasePage() {
           <div className="h-1 w-12 rounded-full group-hover:w-20 transition-all" style={{ background: C.MUTED, opacity: 0.6 }} />
         </div>
       )}
-      {selected && (
+      {selected && viewMode === 'database' && (
         <RowDrawer row={selected} panelH={panelH} fields={fields}
           customValues={selected.customValues ?? {}}
           onClose={() => setSelectedId(null)}
@@ -2008,7 +2155,7 @@ function RowDrawer({
                       <span className="text-xs font-semibold" style={{ color: C.TEXT }}>{f.name}</span>
                       <span className="text-[9px] uppercase" style={{ color: C.MUTED }}>{FIELD_TYPE_LABELS[f.type]}</span>
                     </div>
-                    <div className="w-40"><CustomCell field={f} value={customValues[f.id]} colors={f.colors} onSave={(v) => onSaveCustom(f.id, v)} onAddOption={(label) => { addFieldOption(f.id, label); onSaveCustom(f.id, label) }} /></div>
+                    <div className="w-40"><CustomCell field={f} value={customValues[f.id]} colors={f.colors} onSave={(v) => onSaveCustom(f.id, v)} onAddOption={(label) => { addFieldOption(f.id, label); onSaveCustom(f.id, label) }} onCreateOption={(label) => addFieldOption(f.id, label)} /></div>
                     {onDeleteField && <button onClick={() => onDeleteField(f.id, f.name)} title="Delete column" style={{ color: C.MUTED, fontSize: 11 }}>✕</button>}
                     {onEditField && <button onClick={() => onEditField(f)} title="Edit column" style={{ color: C.MUTED, fontSize: 11 }}>✎</button>}
                   </div>
@@ -2154,6 +2301,147 @@ function RowDrawer({
         </div>,
         document.body,
       )}
+    </div>
+  )
+}
+
+// ─── Review split-pane: 2-stack (Daily + 15m) Mike's Bands synced to the selected row ─
+function ReviewPane({ symbol, date, dark, C }: { symbol?: string; date?: string; dark: boolean; C: typeof DARK }) {
+  const [topSettings, setTopSettings] = useState<ChartSettings>(() => loadJSON('rv_top_settings', DEFAULT_SETTINGS))
+  const [botSettings, setBotSettings] = useState<ChartSettings>(() => loadJSON('rv_bot_settings', DEFAULT_SETTINGS))
+  const [topTf, setTopTf] = useState<Timeframe>(() => loadVal<Timeframe>('rv_top_tf', 'D'))
+  const [botTf, setBotTf] = useState<Timeframe>(() => loadVal<Timeframe>('rv_bot_tf', '15'))
+  const [selectedChart, setSelectedChart] = useState<'top' | 'bottom'>('bottom')
+  const [dayOffset, setDayOffset] = useState(0)
+  const [extraDays, setExtraDays] = useState(0)
+  const [zoomPreset, setZoomPreset] = useState<'6m' | '1y' | '2y' | '3y' | null>(null)
+  const [showInd, setShowInd] = useState(false)
+  const [splitPct, setSplitPct] = useState<number>(() => {
+    try { const v = localStorage.getItem('rv_split'); const n = v ? parseFloat(v) : NaN; return Number.isFinite(n) ? n : 0.58 } catch { return 0.58 }
+  })
+  const ZOOM_RANGES = { '6m': { before: 126, after: 25 }, '1y': { before: 252, after: 25 }, '2y': { before: 504, after: 25 }, '3y': { before: 756, after: 25 } } as const
+  const zoomDays = zoomPreset ? ZOOM_RANGES[zoomPreset] : undefined
+  useEffect(() => { try { localStorage.setItem('rv_top_settings', JSON.stringify(topSettings)) } catch {} }, [topSettings])
+  useEffect(() => { try { localStorage.setItem('rv_bot_settings', JSON.stringify(botSettings)) } catch {} }, [botSettings])
+  useEffect(() => { try { localStorage.setItem('rv_top_tf', topTf) } catch {} }, [topTf])
+  useEffect(() => { try { localStorage.setItem('rv_bot_tf', botTf) } catch {} }, [botTf])
+  useEffect(() => { try { localStorage.setItem('rv_split', String(splitPct)) } catch {} }, [splitPct])
+  useEffect(() => () => { try { document.body.style.userSelect = '' } catch {} }, [])
+  const isTop = selectedChart === 'top'
+  const curSettings = isTop ? topSettings : botSettings
+  const setCurSettings = isTop ? setTopSettings : setBotSettings
+  const curTf = isTop ? topTf : botTf
+  const setCurTf = isTop ? setTopTf : setBotTf
+  const toggle = (key: keyof ChartSettings) => setCurSettings((s) => ({ ...s, [key]: !s[key] }))
+  const applyTemplate = (id: string) => {
+    const t = IND_TEMPLATES.find((x) => x.id === id)
+    if (t) setCurSettings((s) => ({ ...s, ...t.settings }))
+  }
+  const CHART_TF_OPTIONS: { v: Timeframe; label: string }[] = [
+    { v: '5', label: '5m' }, { v: '15', label: '15m' }, { v: '60', label: '1h' }, { v: '120', label: '2h' }, { v: '240', label: '4h' }, { v: 'D', label: 'D' },
+  ]
+  const tfLabel = (tf: Timeframe) => CHART_TF_OPTIONS.find((o) => o.v === tf)?.label ?? tf
+  const baseOff = (tf: Timeframe) => tf === 'D' ? 6 : 1
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const [h, setH] = useState(360)
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setH(el.clientHeight))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [symbol])
+  const DIV = 6
+  const topH = Math.max(80, Math.floor((h - DIV) * splitPct))
+  const botH = Math.max(60, Math.floor((h - DIV) * (1 - splitPct)))
+
+  if (!symbol) {
+    return (
+      <div className="flex items-center justify-center h-full text-xs" style={{ color: C.MUTED }}>
+        Select a row to view charts
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0 gap-1">
+      {/* shared pan/zoom controls (copied from RowDrawer) */}
+      <div className="flex items-center gap-1 shrink-0 flex-wrap">
+        <button onClick={() => { setZoomPreset(null); setDayOffset((o) => o - 1) }} title="Pan back 1 day" className="text-[11px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>◀</button>
+        <button onClick={() => { setDayOffset(0); setExtraDays(0); setZoomPreset(null) }} title="Reset to D0" className="text-[10px] px-1.5 py-0.5 rounded font-mono font-bold" style={{ color: C.BG, background: C.GOLD }}>D0</button>
+        <button onClick={() => { setZoomPreset(null); setDayOffset((o) => o + 1) }} title="Pan forward 1 day" className="text-[11px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>▶</button>
+        <span className="w-px h-3" style={{ background: C.BORDER }} />
+        <button onClick={() => { setZoomPreset(null); setDayOffset((o) => o + 3); setExtraDays((d) => d + 3) }} title="Progress forward 3 days" className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>+3d</button>
+        <button onClick={() => { setZoomPreset(null); setDayOffset((o) => o + 7); setExtraDays((d) => d + 7) }} title="Progress forward 7 days" className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>+7d</button>
+        <button onClick={() => { setZoomPreset(null); setDayOffset((o) => o + 14); setExtraDays((d) => d + 14) }} title="Progress forward 14 days" className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>+14d</button>
+        <span className="w-px h-3" style={{ background: C.BORDER }} />
+        {(['6m', '1y', '2y', '3y'] as const).map((k) => (
+          <button key={k} onClick={() => { setZoomPreset((p) => p === k ? null : k); setDayOffset(0); setExtraDays(0) }} title={`Zoom out to ~${k} of daily history before D0`} className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={zoomPreset === k ? { color: C.BG, background: C.GOLD } : { color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>{k}</button>
+        ))}
+      </div>
+
+      {/* selected chart + per-chart timeframe selector */}
+      <div className="flex items-center gap-1 shrink-0 flex-wrap">
+        <button onClick={() => setSelectedChart('top')} className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={isTop ? { color: C.BG, background: C.GOLD } : { color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>▲ Top {tfLabel(topTf)}</button>
+        <button onClick={() => setSelectedChart('bottom')} className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={!isTop ? { color: C.BG, background: C.GOLD } : { color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>▼ Bottom {tfLabel(botTf)}</button>
+        <span className="w-px h-3" style={{ background: C.BORDER }} />
+        <span className="text-[10px]" style={{ color: C.MUTED }}>TF:</span>
+        {CHART_TF_OPTIONS.map((o) => (
+          <button key={o.v} onClick={() => setCurTf(o.v)} className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={curTf === o.v ? { color: C.BG, background: C.GOLD } : { color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>{o.label}</button>
+        ))}
+      </div>
+
+      {/* indicator template bar (copied from RowDrawer) */}
+      <div className="shrink-0 space-y-1">
+        <div className="flex gap-0.5 items-center flex-wrap">
+          {IND_TEMPLATES.map((tpl) => (
+            <button key={tpl.id} onClick={() => applyTemplate(tpl.id)} className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.MUTED, background: 'transparent', border: `1px solid ${C.BORDER}` }}>{tpl.name}</button>
+          ))}
+          <button onClick={() => setShowInd((s) => !s)} className="text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 ml-auto" style={showInd ? { color: C.GOLD, background: C.GOLD_DIM, border: `1px solid ${C.GOLD_BORDER}` } : { color: C.MUTED, background: 'transparent', border: `1px solid ${C.BORDER}` }}>⚙ Indicators</button>
+        </div>
+        {showInd && (
+          <div className="flex flex-wrap gap-0.5">
+            {TEMPLATE_IND_KEYS.map(([key, label]) => (
+              <button key={key} onClick={() => toggle(key)} className="text-[10px] px-1.5 py-0.5 rounded font-mono transition-colors" style={curSettings[key] ? { color: C.GOLD, background: C.GOLD_DIM, border: `1px solid ${C.GOLD_BORDER}` } : { color: C.MUTED, background: 'transparent', border: `1px solid ${C.BORDER}` }}>{label}</button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* 2-stack: per-chart tf/settings — click a chart to select it */}
+      <div ref={wrapRef} className="flex-1 min-h-0 overflow-hidden flex flex-col">
+        <div style={{ height: topH, boxShadow: isTop ? `inset 0 0 0 2px ${C.GOLD}` : 'none' }} className="min-h-0 overflow-hidden cursor-pointer" onClick={() => setSelectedChart('top')}>
+          <ScanMiniChart symbol={symbol} tf={topTf} date={date} height={topH} settings={topSettings} dark={dark} dayOffset={baseOff(topTf) + dayOffset} extraDays={extraDays} zoomDays={topTf === 'D' ? (zoomDays as any) : topTf === '5' ? { before: 1 + extraDays, after: 0 } : undefined} compact />
+        </div>
+        <div
+          onPointerDown={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            const wrap = wrapRef.current
+            if (!wrap) return
+            const move = (ev: PointerEvent) => {
+              const rect = wrap.getBoundingClientRect()
+              const pct = (ev.clientY - rect.top - DIV / 2) / Math.max(1, rect.height - DIV)
+              setSplitPct(Math.min(0.85, Math.max(0.15, pct)))
+            }
+            const up = () => {
+              window.removeEventListener('pointermove', move, true)
+              window.removeEventListener('pointerup', up, true)
+              document.body.style.userSelect = ''
+            }
+            document.body.style.userSelect = 'none'
+            window.addEventListener('pointermove', move, true)
+            window.addEventListener('pointerup', up, true)
+          }}
+          className="shrink-0 cursor-row-resize flex items-center justify-center"
+          style={{ height: DIV, background: C.SURFACE2, borderTop: `1px solid ${C.BORDER}`, borderBottom: `1px solid ${C.BORDER}`, touchAction: 'none' }}
+        >
+          <div style={{ width: 36, height: 3, borderRadius: 2, background: C.MUTED }} />
+        </div>
+        <div style={{ height: botH, boxShadow: !isTop ? `inset 0 0 0 2px ${C.GOLD}` : 'none' }} className="min-h-0 overflow-hidden cursor-pointer" onClick={() => setSelectedChart('bottom')}>
+          <ScanMiniChart symbol={symbol} tf={botTf} date={date} height={botH} settings={botSettings} dark={dark} dayOffset={baseOff(botTf) + dayOffset} extraDays={extraDays} zoomDays={botTf === 'D' ? (zoomDays as any) : botTf === '5' ? { before: 1 + extraDays, after: 0 } : undefined} compact />
+        </div>
+      </div>
     </div>
   )
 }

@@ -19,7 +19,7 @@ export default function MainLayout({
   return (
     <>
       {!isBacktest && <AgentSystemInitializer />}
-      <div className="relative flex min-h-screen flex-col">
+      <div className={`relative flex flex-col ${pathname.startsWith('/database') ? 'h-[calc(100vh-56px)] overflow-hidden' : 'min-h-screen'}`}>
         {children}
         {!isBacktest && <Footer />}
       </div>

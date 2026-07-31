@@ -31,7 +31,7 @@ const FETCH_CONCURRENCY = 8
 // ── durable cache (outside .next, survives builds) ──────────
 const CACHE_FILE = join(process.cwd(), '.cache', 'gap-stats.json')
 const memCache = new Map<string, { data: any; ts: number }>()
-const TTL = 7 * 24 * 60 * 60 * 1000 // 7 days — historical bars immutable
+const TTL = 24 * 60 * 60 * 1000 // 1 day — adjusted bars mutate when splits/dividends land, so long TTL loses post-split gaps
 try {
   if (existsSync(CACHE_FILE)) {
     for (const [k, v] of JSON.parse(readFileSync(CACHE_FILE, 'utf8'))) memCache.set(k, v)

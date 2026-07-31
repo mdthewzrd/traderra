@@ -1,0 +1,2105 @@
+{
+  "id": "gc-johnny-pure",
+  "file": "",
+  "name": "G&C · Pure Johnny · Dilution 20-SMA × Exec-Pop Short · Intraday",
+  "engine": "gc-johnny-pure",
+  "meta": {
+    "intraday": true,
+    "symbol": "Johnny Dilution Universe (rs-offering-master)",
+    "tf": "2",
+    "from": "2025-01-06",
+    "to": "2026-07-29",
+    "strategy": "Johnny G&C (video oPWLBAB-L6w): dilution gap-up + failed-gap history + daily SMA(20) extension → 20-SMA backside breakdown (1m/5m, deviation-branched) → SHORT the pop [2m high ≥ EMA9+ATR9×0.5, bar-break low[i]<low[i-1] → short @ low[i]] → risk=prev-high/HOD, target=5m 200-EMA or EOD. 8-EMA DROPPED (misattribution).",
+    "universe": "rs-offering-master dilution names + gap≥5%&gap_atr≥0.5 + daily SMA(20) extension (D-1 close−SMA20)/ATR≥1.5 + ≥1 failed gap in 20d. Faithful to oPWLBAB-L6w.",
+    "params": {
+      "gap_min_pct": 5,
+      "gap_min_atr": 0.5,
+      "sma20_ext_min_atr": 1.5,
+      "failed_gap_lookback": 20,
+      "failed_gap_min": 1,
+      "devThresh_atr": 0.5,
+      "popBandMult": 0.5,
+      "popTimeoutBars": 20,
+      "sizeFactor5m": 0.5,
+      "minRisk": "$0.05 [ASSUMPTION]",
+      "riskPerTrade": 100
+    },
+    "note": "EXPLORATORY (not playbook). FAITHFUL to Johnny's G&C video oPWLBAB-L6w — his universe, his 20-SMA setup, his prev-high/HOD risk, his 5m-200-EMA/EOD target. Mike's exec-signals logic is used ONLY to define 'the pop' (the one thing Johnny leaves vague). HONESTY: 0 sub-1% tight-stop trades (Johnny's wider risk avoids the micro-stop inflation of v1/v2), so +0.14R/PF 1.24 is the realistic core — BUT entry @ low[i] is a best-case/lookahead fill (faithful to calcExecSignals) and gap-skip slippage is NOT modeled (would likely erode the marginal edge). See edge-dev/docs/research/gc-scan-backtest-findings.md §9."
+  },
+  "summary": {
+    "trades": 113,
+    "wins": 43,
+    "winRate": 38.1,
+    "totR": 15.5,
+    "profitFactor": 1.24,
+    "longs": 0,
+    "shorts": 113,
+    "avgR": 0.14,
+    "greenDays": 35,
+    "greenPct": 37.6,
+    "tradingDays": 93,
+    "perDay": 1.22,
+    "maxDD": 9.2,
+    "avgDayR": 0.17,
+    "bestDay": {
+      "date": "2025-10-03",
+      "r": 7.26
+    },
+    "worstDay": {
+      "date": "2026-02-17",
+      "r": -2.0
+    }
+  },
+  "byDay": {
+    "2025-01-06": {
+      "r": -0.81,
+      "trades": 2,
+      "pnl": -81.13
+    },
+    "2025-01-10": {
+      "r": 1.64,
+      "trades": 1,
+      "pnl": 164.0
+    },
+    "2025-01-29": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2025-01-30": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2025-02-06": {
+      "r": 0.93,
+      "trades": 1,
+      "pnl": 93.14
+    },
+    "2025-02-12": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2025-02-13": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2025-02-14": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2025-02-18": {
+      "r": 1.27,
+      "trades": 1,
+      "pnl": 126.58
+    },
+    "2025-02-25": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2025-02-27": {
+      "r": 0.4,
+      "trades": 1,
+      "pnl": 39.88
+    },
+    "2025-03-03": {
+      "r": 5.71,
+      "trades": 1,
+      "pnl": 570.7
+    },
+    "2025-03-05": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2025-03-07": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2025-04-22": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2025-04-25": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2025-05-30": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2025-06-04": {
+      "r": 0.29,
+      "trades": 1,
+      "pnl": 28.57
+    },
+    "2025-06-06": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2025-06-12": {
+      "r": 0.42,
+      "trades": 1,
+      "pnl": 41.57
+    },
+    "2025-06-16": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2025-07-22": {
+      "r": 0.7,
+      "trades": 1,
+      "pnl": 34.78
+    },
+    "2025-07-23": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2025-07-24": {
+      "r": 2.35,
+      "trades": 3,
+      "pnl": 234.93
+    },
+    "2025-07-25": {
+      "r": -1.12,
+      "trades": 3,
+      "pnl": -112.0
+    },
+    "2025-07-28": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2025-08-08": {
+      "r": 0.72,
+      "trades": 1,
+      "pnl": 72.01
+    },
+    "2025-08-26": {
+      "r": -0.25,
+      "trades": 2,
+      "pnl": -62.42
+    },
+    "2025-08-28": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2025-09-02": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2025-09-05": {
+      "r": -0.24,
+      "trades": 1,
+      "pnl": -24.11
+    },
+    "2025-09-08": {
+      "r": 3.24,
+      "trades": 1,
+      "pnl": 323.86
+    },
+    "2025-09-09": {
+      "r": -0.16,
+      "trades": 1,
+      "pnl": -15.77
+    },
+    "2025-09-15": {
+      "r": 4.06,
+      "trades": 1,
+      "pnl": 405.69
+    },
+    "2025-09-19": {
+      "r": 0.03,
+      "trades": 2,
+      "pnl": 3.37
+    },
+    "2025-10-03": {
+      "r": 7.26,
+      "trades": 3,
+      "pnl": 726.54
+    },
+    "2025-10-06": {
+      "r": 2.33,
+      "trades": 1,
+      "pnl": 232.98
+    },
+    "2025-10-07": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2025-10-08": {
+      "r": 2.51,
+      "trades": 1,
+      "pnl": 250.69
+    },
+    "2025-10-10": {
+      "r": 2.69,
+      "trades": 1,
+      "pnl": 268.88
+    },
+    "2025-10-13": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2025-12-04": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2025-12-05": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2025-12-08": {
+      "r": 2.92,
+      "trades": 1,
+      "pnl": 292.45
+    },
+    "2025-12-09": {
+      "r": -0.4,
+      "trades": 1,
+      "pnl": -39.68
+    },
+    "2025-12-15": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2025-12-17": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2026-01-06": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2026-01-07": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2026-01-13": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2026-01-14": {
+      "r": 0.76,
+      "trades": 1,
+      "pnl": 75.76
+    },
+    "2026-01-16": {
+      "r": 0.65,
+      "trades": 2,
+      "pnl": 65.4
+    },
+    "2026-01-20": {
+      "r": 4.07,
+      "trades": 1,
+      "pnl": 406.9
+    },
+    "2026-01-21": {
+      "r": -1.06,
+      "trades": 2,
+      "pnl": -56.02
+    },
+    "2026-01-23": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2026-01-26": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2026-01-27": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2026-01-29": {
+      "r": 5.55,
+      "trades": 2,
+      "pnl": 554.7
+    },
+    "2026-01-30": {
+      "r": 0.28,
+      "trades": 1,
+      "pnl": 28.24
+    },
+    "2026-02-11": {
+      "r": -0.48,
+      "trades": 1,
+      "pnl": -48.44
+    },
+    "2026-02-17": {
+      "r": -2.0,
+      "trades": 2,
+      "pnl": -200.0
+    },
+    "2026-02-19": {
+      "r": -0.08,
+      "trades": 2,
+      "pnl": -7.56
+    },
+    "2026-02-27": {
+      "r": 5.32,
+      "trades": 1,
+      "pnl": 532.22
+    },
+    "2026-03-02": {
+      "r": -0.98,
+      "trades": 2,
+      "pnl": -98.28
+    },
+    "2026-03-03": {
+      "r": 0.18,
+      "trades": 1,
+      "pnl": 18.43
+    },
+    "2026-03-04": {
+      "r": -0.88,
+      "trades": 2,
+      "pnl": -88.05
+    },
+    "2026-03-05": {
+      "r": 3.25,
+      "trades": 1,
+      "pnl": 325.0
+    },
+    "2026-03-06": {
+      "r": -2.0,
+      "trades": 2,
+      "pnl": -200.0
+    },
+    "2026-03-11": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2026-03-13": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2026-03-17": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2026-03-20": {
+      "r": 0.57,
+      "trades": 2,
+      "pnl": 56.58
+    },
+    "2026-03-23": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2026-03-25": {
+      "r": 1.15,
+      "trades": 1,
+      "pnl": 115.39
+    },
+    "2026-04-01": {
+      "r": -0.1,
+      "trades": 1,
+      "pnl": -9.59
+    },
+    "2026-04-07": {
+      "r": 2.59,
+      "trades": 1,
+      "pnl": 258.75
+    },
+    "2026-04-09": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2026-04-13": {
+      "r": 2.59,
+      "trades": 1,
+      "pnl": 259.01
+    },
+    "2026-04-14": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2026-04-22": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2026-05-21": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2026-05-22": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2026-05-26": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2026-05-28": {
+      "r": -2.0,
+      "trades": 2,
+      "pnl": -200.0
+    },
+    "2026-06-01": {
+      "r": -2.0,
+      "trades": 2,
+      "pnl": -200.0
+    },
+    "2026-06-02": {
+      "r": 0.01,
+      "trades": 1,
+      "pnl": 0.66
+    },
+    "2026-06-15": {
+      "r": 3.55,
+      "trades": 1,
+      "pnl": 354.6
+    },
+    "2026-06-17": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2026-06-30": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    },
+    "2026-07-10": {
+      "r": 0.67,
+      "trades": 1,
+      "pnl": 66.93
+    },
+    "2026-07-15": {
+      "r": 1.35,
+      "trades": 1,
+      "pnl": 135.3
+    },
+    "2026-07-24": {
+      "r": 0.05,
+      "trades": 1,
+      "pnl": 4.55
+    },
+    "2026-07-29": {
+      "r": -1.0,
+      "trades": 1,
+      "pnl": -100.0
+    }
+  },
+  "trades": [
+    {
+      "id": "short-KITT-20250106",
+      "side": "short",
+      "ticker": "KITT",
+      "rsDate": "2025-01-06",
+      "openDate": "2025-01-06 09:56",
+      "exitDate": "2025-01-06 15:58",
+      "entry": 357.84,
+      "stop": 396.0,
+      "exit": 350.64,
+      "exitLabel": "EOD",
+      "r": 0.19,
+      "pnl": 18.87
+    },
+    {
+      "id": "short-SBEV-20250106",
+      "side": "short",
+      "ticker": "SBEV",
+      "rsDate": "2025-01-06",
+      "openDate": "2025-01-06 09:52",
+      "exitDate": "2025-01-06 10:06",
+      "entry": 42.896,
+      "stop": 44.8,
+      "exit": 44.8,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-KITT-20250110",
+      "side": "short",
+      "ticker": "KITT",
+      "rsDate": "2025-01-10",
+      "openDate": "2025-01-10 10:00",
+      "exitDate": "2025-01-10 15:58",
+      "entry": 252.0,
+      "stop": 270.0,
+      "exit": 222.48,
+      "exitLabel": "EOD",
+      "r": 1.64,
+      "pnl": 164.0
+    },
+    {
+      "id": "short-CELZ-20250129",
+      "side": "short",
+      "ticker": "CELZ",
+      "rsDate": "2025-01-29",
+      "openDate": "2025-01-29 09:58",
+      "exitDate": "2025-01-29 10:00",
+      "entry": 3.34,
+      "stop": 3.39,
+      "exit": 3.39,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-CELZ-20250130",
+      "side": "short",
+      "ticker": "CELZ",
+      "rsDate": "2025-01-30",
+      "openDate": "2025-01-30 09:54",
+      "exitDate": "2025-01-30 10:54",
+      "entry": 3.2,
+      "stop": 3.3515,
+      "exit": 3.3515,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-RNAZ-20250206",
+      "side": "short",
+      "ticker": "RNAZ",
+      "rsDate": "2025-02-06",
+      "openDate": "2025-02-06 09:58",
+      "exitDate": "2025-02-06 15:58",
+      "entry": 356.16,
+      "stop": 398.9972,
+      "exit": 316.26,
+      "exitLabel": "EOD",
+      "r": 0.93,
+      "pnl": 93.14
+    },
+    {
+      "id": "short-AIFF-20250212",
+      "side": "short",
+      "ticker": "AIFF",
+      "rsDate": "2025-02-12",
+      "openDate": "2025-02-12 10:02",
+      "exitDate": "2025-02-12 15:02",
+      "entry": 13.06,
+      "stop": 13.65,
+      "exit": 13.65,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-AIFF-20250213",
+      "side": "short",
+      "ticker": "AIFF",
+      "rsDate": "2025-02-13",
+      "openDate": "2025-02-13 09:56",
+      "exitDate": "2025-02-13 11:28",
+      "entry": 15.3,
+      "stop": 15.99,
+      "exit": 15.99,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-CELZ-20250214",
+      "side": "short",
+      "ticker": "CELZ",
+      "rsDate": "2025-02-14",
+      "openDate": "2025-02-14 09:42",
+      "exitDate": "2025-02-14 09:52",
+      "entry": 4.7,
+      "stop": 4.8491,
+      "exit": 4.8491,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-AIFF-20250218",
+      "side": "short",
+      "ticker": "AIFF",
+      "rsDate": "2025-02-18",
+      "openDate": "2025-02-18 11:06",
+      "exitDate": "2025-02-18 15:58",
+      "entry": 9.35,
+      "stop": 10.14,
+      "exit": 8.35,
+      "exitLabel": "EOD",
+      "r": 1.27,
+      "pnl": 126.58
+    },
+    {
+      "id": "short-ALBT-20250225",
+      "side": "short",
+      "ticker": "ALBT",
+      "rsDate": "2025-02-25",
+      "openDate": "2025-02-25 10:28",
+      "exitDate": "2025-02-25 10:36",
+      "entry": 6.55,
+      "stop": 6.7199,
+      "exit": 6.7199,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-ALBT-20250227",
+      "side": "short",
+      "ticker": "ALBT",
+      "rsDate": "2025-02-27",
+      "openDate": "2025-02-27 09:52",
+      "exitDate": "2025-02-27 09:58",
+      "entry": 7.83,
+      "stop": 9.25,
+      "exit": 7.2638,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 0.4,
+      "pnl": 39.88
+    },
+    {
+      "id": "short-TRNR-20250303",
+      "side": "short",
+      "ticker": "TRNR",
+      "rsDate": "2025-03-03",
+      "openDate": "2025-03-03 10:02",
+      "exitDate": "2025-03-03 12:28",
+      "entry": 2590.0,
+      "stop": 2772.0,
+      "exit": 1551.3336,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 5.71,
+      "pnl": 570.7
+    },
+    {
+      "id": "short-CELZ-20250305",
+      "side": "short",
+      "ticker": "CELZ",
+      "rsDate": "2025-03-05",
+      "openDate": "2025-03-05 09:36",
+      "exitDate": "2025-03-05 10:02",
+      "entry": 5.9,
+      "stop": 6.29,
+      "exit": 6.29,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-ALBT-20250307",
+      "side": "short",
+      "ticker": "ALBT",
+      "rsDate": "2025-03-07",
+      "openDate": "2025-03-07 09:42",
+      "exitDate": "2025-03-07 10:52",
+      "entry": 10.6881,
+      "stop": 11.3751,
+      "exit": 11.3751,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-SBEV-20250422",
+      "side": "short",
+      "ticker": "SBEV",
+      "rsDate": "2025-04-22",
+      "openDate": "2025-04-22 10:28",
+      "exitDate": "2025-04-22 13:44",
+      "entry": 24.8,
+      "stop": 29.988,
+      "exit": 29.988,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-OLB-20250425",
+      "side": "short",
+      "ticker": "OLB",
+      "rsDate": "2025-04-25",
+      "openDate": "2025-04-25 10:26",
+      "exitDate": "2025-04-25 10:32",
+      "entry": 1.84,
+      "stop": 1.98,
+      "exit": 1.98,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-BURU-20250530",
+      "side": "short",
+      "ticker": "BURU",
+      "rsDate": "2025-05-30",
+      "openDate": "2025-05-30 09:52",
+      "exitDate": "2025-05-30 10:34",
+      "entry": 1.9077,
+      "stop": 2.0389,
+      "exit": 2.0389,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-OLB-20250604",
+      "side": "short",
+      "ticker": "OLB",
+      "rsDate": "2025-06-04",
+      "openDate": "2025-06-04 10:40",
+      "exitDate": "2025-06-04 15:58",
+      "entry": 2.2,
+      "stop": 2.27,
+      "exit": 2.18,
+      "exitLabel": "EOD",
+      "r": 0.29,
+      "pnl": 28.57
+    },
+    {
+      "id": "short-BNAI-20250606",
+      "side": "short",
+      "ticker": "BNAI",
+      "rsDate": "2025-06-06",
+      "openDate": "2025-06-06 10:04",
+      "exitDate": "2025-06-06 10:16",
+      "entry": 5.512,
+      "stop": 6.0,
+      "exit": 6.0,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-FFAI-20250612",
+      "side": "short",
+      "ticker": "FFAI",
+      "rsDate": "2025-06-12",
+      "openDate": "2025-06-12 10:00",
+      "exitDate": "2025-06-12 10:02",
+      "entry": 247.5,
+      "stop": 267.0,
+      "exit": 239.3948,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 0.42,
+      "pnl": 41.57
+    },
+    {
+      "id": "short-ELVN-20250616",
+      "side": "short",
+      "ticker": "ELVN",
+      "rsDate": "2025-06-16",
+      "openDate": "2025-06-16 10:22",
+      "exitDate": "2025-06-16 10:24",
+      "entry": 23.015,
+      "stop": 23.4,
+      "exit": 23.4,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-OPAD-20250722",
+      "side": "short",
+      "ticker": "OPAD",
+      "rsDate": "2025-07-22",
+      "openDate": "2025-07-22 09:40",
+      "exitDate": "2025-07-22 13:44",
+      "entry": 32.7,
+      "stop": 38.0,
+      "exit": 29.0129,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 0.7,
+      "pnl": 34.78
+    },
+    {
+      "id": "short-PAPL-20250723",
+      "side": "short",
+      "ticker": "PAPL",
+      "rsDate": "2025-07-23",
+      "openDate": "2025-07-23 10:14",
+      "exitDate": "2025-07-23 10:24",
+      "entry": 6.43,
+      "stop": 7.01,
+      "exit": 7.01,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-FFAI-20250724",
+      "side": "short",
+      "ticker": "FFAI",
+      "rsDate": "2025-07-24",
+      "openDate": "2025-07-24 10:16",
+      "exitDate": "2025-07-24 15:58",
+      "entry": 507.0,
+      "stop": 532.5,
+      "exit": 451.5,
+      "exitLabel": "EOD",
+      "r": 2.18,
+      "pnl": 217.65
+    },
+    {
+      "id": "short-MOBX-20250724",
+      "side": "short",
+      "ticker": "MOBX",
+      "rsDate": "2025-07-24",
+      "openDate": "2025-07-24 09:42",
+      "exitDate": "2025-07-24 10:04",
+      "entry": 11.979,
+      "stop": 12.4,
+      "exit": 11.4852,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 1.17,
+      "pnl": 117.28
+    },
+    {
+      "id": "short-OPAD-20250724",
+      "side": "short",
+      "ticker": "OPAD",
+      "rsDate": "2025-07-24",
+      "openDate": "2025-07-24 09:50",
+      "exitDate": "2025-07-24 09:52",
+      "entry": 24.601,
+      "stop": 25.7,
+      "exit": 25.7,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-FFAI-20250725",
+      "side": "short",
+      "ticker": "FFAI",
+      "rsDate": "2025-07-25",
+      "openDate": "2025-07-25 09:44",
+      "exitDate": "2025-07-25 09:46",
+      "entry": 456.0,
+      "stop": 466.5,
+      "exit": 466.5,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-HCTI-20250725",
+      "side": "short",
+      "ticker": "HCTI",
+      "rsDate": "2025-07-25",
+      "openDate": "2025-07-25 09:56",
+      "exitDate": "2025-07-25 15:58",
+      "entry": 1150.38,
+      "stop": 1299.78,
+      "exit": 1018.908,
+      "exitLabel": "EOD",
+      "r": 0.88,
+      "pnl": 88.0
+    },
+    {
+      "id": "short-SOWG-20250725",
+      "side": "short",
+      "ticker": "SOWG",
+      "rsDate": "2025-07-25",
+      "openDate": "2025-07-25 10:00",
+      "exitDate": "2025-07-25 10:02",
+      "entry": 25.65,
+      "stop": 27.75,
+      "exit": 27.75,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-HCTI-20250728",
+      "side": "short",
+      "ticker": "HCTI",
+      "rsDate": "2025-07-28",
+      "openDate": "2025-07-28 09:48",
+      "exitDate": "2025-07-28 10:28",
+      "entry": 1157.85,
+      "stop": 1195.2,
+      "exit": 1195.2,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-CELZ-20250808",
+      "side": "short",
+      "ticker": "CELZ",
+      "rsDate": "2025-08-08",
+      "openDate": "2025-08-08 10:18",
+      "exitDate": "2025-08-08 11:02",
+      "entry": 3.541,
+      "stop": 3.77,
+      "exit": 3.3761,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 0.72,
+      "pnl": 72.01
+    },
+    {
+      "id": "short-BENF-20250826",
+      "side": "short",
+      "ticker": "BENF",
+      "rsDate": "2025-08-26",
+      "openDate": "2025-08-26 09:48",
+      "exitDate": "2025-08-26 10:10",
+      "entry": 3.488,
+      "stop": 3.5808,
+      "exit": 3.5808,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-OPAD-20250826",
+      "side": "short",
+      "ticker": "OPAD",
+      "rsDate": "2025-08-26",
+      "openDate": "2025-08-26 09:42",
+      "exitDate": "2025-08-26 15:58",
+      "entry": 41.0,
+      "stop": 45.99,
+      "exit": 37.25,
+      "exitLabel": "EOD",
+      "r": 0.75,
+      "pnl": 37.58
+    },
+    {
+      "id": "short-OPAD-20250828",
+      "side": "short",
+      "ticker": "OPAD",
+      "rsDate": "2025-08-28",
+      "openDate": "2025-08-28 09:58",
+      "exitDate": "2025-08-28 10:04",
+      "entry": 40.2,
+      "stop": 43.0,
+      "exit": 43.0,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-MOBX-20250902",
+      "side": "short",
+      "ticker": "MOBX",
+      "rsDate": "2025-09-02",
+      "openDate": "2025-09-02 09:54",
+      "exitDate": "2025-09-02 12:54",
+      "entry": 13.3,
+      "stop": 14.0,
+      "exit": 14.0,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-OPAD-20250905",
+      "side": "short",
+      "ticker": "OPAD",
+      "rsDate": "2025-09-05",
+      "openDate": "2025-09-05 10:58",
+      "exitDate": "2025-09-05 15:58",
+      "entry": 49.3,
+      "stop": 57.389,
+      "exit": 51.25,
+      "exitLabel": "EOD",
+      "r": -0.24,
+      "pnl": -24.11
+    },
+    {
+      "id": "short-GNPX-20250908",
+      "side": "short",
+      "ticker": "GNPX",
+      "rsDate": "2025-09-08",
+      "openDate": "2025-09-08 09:56",
+      "exitDate": "2025-09-08 15:06",
+      "entry": 344.85,
+      "stop": 378.62,
+      "exit": 235.4839,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 3.24,
+      "pnl": 323.86
+    },
+    {
+      "id": "short-OPAD-20250909",
+      "side": "short",
+      "ticker": "OPAD",
+      "rsDate": "2025-09-09",
+      "openDate": "2025-09-09 10:16",
+      "exitDate": "2025-09-09 15:58",
+      "entry": 41.5,
+      "stop": 44.987,
+      "exit": 42.05,
+      "exitLabel": "EOD",
+      "r": -0.16,
+      "pnl": -15.77
+    },
+    {
+      "id": "short-EVTV-20250915",
+      "side": "short",
+      "ticker": "EVTV",
+      "rsDate": "2025-09-15",
+      "openDate": "2025-09-15 09:44",
+      "exitDate": "2025-09-15 10:02",
+      "entry": 4.37,
+      "stop": 4.7,
+      "exit": 3.0312,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 4.06,
+      "pnl": 405.69
+    },
+    {
+      "id": "short-PAPL-20250919",
+      "side": "short",
+      "ticker": "PAPL",
+      "rsDate": "2025-09-19",
+      "openDate": "2025-09-19 09:44",
+      "exitDate": "2025-09-19 10:44",
+      "entry": 6.58,
+      "stop": 6.86,
+      "exit": 6.2906,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 1.03,
+      "pnl": 103.37
+    },
+    {
+      "id": "short-SOWG-20250919",
+      "side": "short",
+      "ticker": "SOWG",
+      "rsDate": "2025-09-19",
+      "openDate": "2025-09-19 10:08",
+      "exitDate": "2025-09-19 12:18",
+      "entry": 14.7,
+      "stop": 17.85,
+      "exit": 17.85,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-BENF-20251003",
+      "side": "short",
+      "ticker": "BENF",
+      "rsDate": "2025-10-03",
+      "openDate": "2025-10-03 10:44",
+      "exitDate": "2025-10-03 12:10",
+      "entry": 7.88,
+      "stop": 8.7992,
+      "exit": 7.4007,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 0.52,
+      "pnl": 52.14
+    },
+    {
+      "id": "short-BNAI-20251003",
+      "side": "short",
+      "ticker": "BNAI",
+      "rsDate": "2025-10-03",
+      "openDate": "2025-10-03 09:56",
+      "exitDate": "2025-10-03 09:58",
+      "entry": 4.9,
+      "stop": 5.045,
+      "exit": 5.045,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-BURU-20251003",
+      "side": "short",
+      "ticker": "BURU",
+      "rsDate": "2025-10-03",
+      "openDate": "2025-10-03 10:02",
+      "exitDate": "2025-10-03 15:58",
+      "entry": 1.5474,
+      "stop": 1.5974,
+      "exit": 1.1602,
+      "exitLabel": "EOD",
+      "r": 7.74,
+      "pnl": 774.4
+    },
+    {
+      "id": "short-BURU-20251006",
+      "side": "short",
+      "ticker": "BURU",
+      "rsDate": "2025-10-06",
+      "openDate": "2025-10-06 09:56",
+      "exitDate": "2025-10-06 13:42",
+      "entry": 1.2475,
+      "stop": 1.2975,
+      "exit": 1.131,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 2.33,
+      "pnl": 232.98
+    },
+    {
+      "id": "short-BURU-20251007",
+      "side": "short",
+      "ticker": "BURU",
+      "rsDate": "2025-10-07",
+      "openDate": "2025-10-07 10:20",
+      "exitDate": "2025-10-07 10:24",
+      "entry": 1.6043,
+      "stop": 1.6911,
+      "exit": 1.6911,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-BURU-20251008",
+      "side": "short",
+      "ticker": "BURU",
+      "rsDate": "2025-10-08",
+      "openDate": "2025-10-08 09:58",
+      "exitDate": "2025-10-08 15:58",
+      "entry": 3.8188,
+      "stop": 4.0429,
+      "exit": 3.257,
+      "exitLabel": "EOD",
+      "r": 2.51,
+      "pnl": 250.69
+    },
+    {
+      "id": "short-BURU-20251010",
+      "side": "short",
+      "ticker": "BURU",
+      "rsDate": "2025-10-10",
+      "openDate": "2025-10-10 10:06",
+      "exitDate": "2025-10-10 10:30",
+      "entry": 2.7181,
+      "stop": 2.7799,
+      "exit": 2.5519,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 2.69,
+      "pnl": 268.88
+    },
+    {
+      "id": "short-BURU-20251013",
+      "side": "short",
+      "ticker": "BURU",
+      "rsDate": "2025-10-13",
+      "openDate": "2025-10-13 09:48",
+      "exitDate": "2025-10-13 10:00",
+      "entry": 2.5499,
+      "stop": 2.5999,
+      "exit": 2.5999,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-QCLS-20251204",
+      "side": "short",
+      "ticker": "QCLS",
+      "rsDate": "2025-12-04",
+      "openDate": "2025-12-04 10:16",
+      "exitDate": "2025-12-04 10:32",
+      "entry": 7.03,
+      "stop": 7.6499,
+      "exit": 7.6499,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-QCLS-20251205",
+      "side": "short",
+      "ticker": "QCLS",
+      "rsDate": "2025-12-05",
+      "openDate": "2025-12-05 09:58",
+      "exitDate": "2025-12-05 10:02",
+      "entry": 7.3,
+      "stop": 7.72,
+      "exit": 7.72,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-TGL-20251208",
+      "side": "short",
+      "ticker": "TGL",
+      "rsDate": "2025-12-08",
+      "openDate": "2025-12-08 10:42",
+      "exitDate": "2025-12-08 13:16",
+      "entry": 32.53,
+      "stop": 36.9899,
+      "exit": 19.4871,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 2.92,
+      "pnl": 292.45
+    },
+    {
+      "id": "short-QCLS-20251209",
+      "side": "short",
+      "ticker": "QCLS",
+      "rsDate": "2025-12-09",
+      "openDate": "2025-12-09 09:54",
+      "exitDate": "2025-12-09 15:58",
+      "entry": 5.75,
+      "stop": 7.64,
+      "exit": 6.5,
+      "exitLabel": "EOD",
+      "r": -0.4,
+      "pnl": -39.68
+    },
+    {
+      "id": "short-YCBD-20251215",
+      "side": "short",
+      "ticker": "YCBD",
+      "rsDate": "2025-12-15",
+      "openDate": "2025-12-15 09:52",
+      "exitDate": "2025-12-15 09:56",
+      "entry": 1.33,
+      "stop": 1.41,
+      "exit": 1.41,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-YCBD-20251217",
+      "side": "short",
+      "ticker": "YCBD",
+      "rsDate": "2025-12-17",
+      "openDate": "2025-12-17 10:24",
+      "exitDate": "2025-12-17 11:56",
+      "entry": 2.23,
+      "stop": 2.39,
+      "exit": 2.39,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-BNAI-20260106",
+      "side": "short",
+      "ticker": "BNAI",
+      "rsDate": "2026-01-06",
+      "openDate": "2026-01-06 09:54",
+      "exitDate": "2026-01-06 09:56",
+      "entry": 4.31,
+      "stop": 4.45,
+      "exit": 4.45,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-SKYQ-20260107",
+      "side": "short",
+      "ticker": "SKYQ",
+      "rsDate": "2026-01-07",
+      "openDate": "2026-01-07 10:00",
+      "exitDate": "2026-01-07 11:06",
+      "entry": 5.376,
+      "stop": 5.8304,
+      "exit": 5.8304,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-EVTV-20260113",
+      "side": "short",
+      "ticker": "EVTV",
+      "rsDate": "2026-01-13",
+      "openDate": "2026-01-13 10:08",
+      "exitDate": "2026-01-13 10:14",
+      "entry": 2.75,
+      "stop": 3.11,
+      "exit": 3.11,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-BNAI-20260114",
+      "side": "short",
+      "ticker": "BNAI",
+      "rsDate": "2026-01-14",
+      "openDate": "2026-01-14 10:34",
+      "exitDate": "2026-01-14 15:58",
+      "entry": 6.02,
+      "stop": 6.35,
+      "exit": 5.77,
+      "exitLabel": "EOD",
+      "r": 0.76,
+      "pnl": 75.76
+    },
+    {
+      "id": "short-BNAI-20260116",
+      "side": "short",
+      "ticker": "BNAI",
+      "rsDate": "2026-01-16",
+      "openDate": "2026-01-16 10:16",
+      "exitDate": "2026-01-16 15:58",
+      "entry": 6.6503,
+      "stop": 6.85,
+      "exit": 6.32,
+      "exitLabel": "EOD",
+      "r": 1.65,
+      "pnl": 165.4
+    },
+    {
+      "id": "short-EVTV-20260116",
+      "side": "short",
+      "ticker": "EVTV",
+      "rsDate": "2026-01-16",
+      "openDate": "2026-01-16 09:54",
+      "exitDate": "2026-01-16 09:56",
+      "entry": 3.7,
+      "stop": 3.81,
+      "exit": 3.81,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-EVTV-20260120",
+      "side": "short",
+      "ticker": "EVTV",
+      "rsDate": "2026-01-20",
+      "openDate": "2026-01-20 09:54",
+      "exitDate": "2026-01-20 14:36",
+      "entry": 4.235,
+      "stop": 4.38,
+      "exit": 3.645,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 4.07,
+      "pnl": 406.9
+    },
+    {
+      "id": "short-BNAI-20260121",
+      "side": "short",
+      "ticker": "BNAI",
+      "rsDate": "2026-01-21",
+      "openDate": "2026-01-21 11:24",
+      "exitDate": "2026-01-21 15:58",
+      "entry": 8.61,
+      "stop": 9.94,
+      "exit": 8.69,
+      "exitLabel": "EOD",
+      "r": -0.06,
+      "pnl": -6.02
+    },
+    {
+      "id": "short-SEGG-20260121",
+      "side": "short",
+      "ticker": "SEGG",
+      "rsDate": "2026-01-21",
+      "openDate": "2026-01-21 10:20",
+      "exitDate": "2026-01-21 11:26",
+      "entry": 2.13,
+      "stop": 2.55,
+      "exit": 2.55,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -50.0
+    },
+    {
+      "id": "short-BNAI-20260123",
+      "side": "short",
+      "ticker": "BNAI",
+      "rsDate": "2026-01-23",
+      "openDate": "2026-01-23 10:06",
+      "exitDate": "2026-01-23 10:24",
+      "entry": 11.76,
+      "stop": 13.04,
+      "exit": 13.04,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-BNAI-20260126",
+      "side": "short",
+      "ticker": "BNAI",
+      "rsDate": "2026-01-26",
+      "openDate": "2026-01-26 10:36",
+      "exitDate": "2026-01-26 13:04",
+      "entry": 32.47,
+      "stop": 39.8472,
+      "exit": 39.8472,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-PHGE-20260127",
+      "side": "short",
+      "ticker": "PHGE",
+      "rsDate": "2026-01-27",
+      "openDate": "2026-01-27 10:02",
+      "exitDate": "2026-01-27 10:04",
+      "entry": 6.55,
+      "stop": 7.3,
+      "exit": 7.3,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-AGIG-20260129",
+      "side": "short",
+      "ticker": "AGIG",
+      "rsDate": "2026-01-29",
+      "openDate": "2026-01-29 09:56",
+      "exitDate": "2026-01-29 10:26",
+      "entry": 3.7742,
+      "stop": 3.85,
+      "exit": 3.3377,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 5.76,
+      "pnl": 575.8
+    },
+    {
+      "id": "short-XHLD-20260129",
+      "side": "short",
+      "ticker": "XHLD",
+      "rsDate": "2026-01-29",
+      "openDate": "2026-01-29 10:52",
+      "exitDate": "2026-01-29 15:58",
+      "entry": 3.0,
+      "stop": 3.7584,
+      "exit": 3.16,
+      "exitLabel": "EOD",
+      "r": -0.21,
+      "pnl": -21.1
+    },
+    {
+      "id": "short-GITS-20260130",
+      "side": "short",
+      "ticker": "GITS",
+      "rsDate": "2026-01-30",
+      "openDate": "2026-01-30 11:36",
+      "exitDate": "2026-01-30 14:56",
+      "entry": 4.06,
+      "stop": 5.44,
+      "exit": 3.6704,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 0.28,
+      "pnl": 28.24
+    },
+    {
+      "id": "short-SUNE-20260211",
+      "side": "short",
+      "ticker": "SUNE",
+      "rsDate": "2026-02-11",
+      "openDate": "2026-02-11 10:40",
+      "exitDate": "2026-02-11 15:58",
+      "entry": 1.96,
+      "stop": 2.28,
+      "exit": 2.115,
+      "exitLabel": "EOD",
+      "r": -0.48,
+      "pnl": -48.44
+    },
+    {
+      "id": "short-RIME-20260217",
+      "side": "short",
+      "ticker": "RIME",
+      "rsDate": "2026-02-17",
+      "openDate": "2026-02-17 10:24",
+      "exitDate": "2026-02-17 10:34",
+      "entry": 3.0,
+      "stop": 3.33,
+      "exit": 3.33,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-SUNE-20260217",
+      "side": "short",
+      "ticker": "SUNE",
+      "rsDate": "2026-02-17",
+      "openDate": "2026-02-17 10:00",
+      "exitDate": "2026-02-17 11:54",
+      "entry": 2.43,
+      "stop": 2.64,
+      "exit": 2.64,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-AGIG-20260219",
+      "side": "short",
+      "ticker": "AGIG",
+      "rsDate": "2026-02-19",
+      "openDate": "2026-02-19 09:54",
+      "exitDate": "2026-02-19 14:32",
+      "entry": 4.36,
+      "stop": 4.51,
+      "exit": 4.51,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-AUUD-20260219",
+      "side": "short",
+      "ticker": "AUUD",
+      "rsDate": "2026-02-19",
+      "openDate": "2026-02-19 09:58",
+      "exitDate": "2026-02-19 10:42",
+      "entry": 8.47,
+      "stop": 9.317,
+      "exit": 7.6871,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 0.92,
+      "pnl": 92.44
+    },
+    {
+      "id": "short-XWEL-20260227",
+      "side": "short",
+      "ticker": "XWEL",
+      "rsDate": "2026-02-27",
+      "openDate": "2026-02-27 09:54",
+      "exitDate": "2026-02-27 15:58",
+      "entry": 1.94,
+      "stop": 2.03,
+      "exit": 1.461,
+      "exitLabel": "EOD",
+      "r": 5.32,
+      "pnl": 532.22
+    },
+    {
+      "id": "short-AGIG-20260302",
+      "side": "short",
+      "ticker": "AGIG",
+      "rsDate": "2026-03-02",
+      "openDate": "2026-03-02 10:24",
+      "exitDate": "2026-03-02 15:58",
+      "entry": 3.42,
+      "stop": 4.5799,
+      "exit": 3.4,
+      "exitLabel": "EOD",
+      "r": 0.02,
+      "pnl": 1.72
+    },
+    {
+      "id": "short-SKYQ-20260302",
+      "side": "short",
+      "ticker": "SKYQ",
+      "rsDate": "2026-03-02",
+      "openDate": "2026-03-02 09:54",
+      "exitDate": "2026-03-02 10:30",
+      "entry": 4.1088,
+      "stop": 4.3024,
+      "exit": 4.3024,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-LRMR-20260303",
+      "side": "short",
+      "ticker": "LRMR",
+      "rsDate": "2026-03-03",
+      "openDate": "2026-03-03 09:58",
+      "exitDate": "2026-03-03 10:02",
+      "entry": 5.285,
+      "stop": 5.385,
+      "exit": 5.2666,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 0.18,
+      "pnl": 18.43
+    },
+    {
+      "id": "short-BNAI-20260304",
+      "side": "short",
+      "ticker": "BNAI",
+      "rsDate": "2026-03-04",
+      "openDate": "2026-03-04 09:52",
+      "exitDate": "2026-03-04 10:58",
+      "entry": 47.32,
+      "stop": 48.555,
+      "exit": 48.555,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-MOBX-20260304",
+      "side": "short",
+      "ticker": "MOBX",
+      "rsDate": "2026-03-04",
+      "openDate": "2026-03-04 10:14",
+      "exitDate": "2026-03-04 15:58",
+      "entry": 8.536,
+      "stop": 11.6,
+      "exit": 8.17,
+      "exitLabel": "EOD",
+      "r": 0.12,
+      "pnl": 11.95
+    },
+    {
+      "id": "short-MOBX-20260305",
+      "side": "short",
+      "ticker": "MOBX",
+      "rsDate": "2026-03-05",
+      "openDate": "2026-03-05 10:00",
+      "exitDate": "2026-03-05 15:58",
+      "entry": 10.0,
+      "stop": 10.4,
+      "exit": 8.7,
+      "exitLabel": "EOD",
+      "r": 3.25,
+      "pnl": 325.0
+    },
+    {
+      "id": "short-AIFF-20260306",
+      "side": "short",
+      "ticker": "AIFF",
+      "rsDate": "2026-03-06",
+      "openDate": "2026-03-06 10:28",
+      "exitDate": "2026-03-06 10:30",
+      "entry": 1.95,
+      "stop": 2.08,
+      "exit": 2.08,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-MOBX-20260306",
+      "side": "short",
+      "ticker": "MOBX",
+      "rsDate": "2026-03-06",
+      "openDate": "2026-03-06 10:14",
+      "exitDate": "2026-03-06 12:22",
+      "entry": 8.951,
+      "stop": 10.1,
+      "exit": 10.1,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-ACXP-20260311",
+      "side": "short",
+      "ticker": "ACXP",
+      "rsDate": "2026-03-11",
+      "openDate": "2026-03-11 10:30",
+      "exitDate": "2026-03-11 10:44",
+      "entry": 4.01,
+      "stop": 4.2,
+      "exit": 4.2,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-AIFF-20260313",
+      "side": "short",
+      "ticker": "AIFF",
+      "rsDate": "2026-03-13",
+      "openDate": "2026-03-13 10:06",
+      "exitDate": "2026-03-13 10:14",
+      "entry": 2.0,
+      "stop": 2.07,
+      "exit": 2.07,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-BIAF-20260317",
+      "side": "short",
+      "ticker": "BIAF",
+      "rsDate": "2026-03-17",
+      "openDate": "2026-03-17 10:08",
+      "exitDate": "2026-03-17 10:30",
+      "entry": 2.73,
+      "stop": 2.94,
+      "exit": 2.94,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-BIAF-20260320",
+      "side": "short",
+      "ticker": "BIAF",
+      "rsDate": "2026-03-20",
+      "openDate": "2026-03-20 09:52",
+      "exitDate": "2026-03-20 15:16",
+      "entry": 3.12,
+      "stop": 3.3799,
+      "exit": 2.713,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 1.57,
+      "pnl": 156.58
+    },
+    {
+      "id": "short-SER-20260320",
+      "side": "short",
+      "ticker": "SER",
+      "rsDate": "2026-03-20",
+      "openDate": "2026-03-20 09:50",
+      "exitDate": "2026-03-20 09:52",
+      "entry": 2.64,
+      "stop": 2.73,
+      "exit": 2.73,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-SER-20260323",
+      "side": "short",
+      "ticker": "SER",
+      "rsDate": "2026-03-23",
+      "openDate": "2026-03-23 09:58",
+      "exitDate": "2026-03-23 13:50",
+      "entry": 2.9,
+      "stop": 3.16,
+      "exit": 3.16,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-BIAF-20260325",
+      "side": "short",
+      "ticker": "BIAF",
+      "rsDate": "2026-03-25",
+      "openDate": "2026-03-25 10:38",
+      "exitDate": "2026-03-25 11:50",
+      "entry": 4.37,
+      "stop": 4.76,
+      "exit": 3.92,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 1.15,
+      "pnl": 115.39
+    },
+    {
+      "id": "short-BIAF-20260401",
+      "side": "short",
+      "ticker": "BIAF",
+      "rsDate": "2026-04-01",
+      "openDate": "2026-04-01 11:18",
+      "exitDate": "2026-04-01 15:58",
+      "entry": 3.89,
+      "stop": 4.62,
+      "exit": 3.96,
+      "exitLabel": "EOD",
+      "r": -0.1,
+      "pnl": -9.59
+    },
+    {
+      "id": "short-SKYQ-20260407",
+      "side": "short",
+      "ticker": "SKYQ",
+      "rsDate": "2026-04-07",
+      "openDate": "2026-04-07 10:14",
+      "exitDate": "2026-04-07 15:58",
+      "entry": 7.45,
+      "stop": 7.85,
+      "exit": 6.415,
+      "exitLabel": "EOD",
+      "r": 2.59,
+      "pnl": 258.75
+    },
+    {
+      "id": "short-SKYQ-20260409",
+      "side": "short",
+      "ticker": "SKYQ",
+      "rsDate": "2026-04-09",
+      "openDate": "2026-04-09 09:58",
+      "exitDate": "2026-04-09 10:18",
+      "entry": 8.22,
+      "stop": 8.75,
+      "exit": 8.75,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-SKYQ-20260413",
+      "side": "short",
+      "ticker": "SKYQ",
+      "rsDate": "2026-04-13",
+      "openDate": "2026-04-13 09:50",
+      "exitDate": "2026-04-13 14:52",
+      "entry": 16.0601,
+      "stop": 17.6699,
+      "exit": 11.8906,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 2.59,
+      "pnl": 259.01
+    },
+    {
+      "id": "short-BNAI-20260414",
+      "side": "short",
+      "ticker": "BNAI",
+      "rsDate": "2026-04-14",
+      "openDate": "2026-04-14 10:00",
+      "exitDate": "2026-04-14 10:18",
+      "entry": 53.53,
+      "stop": 54.32,
+      "exit": 54.32,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-AGPU-20260422",
+      "side": "short",
+      "ticker": "AGPU",
+      "rsDate": "2026-04-22",
+      "openDate": "2026-04-22 10:02",
+      "exitDate": "2026-04-22 10:04",
+      "entry": 9.08,
+      "stop": 9.64,
+      "exit": 9.64,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-CODX-20260521",
+      "side": "short",
+      "ticker": "CODX",
+      "rsDate": "2026-05-21",
+      "openDate": "2026-05-21 09:50",
+      "exitDate": "2026-05-21 10:06",
+      "entry": 2.94,
+      "stop": 3.37,
+      "exit": 3.37,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-HCWB-20260522",
+      "side": "short",
+      "ticker": "HCWB",
+      "rsDate": "2026-05-22",
+      "openDate": "2026-05-22 10:26",
+      "exitDate": "2026-05-22 13:26",
+      "entry": 18.24,
+      "stop": 19.44,
+      "exit": 19.44,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-CODX-20260526",
+      "side": "short",
+      "ticker": "CODX",
+      "rsDate": "2026-05-26",
+      "openDate": "2026-05-26 10:16",
+      "exitDate": "2026-05-26 10:30",
+      "entry": 6.48,
+      "stop": 6.77,
+      "exit": 6.77,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-CODX-20260528",
+      "side": "short",
+      "ticker": "CODX",
+      "rsDate": "2026-05-28",
+      "openDate": "2026-05-28 10:30",
+      "exitDate": "2026-05-28 10:48",
+      "entry": 11.78,
+      "stop": 12.6299,
+      "exit": 12.6299,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-HCWB-20260528",
+      "side": "short",
+      "ticker": "HCWB",
+      "rsDate": "2026-05-28",
+      "openDate": "2026-05-28 09:52",
+      "exitDate": "2026-05-28 09:58",
+      "entry": 12.18,
+      "stop": 12.54,
+      "exit": 12.54,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-ATPC-20260601",
+      "side": "short",
+      "ticker": "ATPC",
+      "rsDate": "2026-06-01",
+      "openDate": "2026-06-01 09:44",
+      "exitDate": "2026-06-01 09:46",
+      "entry": 5.12,
+      "stop": 5.27,
+      "exit": 5.27,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-GITS-20260601",
+      "side": "short",
+      "ticker": "GITS",
+      "rsDate": "2026-06-01",
+      "openDate": "2026-06-01 10:20",
+      "exitDate": "2026-06-01 11:32",
+      "entry": 2.1503,
+      "stop": 2.25,
+      "exit": 2.25,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-CODX-20260602",
+      "side": "short",
+      "ticker": "CODX",
+      "rsDate": "2026-06-02",
+      "openDate": "2026-06-02 10:04",
+      "exitDate": "2026-06-02 10:50",
+      "entry": 7.63,
+      "stop": 8.1,
+      "exit": 7.6269,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 0.01,
+      "pnl": 0.66
+    },
+    {
+      "id": "short-ALOY-20260615",
+      "side": "short",
+      "ticker": "ALOY",
+      "rsDate": "2026-06-15",
+      "openDate": "2026-06-15 10:00",
+      "exitDate": "2026-06-15 15:48",
+      "entry": 16.82,
+      "stop": 17.19,
+      "exit": 15.508,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 3.55,
+      "pnl": 354.6
+    },
+    {
+      "id": "short-OBAI-20260617",
+      "side": "short",
+      "ticker": "OBAI",
+      "rsDate": "2026-06-17",
+      "openDate": "2026-06-17 09:54",
+      "exitDate": "2026-06-17 10:00",
+      "entry": 1.27,
+      "stop": 1.34,
+      "exit": 1.34,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-SKYQ-20260630",
+      "side": "short",
+      "ticker": "SKYQ",
+      "rsDate": "2026-06-30",
+      "openDate": "2026-06-30 10:20",
+      "exitDate": "2026-06-30 10:26",
+      "entry": 3.57,
+      "stop": 3.79,
+      "exit": 3.79,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    },
+    {
+      "id": "short-CUE-20260710",
+      "side": "short",
+      "ticker": "CUE",
+      "rsDate": "2026-07-10",
+      "openDate": "2026-07-10 10:10",
+      "exitDate": "2026-07-10 15:58",
+      "entry": 39.275,
+      "stop": 43.01,
+      "exit": 36.775,
+      "exitLabel": "EOD",
+      "r": 0.67,
+      "pnl": 66.93
+    },
+    {
+      "id": "short-NVVE-20260715",
+      "side": "short",
+      "ticker": "NVVE",
+      "rsDate": "2026-07-15",
+      "openDate": "2026-07-15 10:34",
+      "exitDate": "2026-07-15 15:58",
+      "entry": 28.11,
+      "stop": 32.8699,
+      "exit": 21.67,
+      "exitLabel": "EOD",
+      "r": 1.35,
+      "pnl": 135.3
+    },
+    {
+      "id": "short-SKYQ-20260724",
+      "side": "short",
+      "ticker": "SKYQ",
+      "rsDate": "2026-07-24",
+      "openDate": "2026-07-24 11:08",
+      "exitDate": "2026-07-24 11:14",
+      "entry": 5.0701,
+      "stop": 6.4299,
+      "exit": 5.0082,
+      "exitLabel": "TARGET:5mEMA200",
+      "r": 0.05,
+      "pnl": 4.55
+    },
+    {
+      "id": "short-DFNS-20260729",
+      "side": "short",
+      "ticker": "DFNS",
+      "rsDate": "2026-07-29",
+      "openDate": "2026-07-29 10:04",
+      "exitDate": "2026-07-29 14:14",
+      "entry": 35.5,
+      "stop": 37.9,
+      "exit": 37.9,
+      "exitLabel": "STOP",
+      "r": -1.0,
+      "pnl": -100.0
+    }
+  ],
+  "createdAt": "2026-07-31T00:57:31.000Z"
+}

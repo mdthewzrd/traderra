@@ -83,6 +83,19 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   }
 }
 
+/* ── Z-index scale: single source of truth for stacking ──
+   Pick a tier; NEVER escalate to 2147483647 / !important. Higher tiers win.
+   TSX usage: style={{ zIndex: 'var(--z-dropdown)' }} or className="z-[1000]". */
+:root {
+  --z-base: 0;          /* normal flow */
+  --z-sticky: 10;       /* sticky table headers, in-page sticky bars */
+  --z-dropdown: 1000;   /* dropdowns, menus, popovers, tooltips, cell editors */
+  --z-nav: 1100;        /* fixed/sticky top nav (beats dropdowns) */
+  --z-modal: 2000;      /* modal dialogs + their backdrops */
+  --z-toast: 3000;      /* toasts, alerts */
+  --z-max: 9999;        /* reserved — nothing should normally use this */
+}
+
 @layer base {
   * {
     border-color: hsl(var(--border));
@@ -133,25 +146,17 @@ input[type="date"]::-webkit-calendar-picker-indicator {
     @apply bg-primary/20 text-primary-foreground;
   }
 
-  /* Fix date picker popup z-index and transparency issues */
+  /* Date inputs participate in normal stacking. Previously forced to
+     z-index:2147483647 !important — a max-int hack that made EVERY date cell
+     paint above sticky headers, dropdowns, and modals site-wide. The native
+     calendar popup is browser-rendered and ignores the input's z-index, so the
+     hack fixed nothing and broke layering. Keep position:relative only. */
   input[type="date"] {
     position: relative;
-    z-index: 2147483647 !important;
   }
 
   input[type="date"]::-webkit-calendar-picker-indicator {
     cursor: pointer;
-    z-index: 2147483647 !important;
-  }
-
-  /* Force calendar popup to render on top with solid background */
-  input[type="date"]::-webkit-datetime-edit {
-    z-index: 2147483647 !important;
-  }
-
-  /* Fix webkit date picker popup styling */
-  input[type="date"]::-webkit-datetime-edit-fields-wrapper {
-    z-index: 2147483647 !important;
   }
 
   /* Ensure date inputs don't inherit problematic styles */

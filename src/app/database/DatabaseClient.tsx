@@ -464,6 +464,26 @@ function TagsCell({ value, suggestions, colors, onChange }: {
     </div>
   )
 }
+// ─── Compact read-only tag chips for TABLE rows — click opens the detail drawer (full editing lives there) ──
+function TagsDisplay({ value, colors, onActivate }: { value: string[]; colors?: Record<string, string> | null; onActivate: () => void }) {
+  const C = useTheme()
+  const cur = Array.isArray(value) ? value : []
+  return (
+    <div onClick={onActivate} className="cursor-pointer">
+      <div className="flex flex-wrap gap-1 items-center min-h-[22px] py-0.5" style={{ maxHeight: 24, overflow: 'hidden' }}>
+        {cur.slice(0, 2).map((t) => {
+          const col = colors?.[t]
+          return (
+            <span key={t} className="text-[10px] px-1.5 py-0.5 rounded"
+              style={{ color: col ?? '#c4b5fd', background: col ? `${col}1a` : 'rgba(139,92,246,0.10)', border: `1px solid ${col ? col + '55' : 'rgba(139,92,246,0.30)'}` }}>{t}</span>
+          )
+        })}
+        {cur.length > 2 && <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }} title={`${cur.length - 2} more — open detail to see all`}>+{cur.length - 2}</span>}
+        {cur.length === 0 && <span className="text-[11px]" style={{ color: C.MUTED }}>+ add tag</span>}
+      </div>
+    </div>
+  )
+}
 // ─── Custom column inline cell editor (forward testing) ──
 function CustomCell({ field, value, onSave, colors, onAddOption, onCreateOption, getTagsSuggestions }: {
   field: CorpusField
@@ -1569,6 +1589,7 @@ export default function DatabasePage() {
         cell: (i) => {
           const rid = i.row.original.id
           const val = (i.row.original.customValues ?? {})[f.id]
+          if (f.type === 'tags') return <TagsDisplay value={val} colors={f.colors} onActivate={() => setSelectedId(rid)} />
           return <CustomCell field={f} value={val} colors={f.colors} onSave={(v) => saveCustomValue(rid, f.id, v)} onAddOption={(label) => { addFieldOption(f.id, label); saveCustomValue(rid, f.id, label) }} onCreateOption={(label) => addFieldOption(f.id, label)} getTagsSuggestions={tagsSuggestions} />
         },
       })),
@@ -1590,7 +1611,7 @@ export default function DatabasePage() {
       }),
     )
     return cols
-  }, [loadedScanNames, fields, enums, trades, enumOpts, enumColors, addEnumOption, addFieldOption, updateField, deleteRow, saveCustomValue, deleteField, openDayTrade, tagsSuggestions])
+  }, [loadedScanNames, fields, enums, trades, enumOpts, enumColors, addEnumOption, addFieldOption, updateField, deleteRow, saveCustomValue, deleteField, openDayTrade, tagsSuggestions, setSelectedId])
 
   // Unified client-side filter — works on ANY column
   const tableData = useMemo(() => {

@@ -402,7 +402,7 @@ function TagsCell({ value, suggestions, colors, onChange }: {
     return () => { document.removeEventListener('mousedown', onDoc); window.removeEventListener('scroll', onScroll, true) }
   }, [focused])
   const inputRef = useRef<HTMLInputElement>(null)
-  useEffect(() => { if (focused) inputRef.current?.focus() }, [focused])
+  useEffect(() => { if (focused) inputRef.current?.focus({ preventScroll: true }) }, [focused])
   const cur: string[] = Array.isArray(value) ? value : []
   const q = input.trim().toLowerCase()
   const matches = suggestions.filter((s) => !cur.includes(s) && (!q || s.toLowerCase().includes(q))).slice(0, 30)
@@ -410,7 +410,7 @@ function TagsCell({ value, suggestions, colors, onChange }: {
   const remove = (t: string) => onChange(cur.filter((x) => x !== t))
   const open = () => { if (wrapRef.current) setRect(wrapRef.current.getBoundingClientRect()); setFocused(true) }
   return (
-    <div ref={wrapRef} className="relative cursor-text" onClick={open}>
+    <div ref={wrapRef} className="relative cursor-text" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); open() }}>
       <div className="flex flex-wrap gap-1 items-center min-h-[22px] py-0.5" style={{ maxHeight: focused ? undefined : 24, overflow: focused ? undefined : 'hidden' }}>
         {(focused ? cur : cur.slice(0, 2)).map((t) => {
           const col = colors?.[t]

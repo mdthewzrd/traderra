@@ -2173,6 +2173,7 @@ function RowDrawer({
   row, panelH, fields, customValues, onClose, onUpdate, onNotes, onSaveCustom, onEditField, onDeleteField,
   enumOpts, enumColors, addEnumOption, addFieldOption,
   allTags,
+  getTagsSuggestions,
   trades, onAddTrade, onUpdateTrade, onDeleteTrade,
   openTradeId, setOpenTradeId,
 }: {

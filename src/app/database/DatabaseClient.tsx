@@ -303,13 +303,16 @@ function ThemedMultiSelect({
       <button ref={btnRef} onClick={toggle}
         className="border rounded px-1.5 py-0.5 text-xs font-semibold cursor-pointer flex items-center gap-1 transition-colors w-full"
         style={{ borderColor: C.BORDER, background: C.SURFACE }}>
-        <span className="flex-1 text-left flex flex-wrap gap-0.5 min-w-0">
+        <span className="flex-1 text-left flex flex-wrap gap-0.5 min-w-0" style={{ maxHeight: 20, overflow: 'hidden' }}>
           {value.length === 0
             ? <span style={{ color: C.MUTED }}>{placeholder}</span>
-            : value.map((t) => {
-                const tc = colors?.[t]
-                return <span key={t} className="text-[9px] px-1 rounded shrink-0" style={{ color: tc ?? C.GOLD, background: tc ? `${tc}1a` : C.GOLD_DIM }}>{t}</span>
-              })}
+            : (<>
+                {value.slice(0, 2).map((t) => {
+                  const tc = colors?.[t]
+                  return <span key={t} className="text-[9px] px-1 rounded shrink-0" style={{ color: tc ?? C.GOLD, background: tc ? `${tc}1a` : C.GOLD_DIM }}>{t}</span>
+                })}
+                {value.length > 2 && <span className="text-[9px] px-1 shrink-0" style={{ color: C.MUTED }}>+{value.length - 2}</span>}
+              </>)}
         </span>
         <span style={{ color: C.MUTED, fontSize: 8 }}>▼</span>
       </button>
@@ -406,8 +409,8 @@ function TagsCell({ value, suggestions, colors, onChange }: {
   const open = () => { if (wrapRef.current) setRect(wrapRef.current.getBoundingClientRect()); setFocused(true) }
   return (
     <div ref={wrapRef} className="relative cursor-text" onClick={open}>
-      <div className="flex flex-wrap gap-1 items-center min-h-[22px] py-0.5">
-        {cur.map((t) => {
+      <div className="flex flex-wrap gap-1 items-center min-h-[22px] py-0.5" style={{ maxHeight: focused ? undefined : 26, overflow: focused ? undefined : 'hidden' }}>
+        {(focused ? cur : cur.slice(0, 2)).map((t) => {
           const col = colors?.[t]
           return (
             <span key={t} className="text-[10px] px-1.5 py-0.5 rounded flex items-center gap-0.5"
@@ -417,6 +420,12 @@ function TagsCell({ value, suggestions, colors, onChange }: {
             </span>
           )
         })}
+        {!focused && cur.length > 2 && (
+          <button onClick={(e) => { e.stopPropagation(); open() }} title={`${cur.length - 2} more — click to expand`}
+            className="text-[10px] px-1.5 py-0.5 rounded shrink-0" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>
+            +{cur.length - 2}
+          </button>
+        )}
         <input
           value={input}
           onChange={(e) => { setInput(e.target.value); if (!focused) open() }}
@@ -1496,11 +1505,15 @@ export default function DatabasePage() {
       }),
       ch.accessor('tags', {
         header: 'Tags', size: 180, cell: (i) => {
-          const tags = i.getValue() ?? []
+          const tags = (i.getValue() ?? []) as string[]
           if (!tags.length) return <span className="text-xs" style={{ color: C.BORDER }}>—</span>
-          return <div className="flex flex-wrap gap-1 max-h-[40px] overflow-y-auto">{tags.map((t) => (
-            <span key={t} className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: '#c4b5fd', background: 'rgba(139,92,246,0.10)', border: '1px solid rgba(139,92,246,0.30)' }}>{t}</span>
-          ))}</div>
+          const show = tags.slice(0, 2); const hidden = tags.length - show.length
+          return <div className="flex flex-wrap gap-1 items-center" style={{ maxHeight: 26, overflow: 'hidden' }}>
+            {show.map((t) => (
+              <span key={t} className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: '#c4b5fd', background: 'rgba(139,92,246,0.10)', border: '1px solid rgba(139,92,246,0.30)' }}>{t}</span>
+            ))}
+            {hidden > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }} title={`${hidden} more: ${tags.slice(2).join(', ')}`}>+{hidden}</span>}
+          </div>
         },
       }),
       // ── day trade quick-open buttons (d0–d4) ──

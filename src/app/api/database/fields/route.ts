@@ -4,7 +4,7 @@ import { getAuthUserId } from '@/lib/auth-helpers'
 import { getDatabaseId } from '@/lib/db-id'
 import { seedDefaultFields } from '@/lib/default-fields'
 
-const VALID_TYPES = ['text', 'number', 'select', 'multiselect', 'boolean', 'date', 'grade']
+const VALID_TYPES = ['text', 'number', 'select', 'multiselect', 'boolean', 'date', 'grade', 'tags']
 
 // Custom columns (CorpusField) are scoped per-database-per-user: each database
 // owns its own editable column set. The active database is resolved from the
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   await seedDefaultFields(userId, databaseId)
 
   const fields = await prisma.corpusField.findMany({
-    where: { userId, databaseId },
+    where: { userId, OR: [{ databaseId }, { databaseId: null }] },
     orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
   })
   return NextResponse.json({ fields })
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
   const databaseId = await getDatabaseId(request, userId)
 
   const body = await request.json()
-  const { name, type, options, colors } = body
+  const { name, type, options, colors, shared } = body
   if (!name || typeof name !== 'string' || !name.trim()) {
     return NextResponse.json({ error: 'Name required' }, { status: 400 })
   }
@@ -44,15 +44,16 @@ export async function POST(request: NextRequest) {
   const opts: string[] = (type === 'select' || type === 'multiselect')
     ? Array.isArray(options) ? options.map(String).filter(Boolean) : []
     : []
+  const targetDbId = shared ? null : databaseId
   const colorMap = colors && typeof colors === 'object' ? colors : null
 
   const maxOrder = await prisma.corpusField.aggregate({
-    where: { userId, databaseId }, _max: { order: true },
+    where: { userId, databaseId: targetDbId }, _max: { order: true },
   })
   const field = await prisma.corpusField.create({
     data: {
       userId,
-      databaseId,
+      databaseId: targetDbId,
       name: name.trim(),
       type,
       options: opts,
@@ -70,13 +71,14 @@ export async function PATCH(request: NextRequest) {
   const databaseId = await getDatabaseId(request, userId)
 
   const body = await request.json()
-  const { id, name, options, colors } = body
+  const { id, name, options, colors, shared } = body
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
   const data: any = {}
   if (typeof name === 'string' && name.trim()) data.name = name.trim()
   if (Array.isArray(options)) data.options = options.map(String).filter(Boolean)
   if (colors && typeof colors === 'object') data.colors = colors
+  if (typeof shared === 'boolean') data.databaseId = shared ? null : databaseId
 
   const field = await prisma.corpusField.updateMany({ where: { id, userId, databaseId }, data })
   if (field.count === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })

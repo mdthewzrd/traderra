@@ -128,7 +128,7 @@ model CorpusField {
   database   CorpusDatabase? @relation(fields: [databaseId], references: [id], onDelete: Cascade)
 
   name      String
-  type      String   // 'text' | 'number' | 'select' | 'multiselect' | 'boolean' | 'date' | 'grade'
+  type      String   // 'text' | 'number' | 'select' | 'multiselect' | 'boolean' | 'date' | 'grade' | 'tags'  (databaseId=null => shared across all databases)
   options   String[] @default([])  // for select/multiselect
   colors    Json?    // { optionLabel: '#hex' } per-option color for select/multiselect/grade
   order     Int      @default(0)

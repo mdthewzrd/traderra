@@ -117,7 +117,7 @@ interface CorpusTrade {
   setup?: string | null
 }
 
-type FieldType = 'text' | 'number' | 'select' | 'multiselect' | 'boolean' | 'date' | 'grade'
+type FieldType = 'text' | 'number' | 'select' | 'multiselect' | 'boolean' | 'date' | 'grade' | 'tags'
 interface CorpusField {
   id: string
   name: string
@@ -130,6 +130,7 @@ const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   text: 'Text', number: 'Number', select: 'Dropdown',
   multiselect: 'Multi-Select', boolean: 'Checkbox', date: 'Date',
   grade: 'Grade',
+  tags: 'Tags',
 }
 // Color palette for option chips (cycled on click in FieldModal / inline)
 const PALETTE = ['#D4AF37', '#34d399', '#f59e0b', '#ef4444', '#14b8a6', '#a855f7', '#3b82f6', '#ec4899']
@@ -376,14 +377,86 @@ function ClassifySelect({
   return <ThemedSelect value={value} options={options} colors={map} onChange={onChange} placeholder={placeholder} allowCreate={allowCreate} onCreate={onCreate} />
 }
 
+
+// ─── Tags cell: freeform multi-value with column-centric autocomplete ──
+function TagsCell({ value, suggestions, colors, onChange }: {
+  value: string[]
+  suggestions: string[]
+  colors?: Record<string, string> | null
+  onChange: (v: string[]) => void
+}) {
+  const C = useTheme()
+  const [input, setInput] = useState('')
+  const [focused, setFocused] = useState(false)
+  const [rect, setRect] = useState<DOMRect | null>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!focused) return
+    const onDoc = (e: MouseEvent) => { if (!wrapRef.current?.contains(e.target as Node)) setFocused(false) }
+    const onScroll = () => setFocused(false)
+    document.addEventListener('mousedown', onDoc)
+    window.addEventListener('scroll', onScroll, true)
+    return () => { document.removeEventListener('mousedown', onDoc); window.removeEventListener('scroll', onScroll, true) }
+  }, [focused])
+  const cur: string[] = Array.isArray(value) ? value : []
+  const q = input.trim().toLowerCase()
+  const matches = suggestions.filter((s) => !cur.includes(s) && (!q || s.toLowerCase().includes(q))).slice(0, 30)
+  const add = (t: string) => { const v = t.trim(); if (v && !cur.includes(v)) onChange([...cur, v]); setInput('') }
+  const remove = (t: string) => onChange(cur.filter((x) => x !== t))
+  const open = () => { if (wrapRef.current) setRect(wrapRef.current.getBoundingClientRect()); setFocused(true) }
+  return (
+    <div ref={wrapRef} className="relative cursor-text" onClick={open}>
+      <div className="flex flex-wrap gap-1 items-center min-h-[22px] py-0.5">
+        {cur.map((t) => {
+          const col = colors?.[t]
+          return (
+            <span key={t} className="text-[10px] px-1.5 py-0.5 rounded flex items-center gap-0.5"
+              style={{ color: col ?? '#c4b5fd', background: col ? `${col}1a` : 'rgba(139,92,246,0.10)', border: `1px solid ${col ? col + '55' : 'rgba(139,92,246,0.30)'}` }}>
+              {t}
+              <button onClick={(e) => { e.stopPropagation(); remove(t) }} className="opacity-60 hover:opacity-100">✕</button>
+            </span>
+          )
+        })}
+        <input
+          value={input}
+          onChange={(e) => { setInput(e.target.value); if (!focused) open() }}
+          onFocus={open}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); add(input) }
+            else if (e.key === 'Backspace' && !input && cur.length) { remove(cur[cur.length - 1]) }
+            else if (e.key === 'Escape') setFocused(false)
+          }}
+          placeholder={cur.length ? '' : 'tag + ↵'}
+          className="bg-transparent outline-none text-[11px] min-w-[36px] flex-1"
+          style={{ color: C.TEXT }}
+        />
+      </div>
+      {focused && rect && typeof document !== 'undefined' && matches.length > 0 && createPortal(
+        <div className="rounded-md border shadow-xl max-h-44 overflow-y-auto py-0.5"
+          style={{ position: 'fixed', top: rect.bottom + 2, left: rect.left, width: Math.max(rect.width, 160), zIndex: 1300, background: C.SURFACE, borderColor: C.BORDER }}>
+          {matches.map((s) => {
+            const col = colors?.[s]
+            return (
+              <button key={s} type="button" onMouseDown={(e) => { e.preventDefault(); add(s) }}
+                className="w-full text-left text-[11px] px-2 py-1 transition-colors hover:bg-white/5 capitalize"
+                style={{ color: col ?? C.TEXT2 }}>
+                {col && <span className="inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle" style={{ background: col }} />}{s}
+              </button>
+            )
+          })}
+        </div>, document.body)}
+    </div>
+  )
+}
 // ─── Custom column inline cell editor (forward testing) ──
-function CustomCell({ field, value, onSave, colors, onAddOption, onCreateOption }: {
+function CustomCell({ field, value, onSave, colors, onAddOption, onCreateOption, getTagsSuggestions }: {
   field: CorpusField
   value: any
   onSave: (v: any) => void
   colors?: Record<string, string> | null
   onAddOption?: (label: string) => void
   onCreateOption?: (label: string) => void   // add field option only (no value clobber) — for multiselect create
+  getTagsSuggestions?: (fieldId: string) => string[]
 }) {
   const C = useTheme()
   const base = "border rounded px-1.5 py-0.5 text-xs transition-colors w-full"
@@ -408,6 +481,11 @@ function CustomCell({ field, value, onSave, colors, onAddOption, onCreateOption 
     const cur: string[] = Array.isArray(value) ? value : []
     return <ThemedMultiSelect value={cur} options={field.options} colors={colors ?? undefined}
       onChange={(v) => onSave(v)} allowCreate onCreate={onCreateOption} />
+  }
+  if (field.type === 'tags') {
+    const cur: string[] = Array.isArray(value) ? value : []
+    return <TagsCell value={cur} suggestions={getTagsSuggestions?.(field.id) ?? []} colors={colors}
+      onChange={(v) => onSave(v)} />
   }
   if (field.type === 'date') {
     return <input type="date" value={value ?? ''} onChange={(e) => onSave(e.target.value || null)} className={base} style={st} />
@@ -484,13 +562,14 @@ function ManageEnumModal({ enumKey, title, options, onSave, onClose }: {
 function FieldModal({ edit, onClose, onSubmit, onDelete }: {
   edit?: CorpusField
   onClose: () => void
-  onSubmit: (name: string, type: FieldType, options: string[], colors: Record<string, string>) => void
+  onSubmit: (name: string, type: FieldType, options: string[], colors: Record<string, string>, shared: boolean) => void
   onDelete?: () => void
 }) {
   const C = useTheme()
   const st = { background: C.SURFACE2, borderColor: C.BORDER, color: C.TEXT }
   const [name, setName] = useState(edit?.name ?? '')
   const [type, setType] = useState<FieldType>(edit?.type ?? 'select')
+  const [shared, setShared] = useState<boolean>(edit ? edit.databaseId == null : false)
   const [opts, setOpts] = useState<string[]>(edit?.options ?? [])
   const [optColors, setOptColors] = useState<Record<string, string>>(edit?.colors ?? {})
   const [optInput, setOptInput] = useState('')
@@ -554,8 +633,14 @@ function FieldModal({ edit, onClose, onSubmit, onDelete }: {
             )}
           </div>
         )}
+        <label className="flex items-center gap-2 cursor-pointer text-xs select-none pb-1" style={{ color: C.TEXT2 }}>
+          <button type="button" onClick={() => setShared((v) => !v)} className="w-8 h-4 rounded-full transition-colors relative shrink-0" style={{ background: shared ? C.GOLD : C.SURFACE2, border: `1px solid ${shared ? C.GOLD_BORDER : C.BORDER}` }}>
+            <span className="absolute top-0.5 w-2.5 h-2.5 rounded-full transition-all" style={{ left: shared ? 16 : 2, background: shared ? C.BG : C.MUTED }} />
+          </button>
+          <span>Use in all databases <span style={{ color: C.MUTED }}>(shared — same column in every database)</span></span>
+        </label>
         <div className="flex items-center gap-2 pt-1">
-          <button disabled={!name.trim()} onClick={() => { onSubmit(name.trim(), type, opts, optColors); onClose() }}
+          <button disabled={!name.trim()} onClick={() => { onSubmit(name.trim(), type, opts, optColors, shared); onClose() }}
             className="flex-1 text-xs font-semibold py-2 rounded disabled:opacity-40" style={{ background: C.GOLD, color: C.BG }}>
             {edit ? 'Save' : 'Create Column'}
           </button>
@@ -912,6 +997,15 @@ function ScanLoader({
 // ─── Main page ────────────────────────────────────────────
 export default function DatabasePage() {
   const [rows, setRows] = useState<CorpusRow[]>([])
+  const rowsRef = useRef(rows); rowsRef.current = rows
+  const tagsSuggestions = useCallback((fieldId: string) => {
+    const set = new Set<string>()
+    for (const r of rowsRef.current) {
+      const v = (r.customValues ?? {})[fieldId]
+      if (Array.isArray(v)) v.forEach((t) => set.add(String(t)))
+    }
+    return [...set].sort()
+  }, [])
   const [scans, setScans] = useState<ScanItem[]>([])
   const [selectedScanIds, setSelectedScanIds] = useState<Set<string>>(new Set())
   // Derived: distinct scan sources actually present in the loaded corpus rows.
@@ -1044,13 +1138,17 @@ export default function DatabasePage() {
       const base = { id: `custom__${f.id}`, label: f.name }
       if (f.type === 'grade' || f.type === 'select' || f.type === 'multiselect')
         return { ...base, type: 'enum' as const, options: f.type === 'grade' ? GRADES : f.options, multi: f.type === 'multiselect' }
+      if (f.type === 'tags') {
+        const union = [...new Set(rows.flatMap((r) => { const v = (r.customValues ?? {})[f.id]; return Array.isArray(v) ? v : [] }))].sort()
+        return { ...base, type: 'enum' as const, options: union, multi: true }
+      }
       if (f.type === 'boolean') return { ...base, type: 'boolean' as const }
       if (f.type === 'number') return { ...base, type: 'number' as const }
       if (f.type === 'date') return { ...base, type: 'date' as const }
       return { ...base, type: 'text' as const }
     })
     return [...builtIn, ...custom]
-  }, [fields, loadedScanNames, enums])
+  }, [fields, loadedScanNames, enums, rows])
   const splitDrag = useRef<{ startY: number; startH: number } | null>(null)
   const onSplitDown = (e: React.MouseEvent) => {
     const vh = window.innerHeight
@@ -1159,20 +1257,20 @@ export default function DatabasePage() {
     await dbFetch(`/api/database/trades?id=${tradeId}`, { method: 'DELETE' })
   }, [])
 
-  const createField = async (name: string, type: FieldType, options: string[], colors: Record<string, string>) => {
+  const createField = async (name: string, type: FieldType, options: string[], colors: Record<string, string>, shared: boolean = false) => {
     const res = await dbFetch('/api/database/fields', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, type, options, colors }),
+      body: JSON.stringify({ name, type, options, colors, shared }),
     })
     if (!res.ok) { const e = await res.json().catch(() => ({})); setStatus({ kind: 'err', msg: e.error || 'Create failed' }); return }
     await fetchFields()
     setStatus({ kind: 'ok', msg: `Added column “${name}”.` })
   }
 
-  const updateColumn = async (id: string, name: string, options: string[], colors: Record<string, string>) => {
+  const updateColumn = async (id: string, name: string, options: string[], colors: Record<string, string>, shared: boolean = false) => {
     await dbFetch('/api/database/fields', {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, name, options, colors }),
+      body: JSON.stringify({ id, name, options, colors, shared }),
     })
     await fetchFields()
   }
@@ -1451,7 +1549,7 @@ export default function DatabasePage() {
         cell: (i) => {
           const rid = i.row.original.id
           const val = (i.row.original.customValues ?? {})[f.id]
-          return <CustomCell field={f} value={val} colors={f.colors} onSave={(v) => saveCustomValue(rid, f.id, v)} onAddOption={(label) => { addFieldOption(f.id, label); saveCustomValue(rid, f.id, label) }} onCreateOption={(label) => addFieldOption(f.id, label)} />
+          return <CustomCell field={f} value={val} colors={f.colors} onSave={(v) => saveCustomValue(rid, f.id, v)} onAddOption={(label) => { addFieldOption(f.id, label); saveCustomValue(rid, f.id, label) }} onCreateOption={(label) => addFieldOption(f.id, label)} getTagsSuggestions={tagsSuggestions} />
         },
       })),
       ch.display({
@@ -1472,7 +1570,7 @@ export default function DatabasePage() {
       }),
     )
     return cols
-  }, [loadedScanNames, fields, enums, trades, enumOpts, enumColors, addEnumOption, addFieldOption, updateField, deleteRow, saveCustomValue, deleteField, openDayTrade])
+  }, [loadedScanNames, fields, enums, trades, enumOpts, enumColors, addEnumOption, addFieldOption, updateField, deleteRow, saveCustomValue, deleteField, openDayTrade, tagsSuggestions])
 
   // Unified client-side filter — works on ANY column
   const tableData = useMemo(() => {
@@ -1810,6 +1908,7 @@ export default function DatabasePage() {
           onEditField={(f) => setFieldModal({ open: true, edit: f })}
           onDeleteField={deleteField}
           enumOpts={enumOpts} enumColors={enumColors} addEnumOption={addEnumOption} addFieldOption={addFieldOption}
+          getTagsSuggestions={tagsSuggestions}
           allTags={Array.from(new Set(rows.flatMap((r) => r.tags ?? []))).sort()}
           trades={trades[selected.id] ?? []}
           onAddTrade={(dir) => addTrade(selected.id, dir, selected.signalDate)}
@@ -1821,9 +1920,9 @@ export default function DatabasePage() {
         <FieldModal
           edit={fieldModal.edit}
           onClose={() => setFieldModal({ open: false })}
-          onSubmit={(name, type, options, colors) => {
-            if (fieldModal.edit) updateColumn(fieldModal.edit.id, name, options, colors)
-            else createField(name, type, options, colors)
+          onSubmit={(name, type, options, colors, shared) => {
+            if (fieldModal.edit) updateColumn(fieldModal.edit.id, name, options, colors, shared)
+            else createField(name, type, options, colors, shared)
           }}
           onDelete={fieldModal.edit ? () => deleteField(fieldModal.edit.id, fieldModal.edit.name) : undefined}
         />
@@ -2018,6 +2117,7 @@ function RowDrawer({
   enumColors: (key: string) => Record<string, string>
   addEnumOption: (key: string, label: string) => void
   addFieldOption: (fieldId: string, label: string) => void
+  getTagsSuggestions: (fieldId: string) => string[]
   allTags: string[]
   trades: CorpusTrade[]
   onAddTrade: (direction: string) => void
@@ -2246,7 +2346,7 @@ function RowDrawer({
                       <span className="text-xs font-semibold" style={{ color: C.TEXT }}>{f.name}</span>
                       <span className="text-[9px] uppercase" style={{ color: C.MUTED }}>{FIELD_TYPE_LABELS[f.type]}</span>
                     </div>
-                    <div className="w-40"><CustomCell field={f} value={customValues[f.id]} colors={f.colors} onSave={(v) => onSaveCustom(f.id, v)} onAddOption={(label) => { addFieldOption(f.id, label); onSaveCustom(f.id, label) }} onCreateOption={(label) => addFieldOption(f.id, label)} /></div>
+                    <div className="w-40"><CustomCell field={f} value={customValues[f.id]} colors={f.colors} onSave={(v) => onSaveCustom(f.id, v)} onAddOption={(label) => { addFieldOption(f.id, label); onSaveCustom(f.id, label) }} onCreateOption={(label) => addFieldOption(f.id, label)} getTagsSuggestions={getTagsSuggestions} /></div>
                     {onDeleteField && <button onClick={() => onDeleteField(f.id, f.name)} title="Delete column" style={{ color: C.MUTED, fontSize: 11 }}>✕</button>}
                     {onEditField && <button onClick={() => onEditField(f)} title="Edit column" style={{ color: C.MUTED, fontSize: 11 }}>✎</button>}
                   </div>

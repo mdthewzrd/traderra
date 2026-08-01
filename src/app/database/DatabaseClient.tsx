@@ -396,7 +396,7 @@ function TagsCell({ value, suggestions, colors, onChange }: {
   useEffect(() => {
     if (!focused) return
     const onDoc = (e: MouseEvent) => { if (!wrapRef.current?.contains(e.target as Node)) setFocused(false) }
-    const onScroll = () => setFocused(false)
+    const onScroll = () => { if (wrapRef.current) setRect(wrapRef.current.getBoundingClientRect()) }
     document.addEventListener('mousedown', onDoc)
     window.addEventListener('scroll', onScroll, true)
     return () => { document.removeEventListener('mousedown', onDoc); window.removeEventListener('scroll', onScroll, true) }
@@ -411,8 +411,8 @@ function TagsCell({ value, suggestions, colors, onChange }: {
   const open = () => { if (wrapRef.current) setRect(wrapRef.current.getBoundingClientRect()); setFocused(true) }
   return (
     <div ref={wrapRef} className="relative cursor-text" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); open() }}>
-      <div className="flex flex-wrap gap-1 items-center min-h-[22px] py-0.5" style={{ maxHeight: focused ? undefined : 24, overflow: focused ? undefined : 'hidden' }}>
-        {(focused ? cur : cur.slice(0, 2)).map((t) => {
+      <div className="flex flex-wrap gap-1 items-center min-h-[22px] py-0.5">
+        {cur.map((t) => {
           const col = colors?.[t]
           return (
             <span key={t} className="text-[10px] px-1.5 py-0.5 rounded flex items-center gap-0.5"
@@ -422,30 +422,20 @@ function TagsCell({ value, suggestions, colors, onChange }: {
             </span>
           )
         })}
-        {!focused && cur.length > 2 && (
-          <button onClick={(e) => { e.stopPropagation(); open() }} title={`${cur.length - 2} more — click to expand`}
-            className="text-[10px] px-1.5 py-0.5 rounded shrink-0" style={{ color: C.MUTED, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>
-            +{cur.length - 2}
-          </button>
-        )}
-        {!focused && cur.length === 0 && (
-          <span className="text-[11px]" style={{ color: C.MUTED }}>+ add tag</span>
-        )}
-        {focused && (
-          <input
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') { e.preventDefault(); add(input) }
-              else if (e.key === 'Backspace' && !input && cur.length) { remove(cur[cur.length - 1]) }
-              else if (e.key === 'Escape') setFocused(false)
-            }}
-            placeholder="type + ↵"
-            className="bg-transparent outline-none text-[11px] min-w-[36px] flex-1"
-            style={{ color: C.TEXT }}
-          />
-        )}
+        <input
+          ref={inputRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onFocus={open}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); add(input) }
+            else if (e.key === 'Backspace' && !input && cur.length) { remove(cur[cur.length - 1]) }
+            else if (e.key === 'Escape') setFocused(false)
+          }}
+          placeholder={cur.length ? '' : 'add tag…'}
+          className="bg-transparent outline-none text-[11px] min-w-[40px] flex-1"
+          style={{ color: C.TEXT }}
+        />
       </div>
       {focused && rect && typeof document !== 'undefined' && matches.length > 0 && createPortal(
         <div className="rounded-md border shadow-xl max-h-44 overflow-y-auto py-0.5"
@@ -2420,7 +2410,7 @@ function RowDrawer({
                       <span className="text-xs font-semibold" style={{ color: C.TEXT }}>{f.name}</span>
                       <span className="text-[9px] uppercase" style={{ color: C.MUTED }}>{FIELD_TYPE_LABELS[f.type]}</span>
                     </div>
-                    <div className="w-40"><CustomCell field={f} value={customValues[f.id]} colors={f.colors} onSave={(v) => onSaveCustom(f.id, v)} onAddOption={(label) => { addFieldOption(f.id, label); onSaveCustom(f.id, label) }} onCreateOption={(label) => addFieldOption(f.id, label)} getTagsSuggestions={getTagsSuggestions} /></div>
+                    <div className={f.type === 'tags' ? 'flex-1 min-w-[200px]' : 'w-40'}><CustomCell field={f} value={customValues[f.id]} colors={f.colors} onSave={(v) => onSaveCustom(f.id, v)} onAddOption={(label) => { addFieldOption(f.id, label); onSaveCustom(f.id, label) }} onCreateOption={(label) => addFieldOption(f.id, label)} getTagsSuggestions={getTagsSuggestions} /></div>
                     {onDeleteField && <button onClick={() => onDeleteField(f.id, f.name)} title="Delete column" style={{ color: C.MUTED, fontSize: 11 }}>✕</button>}
                     {onEditField && <button onClick={() => onEditField(f)} title="Edit column" style={{ color: C.MUTED, fontSize: 11 }}>✎</button>}
                   </div>

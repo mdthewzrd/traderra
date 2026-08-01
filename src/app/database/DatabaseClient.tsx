@@ -658,6 +658,20 @@ function FilterPopup({ filterDefs, values, onChange }: {
   }, [open])
   const inputCls = "border rounded px-2 py-1 text-xs w-full focus:outline-none"
   const inputSt = { background: C.SURFACE2, borderColor: C.BORDER, color: C.TEXT }
+  // Saved filter presets (localStorage, per-browser). One click recalls a combo.
+  const PK = 'traderra:dbFilterPresets'
+  const [presets, setPresets] = useState<{ name: string; filters: Record<string, string | string[]> }[]>([])
+  useEffect(() => { try { setPresets(JSON.parse(localStorage.getItem(PK) || '[]')) } catch {} }, [])
+  const persist = (next: typeof presets) => { setPresets(next); try { localStorage.setItem(PK, JSON.stringify(next)) } catch {} }
+  const savePreset = () => {
+    const has = Object.values(values).some((v) => v !== '' && v != null && !(Array.isArray(v) && v.length === 0))
+    if (!has) { alert('Set some filters first, then save.'); return }
+    const name = prompt('Name this filter preset:')
+    if (!name?.trim()) return
+    persist([...presets.filter((p) => p.name !== name.trim()), { name: name.trim(), filters: values }])
+  }
+  const delPreset = (name: string) => persist(presets.filter((p) => p.name !== name))
+  const curKey = JSON.stringify(values)
   return (
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen((o) => !o)} title="Filter rows"
@@ -670,6 +684,24 @@ function FilterPopup({ filterDefs, values, onChange }: {
       {open && (
         <div className="absolute right-0 top-9 z-50 w-72 rounded-lg border shadow-2xl"
           style={{ background: C.SURFACE, borderColor: C.BORDER }}>
+          {/* Saved presets — one-click recall of a filter combo */}
+          <div className="flex flex-wrap items-center gap-1 p-2 border-b" style={{ borderColor: C.BORDER }}>
+            <span className="text-[9px] uppercase tracking-wider font-bold mr-0.5" style={{ color: C.MUTED }}>Presets</span>
+            {presets.map((p) => {
+              const on = JSON.stringify(p.filters) === curKey
+              return (
+                <div key={p.name} className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold"
+                  style={{ background: on ? C.GOLD_DIM : C.SURFACE2, border: `1px solid ${on ? C.GOLD_BORDER : C.BORDER}`, color: on ? C.GOLD : C.TEXT2 }}>
+                  <button onClick={() => onChange({ ...p.filters })} className="cursor-pointer">{p.name}</button>
+                  <button onClick={() => delPreset(p.name)} className="opacity-50 hover:opacity-100 ml-0.5" style={{ color: C.MUTED }} title="Delete preset">✕</button>
+                </div>
+              )
+            })}
+            <button onClick={savePreset} title="Save current filters as a preset"
+              className="text-[10px] px-1.5 py-0.5 rounded flex items-center gap-0.5 font-semibold" style={{ border: `1px dashed ${C.BORDER}`, color: C.MUTED }}>
+              <Plus className="w-2.5 h-2.5" /> Save
+            </button>
+          </div>
           <div className="max-h-[60vh] overflow-y-auto p-3 grid grid-cols-2 gap-x-2 gap-y-2">
             {filterDefs.map((def) => (
               <div key={def.id} className="space-y-0.5">

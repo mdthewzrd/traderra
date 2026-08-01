@@ -672,6 +672,9 @@ function FilterPopup({ filterDefs, values, onChange }: {
   }
   const delPreset = (name: string) => persist(presets.filter((p) => p.name !== name))
   const curKey = JSON.stringify(values)
+  // dynamic filter: one type expanded at a time, type-to-search within it
+  const [expandedType, setExpandedType] = useState<string | null>(null)
+  const [qBy, setQBy] = useState<Record<string, string>>({})
   return (
     <div className="relative" ref={ref}>
       <button onClick={() => setOpen((o) => !o)} title="Filter rows"
@@ -702,46 +705,73 @@ function FilterPopup({ filterDefs, values, onChange }: {
               <Plus className="w-2.5 h-2.5" /> Save
             </button>
           </div>
-          <div className="max-h-[60vh] overflow-y-auto p-3 grid grid-cols-2 gap-x-2 gap-y-2">
-            {filterDefs.map((def) => (
-              <div key={def.id} className="space-y-0.5">
-                <label className="text-[9px] uppercase tracking-wider block" style={{ color: C.MUTED }}>{def.label}</label>
-                {def.type === 'enum' ? (
-                  def.multi ? (
-                    <div className="max-h-28 overflow-y-auto border rounded p-1 space-y-0.5" style={inputSt}>
-                      {(def.options ?? []).length === 0 && <span className="text-[10px]" style={{ color: C.MUTED }}>— none —</span>}
-                      {(def.options ?? []).map((o) => {
-                        const sel = (values[def.id] as string[] | undefined) ?? []
-                        const on = sel.includes(o)
-                        return (
-                          <label key={o} className="flex items-center gap-1 text-[11px] cursor-pointer capitalize" style={{ color: on ? C.GOLD : C.TEXT2 }}>
-                            <input type="checkbox" checked={on} onChange={() => onChange({ ...values, [def.id]: on ? sel.filter((x) => x !== o) : [...sel, o] })} className="w-2.5 h-2.5" />
-                            <span className="truncate">{o}</span>
-                          </label>
-                        )
-                      })}
+          <div className="max-h-[60vh] overflow-y-auto">
+            {filterDefs.map((def) => {
+              const raw = values[def.id]
+              const sel: string[] = Array.isArray(raw) ? raw : (raw ? [String(raw)] : [])
+              const isEnum = def.type === 'enum'
+              const expanded = expandedType === def.id
+              const opts = isEnum ? (def.options ?? []).filter((o) => {
+                const q = (qBy[def.id] || '').toLowerCase(); return !q || String(o).toLowerCase().includes(q)
+              }) : []
+              const toggle = (o: string) => onChange({ ...values, [def.id]: sel.includes(o) ? sel.filter((x) => x !== o) : [...sel, o] })
+              return (
+                <div key={def.id} className="border-b" style={{ borderColor: C.BORDER }}>
+                  <button type="button" onClick={() => setExpandedType(expanded ? null : def.id)}
+                    className="w-full flex items-center justify-between px-3 py-2 text-xs"
+                    style={{ color: sel.length ? C.GOLD : C.TEXT2, background: sel.length ? C.GOLD_DIM : 'transparent' }}>
+                    <span className="font-semibold capitalize">{def.label}</span>
+                    <span className="flex items-center gap-1.5">
+                      {isEnum && <span className="text-[9px]" style={{ color: C.MUTED }}>{def.options?.length ?? 0}</span>}
+                      {sel.length > 0 && <span className="text-[9px] px-1 rounded font-bold" style={{ background: C.GOLD, color: C.BG }}>{sel.length}</span>}
+                      <span className="text-[10px] w-2 text-center" style={{ color: C.MUTED }}>{expanded ? '▾' : '▸'}</span>
+                    </span>
+                  </button>
+                  {expanded && (
+                    <div className="px-3 pb-2.5 space-y-1.5">
+                      {isEnum ? (
+                        <>
+                          <input autoFocus value={qBy[def.id] || ''} onChange={(e) => setQBy((s) => ({ ...s, [def.id]: e.target.value }))}
+                            placeholder={`Search ${def.options?.length ?? 0} options…`} className={inputCls} style={inputSt} />
+                          <div className="max-h-40 overflow-y-auto space-y-0.5">
+                            {opts.map((o) => {
+                              const on = sel.includes(o)
+                              return (
+                                <button type="button" key={o} onClick={() => toggle(o)}
+                                  className="w-full flex items-center gap-1.5 text-[11px] text-left capitalize rounded px-1 py-0.5 transition-colors"
+                                  style={{ color: on ? C.GOLD : C.TEXT2, background: on ? C.GOLD_DIM : 'transparent' }}>
+                                  <span className="w-2.5 h-2.5 rounded-sm border flex items-center justify-center text-[8px] leading-none"
+                                    style={{ borderColor: on ? C.GOLD : C.BORDER, background: on ? C.GOLD : 'transparent', color: C.BG }}>{on ? '✓' : ''}</span>
+                                  <span className="truncate">{o}</span>
+                                </button>
+                              )
+                            })}
+                            {opts.length === 0 && <span className="text-[10px] block px-1" style={{ color: C.MUTED }}>no matches</span>}
+                          </div>
+                          {sel.length > 0 && (
+                            <div className="flex flex-wrap gap-1 pt-0.5">
+                              {sel.map((o) => (
+                                <button type="button" key={o} onClick={() => toggle(o)} title="Remove"
+                                  className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold capitalize"
+                                  style={{ background: C.GOLD_DIM, border: `1px solid ${C.GOLD_BORDER}`, color: C.GOLD }}>
+                                  {o} <span style={{ color: C.MUTED }}>✕</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      ) : def.type === 'boolean' ? (
+                        <select value={values[def.id] ?? ''} onChange={(e) => onChange({ ...values, [def.id]: e.target.value })} className={inputCls} style={inputSt}>
+                          <option value="">All</option><option value="__true">Yes</option><option value="__false">No</option>
+                        </select>
+                      ) : (
+                        <input autoFocus type={def.type} value={values[def.id] ?? ''} onChange={(e) => onChange({ ...values, [def.id]: e.target.value })} placeholder="—" className={inputCls} style={inputSt} />
+                      )}
                     </div>
-                  ) : (
-                    <select value={values[def.id] ?? ''} onChange={(e) => onChange({ ...values, [def.id]: e.target.value })}
-                      className={inputCls} style={inputSt}>
-                      <option value="">All</option>
-                      {(def.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
-                    </select>
-                  )
-                ) : def.type === 'boolean' ? (
-                  <select value={values[def.id] ?? ''} onChange={(e) => onChange({ ...values, [def.id]: e.target.value })}
-                    className={inputCls} style={inputSt}>
-                    <option value="">All</option>
-                    <option value="__true">Yes</option>
-                    <option value="__false">No</option>
-                  </select>
-                ) : (
-                  <input type={def.type} value={values[def.id] ?? ''}
-                    onChange={(e) => onChange({ ...values, [def.id]: e.target.value })}
-                    placeholder="—" className={inputCls} style={inputSt} />
-                )}
-              </div>
-            ))}
+                  )}
+                </div>
+              )
+            })}
           </div>
           {activeCount > 0 && (
             <div className="border-t p-2" style={{ borderColor: C.BORDER }}>

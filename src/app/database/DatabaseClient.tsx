@@ -685,7 +685,7 @@ function FilterPopup({ filterDefs, values, onChange }: {
         {activeCount > 0 && <span className="text-[10px] px-1 rounded" style={{ background: C.GOLD, color: C.BG }}>{activeCount}</span>}
       </button>
       {open && (
-        <div className="absolute right-0 top-9 z-50 w-72 rounded-lg border shadow-2xl"
+        <div className="absolute right-0 top-9 z-[1200] w-72 rounded-lg border shadow-2xl"
           style={{ background: C.SURFACE, borderColor: C.BORDER }}>
           {/* Saved presets — one-click recall of a filter combo */}
           <div className="flex flex-wrap items-center gap-1 p-2 border-b" style={{ borderColor: C.BORDER }}>
@@ -1532,7 +1532,7 @@ export default function DatabasePage() {
     {/* Shell height is responsive to the two-row TopNav: main nav h-14 (56px) always, plus a sticky sub-nav h-10 (40px) that only renders on md+ (top-nav.tsx). So subtract 56px on mobile, 96px on desktop — otherwise the pagination footer (last flex child) is clipped ~40px below the fold. (REQ-332) */}
     <div className="h-[calc(100vh-56px)] md:h-[calc(100vh-96px)] flex flex-col overflow-hidden font-mono" style={{ background: C.BG, color: C.TEXT }}>
       {/* Header */}
-      <header className="flex items-center justify-between px-5 py-3 border-b shrink-0" style={{ borderColor: C.BORDER }}>
+      <header className="relative z-[1100] flex items-center justify-between px-5 py-3 border-b shrink-0" style={{ borderColor: C.BORDER }}>
         <div className="flex items-center gap-3">
           <Database className="w-5 h-5" style={{ color: C.GOLD }} />
           <h1 className="text-base font-bold" style={{ color: C.TEXT }}>Pattern Corpus</h1>

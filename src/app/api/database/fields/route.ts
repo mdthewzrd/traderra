@@ -71,6 +71,12 @@ export async function PATCH(request: NextRequest) {
   const databaseId = await getDatabaseId(request, userId)
 
   const body = await request.json()
+  // bulk reorder: [{id, order}, ...] — user-scoped so it covers both db-scoped and shared (databaseId=null) fields
+  if (Array.isArray(body.reorder)) {
+    await prisma.$transaction(body.reorder.map((r: any) =>
+      prisma.corpusField.updateMany({ where: { id: String(r.id), userId }, data: { order: Number(r.order) } })))
+    return NextResponse.json({ ok: true })
+  }
   const { id, name, options, colors, shared } = body
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
@@ -80,7 +86,7 @@ export async function PATCH(request: NextRequest) {
   if (colors && typeof colors === 'object') data.colors = colors
   if (typeof shared === 'boolean') data.databaseId = shared ? null : databaseId
 
-  const field = await prisma.corpusField.updateMany({ where: { id, userId, databaseId }, data })
+  const field = await prisma.corpusField.updateMany({ where: { id, userId }, data })
   if (field.count === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }

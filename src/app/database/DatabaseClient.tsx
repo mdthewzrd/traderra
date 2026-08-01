@@ -1607,14 +1607,35 @@ export default function DatabasePage() {
   }, [rows, columnFilters])
 
   const [{ pageIndex, pageSize }, setPagination] = useState({ pageIndex: 0, pageSize: 50 })
+
+  // ── column drag-reorder (client columnOrder state, reconciled with dynamic columns) ──
+  const [columnOrder, setColumnOrder] = useState<string[]>([])
+  const orderedIds = useMemo(() => {
+    const allIds = columns.map((c) => c.id)
+    if (columnOrder.length === 0) return allIds
+    const known = new Set(allIds)
+    const ordered = columnOrder.filter((id) => known.has(id))
+    const seen = new Set(ordered)
+    for (const id of allIds) if (!seen.has(id)) ordered.push(id)
+    return ordered
+  }, [columns, columnOrder])
+  const dragCol = useRef<string | null>(null)
+  const persistFieldOrder = useCallback(async (fullOrder: string[]) => {
+    const ids = fullOrder.filter((id) => id.startsWith('custom__')).map((id) => id.slice(8))
+    if (ids.length < 2) return
+    await dbFetch('/api/database/fields', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reorder: ids.map((id, i) => ({ id, order: i })) }) })
+  }, [])
+
   const table = useReactTable({
     data: tableData, columns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     columnResizeMode: 'onChange',
-    state: { sorting, pagination: { pageIndex, pageSize } },
+    state: { sorting, columnOrder: orderedIds, pagination: { pageIndex, pageSize } },
     onSortingChange: setSorting,
+    onColumnOrderChange: setColumnOrder,
     onPaginationChange: setPagination,
   })
 
@@ -1818,7 +1839,18 @@ export default function DatabasePage() {
                     const canSort = h.column.getCanSort()
                     const dir = h.column.getIsSorted()
                     return (
-                    <th key={h.id} className="text-left font-semibold text-xs uppercase tracking-wider px-3 py-2.5 whitespace-nowrap relative group/hdr"
+                    <th key={h.id} draggable
+                      onDragStart={(e) => { if ((e.target as HTMLElement).closest('button, .cursor-col-resize, input, select')) { e.preventDefault(); return } dragCol.current = h.column.id; e.dataTransfer.effectAllowed = 'move' }}
+                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+                      onDrop={() => {
+                        const from = dragCol.current; dragCol.current = null
+                        if (!from || from === h.column.id) return
+                        const base = orderedIds.slice(); const fi = base.indexOf(from); const ti = base.indexOf(h.column.id)
+                        if (fi < 0 || ti < 0) return
+                        const [m] = base.splice(fi, 1); base.splice(ti, 0, m)
+                        setColumnOrder(base); persistFieldOrder(base)
+                      }}
+                      className="text-left font-semibold text-xs uppercase tracking-wider px-3 py-2.5 whitespace-nowrap relative group/hdr cursor-grab active:cursor-grabbing"
                       style={{ color: C.MUTED, width: h.getSize() }}>
                       {canSort ? (
                         <div onClick={() => h.column.toggleSorting(dir === 'asc')}

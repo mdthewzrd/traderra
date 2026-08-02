@@ -92,6 +92,9 @@ export default function RootLayout({
             </GlobalTraderraProvider>
           </TraderraProvider>
         </StudioTheme>
+        <span className="fixed bottom-0.5 left-1 text-[9px] text-[#444] pointer-events-none select-none z-0" title="deployed build time — if this looks old, hard-refresh (Ctrl/Cmd+Shift+R)">
+          build {new Date(process.env.NEXT_PUBLIC_BUILD_AT || 0).toISOString().slice(5, 19).replace('T', ' ')}Z
+        </span>
       </body>
     </html>
   )

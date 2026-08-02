@@ -17,6 +17,8 @@ const nextConfig = {
   },
   env: {
     CUSTOM_KEY: process.env.CUSTOM_KEY,
+    // baked at build start → changes every deploy; surfaced in the UI as a cache-freshness marker
+    NEXT_PUBLIC_BUILD_AT: new Date().toISOString(),
   },
   async rewrites() {
     return [

@@ -1911,7 +1911,12 @@ export default function DatabasePage() {
                     <th key={h.id} data-colid={h.column.id}
                       onMouseDown={(e) => startColDrag(e, h.column.id)}
                       className={`text-left font-semibold text-xs uppercase tracking-wider px-3 py-2.5 whitespace-nowrap relative group/hdr select-none ${h.column.id !== 'symbol' && h.column.id !== 'signalDate' ? 'cursor-grab active:cursor-grabbing' : ''} ${dragOver === h.column.id ? 'ring-2 ring-inset' : ''}`}
-                      style={{ color: C.MUTED, width: h.getSize(), boxShadow: dragOver === h.column.id ? `inset 2px 0 0 ${C.GOLD}` : undefined }}>
+                      style={{ color: C.MUTED, width: h.getSize(),
+                        ...((h.column.id === 'symbol' || h.column.id === 'signalDate') ? {
+                          position: 'sticky', left: h.column.id === 'symbol' ? 0 : (table.getColumn('symbol')?.getSize() ?? 90),
+                          zIndex: 11, background: `${C.BG}f5`,
+                          boxShadow: h.column.id === 'signalDate' ? '2px 0 6px -2px rgba(0,0,0,.5)' : undefined,
+                        } : { boxShadow: dragOver === h.column.id ? `inset 2px 0 0 ${C.GOLD}` : undefined }) }}>
                       {canSort ? (
                         <div onClick={() => h.column.toggleSorting(dir === 'asc')}
                           className="flex items-center gap-1 transition-colors hover:opacity-100 cursor-pointer" style={{ opacity: dir ? 1 : 0.8 }}>
@@ -1951,7 +1956,14 @@ export default function DatabasePage() {
                   className="border-b cursor-pointer transition-colors"
                   style={{ borderColor: C.SURFACE2, background: selectedId === row.original.id ? C.SURFACE2 : 'transparent' }}>
                   {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-3 py-2 align-middle whitespace-nowrap" style={{ width: cell.column.getSize() }} onClick={(e) => {
+                    <td key={cell.id} className="px-3 py-2 align-middle whitespace-nowrap" style={{
+                      width: cell.column.getSize(),
+                      ...((cell.column.id === 'symbol' || cell.column.id === 'signalDate') ? {
+                        position: 'sticky', left: cell.column.id === 'symbol' ? 0 : (table.getColumn('symbol')?.getSize() ?? 90),
+                        zIndex: 2, background: selectedId === row.original.id ? C.SURFACE2 : C.BG,
+                        boxShadow: cell.column.id === 'signalDate' ? '2px 0 6px -2px rgba(0,0,0,.5)' : undefined,
+                      } : {}),
+                    }} onClick={(e) => {
                       const t = e.target as HTMLElement
                       if (t.closest('select') || t.closest('button') || t.closest('.cursor-col-resize')) e.stopPropagation()
                     }}>

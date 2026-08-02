@@ -1641,7 +1641,9 @@ export default function DatabasePage() {
   // ── column drag-reorder (client columnOrder state, reconciled with dynamic columns) ──
   const [columnOrder, setColumnOrder] = useState<string[]>([])
   const orderedIds = useMemo(() => {
-    const allIds = columns.map((c) => c.id)
+    // accessor columns carry `accessorKey`, NOT `id`; resolve the effective id
+    // or the Symbol/Signal pin filter matches nothing (root cause of col-order bug).
+    const allIds = columns.map((c) => (c as any).id ?? (c as any).accessorKey)
     const PINNED = ['symbol', 'signalDate']           // Symbol & Signal are locked to the front
     const pinned = PINNED.filter((id) => allIds.includes(id))
     const rest = allIds.filter((id) => !pinned.includes(id))

@@ -1656,7 +1656,6 @@ export default function DatabasePage() {
     }
     return [...pinned, ...orderedRest]
   }, [columns, columnOrder])
-  const dragCol = useRef<string | null>(null)
   const [dragOver, setDragOver] = useState<string | null>(null)
   const persistFieldOrder = useCallback(async (fullOrder: string[]) => {
     const ids = fullOrder.filter((id) => id.startsWith('custom__')).map((id) => id.slice(8))
@@ -1664,6 +1663,39 @@ export default function DatabasePage() {
     await dbFetch('/api/database/fields', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reorder: ids.map((id, i) => ({ id, order: i })) }) })
   }, [])
+
+  // pointer-based column drag — robust under html{zoom:0.9} (elementFromPoint shares the cursor's coord space, unlike native DnD)
+  const startColDrag = useCallback((e: React.MouseEvent, colId: string) => {
+    if (colId === 'symbol' || colId === 'signalDate') return
+    if (e.button !== 0) return
+    if ((e.target as HTMLElement).closest('button, .cursor-col-resize, input, select')) return
+    const sx = e.clientX, sy = e.clientY
+    let dragging = false
+    const move = (ev: PointerEvent) => {
+      if (!dragging) {
+        if (Math.abs(ev.clientX - sx) < 5 && Math.abs(ev.clientY - sy) < 5) return
+        dragging = true
+      }
+      const el = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null
+      const id = el?.closest('th[data-colid]')?.getAttribute('data-colid') ?? null
+      setDragOver((cur) => (cur === id ? cur : id))
+    }
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      setDragOver(null)
+      if (!dragging) return // it was a click (sort), not a drag
+      const el = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null
+      const to = el?.closest('th[data-colid]')?.getAttribute('data-colid') ?? null
+      if (to && to !== colId) {
+        const base = orderedIds.slice()
+        const fi = base.indexOf(colId), ti = base.indexOf(to)
+        if (fi >= 0 && ti >= 0) { const [m] = base.splice(fi, 1); base.splice(ti, 0, m); setColumnOrder(base); persistFieldOrder(base) }
+      }
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }, [orderedIds, persistFieldOrder])
 
   const table = useReactTable({
     data: tableData, columns,
@@ -1877,25 +1909,10 @@ export default function DatabasePage() {
                     const canSort = h.column.getCanSort()
                     const dir = h.column.getIsSorted()
                     return (
-                    <th key={h.id} draggable={h.column.id !== 'symbol' && h.column.id !== 'signalDate'}
-                      onDragStart={(e) => {
-                        if ((e.target as HTMLElement).closest('button, .cursor-col-resize, input, select')) { e.preventDefault(); return }
-                        dragCol.current = h.column.id
-                        e.dataTransfer.effectAllowed = 'move'
-                        e.dataTransfer.setData('text/plain', h.column.id) // Firefox silently cancels the drag without this
-                      }}
-                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dragOver !== h.column.id) setDragOver(h.column.id) }}
-                      onDrop={() => {
-                        const from = dragCol.current; dragCol.current = null; setDragOver(null)
-                        if (!from || from === h.column.id) return
-                        const base = orderedIds.slice(); const fi = base.indexOf(from); const ti = base.indexOf(h.column.id)
-                        if (fi < 0 || ti < 0) return
-                        const [m] = base.splice(fi, 1); base.splice(ti, 0, m)
-                        setColumnOrder(base); persistFieldOrder(base)
-                      }}
-                      onDragEnd={() => { dragCol.current = null; setDragOver(null) }}
-                      className={`text-left font-semibold text-xs uppercase tracking-wider px-3 py-2.5 whitespace-nowrap relative group/hdr ${h.column.id !== 'symbol' && h.column.id !== 'signalDate' ? 'cursor-grab active:cursor-grabbing' : ''} ${dragOver === h.column.id && dragCol.current && dragCol.current !== h.column.id ? 'ring-2 ring-inset' : ''}`}
-                      style={{ color: C.MUTED, width: h.getSize(), boxShadow: dragOver === h.column.id && dragCol.current && dragCol.current !== h.column.id ? `inset 2px 0 0 ${C.GOLD}` : undefined }}>
+                    <th key={h.id} data-colid={h.column.id}
+                      onMouseDown={(e) => startColDrag(e, h.column.id)}
+                      className={`text-left font-semibold text-xs uppercase tracking-wider px-3 py-2.5 whitespace-nowrap relative group/hdr select-none ${h.column.id !== 'symbol' && h.column.id !== 'signalDate' ? 'cursor-grab active:cursor-grabbing' : ''} ${dragOver === h.column.id ? 'ring-2 ring-inset' : ''}`}
+                      style={{ color: C.MUTED, width: h.getSize(), boxShadow: dragOver === h.column.id ? `inset 2px 0 0 ${C.GOLD}` : undefined }}>
                       {canSort ? (
                         <div onClick={() => h.column.toggleSorting(dir === 'asc')}
                           className="flex items-center gap-1 transition-colors hover:opacity-100 cursor-pointer" style={{ opacity: dir ? 1 : 0.8 }}>

@@ -1473,27 +1473,7 @@ export default function DatabasePage() {
         header: 'Signal', size: 95, cell: (i) => <span className="text-xs" style={{ color: C.MUTED }}>{i.getValue()}</span>,
       }),
     ]
-    for (const name of loadedScanNames) {
-      cols.push(ch.display({
-        id: `scan__${name}`, size: 40,
-        enableSorting: false,
-        header: () => <span className="text-[10px] font-semibold uppercase tracking-wide truncate block max-w-[90px]" title={name} style={{ color: C.TEXT2 }}>{name}</span>,
-        cell: (i) => {
-          const hit = i.row.original.scanSources.includes(name)
-          return hit ? (
-            <span className="inline-flex items-center justify-center w-4 h-4 rounded-sm" style={{ background: C.GOLD_DIM, border: `1px solid ${C.GOLD_BORDER}` }}>
-              <Check className="w-2.5 h-2.5" style={{ color: C.GOLD }} />
-            </span>
-          ) : <span style={{ color: C.BORDER }}>·</span>
-        },
-      }))
-    }
     cols.push(
-      ch.accessor('scanSources', {
-        header: 'Sources', size: 80, cell: (i) => (
-          <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: C.MUTED, background: C.SURFACE2 }}>{i.getValue().length}</span>
-        ),
-      }),
       ch.accessor('setupType', {
         header: 'Setup Type', size: 120, cell: (i) => (
           <ClassifySelect value={i.getValue()} options={enumOpts('setupType')} colors={enumColors('setupType')} placeholder="—"
@@ -1550,6 +1530,25 @@ export default function DatabasePage() {
               {off}
             </button>
           )
+        },
+      })),
+      // ── scan-source columns (moved right so classify columns lead) ──
+      ch.accessor('scanSources', {
+        header: 'Sources', size: 80, cell: (i) => (
+          <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ color: C.MUTED, background: C.SURFACE2 }}>{i.getValue().length}</span>
+        ),
+      }),
+      ...loadedScanNames.map((name) => ch.display({
+        id: `scan__${name}`, size: 40,
+        enableSorting: false,
+        header: () => <span className="text-[10px] font-semibold uppercase tracking-wide truncate block max-w-[90px]" title={name} style={{ color: C.TEXT2 }}>{name}</span>,
+        cell: (i) => {
+          const hit = i.row.original.scanSources.includes(name)
+          return hit ? (
+            <span className="inline-flex items-center justify-center w-4 h-4 rounded-sm" style={{ background: C.GOLD_DIM, border: `1px solid ${C.GOLD_BORDER}` }}>
+              <Check className="w-2.5 h-2.5" style={{ color: C.GOLD }} />
+            </span>
+          ) : <span style={{ color: C.BORDER }}>·</span>
         },
       })),
       // ── user-defined custom columns (forward testing) ──

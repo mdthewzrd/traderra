@@ -1578,7 +1578,6 @@ export default function DatabasePage() {
         cell: (i) => {
           const rid = i.row.original.id
           const val = (i.row.original.customValues ?? {})[f.id]
-          if (f.type === 'tags') return <TagsDisplay value={val} colors={f.colors} onActivate={() => setSelectedId(rid)} />
           return <CustomCell field={f} value={val} colors={f.colors} onSave={(v) => saveCustomValue(rid, f.id, v)} onAddOption={(label) => { addFieldOption(f.id, label); saveCustomValue(rid, f.id, label) }} onCreateOption={(label) => addFieldOption(f.id, label)} getTagsSuggestions={tagsSuggestions} />
         },
       })),

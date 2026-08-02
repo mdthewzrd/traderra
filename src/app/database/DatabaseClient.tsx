@@ -1651,6 +1651,7 @@ export default function DatabasePage() {
     return ordered
   }, [columns, columnOrder])
   const dragCol = useRef<string | null>(null)
+  const [dragOver, setDragOver] = useState<string | null>(null)
   const persistFieldOrder = useCallback(async (fullOrder: string[]) => {
     const ids = fullOrder.filter((id) => id.startsWith('custom__')).map((id) => id.slice(8))
     if (ids.length < 2) return
@@ -1871,18 +1872,24 @@ export default function DatabasePage() {
                     const dir = h.column.getIsSorted()
                     return (
                     <th key={h.id} draggable
-                      onDragStart={(e) => { if ((e.target as HTMLElement).closest('button, .cursor-col-resize, input, select')) { e.preventDefault(); return } dragCol.current = h.column.id; e.dataTransfer.effectAllowed = 'move' }}
-                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+                      onDragStart={(e) => {
+                        if ((e.target as HTMLElement).closest('button, .cursor-col-resize, input, select')) { e.preventDefault(); return }
+                        dragCol.current = h.column.id
+                        e.dataTransfer.effectAllowed = 'move'
+                        e.dataTransfer.setData('text/plain', h.column.id) // Firefox silently cancels the drag without this
+                      }}
+                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dragOver !== h.column.id) setDragOver(h.column.id) }}
                       onDrop={() => {
-                        const from = dragCol.current; dragCol.current = null
+                        const from = dragCol.current; dragCol.current = null; setDragOver(null)
                         if (!from || from === h.column.id) return
                         const base = orderedIds.slice(); const fi = base.indexOf(from); const ti = base.indexOf(h.column.id)
                         if (fi < 0 || ti < 0) return
                         const [m] = base.splice(fi, 1); base.splice(ti, 0, m)
                         setColumnOrder(base); persistFieldOrder(base)
                       }}
-                      className="text-left font-semibold text-xs uppercase tracking-wider px-3 py-2.5 whitespace-nowrap relative group/hdr cursor-grab active:cursor-grabbing"
-                      style={{ color: C.MUTED, width: h.getSize() }}>
+                      onDragEnd={() => { dragCol.current = null; setDragOver(null) }}
+                      className={`text-left font-semibold text-xs uppercase tracking-wider px-3 py-2.5 whitespace-nowrap relative group/hdr cursor-grab active:cursor-grabbing ${dragOver === h.column.id && dragCol.current && dragCol.current !== h.column.id ? 'ring-2 ring-inset' : ''}`}
+                      style={{ color: C.MUTED, width: h.getSize(), boxShadow: dragOver === h.column.id && dragCol.current && dragCol.current !== h.column.id ? `inset 2px 0 0 ${C.GOLD}` : undefined }}>
                       {canSort ? (
                         <div onClick={() => h.column.toggleSorting(dir === 'asc')}
                           className="flex items-center gap-1 transition-colors hover:opacity-100 cursor-pointer" style={{ opacity: dir ? 1 : 0.8 }}>
@@ -1951,6 +1958,9 @@ export default function DatabasePage() {
           <select value={pageSize} onChange={(e) => { setPagination(p => ({ pageIndex: 0, pageSize: Number(e.target.value) })) }} className="text-[10px] rounded px-1 py-0.5 font-mono" style={{ background: C.SURFACE2, color: C.MUTED, border: `1px solid ${C.BORDER}` }}>
             {[25, 50, 100, 200].map(n => <option key={n} value={n}>{n}</option>)}
           </select>
+          {columnOrder.length > 0 && (
+            <button onClick={() => setColumnOrder([])} title="Reset column order to default (Symbol, Signal first)" className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ color: C.GOLD, background: C.SURFACE2, border: `1px solid ${C.BORDER}` }}>↺ cols</button>
+          )}
         </div>
       )}
 

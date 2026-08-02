@@ -16,3 +16,4 @@ prisma/prisma/
 public/inbox/
 .cache/
 scripts/watchdog.log
+tsconfig.tsbuildinfo

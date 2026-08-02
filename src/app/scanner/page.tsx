@@ -1092,8 +1092,10 @@ export function ScanMiniChart({ symbol, tf, date, height = 580, settings, dark, 
       }
     }
 
-    // ── D0 marker: gold wedge below D0 daily candle (1D only) ──
-    if (d0Date && tf === 'D' && bars.length > 0) {
+    // ── D0 marker: gold wedge below the first D0 candle (all TFs) ──
+    // Daily: anchors under the D0 daily bar. Intraday: anchors under the
+    // first bar whose ET date === d0Date (start of the D0 session).
+    if (d0Date && bars.length > 0) {
       for (let i = 0; i < bars.length; i++) {
         const b = bars[i]
         if (barETDate(b) === d0Date) {
@@ -2706,6 +2708,10 @@ export default function ScanDashboardPage() {
               <tr style={{ background: T.SURFACE2, position: 'sticky', top: 0, zIndex: 2 }}>
                 <th onClick={() => toggleSort('ticker')} style={{ padding: '4px 6px', textAlign: 'left', color: sortCol === 'ticker' ? GOLD : GOLD, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 0, background: T.SURFACE2, zIndex: 3, minWidth: 56, cursor: 'pointer', userSelect: 'none' }}>Tk{sortCol === 'ticker' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                 <th onClick={() => toggleSort('date')} style={{ padding: '4px 6px', textAlign: 'left', color: sortCol === 'date' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', position: 'sticky', left: 56, background: T.SURFACE2, zIndex: 3, minWidth: 68, borderRight: `1px solid ${T.BORDER}`, cursor: 'pointer', userSelect: 'none' }}>Date{sortCol === 'date' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                {/* Multi-signal type columns */}
+                {isMultiSignal && signalTypeColumns.map(st => (
+                  <th key={st} style={{ padding: '4px 3px', textAlign: 'center', color: GOLD, fontSize: 7, fontWeight: 700, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{st.replace(/_/g, ' ').replace(/^d(\d)/, 'D$1')}</th>
+                ))}
                 <th onClick={() => toggleSort('pm_high_pct')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'pm_high_pct' ? GOLD : T.TEAL, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="Premarket high vs prev close">PM Hi%{sortCol === 'pm_high_pct' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                 <th onClick={() => toggleSort('gap')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'gap' ? GOLD : T.TEAL, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="Open gap vs prev close">Gap%{sortCol === 'gap' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                 <th onClick={() => toggleSort('pm_vol')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'pm_vol' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="Premarket volume">PM Vol{sortCol === 'pm_vol' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
@@ -2717,10 +2723,6 @@ export default function ScanDashboardPage() {
                 <th onClick={() => toggleSort('ema50')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'ema50' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="% dist: D-1 close vs D-1 EMA50">d50{sortCol === 'ema50' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                 <th onClick={() => toggleSort('ema100')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'ema100' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="% dist: D-1 close vs D-1 EMA100">d100{sortCol === 'ema100' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                 <th onClick={() => toggleSort('ema200')} style={{ padding: '4px 4px', textAlign: 'right', color: sortCol === 'ema200' ? GOLD : T.MUTED, fontSize: 8, fontWeight: 700, textTransform: 'uppercase', cursor: 'pointer', userSelect: 'none' }} title="% dist: D-1 close vs D-1 EMA200">d200{sortCol === 'ema200' ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                {/* Multi-signal type columns */}
-                {isMultiSignal && signalTypeColumns.map(st => (
-                  <th key={st} style={{ padding: '4px 3px', textAlign: 'center', color: GOLD, fontSize: 7, fontWeight: 700, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{st.replace(/_/g, ' ').replace(/^d(\d)/, 'D$1')}</th>
-                ))}
               </tr>
                 )
               })()}
@@ -2766,6 +2768,12 @@ export default function ScanDashboardPage() {
                   >
                     <td style={{ padding: '3px 6px', color: isActive ? GOLD : T.WHITE, fontWeight: 700, fontFamily: 'monospace', position: 'sticky', left: 0, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1 }}>{s.ticker}</td>
                     <td style={{ padding: '3px 6px', color: isActive ? GOLD : T.MUTED, position: 'sticky', left: 56, background: isActive ? T.GOLD_DIM : T.SURFACE, zIndex: 1, borderRight: `1px solid ${T.BORDER}` }}>{(() => { const sig = (s.date || (s as any).signal_date || ''); if (MDR_SWING_RE.test(s.signal || '') && sig) { return <>{nextNyseTradingDay(sig).slice(2)}<br/><span style={{ fontSize: 7, color: T.BORDER }}>S:{sig.slice(5)}</span></> } return sig.slice(2) })()}</td>
+                    {/* Multi-signal type checkmarks */}
+                    {isMultiSignal && signalTypeColumns.map(st => (
+                      <td key={st} style={{ padding: '3px 3px', textAlign: 'center', fontSize: 9 }}>
+                        {s[`is_${st}`] ? <span style={{ color: GOLD, fontWeight: 700 }}>✓</span> : <span style={{ color: T.BORDER }}>·</span>}
+                      </td>
+                    ))}
                     <td style={{ padding: '3px 4px', color: T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{(s as any).pm_high_pct != null ? `${((s as any).pm_high_pct * 100).toFixed(0)}%` : '–'}</td>
                     <td style={{ padding: '3px 4px', color: T.TEAL, textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{(s.gap_pct || 0).toFixed(0)}%</td>
                     <td style={{ padding: '3px 4px', color: T.TEXT2, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{(s as any).pm_vol != null ? `${((s as any).pm_vol / 1e6).toFixed(1)}M` : '–'}</td>
@@ -2777,12 +2785,6 @@ export default function ScanDashboardPage() {
                     <td style={{ padding: '3px 4px', color: s.ema50 != null ? (s.ema50 < 0 ? T.RED : T.TEAL) : T.BORDER, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{s.ema50 != null ? `${(s.ema50 * 100).toFixed(0)}%` : '–'}</td>
                     <td style={{ padding: '3px 4px', color: s.ema100 != null ? (s.ema100 < 0 ? T.RED : T.TEAL) : T.BORDER, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{s.ema100 != null ? `${(s.ema100 * 100).toFixed(0)}%` : '–'}</td>
                     <td style={{ padding: '3px 4px', color: s.ema200 != null ? (s.ema200 < 0 ? T.RED : T.TEAL) : T.BORDER, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{s.ema200 != null ? `${(s.ema200 * 100).toFixed(0)}%` : '–'}</td>
-                    {/* Multi-signal type checkmarks */}
-                    {isMultiSignal && signalTypeColumns.map(st => (
-                      <td key={st} style={{ padding: '3px 3px', textAlign: 'center', fontSize: 9 }}>
-                        {s[`is_${st}`] ? <span style={{ color: GOLD, fontWeight: 700 }}>✓</span> : <span style={{ color: T.BORDER }}>·</span>}
-                      </td>
-                    ))}
                   </tr>
                 )
               })

@@ -1643,12 +1643,18 @@ export default function DatabasePage() {
   const [columnOrder, setColumnOrder] = useState<string[]>([])
   const orderedIds = useMemo(() => {
     const allIds = columns.map((c) => c.id)
-    if (columnOrder.length === 0) return allIds
-    const known = new Set(allIds)
-    const ordered = columnOrder.filter((id) => known.has(id))
-    const seen = new Set(ordered)
-    for (const id of allIds) if (!seen.has(id)) ordered.push(id)
-    return ordered
+    const PINNED = ['symbol', 'signalDate']           // Symbol & Signal are locked to the front
+    const pinned = PINNED.filter((id) => allIds.includes(id))
+    const rest = allIds.filter((id) => !pinned.includes(id))
+    let orderedRest: string[]
+    if (columnOrder.length === 0) orderedRest = rest
+    else {
+      const known = new Set(rest)
+      orderedRest = columnOrder.filter((id) => known.has(id))
+      const seen = new Set(orderedRest)
+      for (const id of rest) if (!seen.has(id)) orderedRest.push(id)
+    }
+    return [...pinned, ...orderedRest]
   }, [columns, columnOrder])
   const dragCol = useRef<string | null>(null)
   const [dragOver, setDragOver] = useState<string | null>(null)
@@ -1871,7 +1877,7 @@ export default function DatabasePage() {
                     const canSort = h.column.getCanSort()
                     const dir = h.column.getIsSorted()
                     return (
-                    <th key={h.id} draggable
+                    <th key={h.id} draggable={h.column.id !== 'symbol' && h.column.id !== 'signalDate'}
                       onDragStart={(e) => {
                         if ((e.target as HTMLElement).closest('button, .cursor-col-resize, input, select')) { e.preventDefault(); return }
                         dragCol.current = h.column.id
@@ -1888,7 +1894,7 @@ export default function DatabasePage() {
                         setColumnOrder(base); persistFieldOrder(base)
                       }}
                       onDragEnd={() => { dragCol.current = null; setDragOver(null) }}
-                      className={`text-left font-semibold text-xs uppercase tracking-wider px-3 py-2.5 whitespace-nowrap relative group/hdr cursor-grab active:cursor-grabbing ${dragOver === h.column.id && dragCol.current && dragCol.current !== h.column.id ? 'ring-2 ring-inset' : ''}`}
+                      className={`text-left font-semibold text-xs uppercase tracking-wider px-3 py-2.5 whitespace-nowrap relative group/hdr ${h.column.id !== 'symbol' && h.column.id !== 'signalDate' ? 'cursor-grab active:cursor-grabbing' : ''} ${dragOver === h.column.id && dragCol.current && dragCol.current !== h.column.id ? 'ring-2 ring-inset' : ''}`}
                       style={{ color: C.MUTED, width: h.getSize(), boxShadow: dragOver === h.column.id && dragCol.current && dragCol.current !== h.column.id ? `inset 2px 0 0 ${C.GOLD}` : undefined }}>
                       {canSort ? (
                         <div onClick={() => h.column.toggleSorting(dir === 'asc')}

@@ -411,7 +411,7 @@ function TagsCell({ value, suggestions, colors, onChange }: {
   const open = () => { if (wrapRef.current) setRect(wrapRef.current.getBoundingClientRect()); setFocused(true) }
   return (
     <div ref={wrapRef} className="relative cursor-text" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); open() }}>
-      <div className="flex flex-wrap gap-1 items-center min-h-[22px] py-0.5">
+      <div className="flex flex-wrap gap-1 items-center min-h-[22px] py-0.5" style={{ maxHeight: focused ? undefined : 24, overflow: focused ? undefined : 'hidden' }}>
         {cur.map((t) => {
           const col = colors?.[t]
           return (

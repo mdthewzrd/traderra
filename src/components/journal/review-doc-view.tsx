@@ -14,7 +14,7 @@ interface ReviewDocViewProps {
 // Structured review sections — mirrors the playbook section pattern
 // (gold uppercase label + muted hint + bordered textarea + chart thumbnails).
 type Bias = 'Long' | 'Short' | 'Neutral'
-type TradeIdea = { id: string; ticker: string; thesis: string; setupId?: string; setupName?: string; bias?: Bias }
+type TradeIdea = { id: string; ticker: string; thesis: string; setupId?: string; setupName?: string; bias?: Bias; charts?: { ref: string; caption?: string }[] }
 type SectionData = { text: string; annots: { ref: string; caption?: string }[]; tradeIdeas?: TradeIdea[] }
 type ReviewContent = { sections: Record<string, SectionData>; legacyHtml?: string }
 
@@ -188,6 +188,49 @@ function sanitizeLegacyHtml(html: string | undefined): string | undefined {
   return out
 }
 
+async function filesToRefs(files: FileList | File[] | null): Promise<string[]> {
+  if (!files) return []
+  const imgs = Array.from(files).filter((f) => f.type.startsWith('image/'))
+  const reads = await Promise.all(imgs.map((f) => new Promise<string>((res) => {
+    const r = new FileReader(); r.onload = () => res(r.result as string); r.readAsDataURL(f)
+  })))
+  return reads
+}
+
+/** Attach/remove chart screenshots for a single trade idea — mirrors the section-level annots UI. */
+function IdeaChartAttach({ charts, fileRef, onAdd, onRemove, onImageClick }: {
+  charts: { ref: string; caption?: string }[]
+  fileRef: React.RefObject<HTMLInputElement>
+  onAdd: (f: FileList | File[] | null) => void
+  onRemove: (i: number) => void
+  onImageClick: (ref: string) => void
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={() => fileRef.current?.click()} className="flex items-center gap-1 text-[11px] studio-muted hover:text-[#D4AF37]">
+          <Paperclip className="h-3 w-3" /> attach charts
+        </button>
+        <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => { onAdd(e.target.files); e.target.value = '' }} />
+      </div>
+      {charts.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {charts.map((a, i) => (
+            <div key={i} className="relative group">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={a.ref} alt={a.caption ?? ''} onClick={() => onImageClick(a.ref)}
+                className="w-full h-auto rounded-lg border cursor-zoom-in" style={{ borderColor: C.BORDER }} />
+              <button onClick={() => onRemove(i)}
+                className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full text-[10px] opacity-0 group-hover:opacity-100 flex items-center justify-center"
+                style={{ background: '#dc2626', color: '#fff' }}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SectionField({ label, hint, section, onChange, onImageClick, allowTradeIdeas, playbooks }: {
   label: string; hint: string
   section: SectionData
@@ -215,29 +258,33 @@ function SectionField({ label, hint, section, onChange, onImageClick, allowTrade
   const [edSetupId, setEdSetupId] = useState('')
   const [edSetupName, setEdSetupName] = useState('')
   const [edBias, setEdBias] = useState<Bias | ''>('')
+  const [edCharts, setEdCharts] = useState<{ ref: string; caption?: string }[]>([])
+  const [newCharts, setNewCharts] = useState<{ ref: string; caption?: string }[]>([])
+  const edFileRef = useRef<HTMLInputElement>(null)
+  const newFileRef = useRef<HTMLInputElement>(null)
 
   const ideas = section.tradeIdeas ?? []
   const addIdea = () => {
     const t = newTicker.trim().toUpperCase()
     if (!t) { tickerRef.current?.focus(); return }
     const setup = playbooks?.find((p) => p.id === newSetupId)
-    onChange({ ...section, tradeIdeas: [...ideas, { id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now() + Math.random()), ticker: t, thesis: newThesis.trim(), setupId: setup?.id, setupName: setup?.name, bias: (newBias || undefined) as Bias | undefined }] })
-    setNewTicker(''); setNewThesis(''); setNewSetupId(''); setNewSetupName(''); setNewBias(''); tickerRef.current?.focus()  // keep form open for rapid entry
+    onChange({ ...section, tradeIdeas: [...ideas, { id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now() + Math.random()), ticker: t, thesis: newThesis.trim(), setupId: setup?.id, setupName: setup?.name, bias: (newBias || undefined) as Bias | undefined, charts: newCharts.length ? newCharts : undefined }] })
+    setNewTicker(''); setNewThesis(''); setNewSetupId(''); setNewSetupName(''); setNewBias(''); setNewCharts([]); tickerRef.current?.focus()  // keep form open for rapid entry
   }
   const removeIdea = (id: string) => {
     onChange({ ...section, tradeIdeas: ideas.filter((x) => x.id !== id) })
   }
   const resetEditDraft = () => {
-    setEditingId(null); setEdTicker(''); setEdThesis(''); setEdSetupId(''); setEdSetupName(''); setEdBias('')
+    setEditingId(null); setEdTicker(''); setEdThesis(''); setEdSetupId(''); setEdSetupName(''); setEdBias(''); setEdCharts([])
   }
   const startEdit = (idea: TradeIdea) => {
-    setEditingId(idea.id); setEdTicker(idea.ticker); setEdThesis(idea.thesis); setEdSetupId(idea.setupId ?? ''); setEdSetupName(idea.setupName ?? ''); setEdBias(idea.bias ?? '')
+    setEditingId(idea.id); setEdTicker(idea.ticker); setEdThesis(idea.thesis); setEdSetupId(idea.setupId ?? ''); setEdSetupName(idea.setupName ?? ''); setEdBias(idea.bias ?? ''); setEdCharts(idea.charts ?? [])
   }
   const saveEdit = () => {
     const t = edTicker.trim().toUpperCase()
     if (!t) { resetEditDraft(); return }
     const setup = playbooks?.find((p) => p.id === edSetupId)
-    onChange({ ...section, tradeIdeas: ideas.map((x) => x.id === editingId ? { ...x, ticker: t, thesis: edThesis.trim(), setupId: edSetupId || undefined, setupName: setup?.name ?? edSetupName ?? undefined, bias: (edBias || undefined) as Bias | undefined } : x) })
+    onChange({ ...section, tradeIdeas: ideas.map((x) => x.id === editingId ? { ...x, ticker: t, thesis: edThesis.trim(), setupId: edSetupId || undefined, setupName: setup?.name ?? edSetupName ?? undefined, bias: (edBias || undefined) as Bias | undefined, charts: edCharts.length ? edCharts : undefined } : x) })
     resetEditDraft()
   }
   const cancelEdit = () => resetEditDraft()
@@ -282,6 +329,42 @@ function SectionField({ label, hint, section, onChange, onImageClick, allowTrade
     }
   }
 
+  const addEdCharts = async (f: FileList | File[] | null) => {
+    const refs = await filesToRefs(f)
+    if (refs.length) setEdCharts((c) => [...c, ...refs.map((ref) => ({ ref, caption: '' }))])
+  }
+  const addNewCharts = async (f: FileList | File[] | null) => {
+    const refs = await filesToRefs(f)
+    if (refs.length) setNewCharts((c) => [...c, ...refs.map((ref) => ({ ref, caption: '' }))])
+  }
+  const onEdPaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items; if (!items) return
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        const file = items[i].getAsFile(); if (!file) continue
+        const reader = new FileReader()
+        reader.onload = () => setEdCharts((c) => [...c, { ref: reader.result as string, caption: '' }])
+        reader.readAsDataURL(file)
+        e.preventDefault()
+        return
+      }
+    }
+  }
+  const onNewPaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items; if (!items) return
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        const file = items[i].getAsFile(); if (!file) continue
+        const reader = new FileReader()
+        reader.onload = () => setNewCharts((c) => [...c, { ref: reader.result as string, caption: '' }])
+        reader.readAsDataURL(file)
+        e.preventDefault()
+        return
+      }
+    }
+  }
+  useEffect(() => { if (!showIdeaForm) setNewCharts([]) }, [showIdeaForm])
+
   return (
     <div className="space-y-2">
       <div>
@@ -317,8 +400,9 @@ function SectionField({ label, hint, section, onChange, onImageClick, allowTrade
                     playbooks={playbooks ?? []}
                   />
                 </div>
-                <textarea value={edThesis} onChange={(e) => setEdThesis(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && edTicker.trim()) { e.preventDefault(); saveEdit() } if (e.key === 'Escape') cancelEdit() }} placeholder="Thesis / level / trigger — multi-line OK" rows={3} className="w-full px-2 py-1.5 text-sm rounded-lg leading-relaxed resize-none focus:outline-none" style={{ background: '#0a0a0a', border: '1px solid ' + C.BORDER, color: C.TEXT, minHeight: '4rem' }} />
+                <textarea value={edThesis} onPaste={onEdPaste} onChange={(e) => setEdThesis(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && edTicker.trim()) { e.preventDefault(); saveEdit() } if (e.key === 'Escape') cancelEdit() }} placeholder="Thesis / level / trigger — multi-line OK" rows={3} className="w-full px-2 py-1.5 text-sm rounded-lg leading-relaxed resize-none focus:outline-none" style={{ background: '#0a0a0a', border: '1px solid ' + C.BORDER, color: C.TEXT, minHeight: '4rem' }} />
                 <div className="text-[11px]" style={{ color: C.MUTED }}>Edit — <kbd className="px-1 rounded bg-[#1a1a1a] border border-[#2a2a2a]">Enter</kbd> to save · <kbd className="px-1 rounded bg-[#1a1a1a] border border-[#2a2a2a]">Esc</kbd> to cancel</div>
+                <IdeaChartAttach charts={edCharts} fileRef={edFileRef} onAdd={addEdCharts} onRemove={(i) => setEdCharts((c) => c.filter((_, idx) => idx !== i))} onImageClick={onImageClick} />
                 <div className="flex items-center gap-2">
                   <button type="button" onClick={saveEdit} disabled={!edTicker.trim()} className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-40" style={{ background: C.GOLD, color: '#0a0a0a' }}>Save</button>
                   <button type="button" onClick={cancelEdit} className="px-2 py-1.5 text-xs studio-muted hover:text-studio-text">Cancel</button>
@@ -339,6 +423,16 @@ function SectionField({ label, hint, section, onChange, onImageClick, allowTrade
                   </a>
                 )}
                 <div className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: C.TEXT }}>{idea.thesis || <span style={{ color: C.MUTED }}>—</span>}</div>
+                {idea.charts?.length ? (
+                  <div className="flex flex-col gap-2 mt-2">
+                    {idea.charts.map((a, i) => (
+                      <div key={i}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={a.ref} alt={a.caption ?? ''} onClick={() => onImageClick(a.ref)} className="w-full h-auto rounded-lg border cursor-zoom-in" style={{ borderColor: C.BORDER }} />
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 <button type="button" onClick={() => startEdit(idea)} className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold transition-colors hover:bg-[rgba(212,175,55,0.12)]" style={{ color: C.GOLD, border: '1px solid rgba(212,175,55,0.3)' }} title="Edit this idea"><Pencil className="h-3 w-3" /> Edit</button>
@@ -365,7 +459,8 @@ function SectionField({ label, hint, section, onChange, onImageClick, allowTrade
                 />
               </div>
               <div className="text-[11px]" style={{ color: C.MUTED }}>Thesis — <kbd className="px-1 rounded bg-[#1a1a1a] border border-[#2a2a2a]">Enter</kbd> to save · <kbd className="px-1 rounded bg-[#1a1a1a] border border-[#2a2a2a]">Shift+Enter</kbd> for newline</div>
-              <textarea value={newThesis} onChange={(e) => setNewThesis(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && newTicker.trim()) { e.preventDefault(); addIdea() } if (e.key === 'Escape') { setShowIdeaForm(false); setNewTicker(''); setNewThesis(''); setNewSetupId(''); setNewBias('') } }} placeholder="Thesis / level / trigger — multi-line OK" rows={3} className="w-full px-2 py-1.5 text-sm rounded-lg leading-relaxed resize-none focus:outline-none" style={{ background: '#0a0a0a', border: '1px solid ' + C.BORDER, color: C.TEXT, minHeight: '4rem' }} />
+              <textarea value={newThesis} onPaste={onNewPaste} onChange={(e) => setNewThesis(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && newTicker.trim()) { e.preventDefault(); addIdea() } if (e.key === 'Escape') { setShowIdeaForm(false); setNewTicker(''); setNewThesis(''); setNewSetupId(''); setNewBias('') } }} placeholder="Thesis / level / trigger — multi-line OK" rows={3} className="w-full px-2 py-1.5 text-sm rounded-lg leading-relaxed resize-none focus:outline-none" style={{ background: '#0a0a0a', border: '1px solid ' + C.BORDER, color: C.TEXT, minHeight: '4rem' }} />
+              <IdeaChartAttach charts={newCharts} fileRef={newFileRef} onAdd={addNewCharts} onRemove={(i) => setNewCharts((c) => c.filter((_, idx) => idx !== i))} onImageClick={onImageClick} />
               <div className="flex items-center gap-2">
                 <button type="button" onClick={addIdea} disabled={!newTicker.trim()} className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-40" style={{ background: C.GOLD, color: '#0a0a0a' }}>Add idea</button>
                 <button type="button" onClick={() => { setShowIdeaForm(false); setNewTicker(''); setNewThesis(''); setNewSetupId(''); setNewBias('') }} className="px-2 py-1.5 text-xs studio-muted hover:text-studio-text">Cancel</button>

@@ -520,8 +520,14 @@ export default function LiveScanPage() {
 
   // Never-empty: if today has no G&C data, land the G&C Potentials tab on the most
   // recent gc date (DB results ∪ live SSE), so the panel is never blank on load.
+  // ONE-SHOT: latch via ref once we've landed (or once today has data) so live
+  // poll-ticks and user date-navigation never re-snap the date away from the
+  // user's choice. Previously gcEodDate was a dep with no latch, so every tick
+  // forced gcEodDate back to maxDate — making the date nav unchangeable.
+  const gcLandedRef = useRef(false)
   useEffect(() => {
-    if (eodHitsFor('gc', todayStr()).length > 0) return
+    if (gcLandedRef.current) return
+    if (eodHitsFor('gc', todayStr()).length > 0) { gcLandedRef.current = true; return }
     const dates = new Set<string>()
     for (const x of (specResults.get('real-d1-pm-gc') || [])) {
       const d = x.date ? String(x.date).slice(0, 10) : ''
@@ -532,7 +538,10 @@ export default function LiveScanPage() {
     }
     const today = todayStr()
     const maxDate = [...dates].filter(d => d <= today).sort().pop()
-    if (maxDate && maxDate !== gcEodDate) setGcEodDate(maxDate)
+    if (maxDate) {
+      if (maxDate !== gcEodDate) setGcEodDate(maxDate)
+      gcLandedRef.current = true
+    }
   }, [resultsVersion, liveVersion, eodHitsFor, specResults, gcEodDate])
 
   const validHitsFor = useCallback((groupKey: string, date: string) => {

@@ -1,10 +1,12 @@
 /**
  * REQ-571 Phase 2 — Reusable Polygon aggregates fetcher.
  *
- * Extracted verbatim from the inline loop in src/app/api/chart-data/bars/route.ts
- * (which stays UNTOUCHED — this phase is strictly additive). Mirrors the same URL
- * shape (`/v2/aggs/ticker/.../range/...`), `next_url` pagination (capped at 25
- * pages), and free-tier pacing (120ms between pages).
+ * Adapted from the inline loop in src/app/api/chart-data/bars/route.ts (which
+ * stays UNTOUCHED — this phase is strictly additive). Mirrors the same URL shape
+ * (`/v2/aggs/ticker/.../range/...`), `next_url` pagination (capped at 25 pages),
+ * and free-tier pacing (120ms between pages). DIVERGES from the original on
+ * error handling: an unknown/not-found ticker returns [] here (so the stitcher
+ * degrades gracefully) rather than surfacing an error to the client.
  *
  * Adds an `adjusted` flag the bars route hardcodes to `true`. The CIK stitcher
  * passes `adjusted=false` so SEC-sourced reverse splits (getReverseSplits) are

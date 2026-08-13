@@ -121,23 +121,31 @@ export function buildAppliedSplits(raw: ReverseSplit[]): ResolvedSplit[] {
  * For every split whose executionDate is AFTER the bar's date, scale OHLC by
  * priceFactor and volume by volumeFactor. A bar older than several splits
  * accumulates every applicable factor (continuous across compound events).
+ *
+ * Volume is rounded ONCE at the end from a single accumulated factor — never
+ * per-split. Per-split rounding compounds error across compound events (e.g.
+ * NUWE 1:5 x 1:42 x 1:35): vol 3673 consolidates to 0.4997 shares (-> 0) but
+ * progressive per-split rounding drifts to 1.
  */
 export function scaleBar(bar: ContinuousBar, splits: ResolvedSplit[]): ContinuousBar {
-  let o = bar.o;
-  let h = bar.h;
-  let l = bar.l;
-  let c = bar.c;
-  let v = bar.v;
+  let priceFactor = 1;
+  let volumeFactor = 1;
   for (const ev of splits) {
     if (bar.t < ev.executionDate) {
-      o *= ev.priceFactor;
-      h *= ev.priceFactor;
-      l *= ev.priceFactor;
-      c *= ev.priceFactor;
-      v = Math.round(v * ev.volumeFactor);
+      priceFactor *= ev.priceFactor;
+      volumeFactor *= ev.volumeFactor;
     }
   }
-  return { t: bar.t, o, h, l, c, v, sourceSymbol: bar.sourceSymbol };
+  if (priceFactor === 1 && volumeFactor === 1) return bar; // no applicable split
+  return {
+    t: bar.t,
+    o: bar.o * priceFactor,
+    h: bar.h * priceFactor,
+    l: bar.l * priceFactor,
+    c: bar.c * priceFactor,
+    v: Math.round(bar.v * volumeFactor),
+    sourceSymbol: bar.sourceSymbol,
+  };
 }
 
 /**
@@ -210,10 +218,12 @@ export async function getContinuousHistory(
           sourceSymbol: entry.symbol!,
         })),
       );
-    } catch {
+    } catch (e) {
       // Transport errors (429 rate limit, transient 5xx, DNS) for a delisted or
       // foreign (TSXV) symbol → degrade gracefully: this segment contributes no
       // bars. The boundary dedup still joins whatever segments DID resolve.
+      // Logged (not swallowed) so a genuine outage or API-shape change is visible.
+      console.warn('[cik-history] segment fetch failed for', entry.symbol, e);
       segments.push([]);
     }
   }

@@ -53,12 +53,12 @@ export interface TickerChain {
 // ---------------------------------------------------------------------------
 
 /** Zero-pad a CIK (number or string) to SEC's 10-digit form. */
-function padCik10(cik: number | string): string {
+export function padCik10(cik: number | string): string {
   return String(cik).padStart(10, '0');
 }
 
 /** "Dec 29, 2023" → Date (UTC noon-safe). Null if unparseable. */
-function parseMonthDayYear(s: string): Date | null {
+export function parseMonthDayYear(s: string): Date | null {
   const m = s.match(/([A-Z][a-z]{2})\s+(\d{1,2}),?\s*(\d{4})/);
   if (!m) return null;
   const months: Record<string, number> = {
@@ -72,7 +72,7 @@ function parseMonthDayYear(s: string): Date | null {
 }
 
 /** Best company name for a given year from the formerNames backbone. */
-function nameForYear(
+export function nameForYear(
   formerNames: FormerNameEntry[],
   currentName: string | null,
   year: number,
@@ -122,7 +122,7 @@ interface SymbolPeriod { symbol: string; startYear: number; endYear: number }
  * the same ticker collapse into one period; a year with a different ticker
  * starts a new one. Dates are year-granular (Jan 1 / Dec 31) and refined later.
  */
-async function snapshotSymbolTimeline(cik: string): Promise<SymbolPeriod[]> {
+export async function snapshotSymbolTimeline(cik: string): Promise<SymbolPeriod[]> {
   const byYear = await loadSnapshots();
   const cik10 = padCik10(cik);
   const years = [...byYear.keys()].sort((a, b) => a - b);
@@ -153,7 +153,7 @@ interface SaTransition { date: Date; old: string; neu: string; company: string }
 let saCache: Map<number, SaTransition[]> | null = null; // year → transitions
 const SA_DIR = path.join(process.cwd(), 'data', 'sec-sa-changes');
 
-async function loadSaTransitions(): Promise<Map<number, SaTransition[]>> {
+export async function loadSaTransitions(): Promise<Map<number, SaTransition[]>> {
   if (saCache) return saCache;
   const byYear = new Map<number, SaTransition[]>();
   const files = await fs.readdir(SA_DIR).catch(() => [] as string[]);

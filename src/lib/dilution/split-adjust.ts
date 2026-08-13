@@ -19,12 +19,12 @@
 import type { ReverseSplit } from '@/lib/sec/reverse-splits';
 
 /** Effective date of a split: stated execution date, else the filing date. */
-function effectiveDate(s: ReverseSplit): string {
+export function effectiveDate(s: ReverseSplit): string {
   return s.executionDate ?? s.announcementDate;
 }
 
 /** Parse "1-for-3" / "1:3" / "1 to 3" → [num=1, den=3]. null if unparseable. */
-function parseRatio(ratio: string): [num: number, den: number] | null {
+export function parseRatio(ratio: string): [num: number, den: number] | null {
   const m = ratio.match(/(\d+)\s*[-:]?\s*(?:for|to)\s*[-:]?\s*(\d+)/i);
   if (!m) return null;
   const num = Number(m[1]);

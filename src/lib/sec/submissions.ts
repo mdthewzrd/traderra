@@ -34,6 +34,15 @@ interface RecentColumns {
   items?: (string | null)[]; // present only on event forms (8-K etc.)
 }
 
+/** Raw SEC formerNames entry. SEC uses `from`/`to` (ISO datetime); normalized feeds (e.g. cached seeds) may use startDate/endDate — parseFormerNames accepts both. */
+interface FormerNameRaw {
+  name: string;
+  from?: string;
+  to?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
 interface SubmissionsPayload {
   cik: string;
   name?: string;
@@ -42,6 +51,7 @@ interface SubmissionsPayload {
   entityType?: string;
   sic?: string;
   sicDescription?: string;
+  formerNames?: FormerNameRaw[]; // REQ-571 Phase 1 name-chain backbone
   filings?: { recent?: RecentColumns };
 }
 
@@ -153,4 +163,112 @@ export async function getRecentFilings(cik: string, limit = 50) {
     orderBy: { filingDate: 'desc' },
     take: limit,
   });
+}
+
+// ---------------------------------------------------------------------------
+// REQ-571 Phase 1 — CIK name-chain backbone (company names + date ranges).
+// This layer resolves NAMES only. The historical ticker SYMBOLS are derived by
+// the ticker-chain resolver (src/lib/sec/ticker-chain.ts) from annual snapshots.
+// ---------------------------------------------------------------------------
+
+/** One resolved period: a company name with an optional [startDate, endDate]. */
+export interface FormerNameEntry {
+  name: string;
+  startDate: Date | null;
+  endDate: Date | null;
+}
+
+/** Result of resolving a CIK's name-chain backbone from SEC submissions.json. */
+export interface FormerNamesResult {
+  cik: string; // 10-digit zero-padded
+  currentName: string | null;
+  currentTickers: string[];
+  /** Earliest evidence this CIK existed as a filing entity. Downstream price-history
+   *  consumers MUST discard bars predating this date (ticker-recycling hazard:
+   *  Polygon silently concatenates histories of companies reusing a symbol). */
+  earliestFilingDate: Date | null;
+  formerNames: FormerNameEntry[]; // ordered as SEC returns them
+}
+
+/** Parse an ISO date/datetime string into a Date, or null when absent/invalid. */
+function parseSecDate(raw: string | undefined | null): Date | null {
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Fetch the full submissions.json payload for a CIK.
+ * Returns null on 404 (company has no submissions); other fetch errors throw.
+ * Exposed so the ticker-chain resolver reuses the same UA/rate-limited fetch
+ * instead of hand-rolling requests (SEC 403s generic User-Agents).
+ */
+export async function fetchSubmissionsPayload(cik: string): Promise<SubmissionsPayload | null> {
+  const url = `${SUBMISSIONS_BASE}/CIK${padCik(cik)}.json`;
+  try {
+    return await secFetchJson<SubmissionsPayload>(url);
+  } catch (err) {
+    if (err instanceof SecHttpError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+/**
+ * Resolve a CIK's name-chain backbone from SEC submissions.json.
+ *
+ * Returns the current name + tickers, the parsed formerNames (each with nullable
+ * startDate/endDate — SEC sometimes omits them), and the CIK's earliest filing
+ * date (recycling-hazard prune field). Yields company NAMES + date ranges only;
+ * historical ticker SYMBOLS are derived elsewhere from annual snapshots.
+ */
+export async function parseFormerNames(cik: string): Promise<FormerNamesResult> {
+  const padded = padCik(cik);
+  const payload = await fetchSubmissionsPayload(padded);
+
+  const result: FormerNamesResult = {
+    cik: padded,
+    currentName: payload?.name ?? null,
+    currentTickers: payload?.tickers ?? [],
+    earliestFilingDate: null,
+    formerNames: [],
+  };
+  if (!payload) return result;
+
+  const formerNames: FormerNameEntry[] = (payload.formerNames ?? []).map((f) => ({
+    name: f.name,
+    // Raw SEC keys are from/to; accept startDate/endDate from normalized feeds.
+    startDate: parseSecDate(f.from ?? f.startDate),
+    endDate: parseSecDate(f.to ?? f.endDate),
+  }));
+
+  // Earliest SEC filing date: submissions.json has no dedicated field, so derive
+  // the earliest evidence this CIK existed. Use the EARLIER of the oldest recent
+  // filing date and the earliest formerName start, so consumers prune maximally
+  // against ticker-recycling concatenation (over-pruning recent history is not a
+  // risk because the oldest recent filing is itself a filing by this CIK).
+  const filingDates = payload.filings?.recent?.filingDate ?? [];
+  let oldestFiling: Date | null = null;
+  if (filingDates.length) {
+    // 'YYYY-MM-DD' zero-padded strings sort lexicographically == chronologically.
+    const minStr = filingDates.reduce<string | null>(
+      (m, s) => (s && (!m || s < m) ? s : m),
+      null,
+    );
+    oldestFiling = parseSecDate(minStr);
+  }
+  const nameStarts = formerNames
+    .map((f) => f.startDate)
+    .filter((d): d is Date => !!d);
+  const earliestNameStart = nameStarts.length
+    ? new Date(Math.min(...nameStarts.map((d) => d.getTime())))
+    : null;
+  if (oldestFiling && earliestNameStart) {
+    result.earliestFilingDate =
+      oldestFiling.getTime() <= earliestNameStart.getTime() ? oldestFiling : earliestNameStart;
+  } else {
+    result.earliestFilingDate = oldestFiling ?? earliestNameStart;
+  }
+
+  result.formerNames = formerNames;
+  return result;
 }

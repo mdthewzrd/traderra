@@ -760,6 +760,7 @@ model DilutionCompany {
   form4Txns         DilutionForm4Txn[]
   facts             DilutionFact[]
   securities        DilutionSecurity[]
+  formerNames       SecFormerName[]
 }
 
 model DilutionSecurity {
@@ -780,6 +781,26 @@ model DilutionSecurity {
 
   @@unique([cik, type])
   @@index([cik])
+}
+
+model SecFormerName {
+  // REQ-571 Phase 1: CIK name-chain backbone. One row per (cik, name) period.
+  // The historical ticker SYMBOLS are not stored here — the ticker-chain
+  // resolver derives them at query time from bundled annual SEC snapshots
+  // (source (a) snapshot-DIFF). This table is the name + date-range spine
+  // (source (b) formerNames) that continuous price history hangs off of.
+  id        String   @id @default(cuid())
+  cik       String                      // 10-digit zero-padded SEC CIK → DilutionCompany.cik
+  name      String                      // company name as of this period
+  startDate DateTime?                   // sparse SEC formerNames often lack dates → nullable
+  endDate   DateTime?                   // null = open-ended / unknown end
+  source    String   @default("sec-submissions")  // 'sec-submissions' | 'snapshot-diff' | 'stockanalysis'
+  createdAt DateTime @default(now())
+
+  company   DilutionCompany @relation(fields: [cik], references: [cik], onDelete: Cascade)
+
+  @@index([cik])
+  @@index([cik, startDate])
 }
 
 model DilutionFiling {
